@@ -8,16 +8,39 @@ DevBoard is a "developer command centre" application designed to be a comprehens
 
 The system will be built on a local client-server architecture, ensuring access to local file systems for code repository management.
 
+* **Project Structure**: A monorepo structure with clearly separated `backend` and `frontend` applications is recommended. Each application will use a standard `src` layout for clean separation of source code from configuration and test files.
+    ```
+    /
+    ├── backend/
+    │   ├── devboard/      # Main Python package
+    │   │   ├── routers/    # API endpoints
+    │   │   ├── models/     # SQLAlchemy & Pydantic models
+    │   │   ├── services/   # Business logic, agent orchestration
+    │   │   └── core/       # Configuration, core utilities
+    │   ├── tests/
+    │   └── pyproject.toml
+    │
+    ├── frontend/
+    │   ├── src/
+    │   │   ├── components/ # Reusable UI components
+    │   │   ├── views/      # Main pages/screens (e.g., ProjectDashboard, TaskDetail)
+    │   │   ├── services/   # API client, state management
+    │   │   └── assets/
+    │   └── package.json
+    │
+    └── docker-compose.yml
+    ```
+
 * **Deployment**: A container-based approach (e.g., Docker) is recommended, with local code repositories mounted as volumes to provide necessary file system access.
 * **Backend**:
   * **Framework**: An asynchronous Python web server using FastAPI.
-  * **Database**: SQLAlchemy as the ORM with a local SQLite database for initial phases, offering a clear migration path to PostgreSQL for future multi-user support. Use [Atlas](https://atlasgo.io/) for DB schema management and migrations.
+  * **Database**: SQLAlchemy as the ORM with a local SQLite database for initial phases, offering a clear migration path to PostgreSQL for future multi-user support. Use Alembic for DB schema management and migrations.
   * **Real-time Communication**: WebSockets will be used for streaming agent progress and other real-time updates to the frontend.
-  * Use `uv` for dependency management and `ruff` for linting and formatting
+  * Use `uv` for dependency management,  `ruff` for linting and formatting and `pyright` for type checking
 * **Frontend**: A modern, web-based UI built with a framework like React.
 * **Long-Running Tasks**:
   * **Challenge**: AI agent sessions are long-running and cannot be handled within a single synchronous API request.
-  * **Proposed Solution**: A background task queue is required. A lightweight option like Dramatiq or FastAPI's built-in `BackgroundTasks` will be used for initial phases. The flow will be: API triggers a background job -> job streams updates via WebSockets -> UI displays real-time progress.
+  * **Proposed Solution**: A background task queue is required. A lightweight option like Dramatiq or Huey will be used for initial phases. The flow will be: API triggers a background job -> job streams updates via WebSockets -> UI displays real-time progress.
 * **File Synchronization Strategy**:
   * **Challenge**: Documents managed in the UI (e.g., `ARCHITECTURE.md`, `CLAUDE.md`) may also be edited directly on the filesystem, leading to conflicts.
   * **Proposed Solution**: Implement a diff-reconciliation mechanism. Before saving changes from the UI to a file, the application will check the file's last modified timestamp. If the file has changed on disk since it was last read by the app, a three-way merge (using a library like `diff-match-patch`) will be attempted to reconcile the changes automatically. If conflicts cannot be resolved, the user will be prompted to choose which version to keep or to resolve the conflicts manually.
@@ -44,6 +67,7 @@ An interface for providing project and task context from external data sources.
 * **Authentication**: Users will provide credentials (API keys, Personal Access Tokens) via the UI or environment variables. For Slack, the approach will aim to use `xoxc` and `xoxd` tokens to avoid workspace app installation.
 * **API / Interface**:
   * `can_handle_uri(resource_uri)`: Determines if the provider can handle a given resource link.
+  * `get_retrieval_strategy(resource_uri) -> 'EAGER' | 'ON_DEMAND'`: Determines if a resource is "small" enough to be fetched eagerly or "large" enough to require on-demand searching via a tool.
   * `get_resource(resource_uri)`: Retrieves the full content of a small-scope resource.
   * `get_relevant_context(resource_uri, query)`: Retrieves context relevant to a specific query from a larger-scope resource.
   * `get_mcp_tools()`: Returns a list of tools specific to this provider that can be passed to an agent.
@@ -150,9 +174,9 @@ Represents a software codebase relevant to a project or task.
   * Task description
   * The approved Implementation Plan.
 * **Tools/Capabilities**:
-  * Performs code changes.
-  * Runs tests.
-  * Can be interactively guided by the user to iterate on the solution.
+  * Advanced file system manipulation (read, write, list files).
+  * Executes shell commands (e.g., run tests, install dependencies).
+  * Can also use the "Search-and-Replace Block" strategy to make updates to the `Implementation Plan` if new information is discovered during implementation.
   * Can respond to PR review comments.
 * **Model**: Agent with strong agential/tool-use capabilities (e.g., Claude via Claude Code SDK).
 * **Implementation**:
@@ -170,9 +194,41 @@ Represents a software codebase relevant to a project or task.
 * **Implementation**:
   * Can run in app within API request using framework like PydanticAI or as a background task if it needs to do more extensive work.
 
+## Project Agent Conversation Management
+
+* **Challenge**: The Project Q&A agent's conversation history must feel continuous but cannot grow indefinitely, as this would exhaust the LLM's context window. The history must also account for tool calls made by the agent.
+* **Proposed Solution**: A hybrid strategy of an automatic sliding window for message history, combined with a manual reset option and structured storage for tool calls. The primary "memory" of the project will always be the persisted `Project Details` document, not the conversation history.
+* **Implementation**:
+    * **Automatic Sliding Window**: The system will automatically persist only the last **N** messages (e.g., 40) for any given project conversation. When a new message is added, the oldest message is deleted from the database. This keeps the immediate conversational context relevant.
+    * **Manual Reset**: The UI will provide a "Reset Conversation" button, allowing the user to clear the history for a project and start fresh.
+    * **Tool Call Tracking**: The conversation history will explicitly store tool calls and their results as distinct message types. This provides the agent with a clear, structured history of its actions and their outcomes, which is crucial for effective reasoning.
+
+## Task Planning Agent Context Management
+
+* **Challenge**: When an agent is triggered for a task, it needs to be provided with the right context. Some linked resources are small and should be provided upfront, while others are too large and should be made available for the agent to search on-demand.
+* **Proposed Solution**: Implement a **Context Assembly Process** that runs before the agent is called. This process intelligently decides how to handle each resource, preparing a perfectly tailored prompt for the agent.
+* **Implementation**:
+    1.  **Gather Resource URIs**: The backend orchestrator collects all resource links associated with the task from the database and by parsing the task description.
+    2.  **Determine Retrieval Strategy**: For each URI, the orchestrator queries the responsible `ContextProvider` by calling its `get_retrieval_strategy(uri)` method.
+    3.  **Provider-Side Logic**: The logic for differentiating between "small" and "large" resources resides within each provider. For example:
+        * A `SlackContextProvider` identifies a link with a message timestamp as `EAGER` and a channel link as `ON_DEMAND`.
+        * A `NotionContextProvider` might check page metadata (like word count) to decide between `EAGER` and `ON_DEMAND`.
+    4.  **Assemble Final Prompt**: The orchestrator builds the agent's prompt based on the strategies:
+        * For every resource marked `EAGER`, it calls `provider.get_resource(uri)` and includes the full content directly in the prompt's context section.
+        * For every resource marked `ON_DEMAND`, it provides a human-readable description (e.g., "Slack Channel: #project-alpha", along with description if present) and adds the provider's tools (e.g., `search_slack_channel(query)`) to the list of tools available to the agent.
+
+### Planner/Implementer Handoff Strategy
+* **Challenge**: The Planning and Implementation agents have different specializations and require different tools and frameworks, but the user experience should feel continuous.
+* **Proposed Solution**: The "Baton Pass" model. The two agents are treated as separate, specialized services with a clean and formal handoff.
+* **Implementation**:
+    1.  **Planning Phase**: The user's conversation is exclusively with the `Task Investigation & Planning Agent`. The goal of this phase is to produce the `Implementation Plan`.
+    2.  **Formal Handoff**: When the user clicks "Approve Plan", the task's status changes. The conversation history with the Planning Agent is archived.
+    3.  **Implementation Phase**: A *new* conversation is initiated with the `Task Implementation Agent`. The approved `Implementation Plan` serves as the complete context and contract for this new agent.
+    4.  **Seamless UI**: From the user's perspective, this all occurs within the same Task Detail View. The "brain" connected to the chat window simply switches from the Planner to the Implementer based on the task's status, ensuring the right specialist is always on the job.
+
 ### Agent Document Editing Strategy
-* **Challenge**: When an agent needs to update a document (like the Project Details or an Implementation Plan), simply appending the new version to the conversation history is inefficient and confusing.
-* **Proposed Solution**: Treat key artifacts as "living documents" within the agent's context. Instead of passing the document as a simple string in the prompt, it can be provided as a special tool-accessible object. The agent would use a dedicated `update_document(section_id, new_content)` tool. This approach keeps the context clean, allows for targeted, in-place updates, and provides a clear audit trail of changes.
+* Use surgical find-replace style edit tool for making changes to documents (like the Project Details or an Implementation Plan)
+* Treat key artifacts as "living documents" within the agent's context, that are mutated in-place instead of having contents returned from edit tool and ending up with multiple versions of th document in context
 
 
 ## User Workflow & UI/UX 🗺️
@@ -191,7 +247,7 @@ This section outlines the "happy path" for a user completing a task from start t
 
 3.  **Planning Phase**:
     * The user clicks on the new task, opening the "Task Detail View".
-    * They click the "**Generate Plan**" button. The UI shows a status indicator and a real-time log stream:
+    * They click the "**Generate Plan**" button. The UI shows a status indicator and a real-time log stream of agent activity in the chat window:
         * `[Planner] Reading task description...`
         * `[Planner] Querying Jira for linked tickets...`
         * `[Planner] Searching Slack channel #q3-features for "API authentication"...`
@@ -205,7 +261,7 @@ This section outlines the "happy path" for a user completing a task from start t
 
 5.  **Implementation Phase**:
     * The user clicks "**Start Implementation**". The `Task Implementation Agent` is triggered.
-    * The UI now shows a live log of the agent's actions (e.g., `editing file: src/auth.py`, `running tests...`).
+    * The UI now shows a live log of the agent's actions (e.g., `editing file: src/auth.py`, `running tests...`) in the agent chat window.
     * The task status moves to `Implementing`.
 
 6.  **Completion & Review**:
@@ -247,14 +303,16 @@ This is a focused, full-screen view that opens when a user clicks on a Task Card
     * **Codebase**: The associated codebase for the task.
     * **Created Date**: Timestamp of when the task was created.
 * **Main Content Component (Tabbed Interface)**:
-  * **"Plan" Tab**: Contains the rich Markdown editor for the `Implementation Plan`. This is the default view when a plan is ready for review.
-  * **"Agent Chat" Tab**: The interactive chat window for conversing with the `Planning` or `Implementation` agents. This is where clarifying questions are asked and answered.
-  * **"Logs" Tab**: A read-only, auto-scrolling view for the real-time log stream during agent execution. It displays the step-by-step progress of the running agent.
+  * **"Plan" Tab**: Contains the rich Markdown editor for the `Implementation Plan`.
+  * **"Agent Conversation" Tab**: A single, unified, chronological view for all agent interactions.
+    * **User Messages**: Standard chat bubbles.
+    * **Agent Responses**: Standard chat bubbles for final, user-facing answers.
+    * **Agent "Thinking" Blocks**: For the agent's internal monologue (thoughts, tool calls, tool results), these will be displayed in a distinct, collapsible block. By default, it's collapsed to a summary (e.g., "Agent is thinking... [View 3 Steps]"). When expanded, the user can see the detailed, step-by-step execution log.
 * **Action Bar Component**:
   * A persistent footer or sidebar containing the primary action buttons for the task. The buttons are dynamic and change based on the current task status.
     * **Status `Pending`**: Shows "**Generate Plan**".
     * **Status `Awaiting Approval`**: Shows "**Edit Plan**" and "**Approve Plan**".
-    * **Status `Implementing`**: Shows "**View Logs**" and "**Stop Agent**".
+    * **Status `Implementing`**: Shows "**View Conversation**" and "**Stop Agent**".
     * **Status `Complete`**: Shows "**Create Pull Request**".
 
 ## API Endpoints 🔌
@@ -285,6 +343,117 @@ This section defines the core RESTful API contract between the frontend and the 
 
 * **Real-time Updates**
   * `WS /ws/jobs/{job_id}` - A WebSocket endpoint the frontend connects to after triggering an agent, to receive real-time progress updates.
+
+## Database Schema (SQLAlchemy Models) 🗄️
+
+This section defines the initial database models using modern, type-annotated SQLAlchemy syntax.
+
+```python
+import datetime
+from typing import List, Optional
+
+from sqlalchemy import Column, create_engine, ForeignKey, String, Table, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+class Base(DeclarativeBase):
+    pass
+
+# Association table for the many-to-many relationship between Projects and Codebases
+project_codebase_association = Table(
+    "project_codebase_association",
+    Base.metadata,
+    Column("project_id", ForeignKey("projects.id"), primary_key=True),
+    Column("codebase_id", ForeignKey("codebases.id"), primary_key=True),
+)
+
+class Project(Base):
+    """Represents a high-level project, acting as a container for tasks and codebases."""
+    __tablename__ = 'projects'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    details: Mapped[str] = mapped_column(Text)
+    current_status: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+
+    tasks: Mapped[List["Task"]] = relationship(back_populates="project")
+    codebases: Mapped[List["Codebase"]] = relationship(
+        secondary=project_codebase_association, back_populates="projects"
+    )
+
+class Task(Base):
+    """Represents a single, self-contained piece of work within a project."""
+    __tablename__ = 'tasks'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'))
+    codebase_id: Mapped[Optional[int]] = mapped_column(ForeignKey('codebases.id'))
+    
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(50), default='Pending')
+    remote_task_id: Mapped[Optional[str]] = mapped_column(String(100))
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(100))
+    implementation_plan: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+
+    project: Mapped["Project"] = relationship(back_populates="tasks")
+    codebase: Mapped[Optional["Codebase"]] = relationship(back_populates="tasks")
+
+class Codebase(Base):
+    """Represents a software codebase that can be associated with projects and tasks."""
+    __tablename__ = 'codebases'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text)
+    repository_url: Mapped[Optional[str]] = mapped_column(String(512))
+    local_path: Mapped[Optional[str]] = mapped_column(String(512))
+
+    projects: Mapped[List["Project"]] = relationship(
+        secondary=project_codebase_association, back_populates="codebases"
+    )
+    tasks: Mapped[List["Task"]] = relationship(back_populates="codebase")
+
+class ContextProviderLink(Base):
+    """Links a Project or Task to an external resource URI, like a Slack channel or Notion page."""
+    __tablename__ = 'context_provider_links'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int] = mapped_column()
+    parent_type: Mapped[str] = mapped_column(String(50)) # 'project' or 'task'
+    provider_type: Mapped[str] = mapped_column(String(50)) # e.g., 'slack', 'notion'
+    resource_uri: Mapped[str] = mapped_column(String(1024))
+    description: Mapped[Optional[str]] = mapped_column(String(1024))
+    
+    __mapper_args__ = {
+        "polymorphic_on": "parent_type",
+    }
+    
+class ProjectConversationMessage(Base):
+    """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
+    __tablename__ = 'project_conversation_messages'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'))
+    
+    # The role of the message sender, e.g., 'user', 'assistant', 'tool_call', 'tool_result'
+    role: Mapped[str] = mapped_column(String(50))
+    
+    # For text content from 'user' or 'assistant'
+    content: Mapped[Optional[str]] = mapped_column(Text)
+    
+    # For structured data from 'tool_call' or 'tool_result'
+    tool_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    
+    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+
+    project: Mapped["Project"] = relationship(back_populates="messages")
+
+class ContextProviderConfiguration(Base):
+    """Stores the JSON-serialized configuration for a single context provider type."""
+    __tablename__ = 'configurations'
+    
+    provider_type: Mapped[str] = mapped_column(String(50), primary_key=True)
+    settings_json: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+```
 
 ## Key Artifact Schemas 📝
 
@@ -374,95 +543,6 @@ An overview of the database schema and the primary data models used in the appli
 A description of any major design patterns (e.g., Repository Pattern, Dependency Injection) or coding conventions used throughout the codebase.
 ```
 
-## Database Schema (SQLAlchemy Models) 🗄️
-
-This section defines the initial database models using modern, type-annotated SQLAlchemy syntax.
-
-```python
-import datetime
-from typing import List, Optional
-
-from sqlalchemy import Column, create_engine, ForeignKey, String, Table, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-class Base(DeclarativeBase):
-    pass
-
-# Association table for the many-to-many relationship between Projects and Codebases
-project_codebase_association = Table(
-    "project_codebase_association",
-    Base.metadata,
-    Column("project_id", ForeignKey("projects.id"), primary_key=True),
-    Column("codebase_id", ForeignKey("codebases.id"), primary_key=True),
-)
-
-class Project(Base):
-    """Represents a high-level project, acting as a container for tasks and codebases."""
-    __tablename__ = 'projects'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
-    details: Mapped[str] = mapped_column(Text)
-    current_status: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
-
-    tasks: Mapped[List["Task"]] = relationship(back_populates="project")
-    codebases: Mapped[List["Codebase"]] = relationship(
-        secondary=project_codebase_association, back_populates="projects"
-    )
-
-class Task(Base):
-    """Represents a single, self-contained piece of work within a project."""
-    __tablename__ = 'tasks'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'))
-    codebase_id: Mapped[Optional[int]] = mapped_column(ForeignKey('codebases.id'))
-    
-    title: Mapped[str] = mapped_column(String(255))
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(50), default='Pending')
-    remote_task_id: Mapped[Optional[str]] = mapped_column(String(100))
-    conversation_id: Mapped[Optional[str]] = mapped_column(String(100))
-    implementation_plan: Mapped[Optional[str]] = mapped_column(Text)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
-
-    project: Mapped["Project"] = relationship(back_populates="tasks")
-    codebase: Mapped[Optional["Codebase"]] = relationship(back_populates="tasks")
-
-class Codebase(Base):
-    """Represents a software codebase that can be associated with projects and tasks."""
-    __tablename__ = 'codebases'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
-    description: Mapped[str] = mapped_column(Text)
-    repository_url: Mapped[Optional[str]] = mapped_column(String(512))
-    local_path: Mapped[Optional[str]] = mapped_column(String(512))
-
-    projects: Mapped[List["Project"]] = relationship(
-        secondary=project_codebase_association, back_populates="codebases"
-    )
-    tasks: Mapped[List["Task"]] = relationship(back_populates="codebase")
-
-class ContextProviderLink(Base):
-    """Links a Project or Task to an external resource URI, like a Slack channel or Notion page."""
-    __tablename__ = 'context_provider_links'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    parent_id: Mapped[int] = mapped_column()
-    parent_type: Mapped[str] = mapped_column(String(50)) # 'project' or 'task'
-    provider_type: Mapped[str] = mapped_column(String(50)) # e.g., 'slack', 'notion'
-    resource_uri: Mapped[str] = mapped_column(String(1024))
-    
-    __mapper_args__ = {
-        "polymorphic_on": "parent_type",
-    }
-
-class Configuration(Base):
-    """Stores the JSON-serialized configuration for a single context provider type."""
-    __tablename__ = 'configurations'
-    
-    provider_type: Mapped[str] = mapped_column(String(50), primary_key=True)
-    settings_json: Mapped[str] = mapped_column(Text)
-    updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-```
 
 ## Context Provider Configuration
 
@@ -495,20 +575,43 @@ A robust and type-safe configuration system is required to manage the settings f
       model_config = SettingsConfigDict(env_prefix='JIRA_')
   ```
 
+## LLM Provider & Agent Configuration
+
+* **Challenge**: The application needs a flexible way to manage credentials for different LLM providers (e.g., Anthropic, Google) and allow the user to select which model to use for each agent type.
+* **Proposed Solution**: A two-part strategy using Pydantic-Settings for credentials and a dedicated database model for agent model assignments.
+* **LLM Provider Configuration**:
+    * Similar to Context Providers, a Pydantic `BaseSettings` model will be created for each LLM provider (e.g., `AnthropicSettings`).
+    * These models will load API keys exclusively from environment variables (e.g., `ANTHROPIC_API_KEY`). The application will check for the presence of these keys to determine which providers are "configured" and available for use.
+* **Agent Model Assignment**:
+    * A new `AgentConfiguration` table will store the user's choice of model for each agent type (e.g., `planning_agent_model = "claude-3-sonnet-20240229"`).
+    * The UI will present a settings page where users can select a model for each agent from a dropdown. This dropdown will only be populated with models from providers that have their API keys configured in the environment.
+
 ## File Synchronization Strategy
 
 * **Challenge**: Documents managed in the UI that are linked to local files (e.g., `ARCHITECTURE.md`, `CLAUDE.md`) may be edited by external applications (like a text editor or IDE) while they are open in DevBoard. This can lead to conflicting changes and data loss if not handled correctly.
 * **Proposed Solution**: To prevent data loss and manage concurrent edits, the application will implement a **three-way merge** strategy. This is the same robust approach used by version control systems like Git.
-* **Implementation Details**:
-    1.  **State Tracking**: When a file is opened for editing in the DevBoard UI, the application will store its initial state (the **Base Version**).
-    2.  **Pre-Save Check**: Before saving any changes from the UI, the backend will first read the current state of the file on disk (the **Disk Version**).
-    3.  **Diff & Patch**: Using a library like Google's **`diff-match-patch`**, the system will:
-        * Calculate the patch representing the changes between the **Base Version** and the **UI Version**.
-        * Attempt to apply this patch to the **Disk Version**.
-    4.  **Conflict Resolution**:
-        * If the patch applies cleanly (meaning the edits don't overlap), the merged content is written to the file, and the save is successful.
-        * If the patch fails to apply, a **merge conflict** has occurred. The API will return an error, and the UI will present the user with a dialog to resolve the conflict:
-            * **Overwrite Disk Changes**: Saves the UI version, discarding any external edits.
-            * **Discard My Changes**: Reloads the file from disk, discarding all UI edits.
-            * **Copy My Changes to Clipboard**: Allows the user to manually copy their work and resolve the conflict in an external editor.
+* **State Tracking**: File content is always stored in the DB (as **Base Version**). If file sync is enabled:
+    * When file content is requested by UI, first read content from file and update DB version if different
+    * When file content is updated from the UI, read file and DB content and perform 3-way merge and update both File and DB content with result.
+    * If there is a merge conflict, report error to user and they can attempt to resolve manually
 
+## Container Configuration & Persistence
+
+* **Strategy**: The application will be run within a container-based environment (e.g., Docker) to ensure consistency and ease of setup. To manage persistent data and provide access to local codebases, Docker volumes will be used extensively.
+* **Application Data Persistence**:
+    * A dedicated directory on the host machine (e.g., `~/.devboard/data`) will be mapped to a directory inside the container (e.g., `/app/data`).
+    * This volume will store all persistent application state, including the SQLite database file (`devboard.db`) and all JSON configuration files (`agent_config.json`, etc.). This ensures that all user data and settings are preserved even if the container is stopped, removed, or rebuilt.
+* **Codebase Access**:
+    * To allow the application and its AI agents to read and write to local code repositories, users will configure paths to their local codebase directories.
+    * These host paths will be mounted as volumes into a specific directory inside the container (e.g., `/code`). For example, a host directory `/Users/me/dev/my-project` could be mounted to `/code/my-project` inside the container.
+* **Example `docker-compose.yml` snippet**:
+    ```yaml
+    services:
+      backend:
+        build: .
+        volumes:
+          # 1. Maps a host directory for the app's persistent data
+          - ~/.devboard/data:/app/data
+          # 2. Mounts a user's local codebase into the container
+          - /path/to/user/codebase:/code/codebase
+    ```
