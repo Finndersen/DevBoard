@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Application data persistence
+      - ~/.devboard/data:/app/data
+      # Mount user's codebase directory (example - user will configure)
+      - ./:/code/devboard
+    environment:
+      - DATABASE_URL=sqlite:///app/data/devboard.db
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/devboard
+          target: /app/devboard
+        - action: rebuild
+          path: ./backend/pyproject.toml
+
+  frontend:
+    # Placeholder for future frontend service
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - backend
+    profiles:
+      - frontend
