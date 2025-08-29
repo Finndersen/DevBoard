@@ -1,6 +1,6 @@
 # DevBoard - Implementation Plan
 
-This document outlines the detailed, step-by-step tasks required to build the DevBoard application, based on the project specification. Each item is a trackable task.
+This document outlines the detailed, step-by-step tasks required to build the DevBoard application, based on the project specification. The MVP focuses on validating the multi-source context gathering architecture with a Project Q&A agent and four context providers (GitHub, Jira, Slack, Codebase). Each item is a trackable task.
 
 ## Phase 1: Minimum Viable Product (MVP)
 
@@ -30,52 +30,70 @@ This document outlines the detailed, step-by-step tasks required to build the De
 * [ ] **Task 2.3: Implement Core API Endpoints**
   * Create `GET`, `POST`, and `PATCH` endpoints for `Project`, `Task`, and `Codebase` entities.
 * [ ] **Task 2.4: Implement Configuration API Endpoints**
-  * Create `GET` and `POST` endpoints for `ContextProviderLink` and `agent_config.json`.
+  * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for the generic Configuration table.
+  * Create endpoints for managing Integrations and Context Providers.
   * Create the `GET /api/llm-providers/available` endpoint.
 
-### Epic 3: Context & LLM Provider Framework
+### Epic 3: Configuration Framework & Integration Layer
 
-* [ ] **Task 3.1: Implement Pydantic-Settings Framework**
-  * Create the Pydantic `BaseSettings` models for initial Context Providers (Jira, Slack, GitHub) and LLM Providers (e.g., Anthropic).
-* [ ] **Task 3.2: Build Core Context Provider Interface**
-  * Define the abstract base class for all context providers.
-* [ ] **Task 3.3: Implement Initial Context Providers**
-  * Implement Phase 1 functionality for Jira (fetch ticket), Slack (search), and Local Document providers.
+* [ ] **Task 3.1: Implement Generic Configuration Framework**
+  * Create the generic Configuration table and configuration service with Pydantic validation.
+  * Create hierarchical key patterns and schema registry for type-safe configuration loading.
+* [ ] **Task 3.2: Build Integration Base Classes**
+  * Define the abstract base class for all integrations with common authentication and error handling patterns.
+* [ ] **Task 3.3: Implement Core Integrations**
+  * **GitHub Integration**: API client for PRs, commits, issues, branches
+  * **Jira Integration**: API client for tickets, projects, comments
+  * **Slack Integration**: API client for messages, channels, conversations
+  * **Codebase Integration**: File system operations and one-shot agent execution wrapper
 
-### Epic 4: Single-Shot Agent Workflows
+### Epic 4: Context Provider Layer
 
-* [ ] **Task 4.1: Implement Context Assembly Service**
-  * Build the service that runs before an agent is called to prepare the prompt context.
-* [ ] **Task 4.2: Implement Single-Shot Project Q&A Agent**
-  * Create a synchronous API endpoint (`POST /api/projects/{project_id}/chat`) that takes a query, runs the agent, and returns a single response.
-* [ ] **Task 4.3: Implement Single-Shot Task Planning Workflow**
-  * Create a synchronous API endpoint (`POST /api/tasks/{task_id}/plan`) that runs the Planning Agent and returns the complete `Implementation Plan` in the response.
+* [ ] **Task 4.1: Build Context Provider Base Classes**
+  * Define abstract base class with EAGER/ON_DEMAND strategy interface and high-level query tools.
+* [ ] **Task 4.2: Implement Context Providers with Sub-Agents**
+  * **GitHub Context Provider**: PR context, commit summaries (uses GitHub Integration)
+  * **Jira Context Provider**: Ticket context, project status (uses Jira Integration)  
+  * **Slack Context Provider**: Internal sub-agent for query processing (uses Slack Integration)
+  * **Codebase Context Provider**: Agential code exploration using one-shot Claude Code/Gemini CLI execution (uses Codebase Integration)
+  * Each provider implements `get_relevant_context(resource_uri, query)` interface and resource description generation
 
-### Epic 5: Basic Frontend UI
+### Epic 5: Context Assembly & Q&A Agent
 
-* [ ] **Task 5.1: Set Up React Frontend**
+* [ ] **Task 5.1: Implement Context Assembly Service**
+  * Build the service that determines EAGER vs ON_DEMAND strategies for each resource URI.
+  * Implement parallel execution of provider queries and context compilation.
+* [ ] **Task 5.2: Implement Project Q&A Agent**
+  * Create PydanticAI-based agent with custom prompting and universal `get_relevant_context(resource_uri, query)` tool.
+  * Agent receives list of available ON_DEMAND resources with descriptions in initial context.
+  * Build synchronous API endpoint (`POST /api/projects/{project_id}/chat`) for agent interaction.
+* [ ] **Task 5.3: Validate Multi-Source Context Assembly**
+  * Test scenarios involving all four context providers to ensure the architecture works end-to-end.
+
+### Epic 6: Basic Frontend UI
+
+* [ ] **Task 6.1: Set Up React Frontend**
   * Use Vite to initialize a new React project and set up basic routing.
-* [ ] **Task 5.2: Implement Project Dashboard & Kanban Board**
-  * Build the main project view for creating and viewing projects and tasks.
-* [ ] **Task 5.3: Build Task Detail View**
-  * Create the view for a single task, allowing users to see and edit details.
-* [ ] **Task 5.4: Implement Markdown Component**
-  * Integrate a component for rendering and editing Markdown for project/task descriptions and the implementation plan.
-* [ ] **Task 5.5: Implement Basic Agent Interaction UI**
-  * Create a simple UI with a "Run" button to trigger the single-shot agents and a display area for the results.
-* [ ] **Task 5.6: Implement Settings View**
-  * Create the forms for managing context provider and agent model configurations.
+* [ ] **Task 6.2: Implement Project Dashboard**
+  * Build the main project view for creating projects and linking context provider resources.
+* [ ] **Task 6.3: Implement Agent Chat Interface**
+  * Create Project Q&A chat interface with context assembly and real-time responses.
+* [ ] **Task 6.4: Build Configuration Management UI**
+  * Create forms for managing Integration and Context Provider configurations.
+  * Build UI for linking projects to context provider resources with user-provided descriptions.
+  * Include auto-description generation option when user provides just a URI.
+* [ ] **Task 6.5: Implement Basic Task Management**
+  * Simple task CRUD operations with Jira integration for task linking.
 
-## Phase 2: Agent Interactivity & Automation
+## Phase 2: Advanced Agent Features
 
-* [ ] **Task 6.1: Implement Background Task Runner (Huey)**
-* [ ] **Task 6.2: Implement WebSocket Manager for Real-Time Updates**
-* [ ] **Task 6.3: Implement Agent Conversation History**
-  * Add the `ProjectConversationMessage` model and create the migration.
-  * Update the Project Q&A agent to be conversational, using the "Sliding Window" logic.
-* [ ] **Task 6.4: Implement Conversational Task Planning**
-  * Update the Task Planning workflow to be an interactive, conversational background task.
-* [ ] **Task 6.5: Implement Task Implementation Agent**
-* [ ] **Task 6.6: Implement PR Creation Workflow**
-* [ ] **Task 6.7: Enhance UI for Real-Time Interaction**
-  * Implement the `Logs` and `Agent Chat` tabs in the Task Detail View.
+* [ ] **Task 7.1: Implement Agent Conversation History**
+  * Add the `ProjectConversationMessage` model and implement sliding window conversation management.
+* [ ] **Task 7.2: Implement Task Planning Agent**
+  * Build conversational Planning Agent with context assembly and Implementation Plan generation.
+* [ ] **Task 7.3: Implement Task Implementation Agent**
+  * Build Implementation Agent using Claude Code SDK with codebase access and GitHub PR creation.
+* [ ] **Task 7.4: Add Background Task Runner**
+  * Implement Huey/Dramatiq for long-running agent sessions with WebSocket progress updates.
+* [ ] **Task 7.5: Enhanced UI Features**
+  * Task Detail View with Planning/Implementation phases and agent conversation history.

@@ -52,7 +52,7 @@ The system will be built on a local client-server architecture, ensuring access 
 ### 1. Project
 A high-level representation of a large piece of work, analogous to a Jira Epic.
 * **Project Details**: A central Markdown document containing the project overview, technical details, and status.
-* **Context Providers**: Associated with various context sources like Slack channels, Notion pages, etc.
+* **Context Providers**: Associated with various context sources like Slack channels, Notion pages, etc.I dont 
 
 ### 2. Task
 A self-contained piece of work, often linked to a remote ticket in Jira or Asana.
@@ -62,16 +62,27 @@ A self-contained piece of work, often linked to a remote ticket in Jira or Asana
   * **Links**: References to the parent Project, remote task ID, and relevant GitHub repositories/PRs.
   * **AI State**: A `conversation_id` to resume agent sessions and a structured `Implementation Plan` artifact.
 
-### 3. Context Provider
-An interface for providing project and task context from external data sources.
-* **Authentication**: Users will provide credentials (API keys, Personal Access Tokens) via the UI or environment variables. For Slack, the approach will aim to use `xoxc` and `xoxd` tokens to avoid workspace app installation.
-* **API / Interface**:
+### 3. Integration
+A low-level API client interface for external services that provides raw access to service APIs.
+* **Purpose**: Handles authentication, API calls, rate limiting, and error handling for external services.
+* **Examples**: SlackIntegration, JiraIntegration, GitHubIntegration, CodebaseIntegration.
+* **Authentication**: Credentials (API keys, tokens) loaded from environment variables for security.
+* **API Interface**:
+  * Service-specific methods like `get_slack_message()`, `search_jira_issues()`, `get_github_pr()`
+  * Raw data retrieval without business logic or summarization
+  * Reusable across different context providers or direct API access
+
+### 4. Context Provider
+A high-level interface that transforms raw integration data into relevant project/task context using domain intelligence.
+* **Purpose**: Provides intelligent, summarized context for AI agents by leveraging one or more Integrations.
+* **Examples**: ProjectSlackProvider, TaskJiraProvider, CodebaseExplorationProvider.
+* **API Interface**:
   * `can_handle_uri(resource_uri)`: Determines if the provider can handle a given resource link.
-  * `get_retrieval_strategy(resource_uri) -> 'EAGER' | 'ON_DEMAND'`: Determines if a resource is "small" enough to be fetched eagerly or "large" enough to require on-demand searching via a tool.
-  * `get_resource(resource_uri)`: Retrieves the full content of a small-scope resource.
-  * `get_relevant_context(resource_uri, query)`: Retrieves context relevant to a specific query from a larger-scope resource.
-  * `get_mcp_tools()`: Returns a list of tools specific to this provider that can be passed to an agent.
-  * `update_content()`: Performs a refresh of any locally cached content.
+  * `get_retrieval_strategy(resource_uri) -> 'EAGER' | 'ON_DEMAND'`: Determines if a resource is small enough for eager loading.
+  * `get_resource(resource_uri)`: Retrieves full content for small-scope resources (EAGER).
+  * `get_relevant_context(resource_uri, query)`: Universal query interface that uses internal sub-agents to process high-level queries and return focused summaries (ON_DEMAND).
+  * `get_integration_tools()`: Returns lower-level Integration tools for Implementation Agent (write operations like updating Jira status, creating GitHub PRs).
+  * `get_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
 
 ### 4. Codebase
 Represents a software codebase relevant to a project or task.
@@ -83,9 +94,12 @@ Represents a software codebase relevant to a project or task.
 * **Phase 1**: UI for managing user-level agent configurations (e.g., custom slash commands, `CLAUDE.md` prompt guidance, MCP server configuration).
 * **Phase 2**: A unified MCP (tool) server that provides integrations from all configured context providers to the Implementation Agent.
 
-### Context Providers
-* **Phase 1**: Initial integrations for Slack, GitHub, Jira, Notion, and local documents (e.g., PDF). Large-scale resources will rely on the provider's native search capabilities.
-* **Phase 2**: More sophisticated handling of large-scale resources, such as generating local summaries or indexes of Slack conversations for faster retrieval.
+### Integrations & Context Providers
+* **Phase 1**: 
+  * **Integrations**: GitHub (PR/commits), Jira (tickets), Slack (messages), Codebase (file system + agential exploration)
+  * **Context Providers**: ProjectSlackProvider, TaskJiraProvider, GitHubProvider, CodebaseExplorationProvider
+  * **Strategy**: Full EAGER/ON_DEMAND implementation with high-level query interface and internal sub-agents
+* **Phase 2**: Additional providers like Notion, enhanced caching, and local content indexing.
 
 ### Project
 * **Phase 1**: A project view with the editable Project Details document. A project-level chat interface for the Q&A agent.
@@ -117,10 +131,12 @@ Represents a software codebase relevant to a project or task.
 * **Context**:
   * Project overview document.
   * Full list of tasks and their statuses.
-  * List of available large-scale context provider resources with associated descriptions
+  * List of available ON_DEMAND resources with URIs and descriptions
 * **Tools/Capabilities**:
   * Conversational interaction.
-  * `retrieve_relevant_project_context(query)`: A tool for on-demand, targeted context fetching from providers to manage context window limitations. OR, a `get_relevant_context(resource_uri, query)` tool to get context from specific large-scale resources.
+  * **Single Query Tool**: `get_relevant_context(resource_uri, query)` - works with any resource type
+  * **Resource Discovery**: Agent can see available resources and their descriptions to decide which to query
+  * **Read-Only**: Cannot perform write operations like updating tickets or creating PRs
   * Reading more details & state of individual tasks
   * Updating project details/summary and status
 * **Model**: Fast & cheap model with a large context window (e.g., Gemini Flash).
@@ -171,17 +187,18 @@ Represents a software codebase relevant to a project or task.
 ### 5. Task Implementation Agent
 * **Function**: Executes the approved Implementation Plan.
 * **Context**:
-  * Task description
-  * The approved Implementation Plan.
+  * Task description and approved Implementation Plan.
+  * List of available ON_DEMAND resources with URIs and descriptions.
 * **Tools/Capabilities**:
+  * **Read Tools**: Universal `get_relevant_context(resource_uri, query)` for querying any context provider resource.
+  * **Write Tools**: Lower-level Integration tools for mutations like `update_jira_task()`, `create_github_pr()`, `commit_code_changes()`.
   * Advanced file system manipulation (read, write, list files).
   * Executes shell commands (e.g., run tests, install dependencies).
-  * Can also use the "Search-and-Replace Block" strategy to make updates to the `Implementation Plan` if new information is discovered during implementation.
-  * Can respond to PR review comments.
+  * Can update the Implementation Plan using search-and-replace edits.
 * **Model**: Agent with strong agential/tool-use capabilities (e.g., Claude via Claude Code SDK).
 * **Implementation**:
-  * Claude Code SDK running in a background task , resuming from previous conversation state if applicable.
-  * Provided with a unified MCP server combining tools from all configured context providers.
+  * Claude Code SDK running in a background task, resuming from previous conversation state if applicable.
+  * Provided with unified MCP server combining read tools (Context Providers) and write tools (Integrations).
 
 ### 6. Post-Task Review Agent
 * **Function**: After a task is complete, this agent reviews the outcome to reconcile learnings and update project documentation.
@@ -215,7 +232,7 @@ Represents a software codebase relevant to a project or task.
         * A `NotionContextProvider` might check page metadata (like word count) to decide between `EAGER` and `ON_DEMAND`.
     4.  **Assemble Final Prompt**: The orchestrator builds the agent's prompt based on the strategies:
         * For every resource marked `EAGER`, it calls `provider.get_resource(uri)` and includes the full content directly in the prompt's context section.
-        * For every resource marked `ON_DEMAND`, it provides a human-readable description (e.g., "Slack Channel: #project-alpha", along with description if present) and adds the provider's tools (e.g., `search_slack_channel(query)`) to the list of tools available to the agent.
+        * For every resource marked `ON_DEMAND`, it provides the resource URI, type, and description in the agent's initial context, along with the universal `get_relevant_context(resource_uri, query)` tool for querying any resource.
 
 ### Planner/Implementer Handoff Strategy
 * **Challenge**: The Planning and Implementation agents have different specializations and require different tools and frameworks, but the user experience should feel continuous.
@@ -412,19 +429,24 @@ class Codebase(Base):
     )
     tasks: Mapped[List["Task"]] = relationship(back_populates="codebase")
 
+class Configuration(Base):
+    """Generic key-value configuration store for all application settings."""
+    __tablename__ = 'configurations'
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value_json: Mapped[str] = mapped_column(Text)
+    schema_version: Mapped[str] = mapped_column(String(50), default="1.0")
+    updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
 class ContextProviderLink(Base):
-    """Links a Project or Task to an external resource URI, like a Slack channel or Notion page."""
+    """Links a Project or Task to a specific Context Provider resource."""
     __tablename__ = 'context_provider_links'
     id: Mapped[int] = mapped_column(primary_key=True)
+    provider_name: Mapped[str] = mapped_column(String(255))  # References context provider by name
     parent_id: Mapped[int] = mapped_column()
-    parent_type: Mapped[str] = mapped_column(String(50)) # 'project' or 'task'
-    provider_type: Mapped[str] = mapped_column(String(50)) # e.g., 'slack', 'notion'
+    parent_type: Mapped[str] = mapped_column(String(50))  # 'project' or 'task'
     resource_uri: Mapped[str] = mapped_column(String(1024))
-    description: Mapped[Optional[str]] = mapped_column(String(1024))
-    
-    __mapper_args__ = {
-        "polymorphic_on": "parent_type",
-    }
+    description: Mapped[Optional[str]] = mapped_column(String(1024))  # User-provided or auto-generated
+    auto_generated_description: Mapped[bool] = mapped_column(default=True)  # Track if description was auto-generated
     
 class ProjectConversationMessage(Base):
     """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
@@ -444,14 +466,6 @@ class ProjectConversationMessage(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
 
     project: Mapped["Project"] = relationship(back_populates="messages")
-
-class ContextProviderConfiguration(Base):
-    """Stores the JSON-serialized configuration for a single context provider type."""
-    __tablename__ = 'configurations'
-    
-    provider_type: Mapped[str] = mapped_column(String(50), primary_key=True)
-    settings_json: Mapped[str] = mapped_column(Text)
-    updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 ```
 
@@ -544,47 +558,176 @@ A description of any major design patterns (e.g., Repository Pattern, Dependency
 ```
 
 
-## Context Provider Configuration
+## Generic Configuration Framework
 
-A robust and type-safe configuration system is required to manage the settings for various context providers.
+A flexible, type-safe configuration system manages all application settings using a hierarchical key-value approach with schema validation.
 
-* **Strategy**: The application will use the **Pydantic-Settings** library to manage configurations. This approach provides:
-  * **Type Safety & Validation**: Each provider will have a dedicated Pydantic `BaseSettings` model (e.g., `SlackSettings`, `JiraSettings`) ensuring that configuration is always valid.
-  * **Environment Variable Loading**: Sensitive information like API keys and tokens will be loaded directly from environment variables, adhering to security best practices.
-  * **Database Persistence**: Non-sensitive, user-configurable settings will be serialized to JSON and stored in the database.
-* **Implementation**:
-  1. A Pydantic model is defined for each provider, specifying which fields are loaded from the environment and which are user-configurable.
-  2. A `Configuration` table in the database stores the JSON representation of the user-configurable settings for each provider type.
-  3. When the application needs a provider's settings, it will load the JSON from the database and instantiate the corresponding Pydantic model. Pydantic will automatically merge the database values with the values from environment variables to create a complete, validated settings object.
-* **Example Pydantic Models**:
+* **Core Concepts**:
+  * **Configuration Repository**: Code-based registry mapping configuration keys to Pydantic models for validation
+  * **Hierarchical Keys**: Organized namespace like `integration.slack.main`, `context_provider.codebase.local`, `agent.qa.model_settings`
+  * **Multi-Source Loading**: Combines environment variables (sensitive data) with database storage (user settings)
+  * **Type Safety**: All configurations validated against registered Pydantic schemas
+
+* **Configuration Repository Pattern**:
   ```python
-  from pydantic_settings import BaseSettings, SettingsConfigDict
-
-  class SlackSettings(BaseSettings):
-      # Loaded from an environment variable named SLACK_API_TOKEN
-      api_token: str
-      # A non-secret value stored in the DB, editable by the user
-      default_channel: str = "general"
-      # Tells Pydantic to look for environment variables
-      model_config = SettingsConfigDict(env_prefix='SLACK_')
-
-  class JiraSettings(BaseSettings):
-      api_token: str
-      server_url: str # e.g., "[https://your-company.atlassian.net](https://your-company.atlassian.net)"
-      user_email: str
-      model_config = SettingsConfigDict(env_prefix='JIRA_')
+  from abc import ABC, abstractmethod
+  from typing import Dict, Type, TypeVar
+  from pydantic import BaseModel
+  
+  T = TypeVar('T', bound=BaseModel)
+  
+  class ConfigRepository:
+      """Registry of configuration schemas and loading logic"""
+      _schemas: Dict[str, Type[BaseModel]] = {}
+      
+      @classmethod
+      def register_schema(cls, key: str, schema: Type[T]) -> None:
+          cls._schemas[key] = schema
+      
+      @classmethod
+      def get_config(cls, key: str) -> BaseModel:
+          schema = cls._schemas.get(key)
+          if not schema:
+              raise ValueError(f"No schema registered for key: {key}")
+          
+          # Load from database + environment variables
+          db_data = load_from_database(key)
+          return schema.model_validate(db_data)
   ```
 
-## LLM Provider & Agent Configuration
+* **Example Configuration Schemas**:
+  ```python
+  # Integration Layer - API credentials and connection details
+  class SlackIntegrationConfig(BaseSettings):
+      api_token: str  # From SLACK_API_TOKEN env var
+      workspace_url: Optional[str] = None  # From database
+      model_config = SettingsConfigDict(env_prefix='SLACK_')
 
-* **Challenge**: The application needs a flexible way to manage credentials for different LLM providers (e.g., Anthropic, Google) and allow the user to select which model to use for each agent type.
-* **Proposed Solution**: A two-part strategy using Pydantic-Settings for credentials and a dedicated database model for agent model assignments.
-* **LLM Provider Configuration**:
-    * Similar to Context Providers, a Pydantic `BaseSettings` model will be created for each LLM provider (e.g., `AnthropicSettings`).
-    * These models will load API keys exclusively from environment variables (e.g., `ANTHROPIC_API_KEY`). The application will check for the presence of these keys to determine which providers are "configured" and available for use.
-* **Agent Model Assignment**:
-    * A new `AgentConfiguration` table will store the user's choice of model for each agent type (e.g., `planning_agent_model = "claude-3-sonnet-20240229"`).
-    * The UI will present a settings page where users can select a model for each agent from a dropdown. This dropdown will only be populated with models from providers that have their API keys configured in the environment.
+  # Context Provider Layer - Behavior and defaults  
+  class SlackContextProviderConfig(BaseModel):
+      integration_key: str = "integration.slack.main"
+      lookback_days: int = 7
+      max_messages_per_query: int = 50
+      agent_model: str = "gemini-flash"
+      
+  # Agent Configuration
+  class QAAgentConfig(BaseModel):
+      model_name: str = "gemini-flash"
+      max_context_tokens: int = 100000
+      temperature: float = 0.1
+      
+  # Register schemas with repository
+  ConfigRepository.register_schema("integration.slack.main", SlackIntegrationConfig)
+  ConfigRepository.register_schema("context_provider.slack.discussions", SlackContextProviderConfig) 
+  ConfigRepository.register_schema("agent.qa.default", QAAgentConfig)
+  ```
+
+* **Configuration Service Interface**:
+  ```python
+  from typing import Optional, List, Dict
+  from pydantic import ValidationError
+  
+  class ConfigValidationResult:
+      def __init__(self, success: bool, config: Optional[BaseModel] = None, errors: Optional[List[str]] = None):
+          self.success = success
+          self.config = config
+          self.errors = errors or []
+  
+  class ConfigService:
+      def get_config(self, key: str) -> Optional[BaseModel]:
+          """Simple getter - returns config if valid, None if not"""
+          result = self.validate_config(key)
+          return result.config if result.success else None
+      
+      def validate_config(self, key: str) -> ConfigValidationResult:
+          """Returns detailed validation result with error information"""
+          schema = ConfigRepository.get_schema(key)
+          if not schema:
+              return ConfigValidationResult(False, errors=[f"No schema registered for key: {key}"])
+          
+          try:
+              # Load DB data (empty dict if no entry exists)
+              db_data = self._load_from_db(key) or {}
+              
+              # Attempt to instantiate with DB + env vars
+              config = schema.model_validate(db_data)
+              return ConfigValidationResult(True, config=config)
+              
+          except ValidationError as e:
+              # Parse errors to provide helpful feedback
+              errors = []
+              for error in e.errors():
+                  field = error['loc'][0] if error['loc'] else 'unknown'
+                  if 'missing' in error['type']:
+                      errors.append(f"Missing required field '{field}' - check environment variables or database configuration")
+                  else:
+                      errors.append(f"Invalid value for '{field}': {error['msg']}")
+              
+              return ConfigValidationResult(False, errors=errors)
+      
+      def set_config(self, key: str, data: BaseModel) -> None: ...
+      def list_configs(self, prefix: str = None) -> List[str]: ...
+      def delete_config(self, key: str) -> None: ...
+      def get_provider_status(self, provider_type: str) -> Dict[str, ConfigValidationResult]: ...
+  ```
+
+## Configuration Framework Usage Examples
+
+The generic configuration framework manages all application settings through the unified key-value system:
+
+* **Basic Usage**:
+  ```python
+  # Simple config retrieval
+  slack_config = config_service.get_config("integration.slack.main")
+  if slack_config:
+      integration = SlackIntegration(slack_config)
+  
+  # Detailed validation for UI/diagnostics
+  result = config_service.validate_config("integration.slack.main")
+  if not result.success:
+      for error in result.errors:
+          # Show user: "Missing required field 'api_token' - check environment variables"
+          display_error(error)
+  ```
+
+* **Provider Availability Check**:
+  ```python
+  # Check if provider is fully configured and ready to use
+  provider_status = config_service.get_provider_status("slack")
+  if all(result.success for result in provider_status.values()):
+      # Provider is ready
+      setup_slack_provider()
+  else:
+      # Show configuration errors to user
+      show_provider_setup_errors(provider_status)
+  ```
+
+* **Configuration Hierarchy**:
+
+* **Integration Configurations** (API credentials from environment):
+  * `integration.slack.main` → SlackIntegrationConfig
+  * `integration.jira.production` → JiraIntegrationConfig  
+  * `integration.github.personal` → GitHubIntegrationConfig
+  * `integration.codebase.local` → CodebaseIntegrationConfig
+
+* **Context Provider Configurations** (behavior settings from database):
+  * `context_provider.slack.discussions` → SlackContextProviderConfig
+  * `context_provider.codebase.exploration` → CodebaseContextProviderConfig
+  * `context_provider.jira.tickets` → JiraContextProviderConfig
+
+* **Agent Configurations** (model and behavior settings):
+  * `agent.qa.default` → QAAgentConfig
+  * `agent.planning.default` → PlanningAgentConfig
+  * `agent.implementation.default` → ImplementationAgentConfig
+
+* **LLM Provider Configurations** (API credentials from environment):
+  * `llm.anthropic.main` → AnthropicProviderConfig
+  * `llm.google.main` → GoogleProviderConfig
+
+* **Application-Level Configurations**:
+  * `app.database.main` → DatabaseConfig
+  * `app.websocket.main` → WebSocketConfig
+  * `app.security.main` → SecurityConfig
 
 ## File Synchronization Strategy
 
