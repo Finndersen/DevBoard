@@ -1,36 +1,36 @@
 # DevBoard Backend - Development Commands
 
-.PHONY: help install dev format lint type-check test start migrate clean
+.PHONY: help install dev format lint typecheck test start migrate clean
 
 help:		## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install:	## Install dependencies
-	uv sync
-
-dev:		## Install development dependencies
-	uv sync --dev
+install:	## Install development dependencies
+	uv sync --extra dev
 
 format:		## Format code with ruff
-	uv run ruff format .
+	ruff format .
+	ruff check . --fix
 
 lint:		## Lint code with ruff
-	uv run ruff check .
+	ruff format . --check
+	ruff check .
+	pyright
 
-type-check:	## Type check with pyright
-	uv run pyright
+typecheck:	## Type-check code with mypy
+	pyright
 
 test:		## Run tests
-	uv run pytest
+	pytest
 
 start:		## Start development server
-	uv run uvicorn devboard.main:app --host 0.0.0.0 --port 8000 --reload
+	uvicorn devboard.main:app --host 0.0.0.0 --port 8000 --reload
 
 migrate:	## Run database migrations
-	mkdir -p data && PYTHONPATH=. uv run alembic upgrade head
+	mkdir -p data && PYTHONPATH=. alembic upgrade head
 
 migrate-auto:	## Generate new migration
-	PYTHONPATH=. uv run alembic revision --autogenerate
+	PYTHONPATH=. alembic revision --autogenerate
 
 clean:		## Clean up generated files
 	rm -rf .venv __pycache__ .pytest_cache .ruff_cache
