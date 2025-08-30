@@ -1,13 +1,12 @@
 """Base database models and shared components."""
-import datetime
-from typing import List, Optional
 
-from sqlalchemy import Column, ForeignKey, String, Table, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import Column, ForeignKey, Table
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
+
     pass
 
 

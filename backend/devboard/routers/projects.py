@@ -1,5 +1,4 @@
 """Project API endpoints."""
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,7 +10,7 @@ from devboard.schemas.project import ProjectCreate, ProjectResponse, ProjectUpda
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("/", response_model=list[ProjectResponse])
 async def list_projects(db: Session = Depends(get_db)):
     """List all projects."""
     projects = db.query(Project).all()
@@ -45,11 +44,11 @@ async def update_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     update_data = project_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(project, field, value)
-    
+
     db.commit()
     db.refresh(project)
     return project
@@ -61,7 +60,7 @@ async def delete_project(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     db.delete(project)
     db.commit()
     return {"message": "Project deleted successfully"}

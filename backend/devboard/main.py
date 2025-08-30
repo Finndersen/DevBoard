@@ -1,8 +1,9 @@
 """Main FastAPI application."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from devboard.routers import projects, tasks, codebases, configurations
+from devboard.routers import codebases, configurations, projects, tasks
 
 app = FastAPI(
     title="DevBoard API",
@@ -21,7 +22,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
-app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])  
+app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
 
@@ -38,5 +39,5 @@ async def health():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "database": "connected"  # TODO: Add actual database health check
+        "database": "connected",  # TODO: Add actual database health check
     }

@@ -1,5 +1,4 @@
 """Task API endpoints."""
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,7 +10,7 @@ from devboard.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 router = APIRouter()
 
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=list[TaskResponse])
 async def list_tasks(project_id: int = None, db: Session = Depends(get_db)):
     """List tasks, optionally filtered by project."""
     query = db.query(Task)
@@ -46,11 +45,11 @@ async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depen
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     update_data = task_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(task, field, value)
-    
+
     db.commit()
     db.refresh(task)
     return task
@@ -62,7 +61,7 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     db.delete(task)
     db.commit()
     return {"message": "Task deleted successfully"}

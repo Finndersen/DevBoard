@@ -1,4 +1,5 @@
 """Database models package."""
+
 from .base import Base
 from .codebase import Codebase
 from .configuration import Configuration, ContextProviderLink
@@ -8,7 +9,7 @@ from .task import Task
 __all__ = [
     "Base",
     "Project",
-    "Task", 
+    "Task",
     "Codebase",
     "Configuration",
     "ContextProviderLink",

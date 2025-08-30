@@ -1,5 +1,4 @@
 """Configuration API endpoints."""
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -19,7 +18,7 @@ router = APIRouter()
 
 
 # Configuration endpoints
-@router.get("/", response_model=List[ConfigurationResponse])
+@router.get("/", response_model=list[ConfigurationResponse])
 async def list_configurations(prefix: str = None, db: Session = Depends(get_db)):
     """List all configurations, optionally filtered by key prefix."""
     query = db.query(Configuration)
@@ -67,11 +66,11 @@ async def update_configuration(
     config = db.query(Configuration).filter(Configuration.key == config_key).first()
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
-    
+
     update_data = config_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(config, field, value)
-    
+
     db.commit()
     db.refresh(config)
     return config
@@ -83,14 +82,14 @@ async def delete_configuration(config_key: str, db: Session = Depends(get_db)):
     config = db.query(Configuration).filter(Configuration.key == config_key).first()
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
-    
+
     db.delete(config)
     db.commit()
     return {"message": "Configuration deleted successfully"}
 
 
 # Context Provider Link endpoints
-@router.get("/provider-links/", response_model=List[ContextProviderLinkResponse])
+@router.get("/provider-links/", response_model=list[ContextProviderLinkResponse])
 async def list_provider_links(
     parent_type: str = None, parent_id: int = None, db: Session = Depends(get_db)
 ):
@@ -122,11 +121,11 @@ async def update_provider_link(
     link = db.query(ContextProviderLink).filter(ContextProviderLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Context provider link not found")
-    
+
     update_data = link_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(link, field, value)
-    
+
     db.commit()
     db.refresh(link)
     return link
@@ -138,7 +137,7 @@ async def delete_provider_link(link_id: int, db: Session = Depends(get_db)):
     link = db.query(ContextProviderLink).filter(ContextProviderLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Context provider link not found")
-    
+
     db.delete(link)
     db.commit()
     return {"message": "Context provider link deleted successfully"}

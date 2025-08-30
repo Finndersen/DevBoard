@@ -1,7 +1,5 @@
-import pytest
 from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from devboard.db.models import Base

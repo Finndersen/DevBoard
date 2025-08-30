@@ -1,5 +1,4 @@
 """Codebase API endpoints."""
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,7 +10,7 @@ from devboard.schemas.codebase import CodebaseCreate, CodebaseResponse, Codebase
 router = APIRouter()
 
 
-@router.get("/", response_model=List[CodebaseResponse])
+@router.get("/", response_model=list[CodebaseResponse])
 async def list_codebases(db: Session = Depends(get_db)):
     """List all codebases."""
     codebases = db.query(Codebase).all()
@@ -45,11 +44,11 @@ async def update_codebase(
     codebase = db.query(Codebase).filter(Codebase.id == codebase_id).first()
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
-    
+
     update_data = codebase_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(codebase, field, value)
-    
+
     db.commit()
     db.refresh(codebase)
     return codebase
@@ -61,7 +60,7 @@ async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
     codebase = db.query(Codebase).filter(Codebase.id == codebase_id).first()
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
-    
+
     db.delete(codebase)
     db.commit()
     return {"message": "Codebase deleted successfully"}

@@ -4,44 +4,44 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 ## Phase 1: Minimum Viable Product (MVP)
 
-### Epic 1: Core Backend & Database Setup
+### Epic 1: Core Backend & Database Setup ✅
 
-* [ ] **Task 1.1: Initialize FastAPI Project**
+* [x] **Task 1.1: Initialize FastAPI Project**
   * Set up a standard FastAPI project structure with directories for `routers`, `models`, `services`, `core` (for config), etc.
   * Initialize a `pyproject.toml` file for dependency management with `uv`.
-* [ ] **Task 1.2: Set up Ruff for Linting and Formatting, and Pyright for type checking**
+* [x] **Task 1.2: Set up Ruff for Linting and Formatting, and Pyright for type checking**
   * Add `ruff` and `pyright` as a development dependency in `pyproject.toml`.
-  * Configure `lint` and `format` script commands in `pyproject.toml`.
+  * Configure development commands in Makefile.
   * Create a pre-commit hook to run `ruff` and `pyright` on staged files before each commit.
-* [ ] **Task 1.3: Configure Docker Environment & Persistence**
+* [x] **Task 1.3: Configure Docker Environment & Persistence**
   * Create a `Dockerfile` for the Python backend.
   * Create a `docker-compose.yml` that defines the backend service and configures a volume mount for data persistence.
-* [ ] **Task 1.4: Set Up Database with SQLAlchemy & Atlas**
+* [x] **Task 1.4: Set Up Database with SQLAlchemy & Alembic**
   * Install SQLAlchemy and Alembic.
   * Configure SQLAlchemy to use a local SQLite database file located in the persistent data directory.
-  * Initialize Alembic (alembic init) to create the migrations environment.
+  * Initialize Alembic and configure in `pyproject.toml`.
 
-### Epic 2: Database Models & Core API
+### Epic 2: Database Models & Core API ✅
 
-* [ ] **Task 2.1: Implement Core SQLAlchemy Models**
+* [x] **Task 2.1: Implement Core SQLAlchemy Models**
   * Implement the models required for the MVP: `Project`, `Task`, `Codebase`, `ContextProviderLink`, `Configuration`.
-* [ ] **Task 2.2: Create Initial Database Migration**
-  * Use Alembic (alembic revision --autogenerate) to generate and apply the initial migration script for the core models.
-* [ ] **Task 2.3: Implement Core API Endpoints**
-  * Create `GET`, `POST`, and `PATCH` endpoints for `Project`, `Task`, and `Codebase` entities.
-* [ ] **Task 2.4: Implement Configuration API Endpoints**
+* [x] **Task 2.2: Create Initial Database Migration**
+  * Use Alembic (alembic revision --autogenerate) to generate the initial migration script for the core models.
+* [x] **Task 2.3: Implement Core API Endpoints**
+  * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for `Project`, `Task`, and `Codebase` entities with Pydantic schemas.
+* [x] **Task 2.4: Implement Configuration API Endpoints**
   * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for the generic Configuration table.
-  * Create endpoints for managing Integrations and Context Providers.
-  * Create the `GET /api/llm-providers/available` endpoint.
+  * Create endpoints for managing Context Provider Links.
+  * FastAPI application setup with CORS and router integration.
 
-### Epic 3: Configuration Framework & Integration Layer
+### Epic 3: Configuration Framework & Integration Layer ✅
 
-* [ ] **Task 3.1: Implement Generic Configuration Framework**
+* [x] **Task 3.1: Implement Generic Configuration Framework**
   * Create the generic Configuration table and configuration service with Pydantic validation.
   * Create hierarchical key patterns and schema registry for type-safe configuration loading.
-* [ ] **Task 3.2: Build Integration Base Classes**
+* [x] **Task 3.2: Build Integration Base Classes**
   * Define the abstract base class for all integrations with common authentication and error handling patterns.
-* [ ] **Task 3.3: Implement Core Integrations**
+* [x] **Task 3.3: Implement Core Integrations**
   * **GitHub Integration**: API client for PRs, commits, issues, branches
   * **Jira Integration**: API client for tickets, projects, comments
   * **Slack Integration**: API client for messages, channels, conversations
