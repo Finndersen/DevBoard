@@ -11,6 +11,9 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "python-multipart>=0.0.6",
+    "jira>=3.5.0",
+    "PyGithub>=1.59.0",
+    "slack-sdk>=3.27.0",
 ]
 
 [project.optional-dependencies]
