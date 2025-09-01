@@ -4,11 +4,17 @@ import logging
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic_settings import SettingsConfigDict
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from .base import BaseConfig, BaseIntegration, AuthenticationError, RateLimitError, ResourceNotFoundError, IntegrationError
+from ..core.config import BaseConfig
+from .base import (
+    AuthenticationError,
+    BaseIntegration,
+    IntegrationError,
+    RateLimitError,
+    ResourceNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +30,7 @@ class SlackIntegrationConfig(BaseConfig):
 
 class SlackIntegration(BaseIntegration):
     """Integration for Slack API access."""
-    
+
     integration_type = "slack"
 
     def __init__(self, config: SlackIntegrationConfig):
@@ -35,7 +41,7 @@ class SlackIntegration(BaseIntegration):
             logger.info("Initialized Slack integration")
         except Exception as e:
             logger.error(f"Failed to initialize Slack integration: {e}")
-            raise AuthenticationError(f"Failed to initialize Slack: {e}")
+            raise AuthenticationError(f"Failed to initialize Slack: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test Slack API connection."""
@@ -44,7 +50,7 @@ class SlackIntegration(BaseIntegration):
             return response.get("ok", False)
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             else:
                 logger.error(f"Slack connection test failed: {e}")
                 return False
@@ -56,25 +62,22 @@ class SlackIntegration(BaseIntegration):
         """Get a specific message by channel and timestamp."""
         try:
             response = self.client.conversations_history(
-                channel=channel,
-                latest=timestamp,
-                inclusive=True,
-                limit=1
+                channel=channel, latest=timestamp, inclusive=True, limit=1
             )
-            
+
             if response.get("ok") and response.get("messages"):
                 return response["messages"][0]  # type: ignore[return-value]
             return None
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "not_in_channel"]:
-                raise ResourceNotFoundError(f"Channel or message not found: {e}")
+                raise ResourceNotFoundError(f"Channel or message not found: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in get_message({channel}, {timestamp}): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_channel_history(
         self,
@@ -100,14 +103,14 @@ class SlackIntegration(BaseIntegration):
                 return []
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "not_in_channel"]:
-                raise ResourceNotFoundError(f"Channel not found: {e}")
+                raise ResourceNotFoundError(f"Channel not found: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in get_channel_history({channel}): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_thread_replies(self, channel: str, thread_ts: str) -> list[dict[str, Any]]:
         """Get replies to a thread."""
@@ -119,14 +122,14 @@ class SlackIntegration(BaseIntegration):
             return []
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "thread_not_found"]:
-                raise ResourceNotFoundError(f"Channel or thread not found: {e}")
+                raise ResourceNotFoundError(f"Channel or thread not found: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in get_thread_replies({channel}, {thread_ts}): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     async def search_messages(self, query: str, count: int = 20) -> dict[str, Any]:
         """Search messages across the workspace."""
@@ -140,12 +143,12 @@ class SlackIntegration(BaseIntegration):
                 return {"messages": {"matches": []}}
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in search_messages({query}): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_channel_info(self, channel: str) -> dict[str, Any] | None:
         """Get information about a channel."""
@@ -157,21 +160,20 @@ class SlackIntegration(BaseIntegration):
             return None
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "channel_not_found":
-                raise ResourceNotFoundError(f"Channel not found: {e}")
+                raise ResourceNotFoundError(f"Channel not found: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in get_channel_info({channel}): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     async def list_channels(self, limit: int = 100) -> list[dict[str, Any]]:
         """List public channels."""
         try:
             response = self.client.conversations_list(
-                types="public_channel,private_channel",
-                limit=limit
+                types="public_channel,private_channel", limit=limit
             )
 
             if response.get("ok"):
@@ -179,12 +181,12 @@ class SlackIntegration(BaseIntegration):
             return []
         except SlackApiError as e:
             if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
-                raise AuthenticationError(f"Slack authentication failed: {e}")
+                raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "rate_limited":
-                raise RateLimitError(f"Slack rate limit exceeded: {e}")
+                raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
                 logger.error(f"Slack error in list_channels(): {e}")
-                raise IntegrationError(f"Slack error: {e}")
+                raise IntegrationError(f"Slack error: {e}") from e
 
     def parse_message_url(self, url: str) -> dict[str, str] | None:
         """Parse Slack message URL to extract channel and timestamp."""

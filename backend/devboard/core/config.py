@@ -3,12 +3,31 @@
 import json
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import select
 
 from devboard.db.database import SessionLocal
 from devboard.db.models import Configuration
 
-T = TypeVar("T", bound=BaseModel)
+
+class BaseConfig(BaseSettings):
+    """Base configuration class with common settings for all config models."""
+
+    @classmethod
+    def get_base_config(cls, env_prefix: str) -> SettingsConfigDict:
+        """Get base model configuration with specified env_prefix."""
+        return SettingsConfigDict(
+            env_prefix=env_prefix,
+            case_sensitive=False,
+            extra="forbid",
+            validate_assignment=True,
+            env_file=".env",
+            env_file_encoding="utf-8",
+        )
+
+
+T = TypeVar("T", bound=BaseConfig)
 
 
 class ConfigValidationResult:
@@ -17,7 +36,7 @@ class ConfigValidationResult:
     def __init__(
         self,
         success: bool,
-        config: BaseModel | None = None,
+        config: BaseConfig | None = None,
         errors: list[str] | None = None,
     ):
         self.success = success
@@ -28,7 +47,7 @@ class ConfigValidationResult:
 class ConfigRepository:
     """Registry of configuration schemas and validation logic."""
 
-    _schemas: dict[str, type[BaseModel]] = {}
+    _schemas: dict[str, type[BaseConfig]] = {}
 
     @classmethod
     def register_schema(cls, key: str, schema: type[T]) -> None:
@@ -36,12 +55,12 @@ class ConfigRepository:
         cls._schemas[key] = schema
 
     @classmethod
-    def get_schema(cls, key: str) -> type[BaseModel] | None:
+    def get_schema(cls, key: str) -> type[BaseConfig] | None:
         """Get the registered schema for a configuration key."""
         return cls._schemas.get(key)
 
     @classmethod
-    def get_all_schemas(cls) -> dict[str, type[BaseModel]]:
+    def get_all_schemas(cls) -> dict[str, type[BaseConfig]]:
         """Get all registered schemas."""
         return cls._schemas.copy()
 
@@ -60,7 +79,7 @@ class ConfigService:
     def __init__(self, db_session_factory=SessionLocal):
         self.db_session_factory = db_session_factory
 
-    def get_config(self, key: str) -> BaseModel | None:
+    def get_config(self, key: str) -> BaseConfig | None:
         """Simple getter - returns config if valid, None if not."""
         result = self.validate_config(key)
         return result.config if result.success else None
@@ -93,7 +112,7 @@ class ConfigService:
 
             return ConfigValidationResult(False, errors=errors)
 
-    def set_config(self, key: str, data: BaseModel) -> None:
+    def set_config(self, key: str, data: BaseConfig) -> None:
         """Set configuration data."""
         # Validate that the key has a registered schema
         schema = ConfigRepository.get_schema(key)
@@ -105,7 +124,8 @@ class ConfigService:
 
         # Save to database
         with self.db_session_factory() as db:
-            config = db.query(Configuration).filter(Configuration.key == key).first()
+            stmt = select(Configuration).where(Configuration.key == key)
+            config = db.execute(stmt).scalar_one_or_none()
             if config:
                 config.value_json = validated_data.model_dump_json()
             else:
@@ -116,10 +136,10 @@ class ConfigService:
     def list_configs(self, prefix: str | None = None) -> list[str]:
         """List available configuration keys."""
         with self.db_session_factory() as db:
-            query = db.query(Configuration.key)
+            stmt = select(Configuration.key)
             if prefix:
-                query = query.filter(Configuration.key.startswith(prefix))
-            db_keys = [row[0] for row in query.all()]
+                stmt = stmt.where(Configuration.key.startswith(prefix))
+            db_keys = list(db.execute(stmt).scalars().all())
 
         # Combine with registered schema keys
         schema_keys = ConfigRepository.list_keys(prefix)
@@ -129,7 +149,8 @@ class ConfigService:
     def delete_config(self, key: str) -> None:
         """Delete a configuration."""
         with self.db_session_factory() as db:
-            config = db.query(Configuration).filter(Configuration.key == key).first()
+            stmt = select(Configuration).where(Configuration.key == key)
+            config = db.execute(stmt).scalar_one_or_none()
             if config:
                 db.delete(config)
                 db.commit()
@@ -148,7 +169,8 @@ class ConfigService:
     def _load_from_db(self, key: str) -> dict[str, Any] | None:
         """Load configuration data from database."""
         with self.db_session_factory() as db:
-            config = db.query(Configuration).filter(Configuration.key == key).first()
+            stmt = select(Configuration).where(Configuration.key == key)
+            config = db.execute(stmt).scalar_one_or_none()
             if config:
                 return json.loads(config.value_json)
             return None

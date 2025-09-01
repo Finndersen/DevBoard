@@ -3,25 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
 logger = logging.getLogger(__name__)
-
-
-class BaseConfig(BaseSettings):
-    """Base configuration class with common settings for all config models."""
-    
-    @classmethod
-    def get_base_config(cls, env_prefix: str) -> SettingsConfigDict:
-        """Get base model configuration with specified env_prefix."""
-        return SettingsConfigDict(
-            env_prefix=env_prefix,
-            case_sensitive=False,
-            extra="forbid",
-            validate_assignment=True,
-            env_file=".env",
-            env_file_encoding="utf-8"
-        )
 
 
 class IntegrationError(Exception):
@@ -50,14 +32,13 @@ class ResourceNotFoundError(IntegrationError):
 
 class BaseIntegration(ABC):
     """Abstract base class for all external service integrations."""
-    
+
     integration_type: str
 
     @abstractmethod
     async def test_connection(self) -> bool:
         """Test the connection to the external service."""
         pass
-
 
 
 class IntegrationRegistry:
