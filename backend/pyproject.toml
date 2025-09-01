@@ -14,6 +14,9 @@ dependencies = [
     "jira>=3.5.0",
     "PyGithub>=1.59.0",
     "slack-sdk>=3.27.0",
+    "pydantic-ai>=0.0.14",
+    "httpx>=0.25.0",
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.optional-dependencies]
@@ -59,13 +62,6 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 reportMissingImports = true
 reportMissingTypeStubs = false
-
-# Scripts removed - use direct commands instead:
-# uv run ruff format .
-# uv run ruff check .  
-# uv run pyright
-# uv run pytest
-# uv run uvicorn devboard.main:app --host 0.0.0.0 --port 8000 --reload
 
 [tool.alembic]
 script_location = "migrations"
