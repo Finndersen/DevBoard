@@ -67,24 +67,30 @@ A low-level API client interface for external services that provides raw access 
 * **Purpose**: Handles authentication, API calls, rate limiting, and error handling for external services.
 * **Examples**: SlackIntegration, JiraIntegration, GitHubIntegration, CodebaseIntegration.
 * **Authentication**: Credentials (API keys, tokens) loaded from environment variables for security.
+* **Configuration Pattern**: Each integration has a corresponding `*IntegrationConfig` class that extends `BaseConfig`
 * **API Interface**:
   * Service-specific methods like `get_slack_message()`, `search_jira_issues()`, `get_github_pr()`
   * Raw data retrieval without business logic or summarization
   * Reusable across different context providers or direct API access
+  * Standardized error handling with custom exception hierarchy
 
 ### 4. Context Provider
 A high-level interface that transforms raw integration data into relevant project/task context using domain intelligence.
 * **Purpose**: Provides intelligent, summarized context for AI agents by leveraging one or more Integrations.
-* **Examples**: ProjectSlackProvider, TaskJiraProvider, CodebaseExplorationProvider.
+* **Examples**: GitHubContextProvider, JiraContextProvider, SlackContextProvider, CodebaseContextProvider, WebPageContextProvider.
 * **API Interface**:
   * `can_handle_uri(resource_uri)`: Determines if the provider can handle a given resource link.
   * `get_retrieval_strategy(resource_uri) -> 'EAGER' | 'ON_DEMAND'`: Determines if a resource is small enough for eager loading.
   * `get_resource(resource_uri)`: Retrieves full content for small-scope resources (EAGER).
   * `get_relevant_context(resource_uri, query)`: Universal query interface that uses internal sub-agents to process high-level queries and return focused summaries (ON_DEMAND).
   * `get_integration_tools()`: Returns lower-level Integration tools for Implementation Agent (write operations like updating Jira status, creating GitHub PRs).
-  * `get_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
+  * `generate_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
+* **Initialization Pattern**: 
+  * Context providers check for valid integration configurations before initialization
+  * Missing/invalid configurations result in graceful skipping with detailed logging
+  * Integration instances are registered with `IntegrationRegistry` for potential reuse
 
-### 4. Codebase
+### 5. Codebase
 Represents a software codebase relevant to a project or task.
 * **Architecture Document**: Each codebase can have an associated `ARCHITECTURE.md` file stored in its repository. This document is created and incrementally updated by an AI agent.
 
@@ -96,9 +102,10 @@ Represents a software codebase relevant to a project or task.
 
 ### Integrations & Context Providers
 * **Phase 1**: 
-  * **Integrations**: GitHub (PR/commits), Jira (tickets), Slack (messages), Codebase (file system + agential exploration)
-  * **Context Providers**: ProjectSlackProvider, TaskJiraProvider, GitHubProvider, CodebaseExplorationProvider
-  * **Strategy**: Full EAGER/ON_DEMAND implementation with high-level query interface and internal sub-agents
+  * **Integrations**: GitHub (PR/commits), Jira (tickets), Slack (messages), Codebase (file system), WebPage (HTTP/HTTPS)
+  * **Context Providers**: GitHubContextProvider, JiraContextProvider, SlackContextProvider, CodebaseContextProvider, WebPageContextProvider
+  * **Strategy**: Full EAGER/ON_DEMAND implementation with high-level query interface
+  * **Configuration Management**: Type-safe configuration validation and graceful provider initialization
 * **Phase 2**: Additional providers like Notion, enhanced caching, and local content indexing.
 
 ### Project
@@ -568,6 +575,12 @@ A flexible, type-safe configuration system manages all application settings usin
   * **Multi-Source Loading**: Combines environment variables (sensitive data) with database storage (user settings)
   * **Type Safety**: All configurations validated against registered Pydantic schemas
 
+* **Startup Initialization Pattern**:
+  * Configuration schemas are registered at application startup via `initialize_configurations()`
+  * Context providers check configuration validity before initialization
+  * Integration instances are only created when valid configurations exist
+  * Graceful degradation with logging for missing/invalid configurations
+
 * **Configuration Repository Pattern**:
   ```python
   from abc import ABC, abstractmethod
@@ -706,9 +719,9 @@ The generic configuration framework manages all application settings through the
 
 * **Integration Configurations** (API credentials from environment):
   * `integration.slack.main` → SlackIntegrationConfig
-  * `integration.jira.production` → JiraIntegrationConfig  
-  * `integration.github.personal` → GitHubIntegrationConfig
-  * `integration.codebase.local` → CodebaseIntegrationConfig
+  * `integration.jira.main` → JiraIntegrationConfig
+  * `integration.github.main` → GitHubIntegrationConfig
+  * **Note**: Codebase integration requires no configuration (uses current working directory)
 
 * **Context Provider Configurations** (behavior settings from database):
   * `context_provider.slack.discussions` → SlackContextProviderConfig
@@ -737,6 +750,38 @@ The generic configuration framework manages all application settings through the
     * When file content is requested by UI, first read content from file and update DB version if different
     * When file content is updated from the UI, read file and DB content and perform 3-way merge and update both File and DB content with result.
     * If there is a merge conflict, report error to user and they can attempt to resolve manually
+
+## Implementation Design Decisions & Architecture Details
+
+### SQLAlchemy 2.0 Migration Pattern
+The codebase uses modern SQLAlchemy 2.0 syntax throughout:
+* **Query Style**: `select()` statements instead of legacy `query()` method
+* **Result Handling**: `scalar_one_or_none()`, `scalars().all()` for type-safe results
+* **Repository Pattern**: Consistent `BaseRepository` pattern with dependency injection
+* **Import Strategy**: Absolute imports (`from devboard.module`) instead of relative imports
+
+### Context Provider Dependency Management
+* **Initialization Order**: Configuration registration → Context provider initialization
+* **Dependency Checking**: Context providers validate their integration configurations before startup
+* **Error Handling**: Missing configurations result in graceful skipping with detailed logging
+* **Registry Pattern**: Both integrations and context providers use registry patterns for management
+* **Zero-Configuration Providers**: WebPageContextProvider and CodebaseContextProvider work without configuration
+
+### Configuration Key Naming Convention
+* **Integration Layer**: `integration.{provider_type}.main` (e.g., `integration.github.main`)
+* **Context Provider Layer**: `context_provider.{provider_type}.default` (future use)
+* **Agent Layer**: `agent.{agent_type}.default` (future use)
+
+### Database Schema Implementation
+* **Modern SQLAlchemy**: Uses `Mapped[]` annotations and `mapped_column()` syntax
+* **Relationship Patterns**: Proper bidirectional relationships with `back_populates`
+* **Migration Strategy**: Alembic configured in `pyproject.toml` instead of separate `.ini` file
+* **Test Database**: Separate in-memory SQLite for testing with proper transaction isolation
+
+### Error Handling & Exception Hierarchy
+* **Custom Exceptions**: Service-specific exception hierarchies (e.g., `AuthenticationError`, `RateLimitError`)
+* **Exception Chaining**: Proper `raise ... from e` patterns for debugging
+* **Logging Strategy**: Structured logging with appropriate levels for different scenarios
 
 ## Container Configuration & Persistence
 
