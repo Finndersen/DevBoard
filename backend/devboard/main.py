@@ -3,13 +3,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from devboard.routers import codebases, configurations, projects, tasks
+from devboard.context_providers import initialize_context_providers
+from devboard.core.config import initialize_configurations
+from devboard.routers import codebases, configurations, projects, qa, tasks
 
 app = FastAPI(
     title="DevBoard API",
     description="AI-powered developer command centre",
     version="0.1.0",
 )
+
+# Initialize configurations and context providers
+initialize_configurations()
+initialize_context_providers()
 
 # Configure CORS
 app.add_middleware(
@@ -25,6 +31,7 @@ app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
+app.include_router(qa.router)
 
 
 @app.get("/")

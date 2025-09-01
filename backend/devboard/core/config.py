@@ -176,5 +176,27 @@ class ConfigService:
             return None
 
 
+def initialize_configurations() -> None:
+    """Initialize and register all configuration schemas.
+
+    This function registers all integration configuration schemas with the
+    ConfigRepository, enabling type-safe configuration validation.
+    """
+    import logging
+
+    from devboard.integrations.github import GitHubIntegrationConfig
+    from devboard.integrations.jira import JiraIntegrationConfig
+    from devboard.integrations.slack import SlackIntegrationConfig
+
+    logger = logging.getLogger(__name__)
+
+    # Register integration configuration schemas
+    ConfigRepository.register_schema("integration.github.main", GitHubIntegrationConfig)
+    ConfigRepository.register_schema("integration.jira.main", JiraIntegrationConfig)
+    ConfigRepository.register_schema("integration.slack.main", SlackIntegrationConfig)
+
+    logger.info("Registered all configuration schemas")
+
+
 # Global config service instance
 config_service = ConfigService()
