@@ -1,8 +1,11 @@
+from fastapi.testclient import TestClient
 from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from devboard.api.main import app
+from devboard.db.database import get_db
 from devboard.db.models import Base
 
 
@@ -63,3 +66,18 @@ def db_session(db_session_maker) -> Session:
     """
     with db_session_maker() as session:
         yield session
+
+
+@fixture
+def client(db_session):
+    """FastAPI test client with database setup."""
+
+    def override_get_db():
+        return db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()

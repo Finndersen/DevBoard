@@ -2,7 +2,7 @@
 
 from .base import Base
 from .codebase import Codebase
-from .configuration import Configuration, ContextProviderLink
+from .configuration import Configuration, ContextProviderResource
 from .project import Project, ProjectConversationMessage
 from .task import Task
 
@@ -12,6 +12,6 @@ __all__ = [
     "Task",
     "Codebase",
     "Configuration",
-    "ContextProviderLink",
+    "ContextProviderResource",
     "ProjectConversationMessage",
 ]

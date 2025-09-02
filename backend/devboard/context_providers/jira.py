@@ -9,6 +9,7 @@ from devboard.integrations.jira import JiraIntegration
 
 from .base import (
     BaseContextProvider,
+    ContextProviderUnavailable,
     ContextRetrievalError,
     ContextStrategy,
     DescriptionGenerationError,
@@ -23,17 +24,41 @@ class JiraContextProvider(BaseContextProvider):
 
     provider_type = "jira"
 
+    @classmethod
+    def create_instance(cls) -> "JiraContextProvider":
+        """Create an instance of the Jira context provider.
+
+        Validates configuration and creates the Jira integration.
+
+        Returns:
+            Configured JiraContextProvider instance
+
+        Raises:
+            ContextProviderUnavailable: If Jira configuration is missing or invalid
+        """
+        from devboard.core.config import config_service
+
+        config_result = config_service.validate_config("integration.jira.main")
+        if not config_result.success or not config_result.config:
+            raise ContextProviderUnavailable(
+                f"Jira integration not configured: {config_result.errors}"
+            )
+
+        try:
+            integration = JiraIntegration(config_result.config)
+            return cls(integration)
+        except Exception as e:
+            raise ContextProviderUnavailable(f"Failed to initialize Jira integration: {e}") from e
+
     def __init__(self, integration: JiraIntegration):
         """Initialize with Jira integration."""
         self.integration = integration
 
-    def can_handle_uri(self, resource_uri: str) -> bool:
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
         """Check if URI is a Jira resource."""
-        try:
-            parsed = urlparse(resource_uri)
-            return "atlassian.net" in parsed.netloc or "/browse/" in resource_uri
-        except Exception:
-            return False
+        parsed = urlparse(resource_uri)
+        return "atlassian.net" in parsed.netloc or "/browse/" in resource_uri
 
     def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
         """Jira resources can be EAGER for single issues, ON_DEMAND for projects."""

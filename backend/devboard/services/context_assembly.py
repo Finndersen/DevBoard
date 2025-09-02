@@ -3,20 +3,24 @@
 import asyncio
 import logging
 import re
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from typing import Any
 
 from devboard.context_providers.base import (
     BaseContextProvider,
     ContextProviderRegistry,
+    ContextProviderUnavailable,
     ContextStrategy,
 )
 from devboard.db.database import SessionLocal
-from devboard.db.models import ContextProviderLink
-from devboard.repositories.context_provider_link import ContextProviderLinkRepository
-from devboard.repositories.project import ProjectRepository
+from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 
 logger = logging.getLogger(__name__)
+
+
+class NoProviderFound(Exception):
+    """No provider found for the given resource URI."""
 
 
 @dataclass
@@ -24,7 +28,7 @@ class EagerContextData:
     """Context data for EAGER resources that are fully loaded."""
 
     uri: str
-    user_description: str | None
+    description: str | None
     provider_type: str
     data: dict[str, Any]
 
@@ -36,7 +40,22 @@ class OnDemandResourceInfo:
     uri: str
     description: str  # Primary description (user-provided or auto-generated)
     provider_type: str
-    has_user_description: bool  # Indicates if description came from user
+
+
+@dataclass
+class ResourceInfo:
+    uri: str
+    description: str
+    provider: BaseContextProvider  # TODO: Maybe not ideal having this here?
+    retrieval_strategy: ContextStrategy
+
+
+@dataclass
+class ResourceRetrievalError:
+    """Information about a provider error."""
+
+    resource_uri: str
+    error_message: str
 
 
 @dataclass
@@ -45,6 +64,7 @@ class ProjectContextData:
 
     eager_context: list[EagerContextData]
     on_demand_resources: list[OnDemandResourceInfo]
+    provider_errors: list[ResourceRetrievalError]
 
 
 @dataclass
@@ -64,6 +84,28 @@ class ContextAssemblyService:
     def __init__(self, db_session_factory=SessionLocal):
         self.db_session_factory = db_session_factory
 
+    def _get_provider_instance(
+        self, resource_uri: str
+    ) -> tuple[BaseContextProvider | None, str | None]:
+        """Get provider instance for a resource URI.
+
+        Args:
+            resource_uri: The URI to find a provider for
+
+        Returns:
+            Tuple of (provider_instance, error_message). If provider_instance is None,
+            error_message will contain the reason why.
+        """
+        provider_class = ContextProviderRegistry.get_provider_for_uri(resource_uri)
+        if not provider_class:
+            return None, "No provider found for this URI type"
+
+        try:
+            provider = provider_class.create_instance()
+            return provider, None
+        except ContextProviderUnavailable as e:
+            return None, str(e)
+
     def _extract_uris_from_text(self, text: str) -> list[str]:
         """Extract potential resource URIs from text.
 
@@ -80,7 +122,8 @@ class ContextAssemblyService:
         # Filter to only URLs that have registered providers
         valid_uris = []
         for url in urls:
-            if ContextProviderRegistry.get_provider_for_uri(url):
+            provider_or_class = ContextProviderRegistry.get_provider_for_uri(url)
+            if provider_or_class:
                 valid_uris.append(url)
 
         return valid_uris
@@ -96,130 +139,87 @@ class ContextAssemblyService:
             ProjectContextData containing EAGER context data and ON_DEMAND resource descriptions
         """
         try:
-            # Get project and its context provider links
+            # Get project and its context provider resources
             with self.db_session_factory() as db:
                 project_repo = ProjectRepository(db)
-                link_repo = ContextProviderLinkRepository(db)
+                resource_repo = ContextProviderResourceRepository(db)
 
                 project = project_repo.get_by_id(project_id)
                 if not project:
                     raise ValueError(f"Project {project_id} not found")
 
-                links = link_repo.get_by_parent(project_id, "project")
+                linked_resources = resource_repo.get_resources_for_project(project_id)
 
             # Extract URIs from project description
             detected_uris = self._extract_uris_from_text(project.details)
 
-            # Combine explicit links with detected URIs
-            all_resource_uris = []
-            explicit_uris = {link.resource_uri for link in links}
-
-            # Add explicit links
-            for link in links:
-                all_resource_uris.append((link.resource_uri, link.description))
-
-            # Add detected URIs (only small-scope ones suitable for EAGER loading)
-            for uri in detected_uris:
-                if uri not in explicit_uris:  # Avoid duplicates
-                    provider = ContextProviderRegistry.get_provider_for_uri(uri)
-                    if provider:
-                        try:
-                            strategy = provider.get_retrieval_strategy(uri)
-                            if (
-                                strategy == ContextStrategy.EAGER
-                            ):  # Only include small-scope resources
-                                all_resource_uris.append(
-                                    (uri, None)
-                                )  # No user description for auto-detected
-                                logger.info(
-                                    f"Auto-detected EAGER resource from project description: {uri}"
-                                )
-                        except Exception as e:
-                            logger.warning(f"Failed to check strategy for detected URI {uri}: {e}")
-
-            if not all_resource_uris:
-                logger.info(f"No context resources found for project {project_id}")
-                return ProjectContextData(eager_context=[], on_demand_resources=[])
-
             # Categorize resources by strategy
-            eager_resources = []
-            on_demand_resources = []
+            on_demand_resources: list[OnDemandResourceInfo] = []
+            eager_resource_tasks: list[Coroutine[None, None, EagerContextData]] = []
+            resource_errors: list[ResourceRetrievalError] = []
+            eager_context: list[EagerContextData] = []
 
-            for resource_uri, user_description in all_resource_uris:
-                provider = ContextProviderRegistry.get_provider_for_uri(resource_uri)
-                if not provider:
-                    logger.warning(f"No provider found for URI: {resource_uri}")
-                    continue
+            linked_uris = {resource.resource_uri for resource in linked_resources}
 
+            all_resources: list[tuple[str, str | None]] = []
+            # Add explicit links
+            all_resources.extend(
+                [(resource.resource_uri, resource.description) for resource in linked_resources]
+            )
+            # Add detected URIs
+            all_resources.extend([(uri, None) for uri in detected_uris if uri not in linked_uris])
+
+            for resource_uri, description in all_resources:
                 try:
-                    strategy = provider.get_retrieval_strategy(resource_uri)
-
-                    if strategy == ContextStrategy.EAGER:
-                        # Create a mock link object for EAGER processing
-                        class MockLink:
-                            def __init__(self, uri: str, desc: str | None):
-                                self.resource_uri = uri
-                                self.description = desc
-
-                        mock_link = MockLink(resource_uri, user_description)
-                        eager_resources.append((provider, mock_link))
-                    else:
-                        # Use user description if available, otherwise generate one
-                        if user_description:
-                            description = user_description
-                            has_user_description = True
-                        else:
-                            description = await provider.generate_resource_description(resource_uri)
-                            has_user_description = False
-
-                        on_demand_resources.append(
-                            OnDemandResourceInfo(
-                                uri=resource_uri,
-                                description=description,
-                                provider_type=provider.provider_type,
-                                has_user_description=has_user_description,
-                            )
-                        )
-                except Exception as e:
-                    logger.error(f"Error processing resource {resource_uri}: {e}")
+                    resource_info = await self.get_resource_info(resource_uri, description)
+                except (NoProviderFound, ContextProviderUnavailable) as e:
+                    resource_errors.append(
+                        ResourceRetrievalError(resource_uri=resource_uri, error_message=str(e))
+                    )
                     continue
+
+                if resource_info.retrieval_strategy == ContextStrategy.ON_DEMAND:
+                    on_demand_resources.append(
+                        OnDemandResourceInfo(
+                            uri=resource_info.uri,
+                            description=resource_info.description,
+                            provider_type=resource_info.provider.provider_type,
+                        )
+                    )
+                else:
+                    eager_resource_tasks.append(self._load_eager_context(resource_info))
 
             # Load EAGER context in parallel
-            eager_context = []
-            if eager_resources:
-                eager_tasks = [
-                    self._load_eager_context(provider, link) for provider, link in eager_resources
-                ]
-                eager_results = await asyncio.gather(*eager_tasks, return_exceptions=True)
+            eager_results = await asyncio.gather(*eager_resource_tasks, return_exceptions=True)
 
-                for result in eager_results:
-                    if isinstance(result, Exception):
-                        logger.error(f"Error loading eager context: {result}")
-                    else:
-                        eager_context.append(result)
+            for result in eager_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Error loading eager context: {result}")
+                else:
+                    eager_context.append(result)
 
             return ProjectContextData(
-                eager_context=eager_context, on_demand_resources=on_demand_resources
+                eager_context=eager_context,
+                on_demand_resources=on_demand_resources,
+                provider_errors=resource_errors,
             )
 
         except Exception as e:
             logger.error(f"Error assembling context for project {project_id}: {e}")
             raise
 
-    async def _load_eager_context(
-        self, provider: BaseContextProvider, link: ContextProviderLink
-    ) -> EagerContextData:
+    async def _load_eager_context(self, resource: ResourceInfo) -> EagerContextData:
         """Load EAGER context for a single resource."""
         try:
-            resource_data = await provider.get_resource(link.resource_uri)
+            resource_data = await resource.provider.get_resource(resource.uri)
             return EagerContextData(
-                uri=link.resource_uri,
-                user_description=link.description,
-                provider_type=provider.provider_type,
+                uri=resource.uri,
+                description=resource.description,
+                provider_type=resource.provider.provider_type,
                 data=resource_data,
             )
         except Exception as e:
-            logger.error(f"Error loading eager context for {link.resource_uri}: {e}")
+            logger.error(f"Error loading eager context for {resource.uri}: {e}")
             raise
 
     async def get_on_demand_context(self, resource_uri: str, query: str) -> str:
@@ -235,9 +235,9 @@ class ContextAssemblyService:
             Focused context summary relevant to the query
         """
         try:
-            provider = ContextProviderRegistry.get_provider_for_uri(resource_uri)
+            provider, error = self._get_provider_instance(resource_uri)
             if not provider:
-                raise ValueError(f"No provider found for URI: {resource_uri}")
+                raise ValueError(error or f"No provider found for URI: {resource_uri}")
 
             return await provider.get_relevant_context(resource_uri, query)
 
@@ -245,40 +245,25 @@ class ContextAssemblyService:
             logger.error(f"Error getting on-demand context for {resource_uri}: {e}")
             raise
 
-    async def validate_resource_uri(self, resource_uri: str) -> ResourceValidationResult:
-        """Validate a resource URI and return provider info.
+    async def get_resource_info(self, resource_uri: str, description: str | None) -> ResourceInfo:
+        # TODO: This can probably live somewhere else, and needs tests
+        provider_class = ContextProviderRegistry.get_provider_for_uri(resource_uri)
+        if not provider_class:
+            raise NoProviderFound(f"No context provider found for URI: {resource_uri}")
 
-        Args:
-            resource_uri: The URI to validate
+        # May raise ContextProviderUnavailable if provider cannot be instantiated
+        provider = provider_class.create_instance()
 
-        Returns:
-            ResourceValidationResult with validation results and provider information
-        """
-        try:
-            provider = ContextProviderRegistry.get_provider_for_uri(resource_uri)
-            if not provider:
-                return ResourceValidationResult(
-                    valid=False, error="No provider found for this URI type"
-                )
+        if not description:
+            description = await provider.generate_resource_description(resource_uri)
 
-            try:
-                strategy = provider.get_retrieval_strategy(resource_uri)
-                description = await provider.generate_resource_description(resource_uri)
-
-                return ResourceValidationResult(
-                    valid=True,
-                    provider_type=provider.provider_type,
-                    strategy=strategy.value,
-                    description=description,
-                )
-            except Exception as e:
-                return ResourceValidationResult(
-                    valid=False, error=f"Provider validation failed: {e}"
-                )
-
-        except Exception as e:
-            logger.error(f"Error validating resource URI {resource_uri}: {e}")
-            return ResourceValidationResult(valid=False, error=f"Validation error: {e}")
+        retrieval_strategy = provider.get_retrieval_strategy(resource_uri)
+        return ResourceInfo(
+            uri=resource_uri,
+            description=description,
+            provider=provider,
+            retrieval_strategy=retrieval_strategy,
+        )
 
     def list_available_providers(self) -> list[str]:
         """List all available context provider types."""

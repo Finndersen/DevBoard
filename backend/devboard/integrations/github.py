@@ -12,7 +12,8 @@ from github import (
 )
 from github.Auth import Token
 
-from ..core.config import BaseConfig
+from devboard.core.config import BaseConfig
+
 from .base import (
     AuthenticationError,
     BaseIntegration,

@@ -1,27 +1,9 @@
 """Tests for tasks router."""
 
 import pytest
-from fastapi.testclient import TestClient
 
 from devboard.db.models import Task
-from devboard.main import app
-from devboard.repositories.task import TaskRepository
-
-
-@pytest.fixture
-def client(db_session):
-    """FastAPI test client with database setup."""
-    from devboard.db.database import get_db
-
-    def override_get_db():
-        return db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
+from devboard.db.repositories import ContextProviderResourceRepository, TaskRepository
 
 
 @pytest.fixture
@@ -32,6 +14,15 @@ def test_task_data():
         "description": "Test task description",
         "status": "todo",
         "project_id": 1,
+    }
+
+
+@pytest.fixture
+def test_resource_data():
+    """Sample context provider resource data for testing."""
+    return {
+        "resource_uri": "https://github.com/owner/repo",
+        "description": "Test GitHub repository",
     }
 
 
@@ -173,3 +164,116 @@ class TestTasksRouter:
         response = client.delete("/api/tasks/999")
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
+
+
+class TestTaskResourcesRouter:
+    """Test task resource endpoints."""
+
+    def test_list_task_resources_empty(self, client, db_session, test_task_data):
+        """Test listing task resources when none exist."""
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task = Task(**test_task_data)
+        created_task = task_repo.create(task)
+        db_session.commit()
+
+        response = client.get(f"/api/tasks/{created_task.id}/resources")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_list_task_resources_with_data(
+        self, client, db_session, test_task_data, test_resource_data
+    ):
+        """Test listing task resources with existing data."""
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task = Task(**test_task_data)
+        created_task = task_repo.create(task)
+        db_session.commit()
+
+        # Create test resource
+        resource_repo = ContextProviderResourceRepository(db_session)
+        resource = resource_repo.create_task_resource(
+            task_id=created_task.id,
+            resource_uri=test_resource_data["resource_uri"],
+            description=test_resource_data["description"],
+        )
+        db_session.commit()
+
+        response = client.get(f"/api/tasks/{created_task.id}/resources")
+        assert response.status_code == 200
+
+        resources = response.json()
+        assert len(resources) == 1
+        assert resources[0]["resource_uri"] == test_resource_data["resource_uri"]
+        assert resources[0]["description"] == test_resource_data["description"]
+        assert resources[0]["id"] == resource.id
+
+    def test_list_task_resources_task_not_found(self, client):
+        """Test listing resources for non-existent task."""
+        response = client.get("/api/tasks/999/resources")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Task not found"
+
+    def test_create_task_resource(self, client, db_session, test_task_data, test_resource_data):
+        """Test creating a new task resource."""
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task = Task(**test_task_data)
+        created_task = task_repo.create(task)
+        db_session.commit()
+
+        response = client.post(f"/api/tasks/{created_task.id}/resources", json=test_resource_data)
+        assert response.status_code == 200
+
+        resource_data = response.json()
+        assert resource_data["resource_uri"] == test_resource_data["resource_uri"]
+        assert resource_data["description"] == test_resource_data["description"]
+        assert "id" in resource_data
+
+    def test_create_task_resource_task_not_found(self, client, test_resource_data):
+        """Test creating a resource for non-existent task."""
+        response = client.post("/api/tasks/999/resources", json=test_resource_data)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Task not found"
+
+    def test_delete_task_resource_success(
+        self, client, db_session, test_task_data, test_resource_data
+    ):
+        """Test deleting a task resource."""
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task = Task(**test_task_data)
+        created_task = task_repo.create(task)
+        db_session.commit()
+
+        # Create test resource
+        resource_repo = ContextProviderResourceRepository(db_session)
+        resource = resource_repo.create_task_resource(
+            task_id=created_task.id,
+            resource_uri=test_resource_data["resource_uri"],
+            description=test_resource_data["description"],
+        )
+        db_session.commit()
+
+        response = client.delete(f"/api/tasks/{created_task.id}/resources/{resource.id}")
+        assert response.status_code == 200
+        assert response.json()["message"] == "Resource deleted successfully"
+
+    def test_delete_task_resource_task_not_found(self, client):
+        """Test deleting a resource for non-existent task."""
+        response = client.delete("/api/tasks/999/resources/1")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Task not found"
+
+    def test_delete_task_resource_not_found(self, client, db_session, test_task_data):
+        """Test deleting a non-existent task resource."""
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task = Task(**test_task_data)
+        created_task = task_repo.create(task)
+        db_session.commit()
+
+        response = client.delete(f"/api/tasks/{created_task.id}/resources/999")
+        assert response.status_code == 404
+        assert "Resource not found or does not belong to this task" in response.json()["detail"]

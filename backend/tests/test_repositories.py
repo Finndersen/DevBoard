@@ -6,15 +6,15 @@ from sqlalchemy.orm import Session
 from devboard.db.models import (
     Codebase,
     Configuration,
-    ContextProviderLink,
+    ContextProviderResource,
     Project,
     ProjectConversationMessage,
     Task,
 )
-from devboard.repositories import (
+from devboard.db.repositories import (
     CodebaseRepository,
     ConfigurationRepository,
-    ContextProviderLinkRepository,
+    ContextProviderResourceRepository,
     ProjectConversationMessageRepository,
     ProjectRepository,
     TaskRepository,
@@ -372,82 +372,84 @@ class TestConfigurationRepository:
         assert result is False
 
 
-class TestContextProviderLinkRepository:
-    """Tests for ContextProviderLinkRepository."""
+class TestContextProviderResourceRepository:
+    """Tests for ContextProviderResourceRepository."""
 
     @pytest.fixture
-    def repo(self, db_session: Session) -> ContextProviderLinkRepository:
-        return ContextProviderLinkRepository(db_session)
+    def repo(self, db_session: Session) -> ContextProviderResourceRepository:
+        return ContextProviderResourceRepository(db_session)
 
     @pytest.fixture
-    def sample_link(self) -> ContextProviderLink:
-        return ContextProviderLink(
+    def sample_resource(self) -> ContextProviderResource:
+        return ContextProviderResource(
             parent_id=1,
             parent_type="project",
             provider_name="github",
             resource_uri="https://github.com/test/repo",
         )
 
-    def test_create_link(
-        self, repo: ContextProviderLinkRepository, sample_link: ContextProviderLink
+    def test_create_resource(
+        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
     ):
-        """Test creating a new context provider link."""
-        created = repo.create(sample_link)
+        """Test creating a new context provider resource."""
+        created = repo.create(sample_resource)
         assert created.id is not None
         assert created.parent_id == 1
         assert created.parent_type == "project"
         assert created.provider_name == "github"
 
-    def test_get_by_id(self, repo: ContextProviderLinkRepository, sample_link: ContextProviderLink):
-        """Test getting a link by ID."""
-        created = repo.create(sample_link)
+    def test_get_by_id(
+        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
+    ):
+        """Test getting a resource by ID."""
+        created = repo.create(sample_resource)
         retrieved = repo.get_by_id(created.id)
 
         assert retrieved is not None
         assert retrieved.id == created.id
         assert retrieved.parent_id == created.parent_id
 
-    def test_get_by_id_not_found(self, repo: ContextProviderLinkRepository):
-        """Test getting a link by ID when it doesn't exist."""
+    def test_get_by_id_not_found(self, repo: ContextProviderResourceRepository):
+        """Test getting a resource by ID when it doesn't exist."""
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_by_parent(self, repo: ContextProviderLinkRepository):
-        """Test getting links by parent."""
-        link1 = ContextProviderLink(
+    def test_get_by_parent(self, repo: ContextProviderResourceRepository):
+        """Test getting resources by parent."""
+        resource1 = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             provider_name="github",
             resource_uri="https://github.com/test/repo1",
         )
-        link2 = ContextProviderLink(
+        resource2 = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             provider_name="jira",
             resource_uri="https://jira.example.com/issue/123",
         )
-        link3 = ContextProviderLink(
+        resource3 = ContextProviderResource(
             parent_id=2,
             parent_type="project",
             provider_name="github",
             resource_uri="https://github.com/test/repo2",
         )
 
-        repo.create(link1)
-        repo.create(link2)
-        repo.create(link3)
+        repo.create(resource1)
+        repo.create(resource2)
+        repo.create(resource3)
 
-        parent_links = repo.get_by_parent(1, "project")
-        assert len(parent_links) == 2
-        for link in parent_links:
-            assert link.parent_id == 1
-            assert link.parent_type == "project"
+        parent_resources = repo.get_by_parent(1, "project")
+        assert len(parent_resources) == 2
+        for resource in parent_resources:
+            assert resource.parent_id == 1
+            assert resource.parent_type == "project"
 
-    def test_update_link(
-        self, repo: ContextProviderLinkRepository, sample_link: ContextProviderLink
+    def test_update_resource(
+        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
     ):
-        """Test updating a context provider link."""
-        created = repo.create(sample_link)
+        """Test updating a context provider resource."""
+        created = repo.create(sample_resource)
         created.provider_name = "updated_provider"
         created.resource_uri = "https://example.com/updated"
 
@@ -456,43 +458,43 @@ class TestContextProviderLinkRepository:
         assert updated.resource_uri == "https://example.com/updated"
 
     def test_delete_by_id(
-        self, repo: ContextProviderLinkRepository, sample_link: ContextProviderLink
+        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
     ):
-        """Test deleting a link by ID."""
-        created = repo.create(sample_link)
+        """Test deleting a resource by ID."""
+        created = repo.create(sample_resource)
         result = repo.delete_by_id(created.id)
 
         assert result is True
         assert repo.get_by_id(created.id) is None
 
-    def test_delete_by_id_not_found(self, repo: ContextProviderLinkRepository):
-        """Test deleting a link by ID when it doesn't exist."""
+    def test_delete_by_id_not_found(self, repo: ContextProviderResourceRepository):
+        """Test deleting a resource by ID when it doesn't exist."""
         result = repo.delete_by_id(999)
         assert result is False
 
-    def test_delete_by_parent(self, repo: ContextProviderLinkRepository):
-        """Test deleting all links for a parent."""
-        link1 = ContextProviderLink(
+    def test_delete_by_parent(self, repo: ContextProviderResourceRepository):
+        """Test deleting all resources for a parent."""
+        resource1 = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             provider_name="github",
             resource_uri="https://github.com/test/repo1",
         )
-        link2 = ContextProviderLink(
+        resource2 = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             provider_name="jira",
             resource_uri="https://jira.example.com/issue/123",
         )
 
-        repo.create(link1)
-        repo.create(link2)
+        repo.create(resource1)
+        repo.create(resource2)
 
         count = repo.delete_by_parent(1, "project")
         assert count == 2
 
-        remaining_links = repo.get_by_parent(1, "project")
-        assert len(remaining_links) == 0
+        remaining_resources = repo.get_by_parent(1, "project")
+        assert len(remaining_resources) == 0
 
 
 class TestProjectConversationMessageRepository:

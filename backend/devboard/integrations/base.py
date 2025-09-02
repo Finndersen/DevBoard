@@ -39,30 +39,3 @@ class BaseIntegration(ABC):
     async def test_connection(self) -> bool:
         """Test the connection to the external service."""
         pass
-
-
-class IntegrationRegistry:
-    """Registry for managing integration instances."""
-
-    _integrations: dict[str, BaseIntegration] = {}
-
-    @classmethod
-    def register(cls, name: str, integration: BaseIntegration) -> None:
-        """Register an integration instance."""
-        cls._integrations[name] = integration
-        logger.info(f"Registered integration: {name}")
-
-    @classmethod
-    def get(cls, name: str) -> BaseIntegration | None:
-        """Get a registered integration."""
-        return cls._integrations.get(name)
-
-    @classmethod
-    def list_available(cls) -> list[str]:
-        """List all registered integration names."""
-        return list(cls._integrations.keys())
-
-    @classmethod
-    def clear(cls) -> None:
-        """Clear all registered integrations (useful for testing)."""
-        cls._integrations.clear()

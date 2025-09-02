@@ -79,16 +79,19 @@ A high-level interface that transforms raw integration data into relevant projec
 * **Purpose**: Provides intelligent, summarized context for AI agents by leveraging one or more Integrations.
 * **Examples**: GitHubContextProvider, JiraContextProvider, SlackContextProvider, CodebaseContextProvider, WebPageContextProvider.
 * **API Interface**:
-  * `can_handle_uri(resource_uri)`: Determines if the provider can handle a given resource link.
+  * `can_handle_uri(resource_uri)`: Class method to determine if the provider can handle a given resource link.
   * `get_retrieval_strategy(resource_uri) -> 'EAGER' | 'ON_DEMAND'`: Determines if a resource is small enough for eager loading.
   * `get_resource(resource_uri)`: Retrieves full content for small-scope resources (EAGER).
   * `get_relevant_context(resource_uri, query)`: Universal query interface that uses internal sub-agents to process high-level queries and return focused summaries (ON_DEMAND).
   * `get_integration_tools()`: Returns lower-level Integration tools for Implementation Agent (write operations like updating Jira status, creating GitHub PRs).
   * `generate_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
-* **Initialization Pattern**: 
-  * Context providers check for valid integration configurations before initialization
-  * Missing/invalid configurations result in graceful skipping with detailed logging
-  * Integration instances are registered with `IntegrationRegistry` for potential reuse
+  * `create_instance()`: Factory method for creating configured provider instances with proper error handling.
+* **Registry & Initialization Pattern**:
+  * **Registry Design**: `ContextProviderRegistry` stores provider classes (not instances) for clean architecture
+  * **Factory Pattern**: Each provider class implements `create_instance()` factory method that handles configuration validation
+  * **Error Handling**: Missing/invalid configurations raise `ContextProviderUnavailable` exceptions with detailed error messages
+  * **Runtime Instantiation**: Provider instances are created at request time during context assembly, allowing graceful error collection
+  * **User Feedback**: Configuration errors are collected and presented to users, enabling informed troubleshooting
 
 ### 5. Codebase
 Represents a software codebase relevant to a project or task.
@@ -96,9 +99,15 @@ Represents a software codebase relevant to a project or task.
 
 ## Features & Phased Rollout 🚀
 
-### Global
-* **Phase 1**: UI for managing user-level agent configurations (e.g., custom slash commands, `CLAUDE.md` prompt guidance, MCP server configuration).
-* **Phase 2**: A unified MCP (tool) server that provides integrations from all configured context providers to the Implementation Agent.
+### Global Settings & Configuration
+* **Phase 1**: Comprehensive global settings view for managing all application configuration:
+  * **Integration Management**: Configure API credentials and connection settings for GitHub, Jira, Slack, OpenAI, Anthropic, and Google (Gemini) integrations with on-demand connection testing
+  * **Codebase Management**: Add/remove local repository paths with validation
+  * **Context Provider Configuration**: Manage context provider resource links with URI validation and auto-description generation
+  * **Agent Configuration**: Select models for each agent type (Q&A, Planning, Implementation) with dynamic model lists based on configured LLM providers and intelligent fallback hierarchy
+  * **Connection Testing**: On-demand connection verification with immediate results and actionable error messages for troubleshooting
+* **Phase 2**: Advanced configuration features including configuration templates, bulk operations, and enhanced diagnostics
+* **Phase 3**: A unified MCP (tool) server that provides integrations from all configured context providers to the Implementation Agent.
 
 ### Integrations & Context Providers
 * **Phase 1**: 
@@ -230,16 +239,18 @@ Represents a software codebase relevant to a project or task.
 ## Task Planning Agent Context Management
 
 * **Challenge**: When an agent is triggered for a task, it needs to be provided with the right context. Some linked resources are small and should be provided upfront, while others are too large and should be made available for the agent to search on-demand.
-* **Proposed Solution**: Implement a **Context Assembly Process** that runs before the agent is called. This process intelligently decides how to handle each resource, preparing a perfectly tailored prompt for the agent.
+* **Proposed Solution**: Implement a **Context Assembly Process** that runs before the agent is called. This process intelligently decides how to handle each resource, preparing a perfectly tailored prompt for the agent with robust error handling.
 * **Implementation**:
     1.  **Gather Resource URIs**: The backend orchestrator collects all resource links associated with the task from the database and by parsing the task description.
-    2.  **Determine Retrieval Strategy**: For each URI, the orchestrator queries the responsible `ContextProvider` by calling its `get_retrieval_strategy(uri)` method.
-    3.  **Provider-Side Logic**: The logic for differentiating between "small" and "large" resources resides within each provider. For example:
+    2.  **Provider Instantiation & Error Collection**: For each URI, the orchestrator attempts to create a provider instance using the factory method pattern. If providers cannot be instantiated due to missing configuration, detailed error information is collected.
+    3.  **Determine Retrieval Strategy**: For successfully instantiated providers, the orchestrator queries the `get_retrieval_strategy(uri)` method.
+    4.  **Provider-Side Logic**: The logic for differentiating between "small" and "large" resources resides within each provider. For example:
         * A `SlackContextProvider` identifies a link with a message timestamp as `EAGER` and a channel link as `ON_DEMAND`.
         * A `NotionContextProvider` might check page metadata (like word count) to decide between `EAGER` and `ON_DEMAND`.
-    4.  **Assemble Final Prompt**: The orchestrator builds the agent's prompt based on the strategies:
+    5.  **Assemble Final Prompt with Error Reporting**: The orchestrator builds the agent's prompt based on the strategies:
         * For every resource marked `EAGER`, it calls `provider.get_resource(uri)` and includes the full content directly in the prompt's context section.
         * For every resource marked `ON_DEMAND`, it provides the resource URI, type, and description in the agent's initial context, along with the universal `get_relevant_context(resource_uri, query)` tool for querying any resource.
+        * **Error Transparency**: Provider initialization errors are included in the response, enabling users to understand which resources could not be processed and why (e.g., "GitHub integration not configured").
 
 ### Planner/Implementer Handoff Strategy
 * **Challenge**: The Planning and Implementation agents have different specializations and require different tools and frameworks, but the user experience should feel continuous.
@@ -315,7 +326,37 @@ This is the main landing page for a specific project. It provides a high-level o
   * UI for managing linked codebases.
   * UI for managing linked `ContextProvider` resources (e.g., list of connected Slack channels, Notion pages).
 
-### 2. Task Detail View
+### 2. Global Settings View
+This is a comprehensive configuration management interface accessible from the main navigation. It provides centralized control over all application settings.
+* **Header Component**:
+  * Displays "Global Settings" title.
+  * Navigation tabs: "Integrations", "Codebases", "Context Providers", "Agents".
+* **Integrations Tab**:
+  * **Integration Cards**: Each integration (GitHub, Jira, Slack, OpenAI, Anthropic, Google) displayed as a card with:
+    * Connection status indicator (gray=untested, green=working, red=failed) updated only after testing
+    * "Test Connection" button with loading states that performs immediate connection verification
+    * Configuration form with masked API keys (e.g., "sk-...xyz123") and reveal option
+    * Save/Cancel buttons with validation feedback
+  * **On-Demand Testing**: Click "Test Connection" performs real-time connection test with immediate success/failure results and actionable error messages
+* **Codebases Tab**:
+  * **Path Management Interface**: Add/remove local repository paths with:
+    * Path input field with file system browser integration
+    * Path validation (directory exists, is git repository)
+    * List of configured codebases with edit/remove options
+* **Context Providers Tab**:
+  * **Resource Management**: Interface for managing context provider resources:
+    * Add resource form with URI input and provider auto-detection
+    * Resource validation and provider compatibility checking
+    * Auto-description generation toggle with manual override option
+    * List of configured resources grouped by provider type
+* **Agents Tab**:
+  * **Model Selection Interface**: Dropdown selectors for each agent type:
+    * Q&A Agent, Planning Agent, Implementation Agent
+    * Dynamic model lists populated based on configured and working LLM providers
+    * Fallback hierarchy display showing automatic model selection order
+    * Status indicators showing which providers are available for each model
+
+### 3. Task Detail View
 This is a focused, full-screen view that opens when a user clicks on a Task Card. It's the primary workspace for all agent interactions.
 * **Header Component**:
   * Displays the full Task Title.
@@ -359,6 +400,12 @@ This section defines the core RESTful API contract between the frontend and the 
   * `GET /api/configurations` - List all provider configurations.
   * `GET /api/configurations/{provider_type}` - Get the configuration for a specific provider.
   * `POST /api/configurations/{provider_type}` - Create or update a provider's configuration.
+
+* **Settings Management**
+  * `GET /api/configurations?prefix=integration` - List integration configurations using existing generic endpoint.
+  * `GET /api/configurations?prefix=agent` - List agent configurations using existing generic endpoint.
+  * `POST /api/settings/integrations/{integration_type}/test` - Test connection for a specific integration with immediate results.
+  * `GET /api/settings/agents/available-models` - Get available models based on configured and working LLM providers.
 
 * **Agent Actions**
   * `POST /api/tasks/{task_id}/plan` - Trigger the `Task Investigation & Planning Agent`. Returns a job ID.
@@ -719,23 +766,29 @@ The generic configuration framework manages all application settings through the
 
 * **Integration Configurations** (API credentials from environment):
   * `integration.slack.main` → SlackIntegrationConfig
-  * `integration.jira.main` → JiraIntegrationConfig
+  * `integration.jira.main` → JiraIntegrationConfig  
   * `integration.github.main` → GitHubIntegrationConfig
+  * `integration.openai.main` → OpenAIIntegrationConfig
+  * `integration.anthropic.main` → AnthropicIntegrationConfig
+  * `integration.google.main` → GoogleIntegrationConfig
   * **Note**: Codebase integration requires no configuration (uses current working directory)
 
-* **Context Provider Configurations** (behavior settings from database):
-  * `context_provider.slack.discussions` → SlackContextProviderConfig
-  * `context_provider.codebase.exploration` → CodebaseContextProviderConfig
-  * `context_provider.jira.tickets` → JiraContextProviderConfig
+* **Context Provider Configurations** (behavior settings from database with hardcoded defaults):
+  * `context_provider.slack.discussions` → SlackContextProviderConfig (lookback_days=7, max_messages_per_query=50)
+  * `context_provider.codebase.exploration` → CodebaseContextProviderConfig (max_file_size_kb=500, exclude_patterns=[".git", "node_modules", ".venv"])
+  * `context_provider.jira.tickets` → JiraContextProviderConfig (include_comments=true, max_comment_depth=3)
+  * `context_provider.github.activity` → GitHubContextProviderConfig (include_pr_reviews=true, max_commits_per_pr=20)
+  * `context_provider.webpage.crawling` → WebPageContextProviderConfig (max_depth=2, respect_robots_txt=true)
 
-* **Agent Configurations** (model and behavior settings):
-  * `agent.qa.default` → QAAgentConfig
-  * `agent.planning.default` → PlanningAgentConfig
-  * `agent.implementation.default` → ImplementationAgentConfig
+* **Agent Configurations** (model selection and behavior settings):
+  * `agent.qa.default` → QAAgentConfig (model hierarchy: ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro-latest"])
+  * `agent.planning.default` → PlanningAgentConfig (model hierarchy: ["gemini-1.5-pro-latest", "gpt-4o", "claude-3-5-sonnet-20241022"])
+  * `agent.implementation.default` → ImplementationAgentConfig (model hierarchy: ["claude-3-5-sonnet-20241022", "gpt-4o", "gemini-1.5-pro-latest"])
 
 * **LLM Provider Configurations** (API credentials from environment):
-  * `llm.anthropic.main` → AnthropicProviderConfig
-  * `llm.google.main` → GoogleProviderConfig
+  * `integration.anthropic.main` → AnthropicIntegrationConfig (api_key from ANTHROPIC_API_KEY)
+  * `integration.google.main` → GoogleIntegrationConfig (api_key from GOOGLE_API_KEY)
+  * `integration.openai.main` → OpenAIIntegrationConfig (api_key from OPENAI_API_KEY, organization_id from OPENAI_ORG_ID)
 
 * **Application-Level Configurations**:
   * `app.database.main` → DatabaseConfig
@@ -761,11 +814,13 @@ The codebase uses modern SQLAlchemy 2.0 syntax throughout:
 * **Import Strategy**: Absolute imports (`from devboard.module`) instead of relative imports
 
 ### Context Provider Dependency Management
-* **Initialization Order**: Configuration registration → Context provider initialization
-* **Dependency Checking**: Context providers validate their integration configurations before startup
-* **Error Handling**: Missing configurations result in graceful skipping with detailed logging
-* **Registry Pattern**: Both integrations and context providers use registry patterns for management
-* **Zero-Configuration Providers**: WebPageContextProvider and CodebaseContextProvider work without configuration
+* **Registry Architecture**: `ContextProviderRegistry` stores provider classes (not instances) for clean separation of concerns
+* **Factory Pattern**: Each provider implements `create_instance()` class method that handles configuration validation and integration setup
+* **Error Collection**: Provider initialization failures are collected as structured error information rather than causing system failure
+* **Runtime Instantiation**: Provider instances are created on-demand during context assembly, enabling graceful error handling
+* **Exception Hierarchy**: `ContextProviderUnavailable` exceptions provide detailed error messages for missing/invalid configurations
+* **User Feedback**: Context assembly returns `ProjectContextData` with separate collections for successful context and provider errors
+* **Zero-Configuration Providers**: WebPageContextProvider and CodebaseContextProvider work without external configuration requirements
 
 ### Configuration Key Naming Convention
 * **Integration Layer**: `integration.{provider_type}.main` (e.g., `integration.github.main`)

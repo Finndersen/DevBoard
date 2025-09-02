@@ -3,9 +3,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from devboard.api.routers import codebases, configurations, projects, qa, tasks
 from devboard.context_providers import initialize_context_providers
 from devboard.core.config import initialize_configurations
-from devboard.routers import codebases, configurations, projects, qa, tasks
 
 app = FastAPI(
     title="DevBoard API",

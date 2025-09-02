@@ -21,10 +21,10 @@ class Configuration(Base):
     )
 
 
-class ContextProviderLink(Base):
+class ContextProviderResource(Base):
     """Links a Project or Task to a specific Context Provider resource."""
 
-    __tablename__ = "context_provider_links"
+    __tablename__ = "context_provider_resources"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     provider_name: Mapped[str] = mapped_column(String(255))  # References context provider by name

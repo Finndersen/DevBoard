@@ -24,6 +24,17 @@ class WebPageContextProvider(BaseContextProvider):
 
     provider_type = "webpage"
 
+    @classmethod
+    def create_instance(cls) -> "WebPageContextProvider":
+        """Create an instance of the web page context provider.
+
+        Web pages require no external configuration, so this always succeeds.
+
+        Returns:
+            Configured WebPageContextProvider instance
+        """
+        return cls()
+
     def __init__(self, max_content_length: int = 10000):
         """Initialize web page provider.
 
@@ -32,7 +43,8 @@ class WebPageContextProvider(BaseContextProvider):
         """
         self.max_content_length = max_content_length
 
-    def can_handle_uri(self, resource_uri: str) -> bool:
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
         """Check if URI is a web page (http/https)."""
         parsed = urlparse(resource_uri)
         return parsed.scheme in ["http", "https"]

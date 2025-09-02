@@ -36,7 +36,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('key')
     )
-    op.create_table('context_provider_links',
+    op.create_table('context_provider_resources',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('provider_name', sa.String(length=255), nullable=False),
     sa.Column('parent_id', sa.Integer(), nullable=False),
@@ -96,7 +96,7 @@ def downgrade() -> None:
     op.drop_table('project_conversation_messages')
     op.drop_table('project_codebase_association')
     op.drop_table('projects')
-    op.drop_table('context_provider_links')
+    op.drop_table('context_provider_resources')
     op.drop_table('configurations')
     op.drop_table('codebases')
     # ### end Alembic commands ###

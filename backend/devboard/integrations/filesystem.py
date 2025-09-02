@@ -1,58 +1,59 @@
-"""Codebase integration for accessing local file system and git repository."""
+"""Filesystem integration for accessing local file system and git repository."""
 
 import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from .base import BaseIntegration, IntegrationError
+from .base import BaseIntegration
 
 logger = logging.getLogger(__name__)
 
 
-class CodebaseIntegration(BaseIntegration):
+class FilesystemIntegration(BaseIntegration):
     """Integration for local file system and git repository access."""
 
-    integration_type = "codebase"
+    integration_type = "filesystem"
 
-    def __init__(self, repo_path: str):
-        """Initialize with repository path."""
-        self.repo_path = repo_path
-        logger.info(f"Initialized Codebase integration for {repo_path}")
+    def __init__(self):
+        """Initialize filesystem integration (stateless)."""
+        logger.info("Initialized Filesystem integration")
 
-    async def test_connection(self) -> bool:
-        """Test codebase access by checking repository path."""
-        repo_path = Path(self.repo_path)
-        if not repo_path.exists():
-            logger.error(f"Repository path does not exist: {repo_path}")
+    async def test_connection(self, base_path: str | None = None) -> bool:
+        """Test filesystem access by checking path."""
+        path = Path(base_path or Path.cwd()).resolve()
+
+        if not path.exists():
+            logger.error(f"Path does not exist: {path}")
             return False
 
-        if not repo_path.is_dir():
-            logger.error(f"Repository path is not a directory: {repo_path}")
+        if not path.is_dir():
+            logger.error(f"Path is not a directory: {path}")
             return False
 
         # Check if it's a git repository
-        git_dir = repo_path / ".git"
+        git_dir = path / ".git"
         if not git_dir.exists():
-            logger.warning(f"Directory is not a git repository: {repo_path}")
+            logger.warning(f"Directory is not a git repository: {path}")
             # Still return True as we can access files even without git
 
         return True
 
-    def _run_git_command(self, args: list[str]) -> str:
-        """Run a git command in the repository directory."""
+    def _run_git_command(self, args: list[str], base_path: str) -> str:
+        """Run a git command in the specified directory."""
         result = subprocess.run(
             ["git"] + args,
-            cwd=self.repo_path,
+            cwd=str(base_path),
             capture_output=True,
             text=True,
             check=True,
         )
         return result.stdout.strip()
 
-    async def read_file(self, file_path: str) -> str:
+    async def read_file(self, file_path: str, base_path: str) -> str:
         """Read contents of a file."""
-        full_path = Path(self.repo_path) / file_path
+        base = Path(base_path).resolve()
+        full_path = base / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -62,16 +63,18 @@ class CodebaseIntegration(BaseIntegration):
         with open(full_path, encoding="utf-8") as f:
             return f.read()
 
-    async def list_files(self, directory: str = "", pattern: str | None = None) -> list[str]:
+    async def list_files(
+        self, directory: str = "", pattern: str | None = None, base_path: str | None = None
+    ) -> list[str]:
         """List files in a directory with optional pattern matching."""
-        dir_path = Path(self.repo_path) / directory
+        base = Path(base_path or Path.cwd()).resolve()
+        dir_path = base / directory
         if not dir_path.exists():
             raise FileNotFoundError(f"Directory not found: {directory}")
 
         if not dir_path.is_dir():
             raise ValueError(f"Path is not a directory: {directory}")
 
-        files = []
         if pattern:
             files = [str(p.relative_to(dir_path)) for p in dir_path.rglob(pattern)]
         else:
@@ -80,15 +83,16 @@ class CodebaseIntegration(BaseIntegration):
         return sorted(files)
 
     async def search_files(
-        self, query: str, file_pattern: str | None = None
+        self, query: str, file_pattern: str | None = None, base_path: str | None = None
     ) -> list[dict[str, str]]:
         """Search for text within files using grep-like functionality."""
+        base = Path(base_path or Path.cwd()).resolve()
         cmd_args = ["grep", "-r", "-n", query]
         if file_pattern:
             cmd_args.extend(["--include", file_pattern])
         cmd_args.append(".")
 
-        result = subprocess.run(cmd_args, cwd=self.repo_path, capture_output=True, text=True)
+        result = subprocess.run(cmd_args, cwd=str(base), capture_output=True, text=True)
 
         matches = []
         if result.stdout:
@@ -101,7 +105,7 @@ class CodebaseIntegration(BaseIntegration):
         return matches
 
     async def get_git_log(
-        self, max_count: int = 10, file_path: str | None = None
+        self, max_count: int = 10, file_path: str | None = None, base_path: str | None = None
     ) -> list[dict[str, str]]:
         """Get git commit history."""
         args = [
@@ -114,7 +118,8 @@ class CodebaseIntegration(BaseIntegration):
             args.append("--")
             args.append(file_path)
 
-        output = self._run_git_command(args)
+        base = Path(base_path or Path.cwd()).resolve()
+        output = self._run_git_command(args, str(base))
 
         commits = []
         for line in output.split("\n"):
@@ -137,6 +142,7 @@ class CodebaseIntegration(BaseIntegration):
         commit1: str | None = None,
         commit2: str | None = None,
         file_path: str | None = None,
+        base_path: str | None = None,
     ) -> str:
         """Get git diff between commits or working directory."""
         args = ["diff"]
@@ -150,15 +156,19 @@ class CodebaseIntegration(BaseIntegration):
             args.append("--")
             args.append(file_path)
 
-        return self._run_git_command(args)
+        base = Path(base_path or Path.cwd()).resolve()
+        return self._run_git_command(args, str(base))
 
-    async def get_git_branches(self, remote: bool = False) -> list[str]:
+    async def get_git_branches(
+        self, remote: bool = False, base_path: str | None = None
+    ) -> list[str]:
         """Get list of git branches."""
         args = ["branch"]
         if remote:
             args.append("-r")
 
-        output = self._run_git_command(args)
+        base = Path(base_path or Path.cwd()).resolve()
+        output = self._run_git_command(args, str(base))
         branches = []
         for line in output.split("\n"):
             branch = line.strip()
@@ -170,10 +180,11 @@ class CodebaseIntegration(BaseIntegration):
         return branches
 
     async def get_file_tree(
-        self, directory: str = "", max_depth: int | None = None
+        self, directory: str = "", max_depth: int | None = None, base_path: str | None = None
     ) -> dict[str, Any]:
         """Get hierarchical file tree structure."""
-        dir_path = Path(self.repo_path) / directory
+        base = Path(base_path or Path.cwd()).resolve()
+        dir_path = base / directory
         if not dir_path.exists():
             raise FileNotFoundError(f"Directory not found: {directory}")
 
@@ -190,7 +201,7 @@ class CodebaseIntegration(BaseIntegration):
                     ]:
                         continue
 
-                    relative_path = str(item.relative_to(Path(self.repo_path)))
+                    relative_path = str(item.relative_to(base))
                     if item.is_dir():
                         tree[item.name] = {
                             "type": "directory",
@@ -210,9 +221,10 @@ class CodebaseIntegration(BaseIntegration):
 
         return build_tree(dir_path)
 
-    async def get_file_info(self, file_path: str) -> dict[str, Any]:
+    async def get_file_info(self, file_path: str, base_path: str | None = None) -> dict[str, Any]:
         """Get detailed information about a file."""
-        full_path = Path(self.repo_path) / file_path
+        base = Path(base_path or Path.cwd()).resolve()
+        full_path = base / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -229,7 +241,8 @@ class CodebaseIntegration(BaseIntegration):
         try:
             # Get last commit for this file
             git_log = self._run_git_command(
-                ["log", "-1", "--pretty=format:%H|%an|%ad|%s", "--date=iso", "--", file_path]
+                ["log", "-1", "--pretty=format:%H|%an|%ad|%s", "--date=iso", "--", file_path],
+                str(base),
             )
             if git_log:
                 parts = git_log.split("|", 3)
@@ -245,7 +258,7 @@ class CodebaseIntegration(BaseIntegration):
 
         return info
 
-    def parse_file_url(self, url: str) -> str | None:
+    def parse_file_url(self, url: str, base_path: str | None = None) -> str | None:
         """Parse file URL to extract relative file path."""
         try:
             # Handle file:// URLs or local paths
@@ -256,64 +269,70 @@ class CodebaseIntegration(BaseIntegration):
             else:
                 return url  # Assume it's already a relative path
 
-            # Convert to relative path from repo root
-            repo_path = Path(self.repo_path).resolve()
+            # Convert to relative path from base path
+            base = Path(base_path or Path.cwd()).resolve()
             full_path = Path(file_path).resolve()
 
             try:
-                relative_path = full_path.relative_to(repo_path)
+                relative_path = full_path.relative_to(base)
                 return str(relative_path)
             except ValueError:
-                # Path is outside repository
-                logger.warning(f"File path outside repository: {file_path}")
+                # Path is outside base directory
+                logger.warning(f"File path outside base directory: {file_path}")
                 return None
 
         except Exception:
             return None
 
-    async def investigate_codebase(self, query: str, context: str = "") -> str:
-        """High-level codebase investigation using Gemini CLI agent.
 
-        Args:
-            query: The investigation question or task
-            context: Additional context about what to focus on
+def detect_git_remote_url(local_path: str) -> str | None:
+    """Detect git remote URL from a local repository path.
 
-        Returns:
-            AI-generated analysis and findings
-        """
-        try:
-            full_prompt = f"""
-You are analyzing a codebase located at: {self.repo_path}
+    Returns the remote URL if found, None otherwise.
+    """
+    try:
+        path = Path(local_path).resolve()
 
-Investigation Query: {query}
+        # Check if directory exists
+        if not path.exists() or not path.is_dir():
+            return None
 
-Additional Context: {context}
+        # Check if it's a git repository
+        git_dir = path / ".git"
+        if not git_dir.exists():
+            return None
 
-Please analyze the codebase structure, patterns, and implementation to answer the query.
-Focus on providing specific, actionable insights about the code organization, architecture, and relevant implementation details.
-"""
+        # Get remote URL (try 'origin' first, then any remote)
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+
+        # If origin doesn't exist, try to get any remote
+        result = subprocess.run(
+            ["git", "remote"], cwd=str(path), capture_output=True, text=True, timeout=10
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            first_remote = result.stdout.strip().split("\n")[0]
             result = subprocess.run(
-                ["gemini-cli", "prompt", full_prompt.strip()],
-                cwd=self.repo_path,
+                ["git", "remote", "get-url", first_remote],
+                cwd=str(path),
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=10,
             )
 
-            if result.returncode == 0:
-                logger.info(f"Codebase investigation completed: {query}")
+            if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
-            else:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                logger.error(f"Gemini CLI failed: {error_msg}")
-                raise IntegrationError(f"Gemini CLI error: {error_msg}")
 
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"Codebase investigation timed out for '{query}'")
-            raise IntegrationError("Codebase investigation timed out after 60 seconds") from e
-        except FileNotFoundError as e:
-            logger.error("Gemini CLI not found - ensure gemini-cli is installed and in PATH")
-            raise IntegrationError(
-                "Gemini CLI not installed - install from https://github.com/eliben/gemini-cli"
-            ) from e
+        return None
+
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+        return None

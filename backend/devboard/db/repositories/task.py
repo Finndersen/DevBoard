@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from devboard.db.models import Task
-from devboard.repositories.base import BaseRepository
+from devboard.db.repositories.base import BaseRepository
 
 
 class TaskRepository(BaseRepository[Task]):

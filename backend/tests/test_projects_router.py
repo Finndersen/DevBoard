@@ -1,33 +1,24 @@
 """Tests for projects router."""
 
 import pytest
-from fastapi.testclient import TestClient
 
 from devboard.db.models import Project
-from devboard.main import app
-from devboard.repositories.project import ProjectRepository
-
-
-@pytest.fixture
-def client(db_session):
-    """FastAPI test client with database setup."""
-    from devboard.db.database import get_db
-
-    def override_get_db():
-        return db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
+from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 
 
 @pytest.fixture
 def test_project_data():
     """Sample project data for testing."""
     return {"name": "Test Project", "details": "Test project details", "current_status": "active"}
+
+
+@pytest.fixture
+def test_resource_data():
+    """Sample context provider resource data for testing."""
+    return {
+        "resource_uri": "https://github.com/owner/repo",
+        "description": "Test GitHub repository",
+    }
 
 
 class TestProjectsRouter:
@@ -130,3 +121,120 @@ class TestProjectsRouter:
         response = client.delete("/api/projects/999")
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
+
+
+class TestProjectResourcesRouter:
+    """Test project resource endpoints."""
+
+    def test_list_project_resources_empty(self, client, db_session, test_project_data):
+        """Test listing project resources when none exist."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{created_project.id}/resources")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_list_project_resources_with_data(
+        self, client, db_session, test_project_data, test_resource_data
+    ):
+        """Test listing project resources with existing data."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        # Create test resource
+        resource_repo = ContextProviderResourceRepository(db_session)
+        resource = resource_repo.create_project_resource(
+            project_id=created_project.id,
+            resource_uri=test_resource_data["resource_uri"],
+            description=test_resource_data["description"],
+        )
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{created_project.id}/resources")
+        assert response.status_code == 200
+
+        resources = response.json()
+        assert len(resources) == 1
+        assert resources[0]["resource_uri"] == test_resource_data["resource_uri"]
+        assert resources[0]["description"] == test_resource_data["description"]
+        assert resources[0]["id"] == resource.id
+
+    def test_list_project_resources_project_not_found(self, client):
+        """Test listing resources for non-existent project."""
+        response = client.get("/api/projects/999/resources")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+    def test_create_project_resource(
+        self, client, db_session, test_project_data, test_resource_data
+    ):
+        """Test creating a new project resource."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        response = client.post(
+            f"/api/projects/{created_project.id}/resources", json=test_resource_data
+        )
+        assert response.status_code == 200
+
+        resource_data = response.json()
+        assert resource_data["resource_uri"] == test_resource_data["resource_uri"]
+        assert resource_data["description"] == test_resource_data["description"]
+        assert "id" in resource_data
+
+    def test_create_project_resource_project_not_found(self, client, test_resource_data):
+        """Test creating a resource for non-existent project."""
+        response = client.post("/api/projects/999/resources", json=test_resource_data)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+    def test_delete_project_resource_success(
+        self, client, db_session, test_project_data, test_resource_data
+    ):
+        """Test deleting a project resource."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        # Create test resource
+        resource_repo = ContextProviderResourceRepository(db_session)
+        resource = resource_repo.create_project_resource(
+            project_id=created_project.id,
+            resource_uri=test_resource_data["resource_uri"],
+            description=test_resource_data["description"],
+        )
+        db_session.commit()
+
+        response = client.delete(f"/api/projects/{created_project.id}/resources/{resource.id}")
+        assert response.status_code == 200
+        assert response.json()["message"] == "Resource deleted successfully"
+
+    def test_delete_project_resource_project_not_found(self, client):
+        """Test deleting a resource for non-existent project."""
+        response = client.delete("/api/projects/999/resources/1")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+    def test_delete_project_resource_not_found(self, client, db_session, test_project_data):
+        """Test deleting a non-existent project resource."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        response = client.delete(f"/api/projects/{created_project.id}/resources/999")
+        assert response.status_code == 404
+        assert "Resource not found or does not belong to this project" in response.json()["detail"]

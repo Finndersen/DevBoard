@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from devboard.db.database import get_db
 from devboard.db.models import Project
-from devboard.repositories.project import ProjectRepository
+from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
+from devboard.schemas.configuration import ProjectResourceCreate, ResourceResponse
 from devboard.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 
 router = APIRouter()
@@ -70,3 +71,61 @@ async def delete_project(project_id: int, db: Session = Depends(get_db)):
 
     db.commit()
     return {"message": "Project deleted successfully"}
+
+
+# Project Resource Endpoints
+
+
+@router.get("/{project_id}/resources", response_model=list[ResourceResponse])
+async def list_project_resources(project_id: int, db: Session = Depends(get_db)):
+    """Get all context provider resources for a project."""
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    resource_repo = ContextProviderResourceRepository(db)
+    resources = resource_repo.get_resources_for_project(project_id)
+    return resources
+
+
+@router.post("/{project_id}/resources", response_model=ResourceResponse)
+async def create_project_resource(
+    project_id: int, resource: ProjectResourceCreate, db: Session = Depends(get_db)
+):
+    """Add a context provider resource to a project."""
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    resource_repo = ContextProviderResourceRepository(db)
+    created_resource = resource_repo.create_project_resource(
+        project_id=project_id, resource_uri=resource.resource_uri, description=resource.description
+    )
+
+    db.commit()
+    db.refresh(created_resource)
+    return created_resource
+
+
+@router.delete("/{project_id}/resources/{resource_id}")
+async def delete_project_resource(project_id: int, resource_id: int, db: Session = Depends(get_db)):
+    """Remove a context provider resource from a project."""
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    resource_repo = ContextProviderResourceRepository(db)
+    deleted = resource_repo.delete_project_resource(project_id, resource_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404, detail="Resource not found or does not belong to this project"
+        )
+
+    db.commit()
+    return {"message": "Resource deleted successfully"}

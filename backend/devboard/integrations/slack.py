@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from ..core.config import BaseConfig
+from devboard.core.config import BaseConfig
+
 from .base import (
     AuthenticationError,
     BaseIntegration,

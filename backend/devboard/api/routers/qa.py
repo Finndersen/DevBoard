@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.database import get_db
-from devboard.repositories.project import ProjectRepository
+from devboard.db.repositories import ProjectRepository
+from devboard.services.context_assembly import NoProviderFound
 from devboard.services.qa_agent import qa_agent_service
 
 logger = logging.getLogger(__name__)
@@ -99,7 +101,7 @@ async def get_project_context(
             "eager_context": [
                 {
                     "uri": ctx.uri,
-                    "user_description": ctx.user_description,
+                    "user_description": ctx.description,
                     "provider_type": ctx.provider_type,
                     "data": ctx.data,
                 }
@@ -128,7 +130,7 @@ async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
     """Validate a resource URI and get provider information.
 
     This endpoint helps users validate resource URIs before adding them
-    to their projects as context provider links.
+    to their projects as context provider resources.
 
     Args:
         resource_uri: The URI to validate
@@ -137,16 +139,21 @@ async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
         Validation results and provider information
     """
     try:
-        result = await qa_agent_service.context_service.validate_resource_uri(resource_uri)
+        result = await qa_agent_service.context_service.get_resource_info(resource_uri)
         return {
             "resource_uri": resource_uri,
-            "valid": result.valid,
-            "provider_type": result.provider_type,
+            "valid": True,
+            "provider_type": result.provider.provider_type,
             "strategy": result.strategy,
             "description": result.description,
-            "error": result.error,
+            "error": None,
         }
-
-    except Exception as e:
-        logger.error(f"Error validating resource URI {resource_uri}: {e}")
-        raise HTTPException(status_code=500, detail=f"Validation failed: {e}") from e
+    except (NoProviderFound, ContextProviderUnavailable) as e:
+        return {
+            "resource_uri": resource_uri,
+            "valid": False,
+            "provider_type": None,
+            "strategy": None,
+            "description": None,
+            "error": str(e),
+        }

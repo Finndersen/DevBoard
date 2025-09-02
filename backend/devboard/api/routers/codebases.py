@@ -1,11 +1,14 @@
 """Codebase API endpoints."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from devboard.db.database import get_db
 from devboard.db.models import Codebase
-from devboard.repositories.codebase import CodebaseRepository
+from devboard.db.repositories import CodebaseRepository
+from devboard.integrations.filesystem import detect_git_remote_url
 from devboard.schemas.codebase import CodebaseCreate, CodebaseResponse, CodebaseUpdate
 
 router = APIRouter()
@@ -22,8 +25,27 @@ async def list_codebases(db: Session = Depends(get_db)):
 @router.post("/", response_model=CodebaseResponse)
 async def create_codebase(codebase: CodebaseCreate, db: Session = Depends(get_db)):
     """Create a new codebase."""
+    # Validate that the local path exists and is a directory
+    path = Path(codebase.local_path).resolve()
+    if not path.exists():
+        raise HTTPException(
+            status_code=400, detail=f"Local path does not exist: {codebase.local_path}"
+        )
+
+    if not path.is_dir():
+        raise HTTPException(
+            status_code=400, detail=f"Local path is not a directory: {codebase.local_path}"
+        )
+
+    # Auto-detect git remote URL if the directory is a git repository
+    repository_url = detect_git_remote_url(codebase.local_path)
+
+    # Create the codebase with auto-detected repository URL
+    codebase_data = codebase.model_dump()
+    codebase_data["repository_url"] = repository_url
+
     codebase_repo = CodebaseRepository(db)
-    db_codebase = Codebase(**codebase.model_dump())
+    db_codebase = Codebase(**codebase_data)
     created_codebase = codebase_repo.create(db_codebase)
     db.commit()
     db.refresh(created_codebase)

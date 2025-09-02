@@ -9,13 +9,15 @@ class CodebaseBase(BaseModel):
     name: str
     description: str
     repository_url: str | None = None
-    local_path: str | None = None
+    local_path: str
 
 
-class CodebaseCreate(CodebaseBase):
+class CodebaseCreate(BaseModel):
     """Schema for creating a new codebase."""
 
-    pass
+    name: str
+    description: str
+    local_path: str
 
 
 class CodebaseUpdate(BaseModel):

@@ -42,6 +42,12 @@ class DescriptionGenerationError(ContextProviderError):
     pass
 
 
+class ContextProviderUnavailable(ContextProviderError):
+    """Raised when a provider cannot be initialized due to missing/invalid configuration."""
+
+    pass
+
+
 class BaseContextProvider(ABC):
     """Abstract base class for all context providers.
 
@@ -52,8 +58,26 @@ class BaseContextProvider(ABC):
 
     provider_type: str
 
+    @classmethod
     @abstractmethod
-    def can_handle_uri(self, resource_uri: str) -> bool:
+    def create_instance(cls) -> "BaseContextProvider":
+        """Create a configured instance of this provider.
+
+        This factory method handles provider-specific initialization,
+        including configuration validation and integration setup.
+
+        Returns:
+            Configured provider instance ready for use
+
+        Raises:
+            ContextProviderUnavailable: If provider cannot be initialized
+                due to missing or invalid configuration
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
         """Determine if this provider can handle the given resource URI.
 
         Args:
@@ -155,19 +179,34 @@ class BaseContextProvider(ABC):
 
 
 class ContextProviderRegistry:
-    """Registry for managing context provider instances."""
+    """Registry for managing context provider classes only."""
 
-    _providers: dict[str, BaseContextProvider] = {}
-
-    @classmethod
-    def register(cls, name: str, provider: BaseContextProvider) -> None:
-        """Register a context provider instance."""
-        cls._providers[name] = provider
-        logger.info(f"Registered context provider: {name}")
+    _providers: dict[str, type[BaseContextProvider]] = {}
 
     @classmethod
-    def get(cls, name: str) -> BaseContextProvider | None:
-        """Get a registered context provider."""
+    def register(cls, provider_class: type[BaseContextProvider]) -> None:
+        """Register a context provider class.
+
+        Args:
+            provider_class: The context provider class to register
+
+        Raises:
+            ValueError: If provider class doesn't have provider_type attribute
+        """
+        if not hasattr(provider_class, "provider_type"):
+            raise ValueError("Provider class must have 'provider_type' attribute")
+        cls._providers[provider_class.provider_type] = provider_class
+
+    @classmethod
+    def get(cls, name: str) -> type[BaseContextProvider] | None:
+        """Get a registered context provider class.
+
+        Args:
+            name: The provider type name to look up
+
+        Returns:
+            The provider class if found, None otherwise
+        """
         return cls._providers.get(name)
 
     @classmethod
@@ -176,11 +215,18 @@ class ContextProviderRegistry:
         return list(cls._providers.keys())
 
     @classmethod
-    def get_provider_for_uri(cls, resource_uri: str) -> BaseContextProvider | None:
-        """Find the first provider that can handle the given resource URI."""
-        for provider in cls._providers.values():
-            if provider.can_handle_uri(resource_uri):
-                return provider
+    def get_provider_for_uri(cls, resource_uri: str) -> type[BaseContextProvider] | None:
+        """Find the first provider class that can handle the given resource URI.
+
+        Args:
+            resource_uri: The URI to find a provider for
+
+        Returns:
+            The provider class that can handle the URI, or None if not found
+        """
+        for provider_class in cls._providers.values():
+            if provider_class.can_handle_uri(resource_uri):
+                return provider_class
         return None
 
     @classmethod

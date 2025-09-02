@@ -6,7 +6,8 @@ from typing import Any
 from jira import JIRA as JiraClient
 from jira import JIRAError
 
-from ..core.config import BaseConfig
+from devboard.core.config import BaseConfig
+
 from .base import (
     AuthenticationError,
     BaseIntegration,

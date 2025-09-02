@@ -24,7 +24,7 @@ test:		## Run tests
 	pytest
 
 start:		## Start development server
-	uvicorn devboard.main:app --host 0.0.0.0 --port 8000 --reload
+	uvicorn devboard.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 migrate:	## Run database migrations
 	mkdir -p data && PYTHONPATH=. alembic upgrade head

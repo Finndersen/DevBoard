@@ -9,6 +9,7 @@ from devboard.integrations.github import GitHubIntegration
 
 from .base import (
     BaseContextProvider,
+    ContextProviderUnavailable,
     ContextRetrievalError,
     ContextStrategy,
     DescriptionGenerationError,
@@ -23,17 +24,41 @@ class GitHubContextProvider(BaseContextProvider):
 
     provider_type = "github"
 
+    @classmethod
+    def create_instance(cls) -> "GitHubContextProvider":
+        """Create an instance of the GitHub context provider.
+
+        Validates configuration and creates the GitHub integration.
+
+        Returns:
+            Configured GitHubContextProvider instance
+
+        Raises:
+            ContextProviderUnavailable: If GitHub configuration is missing or invalid
+        """
+        from devboard.core.config import config_service
+
+        config_result = config_service.validate_config("integration.github.main")
+        if not config_result.success or not config_result.config:
+            raise ContextProviderUnavailable(
+                f"GitHub integration not configured: {config_result.errors}"
+            )
+
+        try:
+            integration = GitHubIntegration(config_result.config)
+            return cls(integration)
+        except Exception as e:
+            raise ContextProviderUnavailable(f"Failed to initialize GitHub integration: {e}") from e
+
     def __init__(self, integration: GitHubIntegration):
         """Initialize with GitHub integration."""
         self.integration = integration
 
-    def can_handle_uri(self, resource_uri: str) -> bool:
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
         """Check if URI is a GitHub resource."""
-        try:
-            parsed = urlparse(resource_uri)
-            return parsed.netloc in ["github.com", "www.github.com"]
-        except Exception:
-            return False
+        parsed = urlparse(resource_uri)
+        return parsed.netloc in ["github.com", "www.github.com"]
 
     def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
         """Determine strategy based on resource scope.
@@ -59,30 +84,27 @@ class GitHubContextProvider(BaseContextProvider):
 
     def _parse_github_url(self, url: str) -> dict[str, str] | None:
         """Parse GitHub URL to extract components."""
-        try:
-            # Handle URLs like:
-            # https://github.com/owner/repo/pull/123
-            # https://github.com/owner/repo/issues/456
-            # https://github.com/owner/repo/commit/abc123
-            # https://github.com/owner/repo
+        # Handle URLs like:
+        # https://github.com/owner/repo/pull/123
+        # https://github.com/owner/repo/issues/456
+        # https://github.com/owner/repo/commit/abc123
+        # https://github.com/owner/repo
 
-            pattern = r"github\.com/([^/]+)/([^/]+)(?:/([^/]+)(?:/(\d+|[a-f0-9]+))?)?"
-            match = re.search(pattern, url)
+        pattern = r"github\.com/([^/]+)/([^/]+)(?:/([^/]+)(?:/(\d+|[a-f0-9]+))?)?"
+        match = re.search(pattern, url)
 
-            if not match:
-                return None
-
-            owner, repo, resource_type, identifier = match.groups()
-
-            result = {"owner": owner, "repo": repo}
-            if resource_type:
-                result["type"] = resource_type
-            if identifier:
-                result["id"] = identifier
-
-            return result
-        except Exception:
+        if not match:
             return None
+
+        owner, repo, resource_type, identifier = match.groups()
+
+        result = {"owner": owner, "repo": repo}
+        if resource_type:
+            result["type"] = resource_type
+        if identifier:
+            result["id"] = identifier
+
+        return result
 
     async def get_resource(self, resource_uri: str) -> dict[str, Any]:
         """Get full resource data for EAGER strategy (small-scope resources)."""

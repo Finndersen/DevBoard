@@ -10,14 +10,151 @@ from devboard.context_providers.base import (
     ContextProviderRegistry,
     ContextStrategy,
 )
-from devboard.db.models import ContextProviderLink, Project
-from devboard.repositories.context_provider_link import ContextProviderLinkRepository
-from devboard.repositories.project import ProjectRepository
+from devboard.db.models import ContextProviderResource, Project
+from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     ProjectContextData,
-    ResourceValidationResult,
 )
+
+
+class MockTestProvider(BaseContextProvider):
+    """Mock provider for testing."""
+
+    provider_type = "test"
+
+    def __init__(self, can_handle_uris=None, strategy=ContextStrategy.EAGER, resource_data=None):
+        self.can_handle_uris = can_handle_uris or []
+        self.strategy = strategy
+        self.resource_data = resource_data or {}
+        self.get_resource = AsyncMock(return_value=self.resource_data)
+        self.generate_resource_description = AsyncMock(return_value="Mock description")
+        self.get_relevant_context = AsyncMock(return_value="Mock context")
+
+    @classmethod
+    def create_instance(cls):
+        return cls()
+
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
+        # Default behavior for tests - override in specific instances
+        return "github.com" in resource_uri or resource_uri.startswith("test://")
+
+    def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
+        return self.strategy
+
+    async def get_resource(self, resource_uri: str):
+        return self.resource_data
+
+    async def generate_resource_description(self, resource_uri: str) -> str:
+        return "Mock description"
+
+    async def get_relevant_context(self, resource_uri: str, query: str) -> str:
+        return "Mock context"
+
+
+class MockTest1Provider(BaseContextProvider):
+    """First mock provider for multi-provider tests."""
+
+    provider_type = "test1"
+
+    @classmethod
+    def create_instance(cls):
+        return cls()
+
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
+        return True
+
+    def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
+        return ContextStrategy.EAGER
+
+    async def get_resource(self, resource_uri: str):
+        return {}
+
+    async def generate_resource_description(self, resource_uri: str) -> str:
+        return "Test1 description"
+
+    async def get_relevant_context(self, resource_uri: str, query: str) -> str:
+        return "Test1 context"
+
+
+class MockTest2Provider(BaseContextProvider):
+    """Second mock provider for multi-provider tests."""
+
+    provider_type = "test2"
+
+    @classmethod
+    def create_instance(cls):
+        return cls()
+
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
+        return True
+
+    def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
+        return ContextStrategy.EAGER
+
+    async def get_resource(self, resource_uri: str):
+        return {}
+
+    async def generate_resource_description(self, resource_uri: str) -> str:
+        return "Test2 description"
+
+    async def get_relevant_context(self, resource_uri: str, query: str) -> str:
+        return "Test2 context"
+
+
+class MockGitHubProvider(BaseContextProvider):
+    """Mock GitHub provider for auto-detection tests."""
+
+    provider_type = "github"
+
+    @classmethod
+    def create_instance(cls):
+        return cls()
+
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
+        return "github.com" in resource_uri
+
+    def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
+        return ContextStrategy.EAGER
+
+    async def get_resource(self, resource_uri: str):
+        return {"data": "pr_data"}
+
+    async def generate_resource_description(self, resource_uri: str) -> str:
+        return "GitHub resource description"
+
+    async def get_relevant_context(self, resource_uri: str, query: str) -> str:
+        return "GitHub context"
+
+
+class MockOnDemandProvider(BaseContextProvider):
+    """Mock provider that always uses ON_DEMAND strategy."""
+
+    provider_type = "test_on_demand"
+
+    @classmethod
+    def create_instance(cls):
+        return cls()
+
+    @classmethod
+    def can_handle_uri(cls, resource_uri: str) -> bool:
+        return resource_uri.startswith("test://")
+
+    def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
+        return ContextStrategy.ON_DEMAND
+
+    async def get_resource(self, resource_uri: str):
+        return {}
+
+    async def generate_resource_description(self, resource_uri: str) -> str:
+        return "Auto-generated description"
+
+    async def get_relevant_context(self, resource_uri: str, query: str) -> str:
+        return "Relevant context"
 
 
 class TestContextAssemblyService:
@@ -33,9 +170,9 @@ class TestContextAssemblyService:
         return Mock(spec=ProjectRepository)
 
     @pytest.fixture
-    def mock_link_repo(self):
-        """Mock context provider link repository."""
-        return Mock(spec=ContextProviderLinkRepository)
+    def mock_resource_repo(self):
+        """Mock context provider resource repository."""
+        return Mock(spec=ContextProviderResourceRepository)
 
     @pytest.fixture
     def mock_db_session(self):
@@ -75,9 +212,7 @@ class TestContextAssemblyService:
     def test_extract_uris_from_text(self, service):
         """Test URI extraction from text."""
         # Register a mock provider to validate URLs
-        mock_provider = Mock(spec=BaseContextProvider)
-        mock_provider.can_handle_uri.side_effect = lambda uri: "github.com" in uri
-        ContextProviderRegistry.register("test", mock_provider)
+        ContextProviderRegistry.register(MockTestProvider)
 
         text = """
         Working on https://github.com/owner/repo/pull/123 and also
@@ -108,16 +243,16 @@ class TestContextAssemblyService:
                 "devboard.services.context_assembly.ProjectRepository"
             ) as mock_project_repo_class,
             patch(
-                "devboard.services.context_assembly.ContextProviderLinkRepository"
-            ) as mock_link_repo_class,
+                "devboard.services.context_assembly.ContextProviderResourceRepository"
+            ) as mock_resource_repo_class,
         ):
             mock_project_repo = Mock()
             mock_project_repo.get_by_id.return_value = project
             mock_project_repo_class.return_value = mock_project_repo
 
-            mock_link_repo = Mock()
-            mock_link_repo.get_by_parent.return_value = []
-            mock_link_repo_class.return_value = mock_link_repo
+            mock_resource_repo = Mock()
+            mock_resource_repo.get_by_parent.return_value = []
+            mock_resource_repo_class.return_value = mock_resource_repo
 
             result = await service.get_project_context(1, "test query")
 
@@ -129,9 +264,9 @@ class TestContextAssemblyService:
     async def test_get_project_context_with_explicit_links(
         self, service, mock_db_session, mock_provider
     ):
-        """Test context assembly with explicit provider links."""
+        """Test context assembly with explicit provider resources."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
-        link = ContextProviderLink(
+        link = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             resource_uri="test://resource",
@@ -143,25 +278,25 @@ class TestContextAssemblyService:
                 "devboard.services.context_assembly.ProjectRepository"
             ) as mock_project_repo_class,
             patch(
-                "devboard.services.context_assembly.ContextProviderLinkRepository"
-            ) as mock_link_repo_class,
+                "devboard.services.context_assembly.ContextProviderResourceRepository"
+            ) as mock_resource_repo_class,
         ):
             mock_project_repo = Mock()
             mock_project_repo.get_by_id.return_value = project
             mock_project_repo_class.return_value = mock_project_repo
 
-            mock_link_repo = Mock()
-            mock_link_repo.get_by_parent.return_value = [link]
-            mock_link_repo_class.return_value = mock_link_repo
+            mock_resource_repo = Mock()
+            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo_class.return_value = mock_resource_repo
 
-            ContextProviderRegistry.register("test", mock_provider)
+            ContextProviderRegistry.register(MockTestProvider)
 
             result = await service.get_project_context(1, "test query")
 
             assert isinstance(result, ProjectContextData)
             assert len(result.eager_context) == 1
             assert result.eager_context[0].uri == "test://resource"
-            assert result.eager_context[0].user_description == "User provided description"
+            assert result.eager_context[0].description == "User provided description"
 
     @pytest.mark.asyncio
     async def test_get_project_context_with_detected_uris(
@@ -187,27 +322,25 @@ class TestContextAssemblyService:
                 "devboard.services.context_assembly.ProjectRepository"
             ) as mock_project_repo_class,
             patch(
-                "devboard.services.context_assembly.ContextProviderLinkRepository"
-            ) as mock_link_repo_class,
+                "devboard.services.context_assembly.ContextProviderResourceRepository"
+            ) as mock_resource_repo_class,
         ):
             mock_project_repo = Mock()
             mock_project_repo.get_by_id.return_value = project
             mock_project_repo_class.return_value = mock_project_repo
 
-            mock_link_repo = Mock()
-            mock_link_repo.get_by_parent.return_value = []
-            mock_link_repo_class.return_value = mock_link_repo
+            mock_resource_repo = Mock()
+            mock_resource_repo.get_by_parent.return_value = []
+            mock_resource_repo_class.return_value = mock_resource_repo
 
-            ContextProviderRegistry.register("github", github_provider)
+            ContextProviderRegistry.register(MockGitHubProvider)
 
             result = await service.get_project_context(1, "test query")
 
             assert isinstance(result, ProjectContextData)
             assert len(result.eager_context) == 1
             assert result.eager_context[0].uri == "https://github.com/owner/repo/pull/123"
-            assert (
-                result.eager_context[0].user_description is None
-            )  # Auto-detected, no user description
+            assert result.eager_context[0].description is None  # Auto-detected, no user description
 
     @pytest.mark.asyncio
     async def test_get_project_context_on_demand_with_user_description(
@@ -215,20 +348,11 @@ class TestContextAssemblyService:
     ):
         """Test ON_DEMAND resources prioritize user descriptions."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
-        link = ContextProviderLink(
+        link = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             resource_uri="test://large-resource",
             description="User provided description",
-        )
-
-        # Mock provider that returns ON_DEMAND strategy
-        provider = Mock(spec=BaseContextProvider)
-        provider.provider_type = "test"
-        provider.can_handle_uri.return_value = True
-        provider.get_retrieval_strategy.return_value = ContextStrategy.ON_DEMAND
-        provider.generate_resource_description = AsyncMock(
-            return_value="Auto-generated description"
         )
 
         with (
@@ -236,18 +360,18 @@ class TestContextAssemblyService:
                 "devboard.services.context_assembly.ProjectRepository"
             ) as mock_project_repo_class,
             patch(
-                "devboard.services.context_assembly.ContextProviderLinkRepository"
-            ) as mock_link_repo_class,
+                "devboard.services.context_assembly.ContextProviderResourceRepository"
+            ) as mock_resource_repo_class,
         ):
             mock_project_repo = Mock()
             mock_project_repo.get_by_id.return_value = project
             mock_project_repo_class.return_value = mock_project_repo
 
-            mock_link_repo = Mock()
-            mock_link_repo.get_by_parent.return_value = [link]
-            mock_link_repo_class.return_value = mock_link_repo
+            mock_resource_repo = Mock()
+            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo_class.return_value = mock_resource_repo
 
-            ContextProviderRegistry.register("test", provider)
+            ContextProviderRegistry.register(MockOnDemandProvider)
 
             result = await service.get_project_context(1, "test query")
 
@@ -256,9 +380,6 @@ class TestContextAssemblyService:
 
             resource = result.on_demand_resources[0]
             assert resource.description == "User provided description"  # User description used
-            assert resource.has_user_description is True
-            # generate_resource_description should NOT be called when user description exists
-            provider.generate_resource_description.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_project_context_on_demand_without_user_description(
@@ -266,19 +387,11 @@ class TestContextAssemblyService:
     ):
         """Test ON_DEMAND resources generate descriptions when user doesn't provide one."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
-        link = ContextProviderLink(
+        link = ContextProviderResource(
             parent_id=1,
             parent_type="project",
             resource_uri="test://large-resource",
             description=None,  # No user description
-        )
-
-        provider = Mock(spec=BaseContextProvider)
-        provider.provider_type = "test"
-        provider.can_handle_uri.return_value = True
-        provider.get_retrieval_strategy.return_value = ContextStrategy.ON_DEMAND
-        provider.generate_resource_description = AsyncMock(
-            return_value="Auto-generated description"
         )
 
         with (
@@ -286,18 +399,18 @@ class TestContextAssemblyService:
                 "devboard.services.context_assembly.ProjectRepository"
             ) as mock_project_repo_class,
             patch(
-                "devboard.services.context_assembly.ContextProviderLinkRepository"
-            ) as mock_link_repo_class,
+                "devboard.services.context_assembly.ContextProviderResourceRepository"
+            ) as mock_resource_repo_class,
         ):
             mock_project_repo = Mock()
             mock_project_repo.get_by_id.return_value = project
             mock_project_repo_class.return_value = mock_project_repo
 
-            mock_link_repo = Mock()
-            mock_link_repo.get_by_parent.return_value = [link]
-            mock_link_repo_class.return_value = mock_link_repo
+            mock_resource_repo = Mock()
+            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo_class.return_value = mock_resource_repo
 
-            ContextProviderRegistry.register("test", provider)
+            ContextProviderRegistry.register(MockOnDemandProvider)
 
             result = await service.get_project_context(1, "test query")
 
@@ -305,58 +418,20 @@ class TestContextAssemblyService:
             assert (
                 resource.description == "Auto-generated description"
             )  # Generated description used
-            assert resource.has_user_description is False
-            provider.generate_resource_description.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_validate_resource_uri_valid(self, service):
-        """Test resource validation for valid URI."""
-        provider = Mock(spec=BaseContextProvider)
-        provider.provider_type = "test"
-        provider.can_handle_uri.return_value = True
-        provider.get_retrieval_strategy.return_value = ContextStrategy.EAGER
-        provider.generate_resource_description = AsyncMock(return_value="Test description")
-
-        ContextProviderRegistry.register("test", provider)
-
-        result = await service.validate_resource_uri("test://resource")
-
-        assert isinstance(result, ResourceValidationResult)
-        assert result.valid is True
-        assert result.provider_type == "test"
-        assert result.strategy == "EAGER"
-        assert result.description == "Test description"
-        assert result.error is None
-
-    @pytest.mark.asyncio
-    async def test_validate_resource_uri_no_provider(self, service):
-        """Test resource validation for URI with no provider."""
-        result = await service.validate_resource_uri("unknown://resource")
-
-        assert isinstance(result, ResourceValidationResult)
-        assert result.valid is False
-        assert result.error == "No provider found for this URI type"
 
     @pytest.mark.asyncio
     async def test_get_on_demand_context(self, service):
         """Test getting on-demand context."""
-        provider = Mock(spec=BaseContextProvider)
-        provider.get_relevant_context = AsyncMock(return_value="Relevant context")
-
-        ContextProviderRegistry.register("test", provider)
+        ContextProviderRegistry.register(MockTestProvider)
 
         result = await service.get_on_demand_context("test://resource", "specific query")
 
-        assert result == "Relevant context"
-        provider.get_relevant_context.assert_called_once_with("test://resource", "specific query")
+        assert result == "Mock context"
 
     def test_list_available_providers(self, service):
         """Test listing available providers."""
-        provider1 = Mock(spec=BaseContextProvider)
-        provider2 = Mock(spec=BaseContextProvider)
-
-        ContextProviderRegistry.register("test1", provider1)
-        ContextProviderRegistry.register("test2", provider2)
+        ContextProviderRegistry.register(MockTest1Provider)
+        ContextProviderRegistry.register(MockTest2Provider)
 
         result = service.list_available_providers()
         assert set(result) == {"test1", "test2"}

@@ -1,36 +1,19 @@
 """Tests for Q&A router endpoints."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
+from devboard.context_providers import ContextStrategy
 from devboard.db.models import Project
-from devboard.main import app
 from devboard.services.context_assembly import (
     EagerContextData,
+    NoProviderFound,
     OnDemandResourceInfo,
     ProjectContextData,
+    ResourceInfo,
 )
 from devboard.services.qa_agent import QAAgentService
-
-
-@pytest.fixture
-def client(db_session):
-    """FastAPI test client with database setup."""
-    # Override the get_db dependency with our test session
-    from devboard.db.database import get_db
-
-    def override_get_db():
-        return db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    # Clean up after test
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -51,7 +34,7 @@ def sample_context_data():
         eager_context=[
             EagerContextData(
                 uri="https://github.com/owner/repo/pull/123",
-                user_description="Important PR",
+                description="Important PR",
                 provider_type="github",
                 data={"title": "Fix bug", "body": "Bug fix details"},
             )
@@ -61,7 +44,6 @@ def sample_context_data():
                 uri="https://github.com/owner/repo",
                 description="Main repository",
                 provider_type="github",
-                has_user_description=True,
             )
         ],
     )
@@ -175,22 +157,24 @@ class TestValidateResourceEndpoint:
     @patch("devboard.routers.qa.qa_agent_service")
     def test_validate_resource_success(self, mock_qa_service, client):
         """Test successful resource validation."""
-        from devboard.services.context_assembly import ResourceValidationResult
-
-        mock_result = ResourceValidationResult(
-            valid=True, provider_type="github", strategy="EAGER", description="Test PR description"
+        uri = "https://github.com/owner/repo/pull/123"
+        mock_result = ResourceInfo(
+            provider=MagicMock(provider_type="github"),
+            retrieval_strategy=ContextStrategy.EAGER,
+            description="Test PR description",
+            uri=uri,
         )
-        mock_qa_service.context_service.validate_resource_uri = AsyncMock(return_value=mock_result)
+        mock_qa_service.context_service.get_resource_info = AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/api/projects/validate-resource",
-            params={"resource_uri": "https://github.com/owner/repo/pull/123"},
+            params={"resource_uri": uri},
         )
 
         assert response.status_code == 200
         data = response.json()
 
-        assert data["resource_uri"] == "https://github.com/owner/repo/pull/123"
+        assert data["resource_uri"] == uri
         assert data["valid"] is True
         assert data["provider_type"] == "github"
         assert data["strategy"] == "EAGER"
@@ -200,13 +184,10 @@ class TestValidateResourceEndpoint:
     @patch("devboard.routers.qa.qa_agent_service")
     def test_validate_resource_invalid(self, mock_qa_service, client):
         """Test validation of invalid resource."""
-        from devboard.services.context_assembly import ResourceValidationResult
 
-        mock_result = ResourceValidationResult(
-            valid=False, error="No provider found for this URI type"
+        mock_qa_service.context_service.get_resource_info = AsyncMock(
+            side_effect=NoProviderFound("No provider found for this URI type")
         )
-        mock_qa_service.context_service.validate_resource_uri = AsyncMock(return_value=mock_result)
-
         response = client.post(
             "/api/projects/validate-resource", params={"resource_uri": "invalid://resource"}
         )
@@ -216,20 +197,6 @@ class TestValidateResourceEndpoint:
 
         assert data["valid"] is False
         assert data["error"] == "No provider found for this URI type"
-
-    @patch("devboard.routers.qa.qa_agent_service")
-    def test_validate_resource_service_error(self, mock_qa_service, client):
-        """Test validation endpoint when service raises error."""
-        mock_qa_service.context_service.validate_resource_uri = AsyncMock(
-            side_effect=Exception("Service error")
-        )
-
-        response = client.post(
-            "/api/projects/validate-resource", params={"resource_uri": "test://resource"}
-        )
-
-        assert response.status_code == 500
-        assert "Validation failed" in response.json()["detail"]
 
 
 class TestQAAgentService:

@@ -47,21 +47,28 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Slack Integration**: API client for messages, channels, conversations
   * **Codebase Integration**: File system operations and one-shot agent execution wrapper
 
-### Epic 4: Context Provider Layer
+### Epic 4: Context Provider Layer ✅
 
-* [ ] **Task 4.1: Build Context Provider Base Classes**
+* [x] **Task 4.1: Build Context Provider Base Classes with Registry**
   * Define abstract base class with EAGER/ON_DEMAND strategy interface and high-level query tools.
-* [ ] **Task 4.2: Implement Context Providers with Sub-Agents**
+  * Implement `ContextProviderRegistry` for managing provider classes (not instances).
+  * Add `ContextProviderUnavailable` exception hierarchy for configuration error handling.
+  * Define factory method pattern with `create_instance()` class method for each provider.
+* [x] **Task 4.2: Implement Context Providers with Sub-Agents**
   * **GitHub Context Provider**: PR context, commit summaries (uses GitHub Integration)
   * **Jira Context Provider**: Ticket context, project status (uses Jira Integration)  
   * **Slack Context Provider**: Internal sub-agent for query processing (uses Slack Integration)
   * **Codebase Context Provider**: Agential code exploration using one-shot Claude Code/Gemini CLI execution (uses Codebase Integration)
+  * **WebPage Context Provider**: HTTP/HTTPS resource fetching and content analysis
   * Each provider implements `get_relevant_context(resource_uri, query)` interface and resource description generation
+  * All providers implement factory method pattern with configuration validation and error handling
 
-### Epic 5: Context Assembly & Q&A Agent
+### Epic 5: Context Assembly & Q&A Agent ✅
 
-* [ ] **Task 5.1: Implement Context Assembly Service**
+* [x] **Task 5.1: Implement Context Assembly Service with Error Handling**
   * Build the service that determines EAGER vs ON_DEMAND strategies for each resource URI.
+  * Implement runtime provider instantiation with factory methods and error collection.
+  * Add `ProjectContextData` structure to separate successful context from provider errors.
   * Implement parallel execution of provider queries and context compilation.
 * [ ] **Task 5.2: Implement Project Q&A Agent**
   * Create PydanticAI-based agent with custom prompting and universal `get_relevant_context(resource_uri, query)` tool.
@@ -85,15 +92,42 @@ This document outlines the detailed, step-by-step tasks required to build the De
 * [ ] **Task 6.5: Implement Basic Task Management**
   * Simple task CRUD operations with Jira integration for task linking.
 
+### Epic 7: Global Settings & Configuration View
+
+* [ ] **Task 7.1: Extend Configuration Framework for LLM Providers**
+  * Add OpenAI integration configuration schema with API key and organization ID support.
+  * Add Anthropic integration configuration schema with API key support.
+  * Add Google integration configuration schema with API key support.
+  * Update configuration initialization to register new LLM provider schemas.
+* [ ] **Task 7.2: Implement Agent Configuration Schemas**
+  * Create QAAgentConfig, PlanningAgentConfig, and ImplementationAgentConfig with model selection.
+  * Implement model hierarchy logic and fallback system for agent configuration.
+  * Add agent configuration registration to the configuration framework.
+* [ ] **Task 7.3: Build Settings API Endpoints**
+  * Extend existing `/api/configurations` endpoints to support prefix filtering for settings management.
+  * Implement `/api/settings/integrations/{integration_type}/test` for on-demand connection testing with immediate results.
+  * Add `/api/settings/agents/available-models` endpoint to get dynamic model lists based on working LLM providers.
+* [ ] **Task 7.4: Implement Global Settings Frontend**
+  * Create main settings view with tabbed interface (Integrations, Codebases, Context Providers, Agents).
+  * Build integration configuration cards with connection status indicators and test buttons.
+  * Implement codebase path management interface with validation.
+  * Create context provider resource management interface.
+  * Add agent model selection dropdowns with dynamic model lists.
+* [ ] **Task 7.5: Add Connection Testing & Validation**
+  * Implement on-demand connection testing for all integration types with immediate response handling.
+  * Add form validation with detailed error messaging for configuration fields.
+  * Create integration-specific connection status indicators that update after testing.
+  * Implement API key masking and reveal functionality in configuration forms.
+
 ## Phase 2: Advanced Agent Features
 
-* [ ] **Task 7.1: Implement Agent Conversation History**
+* [ ] **Task 8.1: Implement Agent Conversation History**
   * Add the `ProjectConversationMessage` model and implement sliding window conversation management.
-* [ ] **Task 7.2: Implement Task Planning Agent**
+* [ ] **Task 8.2: Implement Task Planning Agent**
   * Build conversational Planning Agent with context assembly and Implementation Plan generation.
-* [ ] **Task 7.3: Implement Task Implementation Agent**
+* [ ] **Task 8.3: Implement Task Implementation Agent**
   * Build Implementation Agent using Claude Code SDK with codebase access and GitHub PR creation.
-* [ ] **Task 7.4: Add Background Task Runner**
+* [ ] **Task 8.4: Add Background Task Runner**
   * Implement Huey/Dramatiq for long-running agent sessions with WebSocket progress updates.
-* [ ] **Task 7.5: Enhanced UI Features**
+* [ ] **Task 8.5: Enhanced UI Features**
   * Task Detail View with Planning/Implementation phases and agent conversation history.

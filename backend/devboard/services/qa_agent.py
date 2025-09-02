@@ -134,7 +134,7 @@ Please answer the user's query using the available context. If you need more spe
         if context_data.eager_context:
             summary_parts.append("EAGER CONTEXT (pre-loaded):")
             for context in context_data.eager_context:
-                description = context.user_description or "No description"
+                description = context.description or "No description"
                 summary_parts.append(
                     f"- [{context.provider_type.upper()}] {context.uri}: {description}"
                 )
