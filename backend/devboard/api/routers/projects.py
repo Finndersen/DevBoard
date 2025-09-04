@@ -3,8 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from devboard.api.schemas import DeleteResponse, ProjectResourceCreate, ResourceResponse
-from devboard.api.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from devboard.api.schemas import DeleteResponse, ProjectResourceCreate, ResourceResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from devboard.db.database import get_db
 from devboard.db.models import Project
 from devboard.db.repositories import ProjectRepository

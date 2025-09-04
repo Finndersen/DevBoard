@@ -33,8 +33,8 @@ class Task(Base):
         default=lambda: datetime.datetime.now(datetime.UTC)
     )
 
-    project: Mapped[Project] = relationship(back_populates="tasks")
-    codebase: Mapped[Codebase | None] = relationship(back_populates="tasks")
+    project: Mapped["Project"] = relationship(back_populates="tasks")
+    codebase: Mapped["Codebase | None"] = relationship(back_populates="tasks")
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=task_context_resource_association, back_populates="tasks"
     )

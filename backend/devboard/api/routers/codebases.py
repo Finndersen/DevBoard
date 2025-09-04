@@ -5,8 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from devboard.api.schemas import DeleteResponse
-from devboard.api.schemas.codebase import CodebaseCreate, CodebaseResponse, CodebaseUpdate
+from devboard.api.schemas import DeleteResponse, CodebaseCreate, CodebaseResponse, CodebaseUpdate
 from devboard.db.database import get_db
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
