@@ -21,21 +21,16 @@ class TaskRepository(BaseRepository[Task]):
         stmt = select(Task).where(Task.id == task_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_all(self, project_id: int = None) -> list[Task]:
-        """Get all tasks, optionally filtered by project.
-
-        Args:
-            project_id: Optional project ID to filter by
+    def get_all(self) -> list[Task]:
+        """Get all tasks.
 
         Returns:
-            List of tasks
+            List of all tasks
         """
         stmt = select(Task)
-        if project_id:
-            stmt = stmt.where(Task.project_id == project_id)
         return list(self.db.execute(stmt).scalars().all())
 
-    def get_by_project(self, project_id: int) -> list[Task]:
+    def get_for_project(self, project_id: int) -> list[Task]:
         """Get all tasks for a specific project.
 
         Args:

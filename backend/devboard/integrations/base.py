@@ -12,6 +12,18 @@ class IntegrationError(Exception):
     pass
 
 
+class IntegrationConfigurationError(IntegrationError):
+    """Raised when integration cannot initialize due to missing/invalid config."""
+
+    pass
+
+
+class UnsupportedIntegrationError(IntegrationError):
+    """Raised when integration type is not supported."""
+
+    pass
+
+
 class AuthenticationError(IntegrationError):
     """Raised when authentication fails."""
 
@@ -34,6 +46,16 @@ class BaseIntegration(ABC):
     """Abstract base class for all external service integrations."""
 
     integration_type: str
+
+    @classmethod
+    @abstractmethod
+    async def create(cls) -> "BaseIntegration":
+        """Create integration instance with required configuration.
+
+        Raises:
+            IntegrationConfigurationError: If configuration is missing or invalid.
+        """
+        pass
 
     @abstractmethod
     async def test_connection(self) -> bool:

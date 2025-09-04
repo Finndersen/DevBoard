@@ -7,11 +7,12 @@ from urllib.parse import urlparse
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from devboard.core.config import BaseConfig
+from devboard.config.base import BaseConfig
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
+    IntegrationConfigurationError,
     IntegrationError,
     RateLimitError,
     ResourceNotFoundError,
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 class SlackIntegrationConfig(BaseConfig):
     """Configuration for Slack integration."""
+
+    config_key = "integration.slack.main"
 
     api_token: str  # From SLACK_API_TOKEN env var (Bot User OAuth Token)
     workspace_url: str | None = None  # From database (e.g., "company.slack.com")
@@ -42,7 +45,17 @@ class SlackIntegration(BaseIntegration):
             logger.info("Initialized Slack integration")
         except Exception as e:
             logger.error(f"Failed to initialize Slack integration: {e}")
-            raise AuthenticationError(f"Failed to initialize Slack: {e}") from e
+            raise IntegrationConfigurationError(f"Failed to initialize Slack: {e}") from e
+
+    @classmethod
+    async def create(cls) -> "SlackIntegration":
+        """Create Slack integration instance with configuration from environment."""
+        try:
+            config = SlackIntegrationConfig()
+            return cls(config)
+        except Exception as e:
+            logger.error(f"Failed to create Slack integration: {e}")
+            raise IntegrationConfigurationError(f"Slack configuration error: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test Slack API connection."""

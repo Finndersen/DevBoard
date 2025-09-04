@@ -6,11 +6,12 @@ from typing import Any
 from jira import JIRA as JiraClient
 from jira import JIRAError
 
-from devboard.core.config import BaseConfig
+from devboard.config.base import BaseConfig
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
+    IntegrationConfigurationError,
     IntegrationError,
     ResourceNotFoundError,
 )
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 class JiraIntegrationConfig(BaseConfig):
     """Configuration for Jira integration."""
+
+    config_key = "integration.jira.main"
 
     api_token: str  # From JIRA_API_TOKEN env var
     server_url: str  # From JIRA_SERVER_URL env var (e.g., "https://company.atlassian.net")
@@ -36,12 +39,26 @@ class JiraIntegration(BaseIntegration):
     def __init__(self, config: JiraIntegrationConfig):
         """Initialize with Jira configuration and client."""
         self.config = config
-        self.client = JiraClient(
-            server=config.server_url,
-            basic_auth=(config.user_email, config.api_token),
-            options={"agile_rest_path": "agile"},
-        )
-        logger.info("Initialized Jira integration")
+        try:
+            self.client = JiraClient(
+                server=config.server_url,
+                basic_auth=(config.user_email, config.api_token),
+                options={"agile_rest_path": "agile"},
+            )
+            logger.info("Initialized Jira integration")
+        except Exception as e:
+            logger.error(f"Failed to initialize Jira integration: {e}")
+            raise IntegrationConfigurationError(f"Failed to initialize Jira: {e}") from e
+
+    @classmethod
+    async def create(cls) -> "JiraIntegration":
+        """Create Jira integration instance with configuration from environment."""
+        try:
+            config = JiraIntegrationConfig()
+            return cls(config)
+        except Exception as e:
+            logger.error(f"Failed to create Jira integration: {e}")
+            raise IntegrationConfigurationError(f"Jira configuration error: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test Jira API connection."""

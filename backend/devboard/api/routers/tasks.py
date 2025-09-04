@@ -3,11 +3,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from devboard.api.schemas import (
+    DeleteResponse,
+    ResourceResponse,
+    TaskCreate,
+    TaskResourceCreate,
+    TaskResponse,
+    TaskUpdate,
+)
 from devboard.db.database import get_db
 from devboard.db.models import Task
-from devboard.db.repositories import ContextProviderResourceRepository, TaskRepository
-from devboard.schemas.configuration import ResourceResponse, TaskResourceCreate
-from devboard.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from devboard.db.repositories import TaskRepository
+from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
 
 router = APIRouter()
 
@@ -16,7 +23,10 @@ router = APIRouter()
 async def list_tasks(project_id: int = None, db: Session = Depends(get_db)):
     """List tasks, optionally filtered by project."""
     task_repo = TaskRepository(db)
-    tasks = task_repo.get_all(project_id=project_id)
+    if project_id:
+        tasks = task_repo.get_for_project(project_id)
+    else:
+        tasks = task_repo.get_all()
     return tasks
 
 
@@ -59,7 +69,7 @@ async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depen
     return updated_task
 
 
-@router.delete("/{task_id}")
+@router.delete("/{task_id}", response_model=DeleteResponse)
 async def delete_task(task_id: int, db: Session = Depends(get_db)):
     """Delete a task."""
     task_repo = TaskRepository(db)
@@ -68,7 +78,7 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Task not found")
 
     db.commit()
-    return {"message": "Task deleted successfully"}
+    return {"message": "Task deleted successfully", "success": True}
 
 
 # Task Resource Endpoints
@@ -83,8 +93,8 @@ async def list_task_resources(task_id: int, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    resource_repo = ContextProviderResourceRepository(db)
-    resources = resource_repo.get_resources_for_task(task_id)
+    resource_service = ResourceService(db)
+    resources = resource_service.get_resources_for_task(task_id)
     return resources
 
 
@@ -99,17 +109,20 @@ async def create_task_resource(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    resource_repo = ContextProviderResourceRepository(db)
-    created_resource = resource_repo.create_task_resource(
-        task_id=task_id, resource_uri=resource.resource_uri, description=resource.description
-    )
+    resource_service = ResourceService(db)
+    try:
+        created_resource = await resource_service.create_task_resource(
+            task_id=task_id, resource_uri=resource.resource_uri, description=resource.description
+        )
+        db.commit()
+        db.refresh(created_resource)
+        return created_resource
+    except UnsupportedResourceUriError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
-    db.commit()
-    db.refresh(created_resource)
-    return created_resource
 
-
-@router.delete("/{task_id}/resources/{resource_id}")
+@router.delete("/{task_id}/resources/{resource_id}", response_model=DeleteResponse)
 async def delete_task_resource(task_id: int, resource_id: int, db: Session = Depends(get_db)):
     """Remove a context provider resource from a task."""
     # Verify task exists
@@ -118,12 +131,12 @@ async def delete_task_resource(task_id: int, resource_id: int, db: Session = Dep
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    resource_repo = ContextProviderResourceRepository(db)
-    deleted = resource_repo.delete_task_resource(task_id, resource_id)
+    resource_service = ResourceService(db)
+    deleted = resource_service.delete_task_resource(task_id, resource_id)
     if not deleted:
         raise HTTPException(
             status_code=404, detail="Resource not found or does not belong to this task"
         )
 
     db.commit()
-    return {"message": "Resource deleted successfully"}
+    return {"message": "Resource deleted successfully", "success": True}

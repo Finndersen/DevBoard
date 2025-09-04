@@ -17,7 +17,7 @@ lint:		## Lint code with ruff
 	ruff check .
 	pyright
 
-typecheck:	## Type-check code with mypy
+typecheck:	## Type-check code with pyright
 	pyright
 
 test:		## Run tests

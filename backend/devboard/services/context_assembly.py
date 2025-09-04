@@ -9,10 +9,10 @@ from typing import Any
 
 from devboard.context_providers.base import (
     BaseContextProvider,
-    ContextProviderRegistry,
     ContextProviderUnavailable,
     ContextStrategy,
 )
+from devboard.context_providers.registry import ContextProviderRegistry
 from devboard.db.database import SessionLocal
 from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 

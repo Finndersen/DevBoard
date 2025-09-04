@@ -291,17 +291,6 @@ def detect_git_remote_url(local_path: str) -> str | None:
     Returns the remote URL if found, None otherwise.
     """
     try:
-        path = Path(local_path).resolve()
-
-        # Check if directory exists
-        if not path.exists() or not path.is_dir():
-            return None
-
-        # Check if it's a git repository
-        git_dir = path / ".git"
-        if not git_dir.exists():
-            return None
-
         # Get remote URL (try 'origin' first, then any remote)
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
@@ -334,5 +323,5 @@ def detect_git_remote_url(local_path: str) -> str | None:
 
         return None
 
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError, FileNotFoundError):
         return None

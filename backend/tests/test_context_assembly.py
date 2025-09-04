@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from devboard.context_providers.base import (
     BaseContextProvider,
-    ContextProviderRegistry,
     ContextStrategy,
 )
+from devboard.context_providers.registry import ContextProviderRegistry
 from devboard.db.models import ContextProviderResource, Project
 from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 from devboard.services.context_assembly import (

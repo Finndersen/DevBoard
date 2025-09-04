@@ -5,11 +5,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from devboard.api.schemas import DeleteResponse
+from devboard.api.schemas.codebase import CodebaseCreate, CodebaseResponse, CodebaseUpdate
 from devboard.db.database import get_db
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
 from devboard.integrations.filesystem import detect_git_remote_url
-from devboard.schemas.codebase import CodebaseCreate, CodebaseResponse, CodebaseUpdate
 
 router = APIRouter()
 
@@ -82,7 +83,7 @@ async def update_codebase(
     return updated_codebase
 
 
-@router.delete("/{codebase_id}")
+@router.delete("/{codebase_id}", response_model=DeleteResponse)
 async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
     """Delete a codebase."""
     codebase_repo = CodebaseRepository(db)
@@ -91,4 +92,4 @@ async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Codebase not found")
 
     db.commit()
-    return {"message": "Codebase deleted successfully"}
+    return {"message": "Codebase deleted successfully", "success": True}

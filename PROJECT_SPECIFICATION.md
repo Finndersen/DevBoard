@@ -12,11 +12,21 @@ The system will be built on a local client-server architecture, ensuring access 
     ```
     /
     ├── backend/
-    │   ├── devboard/      # Main Python package
-    │   │   ├── routers/    # API endpoints
-    │   │   ├── models/     # SQLAlchemy & Pydantic models
-    │   │   ├── services/   # Business logic, agent orchestration
-    │   │   └── core/       # Configuration, core utilities
+    │   ├── devboard/           # Main Python package
+    │   │   ├── api/
+    │   │   │   └── routers/    # API endpoints
+    │   │   ├── db/
+    │   │   │   ├── models/     # SQLAlchemy models
+    │   │   │   └── repositories/ # Data access layer
+    │   │   ├── services/       # Business logic, agent orchestration
+    │   │   ├── config/         # Configuration schemas and base classes
+    │   │   │   ├── registry.py # ConfigRegistry (domain-colocated)
+    │   │   │   └── base.py     # BaseConfig, ConfigValidationResult
+    │   │   ├── integrations/   # External API clients
+    │   │   │   └── registry.py # IntegrationRegistry (domain-colocated)
+    │   │   ├── context_providers/ # Intelligent context gathering
+    │   │   │   └── registry.py # ContextProviderRegistry (domain-colocated)
+    │   │   └── schemas/        # Pydantic response/request models
     │   ├── tests/
     │   └── pyproject.toml
     │
@@ -68,11 +78,19 @@ A low-level API client interface for external services that provides raw access 
 * **Examples**: SlackIntegration, JiraIntegration, GitHubIntegration, CodebaseIntegration.
 * **Authentication**: Credentials (API keys, tokens) loaded from environment variables for security.
 * **Configuration Pattern**: Each integration has a corresponding `*IntegrationConfig` class that extends `BaseConfig`
+* **Factory Pattern**: Each integration implements a `create()` classmethod that handles configuration loading and validation from environment variables
+* **Connection Testing**: All integrations implement `test_connection()` method for real-time validation of API credentials and connectivity
+* **Registry System**: `IntegrationRegistry` (located in `devboard/integrations/registry.py`) maps integration type names to integration classes using domain-colocated architecture for better cohesion
 * **API Interface**:
   * Service-specific methods like `get_slack_message()`, `search_jira_issues()`, `get_github_pr()`
   * Raw data retrieval without business logic or summarization
   * Reusable across different context providers or direct API access
   * Standardized error handling with custom exception hierarchy
+* **Error Handling**: Custom exceptions for different failure scenarios:
+  * `IntegrationConfigurationError`: Missing or invalid configuration (environment variables)
+  * `AuthenticationError`: Invalid API credentials or expired tokens
+  * `RateLimitError`: API rate limits exceeded
+  * `ResourceNotFoundError`: Requested resource not found or access denied
 
 ### 4. Context Provider
 A high-level interface that transforms raw integration data into relevant project/task context using domain intelligence.
@@ -87,13 +105,28 @@ A high-level interface that transforms raw integration data into relevant projec
   * `generate_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
   * `create_instance()`: Factory method for creating configured provider instances with proper error handling.
 * **Registry & Initialization Pattern**:
-  * **Registry Design**: `ContextProviderRegistry` stores provider classes (not instances) for clean architecture
+  * **Registry Design**: `ContextProviderRegistry` (located in `devboard/context_providers/registry.py`) stores provider classes (not instances) using domain-colocated architecture for intuitive discovery
   * **Factory Pattern**: Each provider class implements `create_instance()` factory method that handles configuration validation
   * **Error Handling**: Missing/invalid configurations raise `ContextProviderUnavailable` exceptions with detailed error messages
   * **Runtime Instantiation**: Provider instances are created at request time during context assembly, allowing graceful error collection
   * **User Feedback**: Configuration errors are collected and presented to users, enabling informed troubleshooting
 
-### 5. Codebase
+### 5. ContextProviderResource
+Represents a linkable external resource (GitHub repo, Jira ticket, Slack thread, etc.) that provides context for projects and tasks.
+* **Shared Resources**: Uses Many-to-Many relationships allowing the same resource to be linked to multiple projects and tasks
+* **Attributes**:
+  * **Resource URI**: Unique identifier for the external resource (e.g., GitHub URL, Jira ticket URL)
+  * **Provider Name**: The context provider that can handle this resource
+  * **Description**: Single description representing the resource itself (either user-provided or auto-generated)
+  * **Created Timestamp**: When the resource was first added to the system
+* **Resource Sharing Benefits**:
+  * **Deduplication**: Same GitHub repo/Jira ticket stored once, linked to multiple projects/tasks
+  * **Data Consistency**: Single source of truth for resource metadata and descriptions
+  * **Cross-Reference**: Easily see all projects/tasks using a particular resource
+  * **Cascade Deletion**: Resources are automatically removed when no longer linked to any project/task
+* **Junction Tables**: Simple M2M associations with timestamps tracking when resources were linked
+
+### 6. Codebase
 Represents a software codebase relevant to a project or task.
 * **Architecture Document**: Each codebase can have an associated `ARCHITECTURE.md` file stored in its repository. This document is created and incrementally updated by an AI agent.
 
@@ -404,7 +437,7 @@ This section defines the core RESTful API contract between the frontend and the 
 * **Settings Management**
   * `GET /api/configurations?prefix=integration` - List integration configurations using existing generic endpoint.
   * `GET /api/configurations?prefix=agent` - List agent configurations using existing generic endpoint.
-  * `POST /api/settings/integrations/{integration_type}/test` - Test connection for a specific integration with immediate results.
+  * `POST /api/settings/integrations/{integration_type}/test` - Test connection for a specific integration with immediate results and detailed error information.
   * `GET /api/settings/agents/available-models` - Get available models based on configured and working LLM providers.
 
 * **Agent Actions**
@@ -423,7 +456,7 @@ This section defines the initial database models using modern, type-annotated SQ
 import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, create_engine, ForeignKey, String, Table, Text
+from sqlalchemy import Column, create_engine, DateTime, ForeignKey, Integer, JSON, String, Table, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -450,6 +483,10 @@ class Project(Base):
     codebases: Mapped[List["Codebase"]] = relationship(
         secondary=project_codebase_association, back_populates="projects"
     )
+    context_resources: Mapped[List["ContextProviderResource"]] = relationship(
+        secondary=project_context_resource_association, back_populates="projects"
+    )
+    messages: Mapped[List["ProjectConversationMessage"]] = relationship(back_populates="project")
 
 class Task(Base):
     """Represents a single, self-contained piece of work within a project."""
@@ -468,6 +505,9 @@ class Task(Base):
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
     codebase: Mapped[Optional["Codebase"]] = relationship(back_populates="tasks")
+    context_resources: Mapped[List["ContextProviderResource"]] = relationship(
+        secondary=task_context_resource_association, back_populates="tasks"
+    )
 
 class Codebase(Base):
     """Represents a software codebase that can be associated with projects and tasks."""
@@ -491,16 +531,39 @@ class Configuration(Base):
     schema_version: Mapped[str] = mapped_column(String(50), default="1.0")
     updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-class ContextProviderLink(Base):
-    """Links a Project or Task to a specific Context Provider resource."""
-    __tablename__ = 'context_provider_links'
+class ContextProviderResource(Base):
+    """Represents a context provider resource that can be shared across projects and tasks."""
+    __tablename__ = 'context_provider_resources'
     id: Mapped[int] = mapped_column(primary_key=True)
-    provider_name: Mapped[str] = mapped_column(String(255))  # References context provider by name
-    parent_id: Mapped[int] = mapped_column()
-    parent_type: Mapped[str] = mapped_column(String(50))  # 'project' or 'task'
-    resource_uri: Mapped[str] = mapped_column(String(1024))
-    description: Mapped[Optional[str]] = mapped_column(String(1024))  # User-provided or auto-generated
-    auto_generated_description: Mapped[bool] = mapped_column(default=True)  # Track if description was auto-generated
+    provider_name: Mapped[str] = mapped_column(String(255))
+    resource_uri: Mapped[str] = mapped_column(String(1024), unique=True)
+    description: Mapped[str] = mapped_column(String(1024))
+    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+
+    projects: Mapped[List["Project"]] = relationship(
+        secondary=project_context_resource_association, back_populates="context_resources"
+    )
+    tasks: Mapped[List["Task"]] = relationship(
+        secondary=task_context_resource_association, back_populates="context_resources"
+    )
+
+# Association table for Project <-> ContextProviderResource
+project_context_resource_association = Table(
+    "project_context_resources",
+    Base.metadata,
+    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
+    Column("resource_id", Integer, ForeignKey("context_provider_resources.id"), primary_key=True),
+    Column("added_at", DateTime, default=datetime.datetime.utcnow),
+)
+
+# Association table for Task <-> ContextProviderResource
+task_context_resource_association = Table(
+    "task_context_resources",
+    Base.metadata,
+    Column("task_id", Integer, ForeignKey("tasks.id"), primary_key=True),
+    Column("resource_id", Integer, ForeignKey("context_provider_resources.id"), primary_key=True),
+    Column("added_at", DateTime, default=datetime.datetime.utcnow),
+)
     
 class ProjectConversationMessage(Base):
     """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
@@ -617,18 +680,20 @@ A description of any major design patterns (e.g., Repository Pattern, Dependency
 A flexible, type-safe configuration system manages all application settings using a hierarchical key-value approach with schema validation.
 
 * **Core Concepts**:
-  * **Configuration Repository**: Code-based registry mapping configuration keys to Pydantic models for validation
+  * **Configuration Registry**: Code-based registry (located in `devboard/config/registry.py`) mapping configuration keys to Pydantic models for validation using domain-colocated architecture
+  * **Configuration Service**: Business logic service (located in `devboard/services/config_service.py`) for configuration validation and management, following centralized service layer pattern
   * **Hierarchical Keys**: Organized namespace like `integration.slack.main`, `context_provider.codebase.local`, `agent.qa.model_settings`
   * **Multi-Source Loading**: Combines environment variables (sensitive data) with database storage (user settings)
   * **Type Safety**: All configurations validated against registered Pydantic schemas
 
-* **Startup Initialization Pattern**:
-  * Configuration schemas are registered at application startup via `initialize_configurations()`
+* **Self-Building Registry Pattern**:
+  * Configuration schemas are automatically registered using class attributes as single source of truth
+  * Registry builds itself from `config_key` class attributes, eliminating manual registration
   * Context providers check configuration validity before initialization
   * Integration instances are only created when valid configurations exist
   * Graceful degradation with logging for missing/invalid configurations
 
-* **Configuration Repository Pattern**:
+* **Configuration Registry Pattern**:
   ```python
   from abc import ABC, abstractmethod
   from typing import Dict, Type, TypeVar
@@ -636,23 +701,29 @@ A flexible, type-safe configuration system manages all application settings usin
   
   T = TypeVar('T', bound=BaseModel)
   
-  class ConfigRepository:
-      """Registry of configuration schemas and loading logic"""
-      _schemas: Dict[str, Type[BaseModel]] = {}
+  class ConfigRegistry:
+      """Registry of configuration schemas using self-building pattern"""
+      
+      # Import configuration classes to avoid circular imports
+      from devboard.config.agent_config import QAAgentConfig, PlanningAgentConfig
+      from devboard.integrations.slack import SlackIntegrationConfig
+      # ... other imports
+      
+      # Self-building registry using class attributes as single source of truth
+      _schemas = {
+          schema.config_key: schema
+          for schema in [
+              QAAgentConfig,
+              PlanningAgentConfig, 
+              SlackIntegrationConfig,
+              # ... other config classes
+          ]
+      }
       
       @classmethod
-      def register_schema(cls, key: str, schema: Type[T]) -> None:
-          cls._schemas[key] = schema
-      
-      @classmethod
-      def get_config(cls, key: str) -> BaseModel:
-          schema = cls._schemas.get(key)
-          if not schema:
-              raise ValueError(f"No schema registered for key: {key}")
-          
-          # Load from database + environment variables
-          db_data = load_from_database(key)
-          return schema.model_validate(db_data)
+      def get_schema(cls, key: str) -> Type[BaseConfig] | None:
+          """Get the registered schema for a configuration key."""
+          return cls._schemas.get(key)
   ```
 
 * **Example Configuration Schemas**:
@@ -803,6 +874,30 @@ The generic configuration framework manages all application settings through the
     * When file content is requested by UI, first read content from file and update DB version if different
     * When file content is updated from the UI, read file and DB content and perform 3-way merge and update both File and DB content with result.
     * If there is a merge conflict, report error to user and they can attempt to resolve manually
+
+## Architecture Design Principles
+
+### Domain-Colocated Registries with Centralized Services
+
+The codebase follows a hybrid architectural approach that balances domain cohesion with service layer clarity:
+
+* **Domain-Colocated Registries**: 
+  * **Rationale**: Registries are collections of domain objects without business logic, making them natural candidates for domain colocation
+  * **Implementation**: `ContextProviderRegistry`, `ConfigRegistry`, and `IntegrationRegistry` are located within their respective domain directories
+  * **Benefits**: High cohesion, intuitive discovery, natural ownership by domain experts
+  * **Pattern**: Self-building registries using class attributes as single source of truth
+
+* **Centralized Service Layer**:
+  * **Rationale**: Services contain cross-domain business logic and orchestration, requiring centralized location for clarity
+  * **Implementation**: All services (including `ConfigService`) located in `devboard/services/`
+  * **Benefits**: Clear architectural layer separation, easier testing and mocking, natural for cross-domain logic
+  * **Pattern**: Dependency injection with clear service boundaries
+
+### Single Source of Truth Pattern
+
+* **Registry Architecture**: All registries use class attributes (`config_key`, `provider_type`, `integration_type`) as the authoritative source, eliminating string duplication
+* **Self-Building Pattern**: Registries build themselves from class metadata, removing the need for manual registration
+* **DRY Compliance**: No duplicate configuration keys or type names across the codebase
 
 ## Implementation Design Decisions & Architecture Details
 

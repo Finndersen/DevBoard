@@ -1,76 +1,15 @@
-"""Generic configuration framework."""
+"""Service for managing application configuration."""
 
 import json
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import select
 
+from devboard.config.base import BaseConfig, ConfigValidationResult
+from devboard.config.registry import ConfigRegistry
 from devboard.db.database import SessionLocal
 from devboard.db.models import Configuration
-
-
-class BaseConfig(BaseSettings):
-    """Base configuration class with common settings for all config models."""
-
-    @classmethod
-    def get_base_config(cls, env_prefix: str) -> SettingsConfigDict:
-        """Get base model configuration with specified env_prefix."""
-        return SettingsConfigDict(
-            env_prefix=env_prefix,
-            case_sensitive=False,
-            extra="forbid",
-            validate_assignment=True,
-            env_file=".env",
-            env_file_encoding="utf-8",
-        )
-
-
-T = TypeVar("T", bound=BaseConfig)
-
-
-class ConfigValidationResult:
-    """Result of configuration validation with detailed error information."""
-
-    def __init__(
-        self,
-        success: bool,
-        config: BaseConfig | None = None,
-        errors: list[str] | None = None,
-    ):
-        self.success = success
-        self.config = config
-        self.errors = errors or []
-
-
-class ConfigRepository:
-    """Registry of configuration schemas and validation logic."""
-
-    _schemas: dict[str, type[BaseConfig]] = {}
-
-    @classmethod
-    def register_schema(cls, key: str, schema: type[T]) -> None:
-        """Register a Pydantic schema for a configuration key."""
-        cls._schemas[key] = schema
-
-    @classmethod
-    def get_schema(cls, key: str) -> type[BaseConfig] | None:
-        """Get the registered schema for a configuration key."""
-        return cls._schemas.get(key)
-
-    @classmethod
-    def get_all_schemas(cls) -> dict[str, type[BaseConfig]]:
-        """Get all registered schemas."""
-        return cls._schemas.copy()
-
-    @classmethod
-    def list_keys(cls, prefix: str | None = None) -> list[str]:
-        """List all registered configuration keys, optionally filtered by prefix."""
-        keys = list(cls._schemas.keys())
-        if prefix:
-            keys = [key for key in keys if key.startswith(prefix)]
-        return sorted(keys)
 
 
 class ConfigService:
@@ -86,7 +25,7 @@ class ConfigService:
 
     def validate_config(self, key: str) -> ConfigValidationResult:
         """Returns detailed validation result with error information."""
-        schema = ConfigRepository.get_schema(key)
+        schema = ConfigRegistry.get_schema(key)
         if not schema:
             return ConfigValidationResult(False, errors=[f"No schema registered for key: {key}"])
 
@@ -115,7 +54,7 @@ class ConfigService:
     def set_config(self, key: str, data: BaseConfig) -> None:
         """Set configuration data."""
         # Validate that the key has a registered schema
-        schema = ConfigRepository.get_schema(key)
+        schema = ConfigRegistry.get_schema(key)
         if not schema:
             raise ValueError(f"No schema registered for key: {key}")
 
@@ -142,7 +81,7 @@ class ConfigService:
             db_keys = list(db.execute(stmt).scalars().all())
 
         # Combine with registered schema keys
-        schema_keys = ConfigRepository.list_keys(prefix)
+        schema_keys = ConfigRegistry.list_keys(prefix)
         all_keys = sorted(set(db_keys + schema_keys))
         return all_keys
 
@@ -174,28 +113,6 @@ class ConfigService:
             if config:
                 return json.loads(config.value_json)
             return None
-
-
-def initialize_configurations() -> None:
-    """Initialize and register all configuration schemas.
-
-    This function registers all integration configuration schemas with the
-    ConfigRepository, enabling type-safe configuration validation.
-    """
-    import logging
-
-    from devboard.integrations.github import GitHubIntegrationConfig
-    from devboard.integrations.jira import JiraIntegrationConfig
-    from devboard.integrations.slack import SlackIntegrationConfig
-
-    logger = logging.getLogger(__name__)
-
-    # Register integration configuration schemas
-    ConfigRepository.register_schema("integration.github.main", GitHubIntegrationConfig)
-    ConfigRepository.register_schema("integration.jira.main", JiraIntegrationConfig)
-    ConfigRepository.register_schema("integration.slack.main", SlackIntegrationConfig)
-
-    logger.info("Registered all configuration schemas")
 
 
 # Global config service instance

@@ -3,13 +3,14 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, project_codebase_association
+from .base import Base, project_codebase_association, project_context_resource_association
 
 if TYPE_CHECKING:
     from .codebase import Codebase
+    from .configuration import ContextProviderResource
     from .task import Task
 
 
@@ -30,6 +31,9 @@ class Project(Base):
     codebases: Mapped[list["Codebase"]] = relationship(
         secondary=project_codebase_association, back_populates="projects"
     )
+    context_resources: Mapped[list["ContextProviderResource"]] = relationship(
+        secondary=project_context_resource_association, back_populates="projects"
+    )
     messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
 
@@ -48,7 +52,7 @@ class ProjectConversationMessage(Base):
     content: Mapped[str | None] = mapped_column(Text)
 
     # For structured data from 'tool_call' or 'tool_result'
-    tool_data: Mapped[dict | None] = mapped_column(Text)  # JSON stored as text
+    tool_data: Mapped[dict | None] = mapped_column(JSON)  # JSON stored as text
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC)

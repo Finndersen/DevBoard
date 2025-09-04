@@ -3,9 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from devboard.api.routers import codebases, configurations, projects, qa, tasks
-from devboard.context_providers import initialize_context_providers
-from devboard.core.config import initialize_configurations
+from devboard.api.routers import codebases, configurations, projects, qa, settings, tasks
 
 app = FastAPI(
     title="DevBoard API",
@@ -13,14 +11,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Initialize configurations and context providers
-initialize_configurations()
-initialize_context_providers()
-
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +25,7 @@ app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(qa.router)
 
 

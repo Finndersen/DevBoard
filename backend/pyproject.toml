@@ -2,7 +2,7 @@
 name = "devboard"
 version = "0.1.0"
 description = "DevBoard - AI-powered developer command centre"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
@@ -30,7 +30,7 @@ dev = [
 
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 extend-exclude = ["migrations"]
 
@@ -58,7 +58,7 @@ line-ending = "auto"
 [tool.pyright]
 include = ["devboard"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingImports = true
 reportMissingTypeStubs = false

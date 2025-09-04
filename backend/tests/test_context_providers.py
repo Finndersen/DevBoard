@@ -7,7 +7,6 @@ import pytest
 
 from devboard.context_providers.base import (
     BaseContextProvider,
-    ContextProviderRegistry,
     ContextRetrievalError,
     ContextStrategy,
     ResourceHandlingError,
@@ -15,6 +14,7 @@ from devboard.context_providers.base import (
 from devboard.context_providers.codebase import CodebaseContextProvider
 from devboard.context_providers.github import GitHubContextProvider
 from devboard.context_providers.jira import JiraContextProvider
+from devboard.context_providers.registry import ContextProviderRegistry
 from devboard.context_providers.slack import SlackContextProvider
 from devboard.context_providers.webpage import WebPageContextProvider
 

@@ -36,7 +36,7 @@ class GitHubContextProvider(BaseContextProvider):
         Raises:
             ContextProviderUnavailable: If GitHub configuration is missing or invalid
         """
-        from devboard.core.config import config_service
+        from devboard.services.config_service import config_service
 
         config_result = config_service.validate_config("integration.github.main")
         if not config_result.success or not config_result.config:

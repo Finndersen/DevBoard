@@ -196,6 +196,7 @@ class TestTaskResourcesRouter:
         resource = resource_repo.create_task_resource(
             task_id=created_task.id,
             resource_uri=test_resource_data["resource_uri"],
+            provider_name="github",
             description=test_resource_data["description"],
         )
         db_session.commit()
@@ -252,6 +253,7 @@ class TestTaskResourcesRouter:
         resource = resource_repo.create_task_resource(
             task_id=created_task.id,
             resource_uri=test_resource_data["resource_uri"],
+            provider_name="github",
             description=test_resource_data["description"],
         )
         db_session.commit()

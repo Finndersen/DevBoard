@@ -3,14 +3,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from devboard.db.database import get_db
-from devboard.db.models import Configuration
-from devboard.db.repositories import ConfigurationRepository
-from devboard.schemas.configuration import (
+from devboard.api.schemas import (
     ConfigurationCreate,
     ConfigurationResponse,
     ConfigurationUpdate,
+    DeleteResponse,
 )
+from devboard.db.database import get_db
+from devboard.db.models import Configuration
+from devboard.db.repositories import ConfigurationRepository
 
 router = APIRouter()
 
@@ -77,7 +78,7 @@ async def update_configuration(
     return updated_config
 
 
-@router.delete("/{config_key}")
+@router.delete("/{config_key}", response_model=DeleteResponse)
 async def delete_configuration(config_key: str, db: Session = Depends(get_db)):
     """Delete a configuration."""
     config_repo = ConfigurationRepository(db)
@@ -86,4 +87,4 @@ async def delete_configuration(config_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Configuration not found")
 
     db.commit()
-    return {"message": "Configuration deleted successfully"}
+    return {"message": "Configuration deleted successfully", "success": True}

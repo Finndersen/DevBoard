@@ -23,18 +23,32 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 ### Epic 2: Database Models & Core API ✅
 
+**Major Architectural Change - M2M Resource Sharing**: Refactored `ContextProviderResource` from polymorphic parent relationships to Many-to-Many relationships with Projects and Tasks. This enables:
+- **Resource Sharing**: Same GitHub repo/Jira ticket can be linked to multiple projects/tasks
+- **Data Consistency**: Single source of truth for resource metadata and descriptions 
+- **Cascade Deletion**: Resources automatically deleted when no longer linked to any entity
+- **Find-or-Create Pattern**: Duplicate resources are merged automatically based on URI
+
 * [x] **Task 2.1: Implement Core SQLAlchemy Models**
-  * Implement the models required for the MVP: `Project`, `Task`, `Codebase`, `ContextProviderLink`, `Configuration`.
+  * Implement the models required for the MVP: `Project`, `Task`, `Codebase`, `ContextProviderResource`, `Configuration`.
+  * **UPDATED**: Refactored `ContextProviderResource` to use Many-to-Many relationships with Projects and Tasks, enabling resource sharing and deduplication.
 * [x] **Task 2.2: Create Initial Database Migration**
   * Use Alembic (alembic revision --autogenerate) to generate the initial migration script for the core models.
 * [x] **Task 2.3: Implement Core API Endpoints**
   * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for `Project`, `Task`, and `Codebase` entities with Pydantic schemas.
 * [x] **Task 2.4: Implement Configuration API Endpoints**
   * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for the generic Configuration table.
-  * Create endpoints for managing Context Provider Links.
+  * Create endpoints for managing Context Provider Resources with M2M linking to Projects and Tasks.
+  * **UPDATED**: Implemented find-or-create pattern for resource sharing and cascade deletion when resources become orphaned.
   * FastAPI application setup with CORS and router integration.
 
 ### Epic 3: Configuration Framework & Integration Layer ✅
+
+**Major Architectural Improvement - Domain-Colocated Registries**: Refactored registry architecture to use domain colocation with centralized services:
+- **Registry Location**: Moved registries to their domain directories (`config/registry.py`, `integrations/registry.py`, `context_providers/registry.py`)
+- **Service Centralization**: Moved `ConfigService` to `services/config_service.py` for consistent service layer architecture
+- **Self-Building Pattern**: All registries now use class attributes as single source of truth, eliminating manual registration
+- **DRY Compliance**: Removed string duplication by using `config_key`, `provider_type`, and `integration_type` class attributes
 
 * [x] **Task 3.1: Implement Generic Configuration Framework**
   * Create the generic Configuration table and configuration service with Pydantic validation.
@@ -46,6 +60,15 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Jira Integration**: API client for tickets, projects, comments
   * **Slack Integration**: API client for messages, channels, conversations
   * **Codebase Integration**: File system operations and one-shot agent execution wrapper
+* [x] **Task 3.4: Implement Integration Registry and Factory Pattern**
+  * Build `IntegrationRegistry` (domain-colocated in `integrations/registry.py`) for mapping integration type names to integration classes
+  * Add factory method pattern with `create()` classmethod for configuration-based instantiation
+  * Implement standardized error handling with `IntegrationConfigurationError` and other custom exceptions
+  * **UPDATED**: Refactored to use self-building registry pattern with `integration_type` class attributes as single source of truth
+* [x] **Task 3.5: Add Integration Connection Testing**
+  * Implement `test_connection()` method for all integration classes
+  * Create `IntegrationService` for handling connection testing logic with detailed error reporting
+  * Add integration testing API endpoint with proper HTTP status codes and structured error responses
 
 ### Epic 4: Context Provider Layer ✅
 
@@ -70,7 +93,7 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * Implement runtime provider instantiation with factory methods and error collection.
   * Add `ProjectContextData` structure to separate successful context from provider errors.
   * Implement parallel execution of provider queries and context compilation.
-* [ ] **Task 5.2: Implement Project Q&A Agent**
+* [x] **Task 5.2: Implement Project Q&A Agent**
   * Create PydanticAI-based agent with custom prompting and universal `get_relevant_context(resource_uri, query)` tool.
   * Agent receives list of available ON_DEMAND resources with descriptions in initial context.
   * Build synchronous API endpoint (`POST /api/projects/{project_id}/chat`) for agent interaction.
@@ -103,9 +126,9 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * Create QAAgentConfig, PlanningAgentConfig, and ImplementationAgentConfig with model selection.
   * Implement model hierarchy logic and fallback system for agent configuration.
   * Add agent configuration registration to the configuration framework.
-* [ ] **Task 7.3: Build Settings API Endpoints**
+* [x] **Task 7.3: Build Settings API Endpoints**
   * Extend existing `/api/configurations` endpoints to support prefix filtering for settings management.
-  * Implement `/api/settings/integrations/{integration_type}/test` for on-demand connection testing with immediate results.
+  * Implement `/api/settings/integrations/{integration_type}/test` for on-demand connection testing with immediate results and detailed error information.
   * Add `/api/settings/agents/available-models` endpoint to get dynamic model lists based on working LLM providers.
 * [ ] **Task 7.4: Implement Global Settings Frontend**
   * Create main settings view with tabbed interface (Integrations, Codebases, Context Providers, Agents).

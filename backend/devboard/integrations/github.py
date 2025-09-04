@@ -12,11 +12,12 @@ from github import (
 )
 from github.Auth import Token
 
-from devboard.core.config import BaseConfig
+from devboard.config.base import BaseConfig
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
+    IntegrationConfigurationError,
     IntegrationError,
     RateLimitError,
     ResourceNotFoundError,
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 class GitHubIntegrationConfig(BaseConfig):
     """Configuration for GitHub integration."""
+
+    config_key = "integration.github.main"
 
     api_token: str  # From GITHUB_API_TOKEN env var
     base_url: str = "https://api.github.com"
@@ -48,6 +51,16 @@ class GitHubIntegration(BaseIntegration):
         except Exception as e:
             logger.error(f"Failed to initialize GitHub integration: {e}")
             raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
+
+    @classmethod
+    async def create(cls) -> "GitHubIntegration":
+        """Create GitHub integration instance with configuration from environment."""
+        try:
+            config = GitHubIntegrationConfig()
+            return cls(config)
+        except Exception as e:
+            logger.error(f"Failed to create GitHub integration: {e}")
+            raise IntegrationConfigurationError(f"GitHub configuration error: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test GitHub API connection."""

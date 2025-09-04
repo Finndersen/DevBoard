@@ -35,7 +35,7 @@ class SlackContextProvider(BaseContextProvider):
         Raises:
             ContextProviderUnavailable: If Slack configuration is missing or invalid
         """
-        from devboard.core.config import config_service
+        from devboard.services.config_service import config_service
 
         config_result = config_service.validate_config("integration.slack.main")
         if not config_result.success or not config_result.config:

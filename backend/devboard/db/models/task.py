@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base
+from .base import Base, task_context_resource_association
 
 if TYPE_CHECKING:
     from .codebase import Codebase
+    from .configuration import ContextProviderResource
     from .project import Project
 
 
@@ -32,5 +33,8 @@ class Task(Base):
         default=lambda: datetime.datetime.now(datetime.UTC)
     )
 
-    project: Mapped["Project"] = relationship(back_populates="tasks")
-    codebase: Mapped["Codebase | None"] = relationship(back_populates="tasks")
+    project: Mapped[Project] = relationship(back_populates="tasks")
+    codebase: Mapped[Codebase | None] = relationship(back_populates="tasks")
+    context_resources: Mapped[list["ContextProviderResource"]] = relationship(
+        secondary=task_context_resource_association, back_populates="tasks"
+    )

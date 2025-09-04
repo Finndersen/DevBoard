@@ -36,7 +36,7 @@ class JiraContextProvider(BaseContextProvider):
         Raises:
             ContextProviderUnavailable: If Jira configuration is missing or invalid
         """
-        from devboard.core.config import config_service
+        from devboard.services.config_service import config_service
 
         config_result = config_service.validate_config("integration.jira.main")
         if not config_result.success or not config_result.config:
