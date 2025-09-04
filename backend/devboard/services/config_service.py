@@ -8,14 +8,14 @@ from sqlalchemy import select
 
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import ConfigRegistry
-from devboard.db.database import SessionLocal
+from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.models import Configuration
 
 
 class ConfigService:
     """Service for managing application configuration."""
 
-    def __init__(self, db_session_factory=SessionLocal):
+    def __init__(self, db_session_factory: SessionMakerType = SessionLocal):
         self.db_session_factory = db_session_factory
 
     def get_config(self, key: str) -> BaseConfig | None:
@@ -39,7 +39,7 @@ class ConfigService:
 
         except ValidationError as e:
             # Parse errors to provide helpful feedback
-            errors = []
+            errors: list[str] = []
             for error in e.errors():
                 field = error["loc"][0] if error["loc"] else "unknown"
                 if "missing" in error["type"]:

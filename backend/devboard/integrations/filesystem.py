@@ -294,7 +294,7 @@ def detect_git_remote_url(local_path: str) -> str | None:
         # Get remote URL (try 'origin' first, then any remote)
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            cwd=str(path),
+            cwd=str(local_path),
             capture_output=True,
             text=True,
             timeout=10,
@@ -305,14 +305,14 @@ def detect_git_remote_url(local_path: str) -> str | None:
 
         # If origin doesn't exist, try to get any remote
         result = subprocess.run(
-            ["git", "remote"], cwd=str(path), capture_output=True, text=True, timeout=10
+            ["git", "remote"], cwd=str(local_path), capture_output=True, text=True, timeout=10
         )
 
         if result.returncode == 0 and result.stdout.strip():
             first_remote = result.stdout.strip().split("\n")[0]
             result = subprocess.run(
                 ["git", "remote", "get-url", first_remote],
-                cwd=str(path),
+                cwd=str(local_path),
                 capture_output=True,
                 text=True,
                 timeout=10,

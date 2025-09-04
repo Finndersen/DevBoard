@@ -86,7 +86,7 @@ class IntegrationService:
 
     async def test_all_integrations(self) -> dict[str, IntegrationTestResult]:
         """Test connections for all available integration types."""
-        results = {}
+        results: dict[str, IntegrationTestResult] = {}
         for integration_type in IntegrationRegistry.get_available_types():
             results[integration_type] = await self.test_integration_connection(integration_type)
         return results

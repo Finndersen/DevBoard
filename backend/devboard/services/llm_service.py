@@ -40,10 +40,10 @@ class LLMService:
         Returns:
             List of available models with provider information
         """
-        available_models = []
+        available_models: list[ModelInfo] = []
 
         # Check which providers are configured and working
-        working_providers = []
+        working_providers: list[str] = []
         for provider_type in ["openai", "anthropic", "google"]:
             config_key = f"llm.{provider_type}.main"
             config_result = config_service.validate_config(config_key)

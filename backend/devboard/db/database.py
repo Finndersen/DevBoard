@@ -3,7 +3,7 @@
 import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # Database URL from environment or default to local SQLite
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/devboard.db")
@@ -17,6 +17,8 @@ engine = create_engine(
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+SessionMakerType = sessionmaker[Session]
 
 
 class Base(DeclarativeBase):

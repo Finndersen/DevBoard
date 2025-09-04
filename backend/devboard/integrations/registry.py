@@ -9,7 +9,7 @@ from .slack import SlackIntegration
 class IntegrationRegistry:
     """Registry for mapping integration type names to integration classes."""
 
-    _integrations = {
+    _integrations: dict[str, type[BaseIntegration]] = {
         integration.integration_type: integration
         for integration in [
             GitHubIntegration,

@@ -13,7 +13,7 @@ from devboard.context_providers.base import (
     ContextStrategy,
 )
 from devboard.context_providers.registry import ContextProviderRegistry
-from devboard.db.database import SessionLocal
+from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class ResourceValidationResult:
 class ContextAssemblyService:
     """Service for assembling context from multiple providers based on strategies."""
 
-    def __init__(self, db_session_factory=SessionLocal):
+    def __init__(self, db_session_factory: SessionMakerType = SessionLocal):
         self.db_session_factory = db_session_factory
 
     def _get_provider_instance(
@@ -117,10 +117,10 @@ class ContextAssemblyService:
         # Pattern to match common URL formats
         url_pattern = r'https?://[^\s<>"\'{}\[\]|\\^`]+'
 
-        urls = re.findall(url_pattern, text)
+        urls: list[str] = re.findall(url_pattern, text)
 
         # Filter to only URLs that have registered providers
-        valid_uris = []
+        valid_uris: list[str] = []
         for url in urls:
             provider_or_class = ContextProviderRegistry.get_provider_for_uri(url)
             if provider_or_class:
@@ -193,7 +193,7 @@ class ContextAssemblyService:
             eager_results = await asyncio.gather(*eager_resource_tasks, return_exceptions=True)
 
             for result in eager_results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.error(f"Error loading eager context: {result}")
                 else:
                     eager_context.append(result)

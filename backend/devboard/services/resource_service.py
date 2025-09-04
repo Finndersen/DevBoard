@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from devboard.context_providers.registry import ContextProviderRegistry
-from devboard.db.models import ContextProviderResource
+from devboard.db.models import ContextProviderResource, Project, Task
 from devboard.db.repositories import ContextProviderResourceRepository
 
 
@@ -176,7 +176,7 @@ class ResourceService:
 
     # New methods enabled by M2M relationships
 
-    def get_projects_for_resource(self, resource_id: int) -> list:
+    def get_projects_for_resource(self, resource_id: int) -> list[Project]:
         """Get all projects that use a specific resource.
 
         Args:
@@ -187,7 +187,7 @@ class ResourceService:
         """
         return self.repository.get_projects_for_resource(resource_id)
 
-    def get_tasks_for_resource(self, resource_id: int) -> list:
+    def get_tasks_for_resource(self, resource_id: int) -> list[Task]:
         """Get all tasks that use a specific resource.
 
         Args:

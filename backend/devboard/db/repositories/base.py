@@ -1,14 +1,9 @@
 """Base repository class and patterns for data access layer."""
 
-from abc import ABC
-from typing import Generic, TypeVar
-
 from sqlalchemy.orm import Session
 
-T = TypeVar("T")
 
-
-class BaseRepository(ABC, Generic[T]):
+class BaseRepository[T]:
     """Base repository class for data access operations."""
 
     def __init__(self, db_session: Session):

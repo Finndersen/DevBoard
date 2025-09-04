@@ -11,7 +11,7 @@ from devboard.context_providers.webpage import WebPageContextProvider
 class ContextProviderRegistry:
     """Registry for managing context provider classes."""
 
-    _providers = {
+    _providers: dict[str, type[BaseContextProvider]] = {
         provider.provider_type: provider
         for provider in [
             CodebaseContextProvider,

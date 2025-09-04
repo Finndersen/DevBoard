@@ -20,7 +20,7 @@ from devboard.integrations.slack import SlackIntegrationConfig
 class ConfigRegistry:
     """Registry of configuration schemas and validation logic."""
 
-    _schemas = {
+    _schemas: dict[str, type[BaseConfig]] = {
         schema.config_key: schema
         for schema in [
             # Integration configurations

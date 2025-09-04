@@ -102,13 +102,9 @@ class SlackIntegration(BaseIntegration):
     ) -> list[dict[str, Any]]:
         """Get message history from a channel."""
         try:
-            kwargs = {"channel": channel, "limit": limit}
-            if oldest:
-                kwargs["oldest"] = oldest
-            if latest:
-                kwargs["latest"] = latest
-
-            response = self.client.conversations_history(**kwargs)
+            response = self.client.conversations_history(
+                channel=channel, limit=limit, oldest=oldest, latest=latest
+            )
 
             if response.get("ok"):
                 return response.get("messages", [])  # type: ignore[return-value]

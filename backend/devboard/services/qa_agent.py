@@ -128,7 +128,7 @@ Please answer the user's query using the available context. If you need more spe
 
     def _build_context_summary(self, context_data: ProjectContextData) -> str:
         """Build a summary of available context for the agent."""
-        summary_parts = []
+        summary_parts: list[str] = []
 
         # EAGER context summary
         if context_data.eager_context:
