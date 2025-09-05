@@ -22,52 +22,53 @@ from devboard.context_providers.webpage import WebPageContextProvider
 class TestContextProviderRegistry:
     """Test the context provider registry."""
 
-    def setup_method(self):
-        """Clear registry before each test."""
-        ContextProviderRegistry.clear()
-
-    def test_register_and_get_provider(self):
-        """Test registering and retrieving providers."""
+    def test_registry_initialization_and_get(self):
+        """Test creating a registry instance and getting providers."""
         mock_provider = Mock(spec=BaseContextProvider)
         mock_provider.provider_type = "test"
 
-        ContextProviderRegistry.register("test", mock_provider)
+        # Create test registry with the mock provider
+        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
 
-        assert ContextProviderRegistry.get("test") == mock_provider
-        assert ContextProviderRegistry.get("nonexistent") is None
+        assert test_registry.get("test") == mock_provider
+        assert test_registry.get("nonexistent") is None
 
-    def test_list_available_providers(self):
-        """Test listing available providers."""
+    def test_list_keys(self):
+        """Test listing provider keys."""
         mock_provider1 = Mock(spec=BaseContextProvider)
         mock_provider1.provider_type = "test1"
         mock_provider2 = Mock(spec=BaseContextProvider)
         mock_provider2.provider_type = "test2"
 
-        ContextProviderRegistry.register("test1", mock_provider1)
-        ContextProviderRegistry.register("test2", mock_provider2)
+        # Create test registry with both providers
+        test_registry = ContextProviderRegistry([mock_provider1, mock_provider2], key_attr='provider_type')
 
-        available = ContextProviderRegistry.list_available()
+        available = test_registry.list_keys()
         assert set(available) == {"test1", "test2"}
 
     def test_get_provider_for_uri(self):
         """Test finding provider by URI."""
         mock_provider = Mock(spec=BaseContextProvider)
+        mock_provider.provider_type = "test"
         mock_provider.can_handle_uri.return_value = True
 
-        ContextProviderRegistry.register("test", mock_provider)
+        # Create test registry with mock provider
+        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
 
-        provider = ContextProviderRegistry.get_provider_for_uri("test://resource")
+        provider = test_registry.get_provider_for_uri("test://resource")
         assert provider == mock_provider
         mock_provider.can_handle_uri.assert_called_once_with("test://resource")
 
     def test_get_provider_for_uri_not_found(self):
         """Test URI with no matching provider."""
         mock_provider = Mock(spec=BaseContextProvider)
+        mock_provider.provider_type = "test"
         mock_provider.can_handle_uri.return_value = False
 
-        ContextProviderRegistry.register("test", mock_provider)
+        # Create test registry with mock provider
+        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
 
-        provider = ContextProviderRegistry.get_provider_for_uri("unknown://resource")
+        provider = test_registry.get_provider_for_uri("unknown://resource")
         assert provider is None
 
 

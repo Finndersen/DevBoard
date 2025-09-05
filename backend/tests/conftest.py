@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from devboard.api.main import app
@@ -45,27 +45,24 @@ def db_tables(db_connection):
     yield
 
 
-@fixture()
-def db_session_maker(db_connection: Connection, db_tables):
-    """
-    Provides a SQLAlchemy DB session maker for each test
-    (within a transaction, so changes will be rolled back after each test).
-    """
-    with db_connection.begin() as transaction:
-        # Create session maker bound to the test connection
-        session_maker = sessionmaker(bind=db_connection)
-        yield session_maker
-        # Rollback transaction so that each test is isolated
-        transaction.rollback()
-
 
 @fixture()
-def db_session(db_session_maker) -> Session:
+def db_session(db_connection: Connection, db_tables) -> Session:
     """
-    Provides a SQLAlchemy DB session with an open transaction
+    Provides a SQLAlchemy DB session that automatically rolls back changes after each test.
     """
-    with db_session_maker() as session:
+    # Use savepoint/nested transaction for proper test isolation in SQLite
+    nested_trans = db_connection.begin_nested()
+
+    # Create session bound to the connection
+    session = Session(bind=db_connection)
+
+    try:
         yield session
+    finally:
+        # Close session and rollback the savepoint
+        session.close()
+        nested_trans.rollback()
 
 
 @fixture

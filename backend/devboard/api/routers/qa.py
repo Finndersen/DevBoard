@@ -144,7 +144,7 @@ async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
             "resource_uri": resource_uri,
             "valid": True,
             "provider_type": result.provider.provider_type,
-            "strategy": result.strategy,
+            "strategy": result.retrieval_strategy.value,
             "description": result.description,
             "error": None,
         }

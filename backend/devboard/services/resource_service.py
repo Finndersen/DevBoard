@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from devboard.context_providers.registry import ContextProviderRegistry
+from devboard.context_providers.registry import ContextProviderRegistry, context_provider_registry
 from devboard.db.models import ContextProviderResource, Project, Task
 from devboard.db.repositories import ContextProviderResourceRepository
 
@@ -18,9 +18,10 @@ class UnsupportedResourceUriError(Exception):
 class ResourceService:
     """Service layer for context provider resource operations with M2M support."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, context_provider_registry_instance: ContextProviderRegistry | None = None):
         self.db = db
         self.repository = ContextProviderResourceRepository(db)
+        self.context_provider_registry = context_provider_registry_instance or context_provider_registry
 
     def determine_provider_name(self, resource_uri: str) -> str:
         """Determine the provider name for a given resource URI.
@@ -34,7 +35,7 @@ class ResourceService:
         Raises:
             UnsupportedResourceUriError: If no provider can handle this URI
         """
-        provider_class = ContextProviderRegistry.get_provider_for_uri(resource_uri)
+        provider_class = self.context_provider_registry.get_provider_for_uri(resource_uri)
         if not provider_class:
             raise UnsupportedResourceUriError(resource_uri)
         return provider_class.provider_type
@@ -51,7 +52,7 @@ class ResourceService:
         Raises:
             UnsupportedResourceUriError: If no provider can handle this URI
         """
-        provider_class = ContextProviderRegistry.get_provider_for_uri(resource_uri)
+        provider_class = self.context_provider_registry.get_provider_for_uri(resource_uri)
         if not provider_class:
             raise UnsupportedResourceUriError(resource_uri)
 

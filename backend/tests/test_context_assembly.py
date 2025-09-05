@@ -251,7 +251,7 @@ class TestContextAssemblyService:
             mock_project_repo_class.return_value = mock_project_repo
 
             mock_resource_repo = Mock()
-            mock_resource_repo.get_by_parent.return_value = []
+            mock_resource_repo.get_resources_for_project.return_value = []
             mock_resource_repo_class.return_value = mock_resource_repo
 
             result = await service.get_project_context(1, "test query")
@@ -267,10 +267,9 @@ class TestContextAssemblyService:
         """Test context assembly with explicit provider resources."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
         link = ContextProviderResource(
-            parent_id=1,
-            parent_type="project",
             resource_uri="test://resource",
             description="User provided description",
+            provider_name="test",
         )
 
         with (
@@ -286,7 +285,7 @@ class TestContextAssemblyService:
             mock_project_repo_class.return_value = mock_project_repo
 
             mock_resource_repo = Mock()
-            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
 
             ContextProviderRegistry.register(MockTestProvider)
@@ -330,7 +329,7 @@ class TestContextAssemblyService:
             mock_project_repo_class.return_value = mock_project_repo
 
             mock_resource_repo = Mock()
-            mock_resource_repo.get_by_parent.return_value = []
+            mock_resource_repo.get_resources_for_project.return_value = []
             mock_resource_repo_class.return_value = mock_resource_repo
 
             ContextProviderRegistry.register(MockGitHubProvider)
@@ -340,7 +339,7 @@ class TestContextAssemblyService:
             assert isinstance(result, ProjectContextData)
             assert len(result.eager_context) == 1
             assert result.eager_context[0].uri == "https://github.com/owner/repo/pull/123"
-            assert result.eager_context[0].description is None  # Auto-detected, no user description
+            assert result.eager_context[0].description == "GitHub resource description"  # Generated description for auto-detected resource
 
     @pytest.mark.asyncio
     async def test_get_project_context_on_demand_with_user_description(
@@ -349,10 +348,9 @@ class TestContextAssemblyService:
         """Test ON_DEMAND resources prioritize user descriptions."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
         link = ContextProviderResource(
-            parent_id=1,
-            parent_type="project",
             resource_uri="test://large-resource",
             description="User provided description",
+            provider_name="test",
         )
 
         with (
@@ -368,7 +366,7 @@ class TestContextAssemblyService:
             mock_project_repo_class.return_value = mock_project_repo
 
             mock_resource_repo = Mock()
-            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
 
             ContextProviderRegistry.register(MockOnDemandProvider)
@@ -388,10 +386,9 @@ class TestContextAssemblyService:
         """Test ON_DEMAND resources generate descriptions when user doesn't provide one."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
         link = ContextProviderResource(
-            parent_id=1,
-            parent_type="project",
             resource_uri="test://large-resource",
-            description=None,  # No user description
+            description=None,
+            provider_name="test",
         )
 
         with (
@@ -407,7 +404,7 @@ class TestContextAssemblyService:
             mock_project_repo_class.return_value = mock_project_repo
 
             mock_resource_repo = Mock()
-            mock_resource_repo.get_by_parent.return_value = [link]
+            mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
 
             ContextProviderRegistry.register(MockOnDemandProvider)

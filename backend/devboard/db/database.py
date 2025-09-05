@@ -2,6 +2,7 @@
 
 import os
 
+import logfire
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -29,8 +30,10 @@ class Base(DeclarativeBase):
 
 def get_db():
     """Dependency to get database session."""
-    db = SessionLocal()
+    with logfire.span("db.session.create"):
+        db = SessionLocal()
     try:
         yield db
     finally:
-        db.close()
+        with logfire.span("db.session.close"):
+            db.close()

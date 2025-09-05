@@ -44,15 +44,17 @@ def sample_context_data():
                 uri="https://github.com/owner/repo",
                 description="Main repository",
                 provider_type="github",
+                has_user_description=True,
             )
         ],
+        provider_errors=[],
     )
 
 
 class TestChatEndpoint:
     """Test the project chat endpoint."""
 
-    @patch("devboard.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.qa.qa_agent_service")
     def test_chat_with_project_success(self, mock_qa_service, client, db_session, sample_project):
         """Test successful chat with project."""
         # Add project to database
@@ -82,7 +84,7 @@ class TestChatEndpoint:
         assert response.status_code == 404
         assert "Project not found" in response.json()["detail"]
 
-    @patch("devboard.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.qa.qa_agent_service")
     def test_chat_service_error(self, mock_qa_service, client, db_session, sample_project):
         """Test chat endpoint when service raises error."""
         # Add project to database
@@ -101,7 +103,7 @@ class TestChatEndpoint:
 class TestContextEndpoint:
     """Test the project context endpoint."""
 
-    @patch("devboard.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.qa.qa_agent_service")
     def test_get_project_context_success(
         self, mock_qa_service, client, db_session, sample_project, sample_context_data
     ):
@@ -154,7 +156,7 @@ class TestContextEndpoint:
 class TestValidateResourceEndpoint:
     """Test the resource validation endpoint."""
 
-    @patch("devboard.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.qa.qa_agent_service")
     def test_validate_resource_success(self, mock_qa_service, client):
         """Test successful resource validation."""
         uri = "https://github.com/owner/repo/pull/123"
@@ -181,7 +183,7 @@ class TestValidateResourceEndpoint:
         assert data["description"] == "Test PR description"
         assert data["error"] is None
 
-    @patch("devboard.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.qa.qa_agent_service")
     def test_validate_resource_invalid(self, mock_qa_service, client):
         """Test validation of invalid resource."""
 
@@ -207,7 +209,7 @@ class TestQAAgentService:
         """Mock context assembly service."""
         service = Mock()
         service.get_project_context = AsyncMock(
-            return_value=ProjectContextData(eager_context=[], on_demand_resources=[])
+            return_value=ProjectContextData(eager_context=[], on_demand_resources=[], provider_errors=[])
         )
         service.validate_resource_uri = AsyncMock()
         return service

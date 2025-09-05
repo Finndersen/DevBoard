@@ -1,3 +1,15 @@
 .idea/
 /backend/.venv/
 *.db
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Cache files
+.channels_cache_v2.json
+.users_cache.json
+
+# Development files
+TODO.md

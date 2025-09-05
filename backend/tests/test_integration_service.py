@@ -1,10 +1,11 @@
 """Test integration service functionality."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from devboard.integrations.base import IntegrationConfigurationError
+from devboard.core.registry import Registry
+from devboard.integrations.base import BaseIntegration, IntegrationConfigurationError
 from devboard.services.integration_service import IntegrationService, IntegrationTestResult
 
 
@@ -26,15 +27,18 @@ class TestIntegrationService:
         assert "Unsupported integration type" in result.error_message
 
     @pytest.mark.asyncio
-    @patch("devboard.services.integration_service.IntegrationRegistry.get_integration_class")
-    async def test_test_integration_connection_config_error(self, mock_get_class):
+    async def test_test_integration_connection_config_error(self):
         """Test handling of configuration errors."""
         # Mock integration class that raises config error
         mock_integration_class = AsyncMock()
         mock_integration_class.create.side_effect = IntegrationConfigurationError("Missing config")
-        mock_get_class.return_value = mock_integration_class
+        mock_integration_class.integration_type = "github"
 
-        result = await self.service.test_integration_connection("github")
+        # Create test registry with mock integration
+        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        service = IntegrationService(test_registry)
+
+        result = await service.test_integration_connection("github")
 
         assert not result.success
         assert result.integration_type == "github"
@@ -42,8 +46,7 @@ class TestIntegrationService:
         assert "Missing config" in result.error_message
 
     @pytest.mark.asyncio
-    @patch("devboard.services.integration_service.IntegrationRegistry.get_integration_class")
-    async def test_test_integration_connection_success(self, mock_get_class):
+    async def test_test_integration_connection_success(self):
         """Test successful connection test."""
         # Mock integration instance and class
         mock_integration = AsyncMock()
@@ -51,9 +54,13 @@ class TestIntegrationService:
 
         mock_integration_class = AsyncMock()
         mock_integration_class.create.return_value = mock_integration
-        mock_get_class.return_value = mock_integration_class
+        mock_integration_class.integration_type = "github"
 
-        result = await self.service.test_integration_connection("github")
+        # Create test registry with mock integration
+        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        service = IntegrationService(test_registry)
+
+        result = await service.test_integration_connection("github")
 
         assert result.success
         assert result.integration_type == "github"
@@ -64,8 +71,7 @@ class TestIntegrationService:
         mock_integration.test_connection.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("devboard.services.integration_service.IntegrationRegistry.get_integration_class")
-    async def test_test_integration_connection_failure(self, mock_get_class):
+    async def test_test_integration_connection_failure(self):
         """Test failed connection test."""
         # Mock integration instance and class
         mock_integration = AsyncMock()
@@ -73,9 +79,13 @@ class TestIntegrationService:
 
         mock_integration_class = AsyncMock()
         mock_integration_class.create.return_value = mock_integration
-        mock_get_class.return_value = mock_integration_class
+        mock_integration_class.integration_type = "github"
 
-        result = await self.service.test_integration_connection("github")
+        # Create test registry with mock integration
+        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        service = IntegrationService(test_registry)
+
+        result = await service.test_integration_connection("github")
 
         assert not result.success
         assert result.integration_type == "github"
@@ -83,18 +93,27 @@ class TestIntegrationService:
         assert "Connection test failed" in result.error_message
 
     @pytest.mark.asyncio
-    @patch("devboard.services.integration_service.IntegrationRegistry.get_available_types")
-    @patch.object(IntegrationService, "test_integration_connection")
-    async def test_test_all_integrations(self, mock_test_single, mock_get_types):
+    async def test_test_all_integrations(self):
         """Test testing all integrations."""
-        mock_get_types.return_value = ["github", "jira"]
+        # Create mock integration classes
+        github_integration_class = AsyncMock()
+        github_integration_class.integration_type = "github"
+        jira_integration_class = AsyncMock()
+        jira_integration_class.integration_type = "jira"
 
-        # Mock results for each integration
+        # Create test registry with both integrations
+        test_registry = Registry[type[BaseIntegration]]([
+            github_integration_class,
+            jira_integration_class
+        ], key_attr='integration_type')
+        service = IntegrationService(test_registry)
+
+        # Mock the test_integration_connection method to return predefined results
         github_result = IntegrationTestResult("github", True)
         jira_result = IntegrationTestResult("jira", False, "Config error", "config_error")
-        mock_test_single.side_effect = [github_result, jira_result]
+        service.test_integration_connection = AsyncMock(side_effect=[github_result, jira_result])
 
-        results = await self.service.test_all_integrations()
+        results = await service.test_all_integrations()
 
         assert len(results) == 2
         assert results["github"].success

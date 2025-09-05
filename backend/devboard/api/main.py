@@ -4,12 +4,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from devboard.api.routers import codebases, configurations, projects, qa, settings, tasks
+from devboard.config.logfire_config import setup_logfire
 
 app = FastAPI(
     title="DevBoard API",
     description="AI-powered developer command centre",
     version="0.1.0",
 )
+
+setup_logfire(app)
 
 # Configure CORS
 app.add_middleware(

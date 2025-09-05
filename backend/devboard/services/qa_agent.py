@@ -2,6 +2,7 @@
 
 import logging
 
+import logfire
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
@@ -76,16 +77,20 @@ class QAAgentService:
             Returns:
                 Focused context relevant to your query
             """
-            try:
-                # Verify the resource is available
-                available_uris = [res.uri for res in ctx.deps.on_demand_resources]
-                if resource_uri not in available_uris:
-                    return f"Error: Resource {resource_uri} not available for this project"
+            with logfire.span("qa_agent.get_relevant_context", resource_uri=resource_uri, query_length=len(query)):
+                try:
+                    # Verify the resource is available
+                    available_uris = [res.uri for res in ctx.deps.on_demand_resources]
+                    if resource_uri not in available_uris:
+                        logfire.warn("Resource not available", resource_uri=resource_uri, available_count=len(available_uris))
+                        return f"Error: Resource {resource_uri} not available for this project"
 
-                return await self.context_service.get_on_demand_context(resource_uri, query)
-            except Exception as e:
-                logger.error(f"Error getting on-demand context: {e}")
-                return f"Error retrieving context: {e}"
+                    result = await self.context_service.get_on_demand_context(resource_uri, query)
+                    logfire.info("On-demand context retrieved", result_length=len(result))
+                    return result
+                except Exception as e:
+                    logfire.error("Error getting on-demand context", resource_uri=resource_uri, error=str(e), exc_info=e)
+                    return f"Error retrieving context: {e}"
 
         return agent
 
@@ -99,21 +104,32 @@ class QAAgentService:
         Returns:
             AI-generated response based on project context
         """
-        # Assemble project context
-        context_data = await self.context_service.get_project_context(project_id, user_query)
+        with logfire.span("qa_agent.chat", project_id=project_id, query_length=len(user_query)):
+            try:
+                # Assemble project context
+                with logfire.span("qa_agent.context_assembly"):
+                    context_data = await self.context_service.get_project_context(project_id, user_query)
 
-        # Create agent context
-        project_context = ProjectContext(
-            project_id=project_id,
-            eager_context=context_data.eager_context,
-            on_demand_resources=context_data.on_demand_resources,
-        )
+                # Create agent context
+                project_context = ProjectContext(
+                    project_id=project_id,
+                    eager_context=context_data.eager_context,
+                    on_demand_resources=context_data.on_demand_resources,
+                )
 
-        # Prepare initial context summary for the agent
-        context_summary = self._build_context_summary(context_data)
+                # Log context stats
+                logfire.info(
+                    "Context assembled",
+                    eager_resources=len(context_data.eager_context),
+                    on_demand_resources=len(context_data.on_demand_resources),
+                    provider_errors=len(context_data.provider_errors)
+                )
 
-        # Combine user query with context information
-        enhanced_prompt = f"""
+                # Prepare initial context summary for the agent
+                context_summary = self._build_context_summary(context_data)
+
+                # Combine user query with context information
+                enhanced_prompt = f"""
 USER QUERY: {user_query}
 
 AVAILABLE CONTEXT:
@@ -122,9 +138,15 @@ AVAILABLE CONTEXT:
 Please answer the user's query using the available context. If you need more specific information from any ON_DEMAND resource, use the get_relevant_context tool.
 """
 
-        # Run the agent
-        result = await self.agent.run(enhanced_prompt, deps=project_context)
-        return result.data
+                # Run the agent
+                with logfire.span("qa_agent.ai_inference", model="openai:gpt-4o-mini"):
+                    result = await self.agent.run(enhanced_prompt, deps=project_context)
+
+                logfire.info("QA agent response generated", response_length=len(result.data))
+                return result.data
+            except Exception as e:
+                logfire.error("Error processing chat query", project_id=project_id, error=str(e), exc_info=e)
+                return f"I encountered an error processing your query: {e}. Please try again or contact support if the issue persists."
 
     def _build_context_summary(self, context_data: ProjectContextData) -> str:
         """Build a summary of available context for the agent."""

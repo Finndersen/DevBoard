@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from devboard.config.base import BaseConfig, ConfigValidationResult
-from devboard.config.registry import ConfigRegistry
+from devboard.config.registry import config_schema_registry
 from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.models import Configuration
 
@@ -15,8 +15,9 @@ from devboard.db.models import Configuration
 class ConfigService:
     """Service for managing application configuration."""
 
-    def __init__(self, db_session_factory: SessionMakerType = SessionLocal):
+    def __init__(self, db_session_factory: SessionMakerType = SessionLocal, config_registry=None):
         self.db_session_factory = db_session_factory
+        self.config_registry = config_registry or config_schema_registry
 
     def get_config(self, key: str) -> BaseConfig | None:
         """Simple getter - returns config if valid, None if not."""
@@ -25,7 +26,7 @@ class ConfigService:
 
     def validate_config(self, key: str) -> ConfigValidationResult:
         """Returns detailed validation result with error information."""
-        schema = ConfigRegistry.get_schema(key)
+        schema = self.config_registry.get(key)
         if not schema:
             return ConfigValidationResult(False, errors=[f"No schema registered for key: {key}"])
 
@@ -54,7 +55,7 @@ class ConfigService:
     def set_config(self, key: str, data: BaseConfig) -> None:
         """Set configuration data."""
         # Validate that the key has a registered schema
-        schema = ConfigRegistry.get_schema(key)
+        schema = self.config_registry.get(key)
         if not schema:
             raise ValueError(f"No schema registered for key: {key}")
 
@@ -81,7 +82,7 @@ class ConfigService:
             db_keys = list(db.execute(stmt).scalars().all())
 
         # Combine with registered schema keys
-        schema_keys = ConfigRegistry.list_keys(prefix)
+        schema_keys = self.config_registry.list_keys()
         all_keys = sorted(set(db_keys + schema_keys))
         return all_keys
 

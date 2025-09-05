@@ -44,11 +44,13 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 ### Epic 3: Configuration Framework & Integration Layer ✅
 
-**Major Architectural Improvement - Domain-Colocated Registries**: Refactored registry architecture to use domain colocation with centralized services:
-- **Registry Location**: Moved registries to their domain directories (`config/registry.py`, `integrations/registry.py`, `context_providers/registry.py`)
-- **Service Centralization**: Moved `ConfigService` to `services/config_service.py` for consistent service layer architecture
-- **Self-Building Pattern**: All registries now use class attributes as single source of truth, eliminating manual registration
-- **DRY Compliance**: Removed string duplication by using `config_key`, `provider_type`, and `integration_type` class attributes
+**Major Architectural Improvement - Modern Registry Architecture**: Refactored registry system to use modern, type-safe, instance-based pattern:
+- **Generic Base Class**: Created `Registry[T]` generic base class for type safety and consistency across all registries
+- **Instance-Based Pattern**: Converted from class-based to instance-based registries with singleton pattern for improved testability
+- **Dependency Injection**: All services now accept registry instances as constructor parameters enabling test isolation
+- **Simplified API**: Removed `find_by()` methods in favor of direct implementation in specialized registry subclasses
+- **Domain Colocation**: Registries located in domain directories (`config/registry.py`, `integrations/registry.py`, `context_providers/registry.py`)
+- **Service Centralization**: Services remain in `services/` directory for clear architectural layer separation
 
 * [x] **Task 3.1: Implement Generic Configuration Framework**
   * Create the generic Configuration table and configuration service with Pydantic validation.
@@ -61,10 +63,10 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Slack Integration**: API client for messages, channels, conversations
   * **Codebase Integration**: File system operations and one-shot agent execution wrapper
 * [x] **Task 3.4: Implement Integration Registry and Factory Pattern**
-  * Build `IntegrationRegistry` (domain-colocated in `integrations/registry.py`) for mapping integration type names to integration classes
+  * Build `integration_registry` singleton instance (domain-colocated in `integrations/registry.py`) for mapping integration type names to integration classes
   * Add factory method pattern with `create()` classmethod for configuration-based instantiation
   * Implement standardized error handling with `IntegrationConfigurationError` and other custom exceptions
-  * **UPDATED**: Refactored to use self-building registry pattern with `integration_type` class attributes as single source of truth
+  * **UPDATED**: Refactored to use modern instance-based `Registry[T]` pattern with explicit `key_attr` parameter and dependency injection support
 * [x] **Task 3.5: Add Integration Connection Testing**
   * Implement `test_connection()` method for all integration classes
   * Create `IntegrationService` for handling connection testing logic with detailed error reporting
@@ -74,9 +76,10 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 * [x] **Task 4.1: Build Context Provider Base Classes with Registry**
   * Define abstract base class with EAGER/ON_DEMAND strategy interface and high-level query tools.
-  * Implement `ContextProviderRegistry` for managing provider classes (not instances).
+  * Implement `context_provider_registry` singleton instance extending `Registry[type[BaseContextProvider]]` for managing provider classes.
   * Add `ContextProviderUnavailable` exception hierarchy for configuration error handling.
   * Define factory method pattern with `create_instance()` class method for each provider.
+  * **UPDATED**: Refactored to use modern instance-based registry with specialized `get_provider_for_uri()` method and dependency injection support.
 * [x] **Task 4.2: Implement Context Providers with Sub-Agents**
   * **GitHub Context Provider**: PR context, commit summaries (uses GitHub Integration)
   * **Jira Context Provider**: Ticket context, project status (uses Jira Integration)  
@@ -97,7 +100,14 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * Create PydanticAI-based agent with custom prompting and universal `get_relevant_context(resource_uri, query)` tool.
   * Agent receives list of available ON_DEMAND resources with descriptions in initial context.
   * Build synchronous API endpoint (`POST /api/projects/{project_id}/chat`) for agent interaction.
-* [ ] **Task 5.3: Validate Multi-Source Context Assembly**
+* [x] **Task 5.3: Registry Architecture Modernization**
+  * **Generic Registry Foundation**: Implemented `Registry[T]` base class with type-safe, immutable design requiring explicit `list[T]` and `key_attr` parameters
+  * **Instance-Based Pattern**: Converted all registries from class-based to instance-based singleton pattern with dependency injection support
+  * **Service Dependency Injection**: Updated all services (`ContextAssemblyService`, `ConfigService`, `IntegrationService`, `ResourceService`) to accept registry instances as constructor parameters
+  * **Test Infrastructure**: Removed complex registry clearing fixtures, enabling clean test isolation through registry instance injection
+  * **Simplified API**: Removed generic `find_by()` methods, implementing specialized logic directly in registry subclasses for better clarity
+  * **Result**: 145 tests passing with modern, testable architecture while maintaining full functionality
+* [ ] **Task 5.4: Validate Multi-Source Context Assembly**
   * Test scenarios involving all four context providers to ensure the architecture works end-to-end.
 
 ### Epic 6: Basic Frontend UI

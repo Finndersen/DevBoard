@@ -46,6 +46,7 @@ The system will be built on a local client-server architecture, ensuring access 
   * **Framework**: An asynchronous Python web server using FastAPI.
   * **Database**: SQLAlchemy as the ORM with a local SQLite database for initial phases, offering a clear migration path to PostgreSQL for future multi-user support. Use Alembic for DB schema management and migrations.
   * **Real-time Communication**: WebSockets will be used for streaming agent progress and other real-time updates to the frontend.
+  * **Observability**: Pydantic Logfire for comprehensive observability, performance monitoring, and error tracking with automatic instrumentation for FastAPI, SQLAlchemy, and HTTPx requests.
   * Use `uv` for dependency management,  `ruff` for linting and formatting and `pyright` for type checking
 * **Frontend**: A modern, web-based UI built with a framework like React.
 * **Long-Running Tasks**:
@@ -80,7 +81,7 @@ A low-level API client interface for external services that provides raw access 
 * **Configuration Pattern**: Each integration has a corresponding `*IntegrationConfig` class that extends `BaseConfig`
 * **Factory Pattern**: Each integration implements a `create()` classmethod that handles configuration loading and validation from environment variables
 * **Connection Testing**: All integrations implement `test_connection()` method for real-time validation of API credentials and connectivity
-* **Registry System**: `IntegrationRegistry` (located in `devboard/integrations/registry.py`) maps integration type names to integration classes using domain-colocated architecture for better cohesion
+* **Registry System**: `integration_registry` singleton instance (located in `devboard/integrations/registry.py`) maps integration type names to integration classes using domain-colocated architecture for better cohesion and instance-based pattern for improved testability
 * **API Interface**:
   * Service-specific methods like `get_slack_message()`, `search_jira_issues()`, `get_github_pr()`
   * Raw data retrieval without business logic or summarization
@@ -105,7 +106,7 @@ A high-level interface that transforms raw integration data into relevant projec
   * `generate_resource_description(resource_uri)`: Auto-generates or retrieves user-provided descriptions for resources.
   * `create_instance()`: Factory method for creating configured provider instances with proper error handling.
 * **Registry & Initialization Pattern**:
-  * **Registry Design**: `ContextProviderRegistry` (located in `devboard/context_providers/registry.py`) stores provider classes (not instances) using domain-colocated architecture for intuitive discovery
+  * **Registry Design**: `context_provider_registry` singleton instance (located in `devboard/context_providers/registry.py`) stores provider classes using domain-colocated architecture and instance-based pattern for improved testability
   * **Factory Pattern**: Each provider class implements `create_instance()` factory method that handles configuration validation
   * **Error Handling**: Missing/invalid configurations raise `ContextProviderUnavailable` exceptions with detailed error messages
   * **Runtime Instantiation**: Provider instances are created at request time during context assembly, allowing graceful error collection
@@ -875,6 +876,33 @@ The generic configuration framework manages all application settings through the
     * When file content is updated from the UI, read file and DB content and perform 3-way merge and update both File and DB content with result.
     * If there is a merge conflict, report error to user and they can attempt to resolve manually
 
+## Observability & Monitoring
+
+### Pydantic Logfire Integration
+
+The application uses Pydantic Logfire for comprehensive observability and performance monitoring:
+
+* **Configuration**: Hardcoded sensible defaults with environment-based overrides:
+  * Service name: `devboard`
+  * Environment detection from `ENVIRONMENT` variable (defaults to `development`)
+  * Console logging enabled for development environments
+  * Remote telemetry enabled only when `LOGFIRE_TOKEN` environment variable is present
+
+* **Automatic Instrumentation**:
+  * **FastAPI**: Complete HTTP request/response instrumentation with status codes, timing, and error tracking
+  * **SQLAlchemy**: Database query instrumentation with performance metrics and query analysis
+  * **HTTPx**: External API request instrumentation for integration monitoring
+
+* **Service-Level Instrumentation**:
+  * **Context Assembly Service**: Tracks resource discovery, categorization, and eager context loading with detailed metrics
+  * **QA Agent Service**: Monitors chat interactions, context assembly timing, and AI inference performance
+  * **Integration Service**: Tests connection success/failure rates with error categorization
+  * **Context Providers**: Performance tracking for resource retrieval and context generation
+
+* **Error Tracking**: Structured error logging with exception context and stack traces for debugging
+
+* **Performance Monitoring**: Request timing, database query performance, and agent response times
+
 ## Architecture Design Principles
 
 ### Domain-Colocated Registries with Centralized Services
@@ -898,6 +926,33 @@ The codebase follows a hybrid architectural approach that balances domain cohesi
 * **Registry Architecture**: All registries use class attributes (`config_key`, `provider_type`, `integration_type`) as the authoritative source, eliminating string duplication
 * **Self-Building Pattern**: Registries build themselves from class metadata, removing the need for manual registration
 * **DRY Compliance**: No duplicate configuration keys or type names across the codebase
+
+### Modern Registry Architecture
+
+The application uses a modern, type-safe registry pattern that prioritizes testability and maintainability:
+
+* **Generic Registry Base Class**: 
+  * `Registry[T]` provides a generic, type-safe foundation for all registries
+  * Requires explicit `list[T]` initialization and `key_attr` parameter for clarity
+  * Immutable after construction to prevent accidental modifications
+  * Simple API with `get()`, `list_keys()`, `list_values()` methods
+
+* **Instance-Based Pattern**: 
+  * All registries are singleton instances (not classes) enabling dependency injection
+  * Services accept registry instances as constructor parameters for testability
+  * Tests can create isolated registry instances with mock data
+  * No global state manipulation required for test isolation
+
+* **Specialized Registry Subclasses**:
+  * `ContextProviderRegistry` extends `Registry[type[BaseContextProvider]]` with `get_provider_for_uri()` method
+  * Domain-specific logic implemented directly in registry subclasses
+  * No generic `find_by()` methods - specialized implementations for clarity
+
+* **Domain-Colocated Singletons**:
+  * `context_provider_registry` in `devboard/context_providers/registry.py`  
+  * `config_schema_registry` in `devboard/config/registry.py`
+  * `integration_registry` in `devboard/integrations/registry.py`
+  * Each registry located with its domain for intuitive discovery and maintenance
 
 ## Implementation Design Decisions & Architecture Details
 
