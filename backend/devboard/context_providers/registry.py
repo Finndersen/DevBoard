@@ -1,12 +1,13 @@
 """Registry for context provider classes."""
 
+from devboard.core.registry import Registry
+
 from .base import BaseContextProvider
 from .codebase import CodebaseContextProvider
 from .github import GitHubContextProvider
 from .jira import JiraContextProvider
 from .slack import SlackContextProvider
 from .webpage import WebPageContextProvider
-from devboard.core.registry import Registry
 
 
 class ContextProviderRegistry(Registry[type[BaseContextProvider]]):

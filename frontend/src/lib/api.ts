@@ -39,6 +39,33 @@ export interface LLMProvider {
   config: Record<string, any>
 }
 
+export interface ConfigurationFieldInfo {
+  name: string
+  type: 'string' | 'boolean' | 'integer' | 'number'
+  required: boolean
+  description?: string
+  current_value?: any
+  value_source?: 'environment' | 'database' | 'default'
+  is_secret: boolean
+  env_var_name?: string
+  default_value?: any
+  env_value_present: boolean
+}
+
+export interface ConfigurationDetailResponse {
+  key: string
+  fields: ConfigurationFieldInfo[]
+  validation_status: 'valid' | 'invalid' | 'unconfigured'
+  validation_errors?: string[]
+}
+
+export interface IntegrationTestResponse {
+  success: boolean
+  error_type?: string
+  error_message?: string
+  details?: Record<string, any>
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -142,6 +169,24 @@ export class ApiClient {
 
   async toggleLLMProvider(id: string): Promise<LLMProvider> {
     return this.request<LLMProvider>(`/api/settings/llm-providers/${id}/toggle`, {
+      method: 'POST',
+    })
+  }
+
+  // Configuration Management
+  async getConfigurationDetail(configKey: string): Promise<ConfigurationDetailResponse> {
+    return this.request<ConfigurationDetailResponse>(`/api/configurations/${configKey}/detail`)
+  }
+
+  async updateConfigurationFields(configKey: string, fieldUpdates: Record<string, any>): Promise<ConfigurationDetailResponse> {
+    return this.request<ConfigurationDetailResponse>(`/api/configurations/${configKey}/fields`, {
+      method: 'PATCH',
+      body: JSON.stringify(fieldUpdates),
+    })
+  }
+
+  async testIntegrationConnection(integrationType: string): Promise<IntegrationTestResponse> {
+    return this.request<IntegrationTestResponse>(`/api/settings/integrations/${integrationType}/test`, {
       method: 'POST',
     })
   }

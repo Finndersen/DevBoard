@@ -1,10 +1,13 @@
 """Configuration API endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from devboard.api.schemas import (
     ConfigurationCreate,
+    ConfigurationDetailResponse,
     ConfigurationResponse,
     ConfigurationUpdate,
     DeleteResponse,
@@ -12,6 +15,7 @@ from devboard.api.schemas import (
 from devboard.db.database import get_db
 from devboard.db.models import Configuration
 from devboard.db.repositories import ConfigurationRepository
+from devboard.services.config_service import config_service
 
 router = APIRouter()
 
@@ -33,6 +37,18 @@ async def get_configuration(config_key: str, db: Session = Depends(get_db)):
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
     return config
+
+
+@router.get("/{config_key}/detail", response_model=ConfigurationDetailResponse)
+async def get_configuration_detail(config_key: str):
+    """Get detailed configuration with field-level source information."""
+    result = config_service.get_config_details(config_key)
+
+    # If the configuration schema doesn't exist, return 404
+    if result.validation_status == "unconfigured" and not result.fields:
+        raise HTTPException(status_code=404, detail="Configuration schema not found")
+
+    return result
 
 
 @router.post("/", response_model=ConfigurationResponse)
@@ -76,6 +92,23 @@ async def update_configuration(
     db.commit()
     db.refresh(updated_config)
     return updated_config
+
+
+@router.patch("/{config_key}/fields", response_model=ConfigurationDetailResponse)
+async def update_configuration_fields(
+    config_key: str, field_updates: dict[str, Any]
+):
+    """Update specific configuration fields while respecting environment variable precedence."""
+    try:
+        result = config_service.update_config_fields(config_key, field_updates)
+        return result
+    except ValueError as e:
+        if "environment variables" in str(e):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        elif "No schema registered" in str(e):
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        else:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/{config_key}", response_model=DeleteResponse)

@@ -1,58 +1,50 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { CogIcon, LinkIcon, CloudIcon } from '@heroicons/react/24/outline'
-import { apiClient } from '../lib/api'
-import type { Integration, LLMProvider } from '../lib/api'
+import { ConfigurationForm } from '../components/ConfigurationForm'
+import type { ConfigurationDetailResponse } from '../lib/api'
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'integrations' | 'llm' | 'general'>('integrations')
-  const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [llmProviders, setLLMProviders] = useState<LLMProvider[]>([])
-  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'general'>('integrations')
+  
+  const integrationConfigs = [
+    { key: 'integration.github.main', title: 'GitHub Integration', type: 'github' },
+    { key: 'integration.jira.main', title: 'Jira Integration', type: 'jira' },
+    { key: 'integration.slack.main', title: 'Slack Integration', type: 'slack' },
+  ]
 
-  useEffect(() => {
-    fetchSettings()
-  }, [])
+  const llmConfigs = [
+    { key: 'llm.openai.main', title: 'OpenAI Provider', type: 'openai' },
+    { key: 'llm.anthropic.main', title: 'Anthropic Provider', type: 'anthropic' },
+    { key: 'llm.google.main', title: 'Google Provider', type: 'google' },
+  ]
+  
+  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(integrationConfigs[0]?.key || null)
+  const [selectedLLMProvider, setSelectedLLMProvider] = useState<string | null>(null)
 
-  const fetchSettings = async () => {
-    try {
-      const [integrationsData, llmData] = await Promise.all([
-        apiClient.getIntegrations(),
-        apiClient.getLLMProviders()
-      ])
-
-      setIntegrations(integrationsData)
-      setLLMProviders(llmData)
-    } catch (error) {
-      console.error('Failed to fetch settings:', error)
-    } finally {
-      setLoading(false)
-    }
+  const handleConfigurationSave = (config: ConfigurationDetailResponse) => {
+    console.log('Configuration saved:', config)
+    // Could show a toast notification here
   }
 
-  const handleIntegrationToggle = async (integrationId: string) => {
-    try {
-      await apiClient.toggleIntegration(integrationId)
-      await fetchSettings()
-    } catch (error) {
-      console.error('Failed to toggle integration:', error)
-    }
+  const handleTestConnection = () => {
+    console.log('Connection tested')
+    // Could show a toast notification here
   }
 
-  const handleLLMProviderToggle = async (providerId: string) => {
-    try {
-      await apiClient.toggleLLMProvider(providerId)
-      await fetchSettings()
-    } catch (error) {
-      console.error('Failed to toggle LLM provider:', error)
+  const handleTabChange = (newTab: 'integrations' | 'agents' | 'general') => {
+    setActiveTab(newTab)
+    
+    // Auto-select first item when switching tabs
+    if (newTab === 'integrations') {
+      setSelectedIntegration(integrationConfigs[0]?.key || null)
+      setSelectedLLMProvider(null)
+    } else if (newTab === 'agents') {
+      setSelectedLLMProvider(llmConfigs[0]?.key || null)
+      setSelectedIntegration(null)
+    } else {
+      setSelectedIntegration(null)
+      setSelectedLLMProvider(null)
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
   }
 
   return (
@@ -70,12 +62,12 @@ export default function Settings() {
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
-            { id: 'llm' as const, name: 'AI Providers', icon: CloudIcon },
+            { id: 'agents' as const, name: 'AI Providers', icon: CloudIcon },
             { id: 'general' as const, name: 'General', icon: CogIcon },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -91,108 +83,132 @@ export default function Settings() {
 
       {/* Tab Content */}
       {activeTab === 'integrations' && (
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">External Integrations</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Connect DevBoard to external services for enhanced functionality
-              </p>
-            </div>
-            
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {integrations.length === 0 ? (
-                <div className="px-6 py-8 text-center">
-                  <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No integrations configured</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Integrations will be available once they are set up.
-                  </p>
-                </div>
-              ) : (
-                integrations.map((integration) => (
-                  <div key={integration.id} className="px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        integration.status === 'connected' ? 'bg-green-400' : 'bg-red-400'
-                      }`} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Integration List */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">External Integrations</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Select an integration to configure
+                </p>
+              </div>
+              
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {integrationConfigs.map((integration) => (
+                  <button
+                    key={integration.key}
+                    onClick={() => setSelectedIntegration(integration.key)}
+                    className={`w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                      selectedIntegration === integration.key ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">{integration.name}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{integration.type}</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                          {integration.title}
+                        </h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                          {integration.type}
+                        </p>
                       </div>
+                      {selectedIntegration === integration.key && (
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      )}
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        integration.status === 'connected'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                      }`}>
-                        {integration.status}
-                      </span>
-                      <button
-                        onClick={() => handleIntegrationToggle(integration.id)}
-                        className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400"
-                      >
-                        Configure
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+                  </button>
+                ))}
+              </div>
             </div>
+          </div>
+
+          {/* Configuration Form */}
+          <div className="lg:col-span-2">
+            {selectedIntegration ? (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <ConfigurationForm
+                  configKey={selectedIntegration}
+                  title={integrationConfigs.find(i => i.key === selectedIntegration)?.title || ''}
+                  onSave={handleConfigurationSave}
+                  onTestConnection={handleTestConnection}
+                />
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+                <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                  Select an integration
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Choose an integration from the list to configure its settings
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {activeTab === 'llm' && (
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">AI Providers</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Configure AI language model providers for chat agents
-              </p>
-            </div>
-            
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {llmProviders.length === 0 ? (
-                <div className="px-6 py-8 text-center">
-                  <CloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No AI providers configured</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    AI providers will be available once they are configured.
-                  </p>
-                </div>
-              ) : (
-                llmProviders.map((provider) => (
-                  <div key={provider.id} className="px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        provider.enabled ? 'bg-green-400' : 'bg-gray-400'
-                      }`} />
+      {activeTab === 'agents' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* LLM Provider List */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">AI Providers</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Select a provider to configure
+                </p>
+              </div>
+              
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {llmConfigs.map((provider) => (
+                  <button
+                    key={provider.key}
+                    onClick={() => setSelectedLLMProvider(provider.key)}
+                    className={`w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                      selectedLLMProvider === provider.key ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">{provider.name}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{provider.type}</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                          {provider.title}
+                        </h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                          {provider.type}
+                        </p>
                       </div>
+                      {selectedLLMProvider === provider.key && (
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      )}
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={provider.enabled}
-                          onChange={() => handleLLMProviderToggle(provider.id)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                      </label>
-                      <button className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400">
-                        Configure
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+                  </button>
+                ))}
+              </div>
             </div>
+          </div>
+
+          {/* Configuration Form */}
+          <div className="lg:col-span-2">
+            {selectedLLMProvider ? (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <ConfigurationForm
+                  configKey={selectedLLMProvider}
+                  title={llmConfigs.find(p => p.key === selectedLLMProvider)?.title || ''}
+                  onSave={handleConfigurationSave}
+                />
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+                <CloudIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                  Select an AI provider
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Choose a provider from the list to configure its API settings
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

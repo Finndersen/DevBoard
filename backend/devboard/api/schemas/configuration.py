@@ -1,8 +1,33 @@
 """Configuration Pydantic schemas."""
 
 import datetime
+from typing import Any
 
 from pydantic import BaseModel
+
+
+class ConfigurationFieldInfo(BaseModel):
+    """Information about a single configuration field with source tracking."""
+
+    name: str
+    type: str  # "string", "boolean", "integer", "number"
+    required: bool
+    description: str | None = None
+    current_value: Any | None = None
+    value_source: str | None = None  # "environment", "database", "default"
+    is_secret: bool = False
+    env_var_name: str | None = None
+    default_value: Any | None = None
+    env_value_present: bool = False
+
+
+class ConfigurationDetailResponse(BaseModel):
+    """Detailed configuration response with field-level information."""
+
+    key: str
+    fields: list[ConfigurationFieldInfo]
+    validation_status: str  # "valid", "invalid", "unconfigured"
+    validation_errors: list[str] | None = None
 
 
 class ConfigurationBase(BaseModel):

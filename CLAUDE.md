@@ -10,3 +10,9 @@ Do not add implementation status (e.g. "Fully implemented") to the Project Speci
 
 ## Coding Style
 - Use newer SQLAlchemy 2.0 style (e.g. use `select()` instead of `session.query()`)
+
+
+
+# Frontend Development Guidelines
+
+- Types must be imported using type-only imports (e.g. `import type { XYZ } from '...'`)
