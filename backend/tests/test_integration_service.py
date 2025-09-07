@@ -1,6 +1,6 @@
 """Test integration service functionality."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -30,7 +30,7 @@ class TestIntegrationService:
     async def test_test_integration_connection_config_error(self):
         """Test handling of configuration errors."""
         # Mock integration class that raises config error
-        mock_integration_class = AsyncMock()
+        mock_integration_class = Mock()
         mock_integration_class.create.side_effect = IntegrationConfigurationError("Missing config")
         mock_integration_class.integration_type = "github"
 
@@ -52,7 +52,7 @@ class TestIntegrationService:
         mock_integration = AsyncMock()
         mock_integration.test_connection.return_value = True
 
-        mock_integration_class = AsyncMock()
+        mock_integration_class = Mock()
         mock_integration_class.create.return_value = mock_integration
         mock_integration_class.integration_type = "github"
 
@@ -77,7 +77,7 @@ class TestIntegrationService:
         mock_integration = AsyncMock()
         mock_integration.test_connection.return_value = False
 
-        mock_integration_class = AsyncMock()
+        mock_integration_class = Mock()
         mock_integration_class.create.return_value = mock_integration
         mock_integration_class.integration_type = "github"
 

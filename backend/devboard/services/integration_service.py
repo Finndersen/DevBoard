@@ -49,7 +49,7 @@ class IntegrationService:
 
                 # Create integration instance
                 with logfire.span("integration_service.create_instance"):
-                    integration = await integration_class.create()
+                    integration = integration_class.create()
 
                 # Test connection
                 with logfire.span("integration_service.test_api_connection"):

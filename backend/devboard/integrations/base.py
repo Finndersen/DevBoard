@@ -49,13 +49,13 @@ class BaseIntegration(ABC):
 
     @classmethod
     @abstractmethod
-    async def create(cls) -> "BaseIntegration":
+    def create(cls) -> "BaseIntegration":
         """Create integration instance with required configuration.
 
         Raises:
             IntegrationConfigurationError: If configuration is missing or invalid.
         """
-        pass
+        return cls()
 
     @abstractmethod
     async def test_connection(self) -> bool:

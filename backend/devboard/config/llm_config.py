@@ -26,15 +26,15 @@ class AnthropicProviderConfig(BaseConfig):
     model_config = BaseConfig.get_base_config("ANTHROPIC_")
 
 
-class GoogleProviderConfig(BaseConfig):
-    """Configuration for Google (Gemini) LLM provider."""
+class GeminiProviderConfig(BaseConfig):
+    """Configuration for Gemini LLM provider."""
 
-    config_key = "llm.google.main"
+    config_key = "llm.gemini.main"
 
-    api_key: str  # From GOOGLE_API_KEY env var
+    api_key: str  # From GEMINI_API_KEY env var
     base_url: str = "https://generativelanguage.googleapis.com"
 
-    model_config = BaseConfig.get_base_config("GOOGLE_")
+    model_config = BaseConfig.get_base_config("GEMINI_")
 
 
 # Model hierarchies for different agent types (hardcoded per agent)
@@ -62,7 +62,7 @@ PROVIDER_MODELS = {
         "claude-3.5-sonnet-20241022",
         "claude-3.5-haiku-20241022",
     ],
-    "google": [
+    "gemini": [
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",

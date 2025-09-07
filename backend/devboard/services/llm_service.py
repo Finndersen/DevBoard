@@ -44,7 +44,7 @@ class LLMService:
 
         # Check which providers are configured and working
         working_providers: list[str] = []
-        for provider_type in ["openai", "anthropic", "google"]:
+        for provider_type in ["openai", "anthropic", "gemini"]:
             config_key = f"llm.{provider_type}.main"
             config_result = config_service.validate_config(config_key)
             if config_result.success:

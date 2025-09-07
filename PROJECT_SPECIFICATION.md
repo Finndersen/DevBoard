@@ -78,8 +78,8 @@ A low-level API client interface for external services that provides raw access 
 * **Purpose**: Handles authentication, API calls, rate limiting, and error handling for external services.
 * **Examples**: SlackIntegration, JiraIntegration, GitHubIntegration, CodebaseIntegration.
 * **Authentication**: Credentials (API keys, tokens) loaded from environment variables for security.
-* **Configuration Pattern**: Each integration has a corresponding `*IntegrationConfig` class that extends `BaseConfig`
-* **Factory Pattern**: Each integration implements a `create()` classmethod that handles configuration loading and validation from environment variables
+* **Configuration Pattern**: Integration configuration classes are centralized in `devboard/config/integration_configs.py` to avoid circular dependencies
+* **Factory Pattern**: Each integration implements a synchronous `create()` classmethod that handles configuration loading and validation from environment variables
 * **Connection Testing**: All integrations implement `test_connection()` method for real-time validation of API credentials and connectivity
 * **Registry System**: `integration_registry` singleton instance (located in `devboard/integrations/registry.py`) maps integration type names to integration classes using domain-colocated architecture for better cohesion and instance-based pattern for improved testability
 * **API Interface**:
@@ -107,7 +107,7 @@ A high-level interface that transforms raw integration data into relevant projec
   * `create_instance()`: Factory method for creating configured provider instances with proper error handling.
 * **Registry & Initialization Pattern**:
   * **Registry Design**: `context_provider_registry` singleton instance (located in `devboard/context_providers/registry.py`) stores provider classes using domain-colocated architecture and instance-based pattern for improved testability
-  * **Factory Pattern**: Each provider class implements `create_instance()` factory method that handles configuration validation
+  * **Factory Pattern**: Each provider class implements synchronous `create_instance()` factory method that delegates to integration's `create()` method, eliminating code duplication
   * **Error Handling**: Missing/invalid configurations raise `ContextProviderUnavailable` exceptions with detailed error messages
   * **Runtime Instantiation**: Provider instances are created at request time during context assembly, allowing graceful error collection
   * **User Feedback**: Configuration errors are collected and presented to users, enabling informed troubleshooting
@@ -135,7 +135,9 @@ Represents a software codebase relevant to a project or task.
 
 ### Global Settings & Configuration
 * **Phase 1**: Comprehensive global settings view for managing all application configuration:
-  * **Integration Management**: Configure API credentials and connection settings for GitHub, Jira, Slack, OpenAI, Anthropic, and Google (Gemini) integrations with on-demand connection testing
+  * **Integration Management**: Configure API credentials and connection settings for GitHub, Jira, Slack, OpenAI, Anthropic, and Gemini integrations with on-demand connection testing
+  * **Dynamic Configuration System**: Environment variables can be overridden through UI with clear indicators showing value sources (environment, database, defaults)
+  * **Environment Variable Support**: Automatic loading from `.env` files in current directory, home directory, or backend directory at startup
   * **Codebase Management**: Add/remove local repository paths with validation
   * **Context Provider Configuration**: Manage context provider resource links with URI validation and auto-description generation
   * **Agent Configuration**: Select models for each agent type (Q&A, Planning, Implementation) with dynamic model lists based on configured LLM providers and intelligent fallback hierarchy
@@ -705,9 +707,9 @@ A flexible, type-safe configuration system manages all application settings usin
   class ConfigRegistry:
       """Registry of configuration schemas using self-building pattern"""
       
-      # Import configuration classes to avoid circular imports
+      # Import configuration classes from centralized location
       from devboard.config.agent_config import QAAgentConfig, PlanningAgentConfig
-      from devboard.integrations.slack import SlackIntegrationConfig
+      from devboard.config.integration_configs import SlackIntegrationConfig, GitHubIntegrationConfig, JiraIntegrationConfig
       # ... other imports
       
       # Self-building registry using class attributes as single source of truth

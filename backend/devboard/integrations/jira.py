@@ -6,7 +6,8 @@ from typing import Any
 from jira import JIRA as JiraClient
 from jira import JIRAError
 
-from devboard.config.base import BaseConfig
+from devboard.config.integration_configs import JiraIntegrationConfig
+from devboard.services.config_service import config_service
 
 from .base import (
     AuthenticationError,
@@ -17,18 +18,6 @@ from .base import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class JiraIntegrationConfig(BaseConfig):
-    """Configuration for Jira integration."""
-
-    config_key = "integration.jira.main"
-
-    api_token: str  # From JIRA_API_TOKEN env var
-    server_url: str  # From JIRA_SERVER_URL env var (e.g., "https://company.atlassian.net")
-    user_email: str  # From JIRA_USER_EMAIL env var
-
-    model_config = BaseConfig.get_base_config("JIRA_")
 
 
 class JiraIntegration(BaseIntegration):
@@ -51,10 +40,15 @@ class JiraIntegration(BaseIntegration):
             raise IntegrationConfigurationError(f"Failed to initialize Jira: {e}") from e
 
     @classmethod
-    async def create(cls) -> "JiraIntegration":
-        """Create Jira integration instance with configuration from environment."""
+    def create(cls) -> "JiraIntegration":
+        """Create Jira integration instance with configuration from database and environment."""
         try:
-            config = JiraIntegrationConfig()
+            # Get configuration from config service (includes database + environment)
+            config = config_service.get_config(JiraIntegrationConfig.config_key)
+            if not config:
+                raise IntegrationConfigurationError(
+                    "Jira configuration not found or invalid. Please configure the Jira integration."
+                )
             return cls(config)
         except Exception as e:
             logger.error(f"Failed to create Jira integration: {e}")

@@ -11,6 +11,7 @@ class Registry(Generic[T]):
     Provides a type-safe way to store and retrieve items by string keys.
     The registry is immutable after construction.
     """
+    _items: dict[str, T]
 
     def __init__(self, items: list[T], key_attr: str):
         """Initialize the registry.

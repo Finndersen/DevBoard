@@ -27,7 +27,7 @@ class SlackContextProvider(BaseContextProvider):
     def create_instance(cls) -> "SlackContextProvider":
         """Create an instance of the Slack context provider.
 
-        Validates configuration and creates the Slack integration.
+        Uses SlackIntegration.create() to handle configuration validation and initialization.
 
         Returns:
             Configured SlackContextProvider instance
@@ -35,16 +35,11 @@ class SlackContextProvider(BaseContextProvider):
         Raises:
             ContextProviderUnavailable: If Slack configuration is missing or invalid
         """
-        from devboard.services.config_service import config_service
-
-        config_result = config_service.validate_config("integration.slack.main")
-        if not config_result.success or not config_result.config:
-            raise ContextProviderUnavailable(
-                f"Slack integration not configured: {config_result.errors}"
-            )
-
-        integration = SlackIntegration(config_result.config)
-        return cls(integration)
+        try:
+            integration = SlackIntegration.create()
+            return cls(integration)
+        except Exception as e:
+            raise ContextProviderUnavailable(f"Failed to initialize Slack integration: {e}") from e
 
     def __init__(self, integration: SlackIntegration):
         """Initialize with Slack integration."""

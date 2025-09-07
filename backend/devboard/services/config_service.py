@@ -83,34 +83,21 @@ class ConfigService:
         if not schema_class:
             raise ValueError(f"No schema registered for key: {key}")
 
-        # Get current configuration details to check field sources
-        current_details = self.get_config_details(key)
-
         # Load existing DB data
         db_data = self._load_from_db(key) or {}
 
-        # Filter out fields that are set by environment variables
-        allowed_updates = {}
-        rejected_fields = []
-
-        for field_name, new_value in field_updates.items():
-            # Find the field info from current details
-            field_info = next((f for f in current_details.fields if f.name == field_name), None)
-
-            if field_info and field_info.value_source == "environment":
-                # Don't allow updating fields that are set by environment variables
-                rejected_fields.append(field_name)
+        # Allow updating all fields - users can override environment variables
+        # Convert empty strings to None and remove from database (reset to env/default)
+        for field_name, value in field_updates.items():
+            if isinstance(value, str) and value.strip() == "":
+                # Remove from database to reset to environment or default value
+                db_data.pop(field_name, None)
+            elif value is None:
+                # Explicit None means remove from database
+                db_data.pop(field_name, None)
             else:
-                # Allow updating fields from database or default sources
-                allowed_updates[field_name] = new_value
-
-        if rejected_fields:
-            raise ValueError(
-                f"Cannot update fields set by environment variables: {', '.join(rejected_fields)}"
-            )
-
-        # Update the database data with allowed updates
-        db_data.update(allowed_updates)
+                # Set the value in database
+                db_data[field_name] = value
 
         # Save updated data to database
         with self.db_session_factory() as db:
@@ -186,30 +173,26 @@ class ConfigService:
             current_value = None
             env_value_present = False
 
-            # Only check env vars for string fields
-            is_string_field = self._is_string_field(field_info)
+            # Calculate environment variable name for all fields
+            env_prefix = schema_class.model_config.get('env_prefix', '')
+            env_var_name = f"{env_prefix}{field_name.upper()}"
+            env_value_present = env_var_name in os.environ
 
-            if is_string_field:
-                env_prefix = schema_class.model_config.get('env_prefix', '')
-                env_var_name = f"{env_prefix}{field_name.upper()}"
-                env_value_present = env_var_name in os.environ
+            # Only check env vars for string fields for value comparison
+            is_string_field = self._is_string_field(field_info)
 
             if final_config:
                 current_value = getattr(final_config, field_name)
 
-                # Determine source
-                if is_string_field and env_value_present:
-                    # For string fields, check if env value matches current value
-                    env_value = os.environ[env_var_name]
-                    if current_value == env_value:
-                        value_source = "environment"
-                    elif field_name in db_data:
-                        # DB override of env var
-                        value_source = "database"
-                elif field_name in db_data:
-                    # DB value (no env var possible for non-strings)
+                # Determine source - simplified logic
+                if field_name in db_data:
+                    # Database value takes precedence (could be overriding env var)
                     value_source = "database"
+                elif is_string_field and env_value_present:
+                    # String field using environment variable
+                    value_source = "environment"
                 elif current_value == field_info.default:
+                    # Using default value
                     value_source = "default"
 
             fields.append(ConfigurationFieldInfo(
@@ -220,7 +203,7 @@ class ConfigService:
                 current_value=current_value,
                 value_source=value_source,
                 is_secret=self._is_secret_field(field_name),
-                env_var_name=env_var_name,  # Only set for string fields
+                env_var_name=env_var_name,  # Now set for all fields
                 default_value=field_info.default if field_info.default is not PydanticUndefined else None,
                 env_value_present=env_value_present
             ))

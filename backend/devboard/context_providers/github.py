@@ -30,7 +30,7 @@ class GitHubContextProvider(BaseContextProvider):
     def create_instance(cls) -> "GitHubContextProvider":
         """Create an instance of the GitHub context provider.
 
-        Validates configuration and creates the GitHub integration.
+        Uses GitHubIntegration.create() to handle configuration validation and initialization.
 
         Returns:
             Configured GitHubContextProvider instance
@@ -38,16 +38,8 @@ class GitHubContextProvider(BaseContextProvider):
         Raises:
             ContextProviderUnavailable: If GitHub configuration is missing or invalid
         """
-        from devboard.services.config_service import config_service
-
-        config_result = config_service.validate_config("integration.github.main")
-        if not config_result.success or not config_result.config:
-            raise ContextProviderUnavailable(
-                f"GitHub integration not configured: {config_result.errors}"
-            )
-
         try:
-            integration = GitHubIntegration(config_result.config)
+            integration = GitHubIntegration.create()
             return cls(integration)
         except Exception as e:
             raise ContextProviderUnavailable(f"Failed to initialize GitHub integration: {e}") from e

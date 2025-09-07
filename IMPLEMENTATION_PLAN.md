@@ -44,13 +44,21 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 ### Epic 3: Configuration Framework & Integration Layer ✅
 
-**Major Architectural Improvement - Modern Registry Architecture**: Refactored registry system to use modern, type-safe, instance-based pattern:
+**Major Architectural Improvements**:
+
+**Modern Registry Architecture**: Refactored registry system to use modern, type-safe, instance-based pattern:
 - **Generic Base Class**: Created `Registry[T]` generic base class for type safety and consistency across all registries
 - **Instance-Based Pattern**: Converted from class-based to instance-based registries with singleton pattern for improved testability
 - **Dependency Injection**: All services now accept registry instances as constructor parameters enabling test isolation
 - **Simplified API**: Removed `find_by()` methods in favor of direct implementation in specialized registry subclasses
 - **Domain Colocation**: Registries located in domain directories (`config/registry.py`, `integrations/registry.py`, `context_providers/registry.py`)
 - **Service Centralization**: Services remain in `services/` directory for clear architectural layer separation
+
+**Circular Dependency Resolution**: Resolved circular dependency between integrations and configuration system:
+- **Centralized Configuration**: Created `config/integration_configs.py` containing all integration configuration schemas
+- **Module Import Order**: Configuration registry now imports integration configs without circular dependencies
+- **Factory Pattern Optimization**: Converted integration `create()` methods from async to sync for better performance
+- **Code Deduplication**: Refactored context provider `create_instance()` methods to delegate to integration `create()` methods
 
 * [x] **Task 3.1: Implement Generic Configuration Framework**
   * Create the generic Configuration table and configuration service with Pydantic validation.
@@ -64,9 +72,10 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Codebase Integration**: File system operations and one-shot agent execution wrapper
 * [x] **Task 3.4: Implement Integration Registry and Factory Pattern**
   * Build `integration_registry` singleton instance (domain-colocated in `integrations/registry.py`) for mapping integration type names to integration classes
-  * Add factory method pattern with `create()` classmethod for configuration-based instantiation
+  * Add factory method pattern with **sync** `create()` classmethod for configuration-based instantiation
   * Implement standardized error handling with `IntegrationConfigurationError` and other custom exceptions
   * **UPDATED**: Refactored to use modern instance-based `Registry[T]` pattern with explicit `key_attr` parameter and dependency injection support
+  * **UPDATED**: Resolved circular dependency by centralizing integration configuration schemas in `config/integration_configs.py`
 * [x] **Task 3.5: Add Integration Connection Testing**
   * Implement `test_connection()` method for all integration classes
   * Create `IntegrationService` for handling connection testing logic with detailed error reporting
@@ -78,8 +87,9 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * Define abstract base class with EAGER/ON_DEMAND strategy interface and high-level query tools.
   * Implement `context_provider_registry` singleton instance extending `Registry[type[BaseContextProvider]]` for managing provider classes.
   * Add `ContextProviderUnavailable` exception hierarchy for configuration error handling.
-  * Define factory method pattern with `create_instance()` class method for each provider.
+  * Define factory method pattern with **sync** `create_instance()` class method for each provider.
   * **UPDATED**: Refactored to use modern instance-based registry with specialized `get_provider_for_uri()` method and dependency injection support.
+  * **UPDATED**: Eliminated code duplication by delegating to integration `create()` methods in context provider factories.
 * [x] **Task 4.2: Implement Context Providers with Sub-Agents**
   * **GitHub Context Provider**: PR context, commit summaries (uses GitHub Integration)
   * **Jira Context Provider**: Ticket context, project status (uses Jira Integration)  
@@ -125,32 +135,51 @@ This document outlines the detailed, step-by-step tasks required to build the De
 * [ ] **Task 6.5: Implement Basic Task Management**
   * Simple task CRUD operations with Jira integration for task linking.
 
-### Epic 7: Global Settings & Configuration View
+### Epic 7: Global Settings & Configuration View ✅
 
-* [ ] **Task 7.1: Extend Configuration Framework for LLM Providers**
-  * Add OpenAI integration configuration schema with API key and organization ID support.
-  * Add Anthropic integration configuration schema with API key support.
-  * Add Google integration configuration schema with API key support.
-  * Update configuration initialization to register new LLM provider schemas.
-* [ ] **Task 7.2: Implement Agent Configuration Schemas**
-  * Create QAAgentConfig, PlanningAgentConfig, and ImplementationAgentConfig with model selection.
-  * Implement model hierarchy logic and fallback system for agent configuration.
-  * Add agent configuration registration to the configuration framework.
+**Major Feature Complete - Dynamic Configuration System**: Implemented comprehensive configuration management system with:
+- **Dynamic Schema Discovery**: Backend-driven form generation avoiding frontend hardcoded schemas
+- **Value Source Tracking**: Environment variables > Database > Default precedence with visual indicators  
+- **Environment Variable Override**: UI capability to override environment variables with clear warnings
+- **Empty String Validation**: Proper null handling and validation for cleared fields
+- **Connection Testing**: Integrated integration testing with proper configuration loading
+- **Environment File Support**: Automatic `.env` file loading from current directory and home directory at startup
+
+* [x] **Task 7.1: Extend Configuration Framework for LLM Providers**
+  * Added OpenAI integration configuration schema with API key and organization ID support.
+  * Added Anthropic integration configuration schema with API key support.
+  * Added Gemini integration configuration schema with API key support (changed from Google).
+  * Updated configuration initialization to register new LLM provider schemas.
+* [x] **Task 7.2: Implement Agent Configuration Schemas**
+  * Created QAAgentConfig, PlanningAgentConfig, ImplementationAgentConfig, and InvestigationAgentConfig with model selection.
+  * Implemented model hierarchy logic and fallback system for agent configuration.
+  * Added agent configuration registration to the configuration framework.
 * [x] **Task 7.3: Build Settings API Endpoints**
-  * Extend existing `/api/configurations` endpoints to support prefix filtering for settings management.
-  * Implement `/api/settings/integrations/{integration_type}/test` for on-demand connection testing with immediate results and detailed error information.
-  * Add `/api/settings/agents/available-models` endpoint to get dynamic model lists based on working LLM providers.
-* [ ] **Task 7.4: Implement Global Settings Frontend**
-  * Create main settings view with tabbed interface (Integrations, Codebases, Context Providers, Agents).
-  * Build integration configuration cards with connection status indicators and test buttons.
-  * Implement codebase path management interface with validation.
-  * Create context provider resource management interface.
-  * Add agent model selection dropdowns with dynamic model lists.
-* [ ] **Task 7.5: Add Connection Testing & Validation**
-  * Implement on-demand connection testing for all integration types with immediate response handling.
-  * Add form validation with detailed error messaging for configuration fields.
-  * Create integration-specific connection status indicators that update after testing.
-  * Implement API key masking and reveal functionality in configuration forms.
+  * Extended existing `/api/configurations` endpoints to support prefix filtering for settings management.
+  * **UPDATED**: Added `/api/configurations/{config_key}/detail` endpoint providing field-level metadata including value sources, environment variable names, and validation info.
+  * **UPDATED**: Added `/api/configurations/{config_key}/fields` PATCH endpoint for field-level updates with empty string to null conversion.
+  * Implemented `/api/settings/integrations/{integration_type}/test` for on-demand connection testing with immediate results and detailed error information.
+  * Added `/api/settings/agents/available-models` endpoint to get dynamic model lists based on working LLM providers.
+* [x] **Task 7.4: Implement Global Settings Frontend**
+  * **COMPLETED**: Created comprehensive settings view with tabbed interface (Integrations, AI Providers).
+  * **COMPLETED**: Built dynamic configuration forms using `ConfigurationField` and `ConfigurationForm` components with:
+    - Value source indicators (environment/database/default)
+    - Environment variable override warnings and reset functionality
+    - Secret field masking/revealing with eye icon toggle
+    - Field validation with proper empty string handling
+    - Uppercase field name display
+  * **COMPLETED**: Integrated connection testing with proper state management and result clearing.
+  * **COMPLETED**: Added dark mode support for all text and UI elements.
+* [x] **Task 7.5: Add Connection Testing & Validation**
+  * **COMPLETED**: Implemented on-demand connection testing for all integration types with immediate response handling.
+  * **COMPLETED**: Added comprehensive form validation with detailed error messaging for configuration fields.
+  * **COMPLETED**: Fixed integration connection testing by updating all integration `create()` methods to use `config_service` for proper database configuration loading.
+  * **COMPLETED**: Implemented API key masking and reveal functionality with toggle button in configuration forms.
+  * **COMPLETED**: Added proper test result state management that clears when switching between configurations.
+* [x] **Task 7.6: Environment Variable Support**
+  * **COMPLETED**: Added python-dotenv dependency and automatic `.env` file loading at startup from current directory and home directory.
+  * **COMPLETED**: Implemented comprehensive environment variable handling in configuration service with proper precedence (environment > database > default).
+  * **COMPLETED**: Added environment variable override capability through UI with clear visual indicators and reset functionality.
 
 ## Phase 2: Advanced Agent Features
 

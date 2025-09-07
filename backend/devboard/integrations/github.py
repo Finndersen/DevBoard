@@ -12,7 +12,8 @@ from github import (
 )
 from github.Auth import Token
 
-from devboard.config.base import BaseConfig
+from devboard.config.integration_configs import GitHubIntegrationConfig
+from devboard.services.config_service import config_service
 
 from .base import (
     AuthenticationError,
@@ -24,17 +25,6 @@ from .base import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class GitHubIntegrationConfig(BaseConfig):
-    """Configuration for GitHub integration."""
-
-    config_key = "integration.github.main"
-
-    api_token: str  # From GITHUB_API_TOKEN env var
-    base_url: str = "https://api.github.com"
-
-    model_config = BaseConfig.get_base_config("GITHUB_")
 
 
 class GitHubIntegration(BaseIntegration):
@@ -53,10 +43,15 @@ class GitHubIntegration(BaseIntegration):
             raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
 
     @classmethod
-    async def create(cls) -> "GitHubIntegration":
-        """Create GitHub integration instance with configuration from environment."""
+    def create(cls) -> "GitHubIntegration":
+        """Create GitHub integration instance with configuration from database and environment."""
         try:
-            config = GitHubIntegrationConfig()
+            # Get configuration from config service (includes database + environment)
+            config = config_service.get_config(GitHubIntegrationConfig.config_key)
+            if not config:
+                raise IntegrationConfigurationError(
+                    "GitHub configuration not found or invalid. Please configure the GitHub integration."
+                )
             return cls(config)
         except Exception as e:
             logger.error(f"Failed to create GitHub integration: {e}")
