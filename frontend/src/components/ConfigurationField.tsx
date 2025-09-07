@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { EyeIcon, EyeSlashIcon, LockClosedIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import type { ConfigurationFieldInfo } from '../lib/api'
 
 interface ConfigurationFieldProps {
@@ -17,7 +17,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
 }) => {
   const [showSecret, setShowSecret] = useState(false)
   
-  const isReadOnly = field.value_source === 'environment' || disabled
+  const isReadOnly = disabled  // Allow editing environment-sourced fields
   const isOverridingEnv = field.value_source === 'database' && field.env_value_present
   const isDefault = field.value_source === 'default'
   
@@ -65,6 +65,15 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
             type="number"
             step={field.type === 'number' ? 'any' : '1'}
             value={value || ''}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === '') {
+                onChange(field.name, '')
+              } else {
+                const numVal = field.type === 'integer' ? parseInt(val, 10) : parseFloat(val)
+                onChange(field.name, isNaN(numVal) ? val : numVal)
+              }
+            }}
           />
         )
       case 'string':
@@ -83,6 +92,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
                   type="button"
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                   onClick={() => setShowSecret(!showSecret)}
+                  aria-label={showSecret ? 'Hide password' : 'Show password'}
                 >
                   {showSecret ? (
                     <EyeSlashIcon className="h-5 w-5 text-gray-400" />
@@ -99,35 +109,56 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
   }
 
   const renderValueSourceIndicator = () => {
-    if (field.value_source === 'environment') {
-      return (
-        <div className="flex items-center mt-1">
-          <LockClosedIcon className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-1" />
-          <span className="text-xs text-gray-600 dark:text-gray-400">
-            Set via {field.env_var_name}
-          </span>
-        </div>
-      )
+    // Show environment variable indicators based on field state
+    if (field.env_var_name) {
+      if (field.value_source === 'environment') {
+        // Currently using environment variable value
+        return (
+          <div className="flex items-center mt-1">
+            <span className="text-xs text-green-600 dark:text-green-400">
+              Set via {field.env_var_name}
+            </span>
+          </div>
+        )
+      } else if (isOverridingEnv) {
+        // Database value overriding environment variable
+        return (
+          <div className="flex items-center mt-1">
+            <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 dark:text-amber-400 mr-1" />
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Overriding {field.env_var_name}
+            </span>
+            <button
+              type="button"
+              className="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              onClick={() => onChange(field.name, null)}
+            >
+              Reset to environment
+            </button>
+          </div>
+        )
+      } else if (field.env_value_present) {
+        // Environment variable exists but not being used (using default or other source)
+        return (
+          <div className="flex items-center mt-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Can be set via {field.env_var_name}
+            </span>
+          </div>
+        )
+      } else {
+        // Show available environment variable name
+        return (
+          <div className="flex items-center mt-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Can be set via {field.env_var_name}
+            </span>
+          </div>
+        )
+      }
     }
 
-    if (isOverridingEnv) {
-      return (
-        <div className="flex items-center mt-1">
-          <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 dark:text-amber-400 mr-1" />
-          <span className="text-xs text-amber-600 dark:text-amber-400">
-            Overriding {field.env_var_name}
-          </span>
-          <button
-            type="button"
-            className="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-            onClick={() => onChange(field.name, null)}
-          >
-            Reset to environment
-          </button>
-        </div>
-      )
-    }
-
+    // Show default value indicator if no environment variable context
     if (isDefault && field.default_value !== null && field.default_value !== undefined) {
       return (
         <div className="mt-1">
@@ -144,7 +175,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
   return (
     <div className="space-y-1">
       <label htmlFor={field.name} className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">
-        {field.name}
+        {field.name.toUpperCase()}
         {field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       

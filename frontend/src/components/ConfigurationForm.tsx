@@ -33,6 +33,7 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
     try {
       setLoading(true)
       setError(null)
+      setTestResult(null)  // Clear test result when loading new configuration
       const result = await apiClient.getConfigurationDetail(configKey)
       setConfig(result)
       
@@ -60,14 +61,14 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       setSaving(true)
       setError(null)
       
-      // Only send fields that can be updated (not environment-sourced fields)
+      // Send all fields that have changed (allow overriding environment variables)
       const updatableFields: Record<string, any> = {}
       config.fields.forEach(field => {
-        if (field.value_source !== 'environment') {
-          const newValue = values[field.name]
-          if (newValue !== field.current_value) {
-            updatableFields[field.name] = newValue
-          }
+        const newValue = values[field.name]
+        if (newValue !== field.current_value) {
+          // Convert empty strings to null for proper validation
+          const processedValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
+          updatableFields[field.name] = processedValue
         }
       })
 
@@ -153,9 +154,16 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
 
   const hasChanges = () => {
     if (!config) return false
-    return config.fields.some(field => 
-      field.value_source !== 'environment' && values[field.name] !== field.current_value
-    )
+    return config.fields.some(field => {
+      const newValue = values[field.name]
+      const currentValue = field.current_value
+      
+      // Convert empty strings to null for comparison
+      const processedNewValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
+      const processedCurrentValue = (typeof currentValue === 'string' && currentValue.trim() === '') ? null : currentValue
+      
+      return processedNewValue !== processedCurrentValue
+    })
   }
 
   if (loading) {

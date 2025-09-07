@@ -7,31 +7,44 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
     "@types/react-router-dom": "^5.3.3",
     "autoprefixer": "^10.4.21",
     "axios": "^1.11.0",
     "postcss": "^8.5.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.8.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.5.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/ui": "^1.0.0",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "jsdom": "^23.0.1",
+    "msw": "^2.0.8",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.2"
+    "vite": "^7.1.2",
+    "vitest": "^1.0.0"
   }
 }

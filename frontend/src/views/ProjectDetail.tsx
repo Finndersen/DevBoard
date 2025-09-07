@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
+import ReactMarkdown from 'react-markdown'
 import Chat from '../components/Chat'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
@@ -10,13 +11,15 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'board' | 'details' | 'settings'>('board')
+  const [activeTab, setActiveTab] = useState<'board' | 'details' | 'chat' | 'settings'>('board')
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
     status: 'Pending'
   })
+  const [isEditingDetails, setIsEditingDetails] = useState(false)
+  const [editedDetails, setEditedDetails] = useState('')
 
   useEffect(() => {
     fetchProject()
@@ -27,6 +30,7 @@ export default function ProjectDetail() {
     try {
       const data = await apiClient.getProject(id!)
       setProject(data)
+      setEditedDetails(data.details || '')
     } catch (error) {
       console.error('Failed to fetch project:', error)
     }
@@ -53,6 +57,21 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error('Failed to create task:', error)
     }
+  }
+
+  const handleSaveDetails = async () => {
+    try {
+      await apiClient.updateProject(id!, { details: editedDetails })
+      setProject(prev => prev ? { ...prev, details: editedDetails } : null)
+      setIsEditingDetails(false)
+    } catch (error) {
+      console.error('Failed to update project details:', error)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditedDetails(project?.details || '')
+    setIsEditingDetails(false)
   }
 
   const getStatusColor = (status: string) => {
@@ -139,17 +158,19 @@ export default function ProjectDetail() {
           {[
             { id: 'board' as const, name: 'Board', icon: null },
             { id: 'details' as const, name: 'Details', icon: null },
+            { id: 'chat' as const, name: 'Q&A Agent', icon: ChatBubbleLeftIcon },
             { id: 'settings' as const, name: 'Settings', icon: null },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
+              {tab.icon && <tab.icon className="w-4 h-4 mr-2" />}
               {tab.name}
             </button>
           ))}
@@ -197,26 +218,63 @@ export default function ProjectDetail() {
       )}
 
       {activeTab === 'details' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Project Details */}
-          <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Project Details</h3>
-              <div className="prose dark:prose-invert max-w-none">
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{project.details}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project Details</h3>
+            {!isEditingDetails ? (
+              <button
+                onClick={() => setIsEditingDetails(true)}
+                className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <PencilIcon className="w-4 h-4 mr-2" />
+                Edit
+              </button>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleSaveDetails}
+                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <CheckIcon className="w-4 h-4 mr-2" />
+                  Save
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancel
+                </button>
               </div>
-            </div>
+            )}
           </div>
-
-          {/* Chat Interface */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 h-96">
-              <div className="flex items-center mb-4">
-                <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Q&A Agent</h3>
-              </div>
-              <Chat projectId={parseInt(id!)} />
+          
+          {isEditingDetails ? (
+            <textarea
+              value={editedDetails}
+              onChange={(e) => setEditedDetails(e.target.value)}
+              className="w-full h-96 px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              placeholder="Enter project details in Markdown format..."
+            />
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-left">
+              {project.details ? (
+                <ReactMarkdown>{project.details}</ReactMarkdown>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 italic">No project details provided. Click Edit to add details.</p>
+              )}
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'chat' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center mb-4">
+            <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Q&A Agent</h3>
+          </div>
+          <div className="h-[600px]">
+            <Chat projectId={parseInt(id!)} />
           </div>
         </div>
       )}

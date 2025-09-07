@@ -15,7 +15,7 @@ export default function Settings() {
   const llmConfigs = [
     { key: 'llm.openai.main', title: 'OpenAI Provider', type: 'openai' },
     { key: 'llm.anthropic.main', title: 'Anthropic Provider', type: 'anthropic' },
-    { key: 'llm.google.main', title: 'Google Provider', type: 'google' },
+    { key: 'llm.gemini.main', title: 'Gemini Provider', type: 'gemini' },
   ]
   
   const [selectedIntegration, setSelectedIntegration] = useState<string | null>(integrationConfigs[0]?.key || null)

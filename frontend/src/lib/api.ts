@@ -104,7 +104,7 @@ export class ApiClient {
 
   async updateProject(id: number | string, project: Partial<Project>): Promise<Project> {
     return this.request<Project>(`/api/projects/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(project),
     })
   }
