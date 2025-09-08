@@ -14,7 +14,8 @@ The system will be built on a local client-server architecture, ensuring access 
     ├── backend/
     │   ├── devboard/           # Main Python package
     │   │   ├── api/
-    │   │   │   └── routers/    # API endpoints
+    │   │   │   ├── routers/    # API endpoints
+    │   │   │   └── schemas/    # Pydantic response/request models
     │   │   ├── db/
     │   │   │   ├── models/     # SQLAlchemy models
     │   │   │   └── repositories/ # Data access layer
@@ -24,9 +25,8 @@ The system will be built on a local client-server architecture, ensuring access 
     │   │   │   └── base.py     # BaseConfig, ConfigValidationResult
     │   │   ├── integrations/   # External API clients
     │   │   │   └── registry.py # IntegrationRegistry (domain-colocated)
-    │   │   ├── context_providers/ # Intelligent context gathering
-    │   │   │   └── registry.py # ContextProviderRegistry (domain-colocated)
-    │   │   └── schemas/        # Pydantic response/request models
+    │   │   └── context_providers/ # Intelligent context gathering
+    │   │       └── registry.py # ContextProviderRegistry (domain-colocated)
     │   ├── tests/
     │   └── pyproject.toml
     │
@@ -54,7 +54,8 @@ The system will be built on a local client-server architecture, ensuring access 
   * **Proposed Solution**: A background task queue is required. A lightweight option like Dramatiq or Huey will be used for initial phases. The flow will be: API triggers a background job -> job streams updates via WebSockets -> UI displays real-time progress.
 * **File Synchronization Strategy**:
   * **Challenge**: Documents managed in the UI (e.g., `ARCHITECTURE.md`, `CLAUDE.md`) may also be edited directly on the filesystem, leading to conflicts.
-  * **Proposed Solution**: Implement a diff-reconciliation mechanism. Before saving changes from the UI to a file, the application will check the file's last modified timestamp. If the file has changed on disk since it was last read by the app, a three-way merge (using a library like `diff-match-patch`) will be attempted to reconcile the changes automatically. If conflicts cannot be resolved, the user will be prompted to choose which version to keep or to resolve the conflicts manually.
+  * **Implemented Solution**: Architecture documents use SHA256 content hashing for conflict detection. When a user edits a document in the UI, the original content hash is stored. Upon saving, the current file content is hashed and compared - if different, a 409 Conflict response is returned with the current hash, allowing the user to review changes and retry. This prevents data loss while maintaining simplicity.
+  * **Future Enhancement**: For more complex scenarios, a three-way merge mechanism using libraries like `diff-match-patch` could be implemented to automatically reconcile changes when conflicts cannot be resolved through simple hash comparison.
 * **Multi-User Collaboration (Phase 3 Goal)**:
   * While the initial focus is a local-first single-user experience, the architecture should not preclude future collaboration. This would likely involve a shared backend and database where project and task data can be synced between users.
 
@@ -68,10 +69,15 @@ A high-level representation of a large piece of work, analogous to a Jira Epic.
 ### 2. Task
 A self-contained piece of work, often linked to a remote ticket in Jira or Asana.
 * **Attributes**:
-  * **Status**: A state machine tracking progress: `Pending` -> `Planning` -> `Awaiting Approval` -> `Implementing` -> `In Review` -> `Complete`.
-  * **Description**: Detailed text description.
+  * **Status**: A state machine tracking progress: `Pending` -> `Designing` -> `Planning` -> `Implementing` -> `In Review` -> `Complete`.
+  * **Task Specification**: Enhanced description document crafted interactively with the Task Planning Agent (stored in `description` field).
+  * **Implementation Plan**: Detailed technical implementation plan created through conversational workflow.
   * **Links**: References to the parent Project, remote task ID, and relevant GitHub repositories/PRs.
-  * **AI State**: A `conversation_id` to resume agent sessions and a structured `Implementation Plan` artifact.
+  * **AI State**: Full conversation history with Task Planning Agent stored as `TaskConversationMessage` records.
+* **Interactive Document Crafting**:
+  * **State-Based Workflow**: Different agent capabilities based on task state (Designing vs Planning)
+  * **Structured Editing**: Agent responses include find-replace edits applied atomically with user approval
+  * **Research Integration**: Full access to context providers during specification and planning phases
 
 ### 3. Integration
 A low-level API client interface for external services that provides raw access to service APIs.
@@ -160,9 +166,13 @@ Represents a software codebase relevant to a project or task.
 ### Task
 * **Phase 1**:
     * Create tasks manually or by linking a Jira/Asana ID.
-    * Trigger the investigation/planning phase to generate an Implementation Plan.
-    * Manually or conversationally edit and approve the plan.
-    * Trigger the Implementation Agent.
+    * **Interactive Task Planning**: State-based workflow with Task Planning Agent for conversational document crafting:
+      * **Designing State**: Interactive task specification refinement with research capabilities
+      * **Planning State**: Implementation plan creation with full context access
+      * **State Transitions**: Manual progression through design → planning → implementation phases
+    * **Document Editing**: Structured agent responses with find-replace edits applied atomically with user approval
+    * **Three-Tab Interface**: Task Specification, Implementation Plan, and Planning Agent conversation views
+    * Trigger the Implementation Agent after planning completion.
     * Basic visualization of agent progress (e.g., streaming logs).
     * Trigger an agent to create a GitHub PR after implementation.
 * **Phase 2**:
@@ -221,20 +231,25 @@ Represents a software codebase relevant to a project or task.
 * **Implementation**:
   * Possibly wrapping a single-shot Gemini CLI agent run in a background task.
 
-### 4. Task Investigation & Planning Agent
-* **Function**: Produces detailed implementation plan with enough granularity to facilitate implementation without further research/investigation
+### 4. Task Planning Agent (Enhanced)
+* **Function**: Interactive document crafting for task specifications and implementation plans through state-based conversational workflow
 * **Context**:
-  * The task description.
-  * Access to all configured context providers.
+  * Current task specification and implementation plan documents
+  * Access to all configured context providers for research
+  * Full conversation history with the user
+  * Task state awareness (Designing vs Planning phases)
 * **Tools/Capabilities**:
-  * Queries context providers for relevant information.
-  * Asks clarifying questions to the user.
-  * Generates a detailed, structured Implementation Plan.
-  * Allows the user to conversationally review, update, and approve the plan.
-  * Runs as a background task.
+  * **Document Editing**: Structured response format with find-replace edits for task specification and implementation plan
+  * **Context Research**: Full access to project context, codebase information, and external resources
+  * **Conversational Refinement**: Interactive clarification and iterative document improvement
+  * **State-Aware Prompting**: Different capabilities based on task state (Designing: spec only, Planning: both documents)
+  * **Atomic Edit Application**: All document changes bundled and applied together with user approval
+* **Response Format**: Structured JSON with message, document edits array, and optional state transitions
 * **Model**: Intelligent model with a large context window (e.g., Gemini Pro).
 * **Implementation**:
-  * Can  run in app as background task/job using framework like Pydantic AI
+  * Synchronous API processing with structured response format
+  * State-based prompt templates for different workflow phases
+  * Integration with existing context provider infrastructure
 
 ### 5. Task Implementation Agent
 * **Function**: Executes the approved Implementation Plan.
@@ -403,18 +418,21 @@ This is a focused, full-screen view that opens when a user clicks on a Task Card
     * **Linked Ticket**: A clickable link to the remote Jira/Asana ticket.
     * **Codebase**: The associated codebase for the task.
     * **Created Date**: Timestamp of when the task was created.
-* **Main Content Component (Tabbed Interface)**:
-  * **"Plan" Tab**: Contains the rich Markdown editor for the `Implementation Plan`.
-  * **"Agent Conversation" Tab**: A single, unified, chronological view for all agent interactions.
-    * **User Messages**: Standard chat bubbles.
-    * **Agent Responses**: Standard chat bubbles for final, user-facing answers.
-    * **Agent "Thinking" Blocks**: For the agent's internal monologue (thoughts, tool calls, tool results), these will be displayed in a distinct, collapsible block. By default, it's collapsed to a summary (e.g., "Agent is thinking... [View 3 Steps]"). When expanded, the user can see the detailed, step-by-step execution log.
+* **Main Content Component (Three-Tab Interface)**:
+  * **"Task Specification" Tab**: Markdown editor/viewer for task description with edit/view toggle pattern
+  * **"Implementation Plan" Tab**: Markdown editor/viewer for implementation plan with edit/view toggle pattern
+  * **"Planning Agent" Tab**: Conversation interface for Task Planning Agent interactions
+    * **User Messages**: Standard chat bubbles
+    * **Agent Responses**: Standard chat bubbles with structured edit proposals
+    * **Edit Confirmation Modals**: Preview document changes with diff view before applying
+    * **Research Summaries**: Collapsible blocks for agent context provider queries
 * **Action Bar Component**:
-  * A persistent footer or sidebar containing the primary action buttons for the task. The buttons are dynamic and change based on the current task status.
-    * **Status `Pending`**: Shows "**Generate Plan**".
-    * **Status `Awaiting Approval`**: Shows "**Edit Plan**" and "**Approve Plan**".
-    * **Status `Implementing`**: Shows "**View Conversation**" and "**Stop Agent**".
-    * **Status `Complete`**: Shows "**Create Pull Request**".
+  * State-based action buttons that change based on current task status:
+    * **Status `Pending`**: Shows "**Start Design**" (→ Designing state)
+    * **Status `Designing`**: Shows "**Begin Planning**" (→ Planning state)
+    * **Status `Planning`**: Shows "**Start Implementation**" (→ Implementing state)
+    * **Status `Implementing`**: Shows "**View Progress**" and "**Stop Agent**"
+    * **Status `Complete`**: Shows "**Create Pull Request**"
 
 ## API Endpoints 🔌
 
@@ -431,6 +449,24 @@ This section defines the core RESTful API contract between the frontend and the 
   * `POST /api/tasks` - Create a new task.
   * `GET /api/tasks/{task_id}` - Get details for a single task.
   * `PATCH /api/tasks/{task_id}` - Update a task's details.
+
+* **Task Planning Agent**
+  * `GET /api/tasks/{task_id}/messages` - Get task planning conversation history.
+  * `POST /api/tasks/{task_id}/messages` - Send message to task planning agent.
+  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits from agent response.
+  * `POST /api/tasks/{task_id}/state-transition` - Progress task through design/planning states.
+
+* **Codebases**
+  * `GET /api/codebases` - List all codebases.
+  * `POST /api/codebases` - Create a new codebase.
+  * `GET /api/codebases/{codebase_id}` - Get details for a single codebase.
+  * `PATCH /api/codebases/{codebase_id}` - Update a codebase's details.
+  * `DELETE /api/codebases/{codebase_id}` - Delete a codebase.
+
+* **Architecture Documents**
+  * `GET /api/codebases/{codebase_id}/architecture_document/` - Get complete architecture document information including content and hash for conflict detection.
+  * `PUT /api/codebases/{codebase_id}/architecture_document/` - Update architecture document content with conflict detection using SHA256 content hashing.
+  * `POST /api/codebases/{codebase_id}/architecture_document/generate` - Generate or update architecture document using AI.
 
 * **Configurations**
   * `GET /api/configurations` - List all provider configurations.

@@ -286,18 +286,20 @@ class TestCodebaseContextProvider:
     @pytest.mark.asyncio
     async def test_get_relevant_context(self, provider, mock_integration):
         """Test getting relevant context via AI analysis."""
-        from unittest.mock import patch, Mock
-        
-        # Mock the subprocess call that runs gemini-cli
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Analysis result from gemini-cli"
-        
-        with patch('subprocess.run', return_value=mock_result) as mock_subprocess:
+        from unittest.mock import patch
+
+        # Mock the execute_gemini_prompt function
+        with patch('devboard.context_providers.codebase.execute_gemini_prompt',
+                   return_value="Analysis result from gemini-cli") as mock_gemini:
             result = await provider.get_relevant_context("src/", "What functions are defined?")
-            
+
             assert result == "Analysis result from gemini-cli"
-            mock_subprocess.assert_called_once()
+            mock_gemini.assert_called_once()
+
+            # Verify the correct parameters were passed
+            call_args = mock_gemini.call_args
+            assert call_args[1]['model'] == "gemini-2.5-flash"
+            assert call_args[1]['operation_mode'] == "read_only"
 
 
 class TestWebPageContextProvider:

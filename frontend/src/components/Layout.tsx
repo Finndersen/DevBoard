@@ -41,6 +41,16 @@ export default function Layout({ children }: LayoutProps) {
                 Projects
               </Link>
               <Link
+                to="/codebases"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isActive('/codebases')
+                    ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20'
+                    : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                Codebases
+              </Link>
+              <Link
                 to="/settings"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive('/settings')

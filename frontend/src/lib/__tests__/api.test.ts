@@ -97,7 +97,7 @@ describe('ApiClient', () => {
       const updatedProject = { ...mockProjects[0], ...updates }
 
       server.use(
-        http.put('*/api/projects/1', async ({ request }) => {
+        http.patch('*/api/projects/1', async ({ request }) => {
           const body = await request.json()
           expect(body).toEqual(updates)
           return HttpResponse.json(updatedProject)
@@ -555,12 +555,12 @@ describe('ApiClient', () => {
       expect(capturedBody).toEqual(projectData)
     })
 
-    it('makes PUT requests with body', async () => {
+    it('makes PATCH requests with body', async () => {
       let capturedMethod: string | undefined
       let capturedBody: any
 
       server.use(
-        http.put('*/api/projects/1', async ({ request }) => {
+        http.patch('*/api/projects/1', async ({ request }) => {
           capturedMethod = request.method
           capturedBody = await request.json()
           return HttpResponse.json({ id: 1, name: 'Updated', details: '', current_status: 'Active', created_at: '' })
@@ -569,7 +569,7 @@ describe('ApiClient', () => {
 
       const updates = { name: 'Updated Project' }
       await apiClient.updateProject(1, updates)
-      expect(capturedMethod).toBe('PUT')
+      expect(capturedMethod).toBe('PATCH')
       expect(capturedBody).toEqual(updates)
     })
 
@@ -587,7 +587,7 @@ describe('ApiClient', () => {
       expect(capturedMethod).toBe('DELETE')
     })
 
-    it('makes PATCH requests with body', async () => {
+    it('makes PATCH requests to configuration endpoints', async () => {
       let capturedMethod: string | undefined
       let capturedBody: any
 

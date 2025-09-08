@@ -8,6 +8,7 @@ import pytest
 
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
+from devboard.utils.hash import compute_content_hash
 
 
 @pytest.fixture
@@ -180,3 +181,187 @@ class TestCodebasesRouter:
         response = client.delete(f"/api/codebases/{created_codebase.id}")
         assert response.status_code == 200
         assert response.json()["message"] == "Codebase deleted successfully"
+
+    def test_get_architecture_document_not_exists(self, client, db_session, test_codebase_data):
+        """Test getting architecture document when file doesn't exist."""
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        response = client.get(f"/api/codebases/{created_codebase.id}/architecture_document/")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["exists"] is False
+        assert data["content"] is None
+        assert data["content_hash"] is None
+
+    def test_get_architecture_document_exists(self, client, db_session, test_codebase_data):
+        """Test getting architecture document when file exists."""
+        # Create test codebase with architecture document
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create architecture document
+        arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
+        arch_content = "# Architecture\n\nThis is the architecture document."
+        arch_file.write_text(arch_content)
+
+        response = client.get(f"/api/codebases/{created_codebase.id}/architecture_document/")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["exists"] is True
+        assert data["content"] == arch_content
+        assert data["content_hash"] is not None
+        assert data["content_hash"].startswith("sha256:")  # SHA256 hash with prefix
+
+    def test_update_architecture_document_new(self, client, db_session, test_codebase_data):
+        """Test creating a new architecture document."""
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        new_content = "# New Architecture\n\nThis is a new architecture document."
+        update_data = {
+            "content": new_content,
+            "original_hash": None
+        }
+
+        response = client.put(
+            f"/api/codebases/{created_codebase.id}/architecture_document/",
+            json=update_data
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["content_hash"] is not None
+
+        # Verify file was created
+        arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
+        assert arch_file.exists()
+        assert arch_file.read_text() == new_content
+
+    def test_update_architecture_document_existing_success(self, client, db_session, test_codebase_data):
+        """Test updating existing architecture document with correct hash."""
+        # Create test codebase with existing architecture document
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create initial architecture document
+        arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
+        original_content = "# Original Architecture\n\nOriginal content."
+        arch_file.write_text(original_content)
+
+        # Get current hash
+        original_hash = compute_content_hash(original_content)
+
+        # Update with new content
+        new_content = "# Updated Architecture\n\nUpdated content."
+        update_data = {
+            "content": new_content,
+            "original_hash": original_hash
+        }
+
+        response = client.put(
+            f"/api/codebases/{created_codebase.id}/architecture_document/",
+            json=update_data
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["content_hash"] is not None
+        assert data["content_hash"] != original_hash
+
+        # Verify file was updated
+        assert arch_file.read_text() == new_content
+
+    def test_update_architecture_document_conflict(self, client, db_session, test_codebase_data):
+        """Test updating architecture document with hash conflict."""
+        # Create test codebase with existing architecture document
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create initial architecture document
+        arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
+        original_content = "# Original Architecture\n\nOriginal content."
+        arch_file.write_text(original_content)
+
+        # Update the file externally (simulating conflict)
+        modified_content = "# Externally Modified Architecture\n\nExternally modified."
+        arch_file.write_text(modified_content)
+
+        # Try to update with old hash
+        new_content = "# User Updated Architecture\n\nUser updated content."
+        update_data = {
+            "content": new_content,
+            "original_hash": "wrong_hash"
+        }
+
+        response = client.put(
+            f"/api/codebases/{created_codebase.id}/architecture_document/",
+            json=update_data
+        )
+        assert response.status_code == 409
+
+        data = response.json()
+        assert "conflict detected" in data["detail"].lower()
+        # Conflict response includes current_hash for retry
+        assert "current_hash" in data
+
+        # Verify file wasn't changed
+        assert arch_file.read_text() == modified_content
+
+    def test_generate_architecture_document(self, client, db_session, test_codebase_data):
+        """Test generating architecture document via AI."""
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(**test_codebase_data)
+        created_codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create some source files for analysis
+        src_dir = Path(test_codebase_data["local_path"]) / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("def main():\n    pass")
+        (src_dir / "utils.py").write_text("def helper():\n    pass")
+
+        response = client.post(f"/api/codebases/{created_codebase.id}/architecture_document/generate")
+
+        # This should work since we have gemini integration available
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["file_path"] is not None
+        # Verify architecture file was created
+        arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
+        assert arch_file.exists()
+
+    def test_get_architecture_document_nonexistent_codebase(self, client):
+        """Test getting architecture document for non-existent codebase."""
+        response = client.get("/api/codebases/999/architecture_document/")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Codebase not found"
+
+    def test_update_architecture_document_nonexistent_codebase(self, client):
+        """Test updating architecture document for non-existent codebase."""
+        update_data = {
+            "content": "# Test",
+            "original_hash": None
+        }
+        response = client.put("/api/codebases/999/architecture_document/", json=update_data)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Codebase not found"

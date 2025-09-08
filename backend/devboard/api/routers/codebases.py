@@ -6,10 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from devboard.api.schemas import CodebaseCreate, CodebaseResponse, CodebaseUpdate, DeleteResponse
+from devboard.api.schemas.codebase import (
+    ArchitectureContentResponse,
+    ArchitectureDocumentResponse,
+    ArchitectureGenerationResponse,
+    ArchitectureStatusResponse,
+    ArchitectureUpdateRequest,
+    ArchitectureUpdateResponse,
+)
 from devboard.db.database import get_db
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
 from devboard.integrations.filesystem import detect_git_remote_url
+from devboard.services.codebase_investigation import CodebaseInvestigationService
 
 router = APIRouter()
 
@@ -92,3 +101,148 @@ async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
 
     db.commit()
     return {"message": "Codebase deleted successfully", "success": True}
+
+
+# Architecture document endpoints
+
+# New combined endpoint
+@router.get("/{codebase_id}/architecture_document/", response_model=ArchitectureDocumentResponse)
+async def get_architecture_document(codebase_id: int, db: Session = Depends(get_db)):
+    """Get complete architecture document information including content and hash."""
+    # Get codebase from database
+    codebase_repo = CodebaseRepository(db)
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Get complete architecture document
+    investigation_service = CodebaseInvestigationService()
+    document = investigation_service.get_architecture_document(codebase.local_path)
+
+    return ArchitectureDocumentResponse(
+        exists=document.exists,
+        content=document.content,
+        content_hash=document.content_hash,
+        file_path=str(document.file_path) if document.file_path else None,
+        size_bytes=document.size_bytes
+    )
+
+
+# New update endpoint
+@router.put("/{codebase_id}/architecture_document/", response_model=ArchitectureUpdateResponse)
+async def update_architecture_document(
+    codebase_id: int,
+    request: ArchitectureUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Update architecture document with conflict detection."""
+    # Get codebase from database
+    codebase_repo = CodebaseRepository(db)
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Update architecture document
+    investigation_service = CodebaseInvestigationService()
+    result = investigation_service.update_architecture_content(
+        codebase_path=codebase.local_path,
+        new_content=request.content,
+        original_hash=request.original_hash
+    )
+
+    # Handle conflict as 409 status
+    if not result.success and result.error_type == "conflict":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "success": False,
+                "message": result.message,
+                "error_type": result.error_type,
+                "current_hash": result.current_hash
+            }
+        )
+
+    # Handle other errors as 400
+    if not result.success:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "message": result.message,
+                "error_type": result.error_type
+            }
+        )
+
+    return ArchitectureUpdateResponse(
+        success=result.success,
+        content_hash=result.content_hash,
+        message=result.message
+    )
+
+
+# Keep existing endpoints for backward compatibility (mark as deprecated)
+@router.get("/{codebase_id}/architecture/status", response_model=ArchitectureStatusResponse, deprecated=True)
+async def get_architecture_status(codebase_id: int, db: Session = Depends(get_db)):
+    """[DEPRECATED - Use /architecture_document/ instead] Get architecture document status for a codebase."""
+    # Get codebase from database
+    codebase_repo = CodebaseRepository(db)
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Check architecture document status
+    investigation_service = CodebaseInvestigationService()
+    status = investigation_service.check_architecture_exists(codebase.local_path)
+
+    return ArchitectureStatusResponse(
+        exists=status.exists,
+        file_path=str(status.file_path) if status.file_path else None,
+        size_bytes=status.size_bytes
+    )
+
+
+@router.get("/{codebase_id}/architecture/content", response_model=ArchitectureContentResponse, deprecated=True)
+async def get_architecture_content(codebase_id: int, db: Session = Depends(get_db)):
+    """[DEPRECATED - Use /architecture_document/ instead] Get architecture document content for a codebase."""
+    # Get codebase from database
+    codebase_repo = CodebaseRepository(db)
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Read architecture content
+    investigation_service = CodebaseInvestigationService()
+    content = investigation_service.read_architecture_content(codebase.local_path)
+
+    return ArchitectureContentResponse(
+        content=content,
+        exists=content is not None
+    )
+
+
+@router.post("/{codebase_id}/architecture_document/generate", response_model=ArchitectureGenerationResponse)
+async def generate_architecture_document(
+    codebase_id: int,
+    db: Session = Depends(get_db)
+):
+    """Generate or update architecture document for a codebase using AI."""
+    # Get codebase from database
+    codebase_repo = CodebaseRepository(db)
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Generate architecture document
+    investigation_service = CodebaseInvestigationService()
+    result = await investigation_service.generate_architecture_document(
+        codebase_path=codebase.local_path,
+        codebase_name=codebase.name,
+    )
+
+    return ArchitectureGenerationResponse(
+        success=result.success,
+        file_path=str(result.file_path) if result.file_path else None,
+        content=result.content,
+        error_message=result.error_message,
+        error_type=result.error_type
+    )

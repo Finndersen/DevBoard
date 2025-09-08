@@ -1,12 +1,12 @@
 """Codebase context provider for file and repository context using AI analysis."""
 
 import logging
-import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from devboard.integrations.filesystem import FilesystemIntegration
+from devboard.utils.gemini_cli import GeminiCliError, execute_gemini_prompt
 
 from .base import (
     BaseContextProvider,
@@ -222,27 +222,17 @@ Please analyze the codebase structure, patterns, and implementation to answer th
 Focus on providing specific, actionable insights about the code organization, architecture, and relevant implementation details.
 """
 
-            result = subprocess.run(
-                ["gemini-cli", "prompt", full_prompt.strip()],
-                cwd=str(self.base_path),
-                capture_output=True,
-                text=True,
-                timeout=60,
+            result = await execute_gemini_prompt(
+                prompt=full_prompt,
+                model="gemini-2.5-flash",  # Fast model suitable for codebase analysis
+                working_dir=self.base_path,
+                timeout=60.0,
+                operation_mode="read_only"  # Codebase analysis should be read-only
             )
 
-            if result.returncode == 0:
-                logger.info(f"Codebase investigation completed: {query}")
-                return result.stdout.strip()
-            else:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                logger.error(f"Gemini CLI failed: {error_msg}")
-                raise ContextRetrievalError(f"Gemini CLI error: {error_msg}")
+            logger.info(f"Codebase investigation completed: {query}")
+            return result
 
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"Codebase investigation timed out for '{query}'")
-            raise ContextRetrievalError("Codebase investigation timed out after 60 seconds") from e
-        except FileNotFoundError as e:
-            logger.error("Gemini CLI not found - ensure gemini-cli is installed and in PATH")
-            raise ContextRetrievalError(
-                "Gemini CLI not installed - install from https://github.com/eliben/gemini-cli"
-            ) from e
+        except GeminiCliError as e:
+            logger.error(f"Gemini CLI error during codebase investigation: {e}")
+            raise ContextRetrievalError(f"Codebase investigation failed: {e}") from e

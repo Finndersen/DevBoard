@@ -2,8 +2,12 @@
 
 import pytest
 
-from devboard.db.models import Project
-from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
+from devboard.db.models import Project, Task
+from devboard.db.repositories import (
+    ContextProviderResourceRepository,
+    ProjectRepository,
+    TaskRepository,
+)
 
 
 @pytest.fixture
@@ -18,6 +22,16 @@ def test_resource_data():
     return {
         "resource_uri": "https://github.com/owner/repo",
         "description": "Test GitHub repository",
+    }
+
+
+@pytest.fixture
+def test_task_data():
+    """Sample task data for testing (without project_id)."""
+    return {
+        "title": "Test Task",
+        "description": "Test task description",
+        "status": "Pending",
     }
 
 
@@ -240,3 +254,73 @@ class TestProjectResourcesRouter:
         response = client.delete(f"/api/projects/{created_project.id}/resources/999")
         assert response.status_code == 404
         assert "Resource not found or does not belong to this project" in response.json()["detail"]
+
+
+class TestProjectTasksRouter:
+    """Test project tasks router endpoints."""
+
+    def test_list_project_tasks_empty(self, client, db_session, test_project_data):
+        """Test listing project tasks when none exist."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{created_project.id}/tasks")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
+        """Test listing project tasks with existing data."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        # Create test tasks
+        task_repo = TaskRepository(db_session)
+        task1_data = {**test_task_data, "project_id": created_project.id, "title": "Task 1"}
+        task2_data = {**test_task_data, "project_id": created_project.id, "title": "Task 2"}
+        task1 = Task(**task1_data)
+        task2 = Task(**task2_data)
+        task_repo.create(task1)
+        task_repo.create(task2)
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{created_project.id}/tasks")
+        assert response.status_code == 200
+        tasks = response.json()
+        assert len(tasks) == 2
+        assert tasks[0]["title"] in ["Task 1", "Task 2"]
+        assert tasks[1]["title"] in ["Task 1", "Task 2"]
+
+    def test_list_project_tasks_project_not_found(self, client):
+        """Test listing tasks for non-existent project."""
+        response = client.get("/api/projects/999/tasks")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+    def test_create_project_task(self, client, db_session, test_project_data, test_task_data):
+        """Test creating a new task in a project."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        project = Project(**test_project_data)
+        created_project = project_repo.create(project)
+        db_session.commit()
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=test_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == test_task_data["title"]
+        assert task_data["description"] == test_task_data["description"]
+        assert task_data["project_id"] == created_project.id
+        assert "id" in task_data
+
+    def test_create_project_task_project_not_found(self, client, test_task_data):
+        """Test creating a task for non-existent project."""
+        response = client.post("/api/projects/999/tasks", json=test_task_data)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"

@@ -14,6 +14,7 @@ export interface Task {
   project_id: number
   created_at: string
   updated_at: string
+  implementation_plan?: string
 }
 
 export interface Message {
@@ -37,6 +38,58 @@ export interface LLMProvider {
   type: string
   enabled: boolean
   config: Record<string, any>
+}
+
+export interface Codebase {
+  id: number
+  name: string
+  description: string
+  repository_url: string | null
+  local_path: string
+}
+
+export interface ArchitectureStatus {
+  exists: boolean
+  file_path: string | null
+  size_bytes: number | null
+}
+
+export interface ArchitectureContent {
+  content: string | null
+  exists: boolean
+}
+
+export interface ArchitectureDocument {
+  exists: boolean
+  content: string | null
+  content_hash: string | null
+  file_path: string | null
+  size_bytes: number | null
+}
+
+export interface ArchitectureUpdateRequest {
+  content: string
+  original_hash: string | null
+}
+
+export interface ArchitectureUpdateResponse {
+  success: boolean
+  content_hash: string | null
+  message: string | null
+  error_type?: string
+  current_hash?: string
+}
+
+export interface ArchitectureGenerationRequest {
+  preserve_user_sections?: boolean
+}
+
+export interface ArchitectureGenerationResponse {
+  success: boolean
+  file_path: string | null
+  content: string | null
+  error_message: string | null
+  error_type: string | null
 }
 
 export interface ConfigurationFieldInfo {
@@ -189,6 +242,74 @@ export class ApiClient {
     return this.request<IntegrationTestResponse>(`/api/settings/integrations/${integrationType}/test`, {
       method: 'POST',
     })
+  }
+
+  // Codebases
+  async getCodebases(): Promise<Codebase[]> {
+    return this.request<Codebase[]>('/api/codebases')
+  }
+
+  async createCodebase(codebase: Omit<Codebase, 'id' | 'repository_url'>): Promise<Codebase> {
+    return this.request<Codebase>('/api/codebases', {
+      method: 'POST',
+      body: JSON.stringify(codebase),
+    })
+  }
+
+  async getCodebase(id: number | string): Promise<Codebase> {
+    return this.request<Codebase>(`/api/codebases/${id}`)
+  }
+
+  async updateCodebase(id: number | string, codebase: Partial<Codebase>): Promise<Codebase> {
+    return this.request<Codebase>(`/api/codebases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(codebase),
+    })
+  }
+
+  async deleteCodebase(id: number | string): Promise<void> {
+    return this.request<void>(`/api/codebases/${id}`, { method: 'DELETE' })
+  }
+
+  // Architecture operations
+  async getArchitectureStatus(codebaseId: number | string): Promise<ArchitectureStatus> {
+    return this.request<ArchitectureStatus>(`/api/codebases/${codebaseId}/architecture/status`)
+  }
+
+  async getArchitectureContent(codebaseId: number | string): Promise<ArchitectureContent> {
+    return this.request<ArchitectureContent>(`/api/codebases/${codebaseId}/architecture/content`)
+  }
+
+  // New combined endpoint
+  async getArchitectureDocument(codebaseId: number | string): Promise<ArchitectureDocument> {
+    return this.request<ArchitectureDocument>(`/api/codebases/${codebaseId}/architecture_document/`)
+  }
+
+  // New update endpoint
+  async updateArchitectureDocument(
+    codebaseId: number | string, 
+    request: ArchitectureUpdateRequest
+  ): Promise<ArchitectureUpdateResponse> {
+    return this.request<ArchitectureUpdateResponse>(
+      `/api/codebases/${codebaseId}/architecture_document/`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(request),
+      }
+    )
+  }
+
+  async generateArchitecture(
+    codebaseId: number | string, 
+    options: ArchitectureGenerationRequest = {}
+  ): Promise<ArchitectureGenerationResponse> {
+    return this.request<ArchitectureGenerationResponse>(
+      `/api/codebases/${codebaseId}/architecture_document/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify(options),
+      }
+    )
   }
 }
 

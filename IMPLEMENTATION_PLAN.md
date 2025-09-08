@@ -181,15 +181,73 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **COMPLETED**: Implemented comprehensive environment variable handling in configuration service with proper precedence (environment > database > default).
   * **COMPLETED**: Added environment variable override capability through UI with clear visual indicators and reset functionality.
 
+### Epic 8: Architecture Document Management ✅
+
+**Major API Improvements**: Implemented comprehensive architecture document management with conflict detection and streamlined UI experience:
+
+- **Merged API Endpoints**: Consolidated separate `/architecture/status` and `/architecture/content` endpoints into single `/architecture_document/` endpoint for better performance
+- **Conflict Detection**: SHA256 content hashing prevents data loss when documents are modified externally
+- **Enhanced UI**: Full-width document editing with dropdown codebase selection for improved usability
+
+* [x] **Task 8.1: Backend API Improvements**
+  * **COMPLETED**: Added new schemas `ArchitectureDocument`, `ArchitectureUpdateRequest`, and `ArchitectureUpdateResponse` for comprehensive architecture document operations
+  * **COMPLETED**: Implemented `GET /api/codebases/{id}/architecture_document/` endpoint combining status and content in single call
+  * **COMPLETED**: Implemented `PUT /api/codebases/{id}/architecture_document/` endpoint with SHA256-based conflict detection
+  * **COMPLETED**: Updated `POST /api/codebases/{id}/architecture_document/generate` to use new URL structure
+  * **COMPLETED**: Enhanced `CodebaseInvestigationService` with `get_architecture_document()` and `update_architecture_content()` methods
+  * **COMPLETED**: Added content hashing utility and comprehensive conflict detection logic
+
+* [x] **Task 8.2: Frontend UI Overhaul**  
+  * **COMPLETED**: Redesigned Codebases component to use dropdown selection instead of sidebar for better horizontal space utilization
+  * **COMPLETED**: Integrated new combined API endpoint reducing API calls from 2 to 1 for common workflows
+  * **COMPLETED**: Added inline markdown editor with conflict detection and user-friendly error handling
+  * **COMPLETED**: Implemented ability to create new architecture documents manually
+  * **COMPLETED**: Added content hash tracking for proper conflict resolution
+  * **COMPLETED**: Enhanced UX with clear loading states, error messages, and edit/save workflows
+
+* [x] **Task 8.3: API Client & Type Safety**
+  * **COMPLETED**: Updated frontend API client with new `getArchitectureDocument()` and `updateArchitectureDocument()` methods
+  * **COMPLETED**: Added TypeScript interfaces for new API responses and request structures
+  * **COMPLETED**: Maintained backward compatibility while deprecating old endpoints
+
 ## Phase 2: Advanced Agent Features
 
-* [ ] **Task 8.1: Implement Agent Conversation History**
-  * Add the `ProjectConversationMessage` model and implement sliding window conversation management.
-* [ ] **Task 8.2: Implement Task Planning Agent**
-  * Build conversational Planning Agent with context assembly and Implementation Plan generation.
-* [ ] **Task 8.3: Implement Task Implementation Agent**
+* [ ] **Task 9.1: Implement Task Conversation History** 
+  * Add `TaskConversationMessage` model mirroring `ProjectConversationMessage` pattern
+  * Implement conversation storage with role-based messages and structured tool data
+  * Full conversation history storage (sliding window optimizations deferred)
+
+* [ ] **Task 9.2: Enhanced Task Planning Agent with Interactive Document Crafting**
+  * **State-Based Workflow**: Implement task state progression (Pending → Designing → Planning → Implementing)
+  * **Structured Response Format**: Agent returns JSON with message + document edits arrays
+  * **Document Editing Tools**: Find-replace edit capability for task specification and implementation plan
+  * **Context Research Integration**: Full access to context providers during design and planning phases
+  * **State-Aware Prompting**: Different agent prompts and capabilities based on task state
+  * **Atomic Edit Application**: Batch edit processing with user approval workflow
+
+* [ ] **Task 9.3: Task Planning API Layer**
+  * `GET /api/tasks/{task_id}/messages` - Task conversation history endpoint
+  * `POST /api/tasks/{task_id}/messages` - Send message to planning agent endpoint  
+  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits endpoint
+  * `POST /api/tasks/{task_id}/state-transition` - Manual state progression endpoint
+  * Enhanced task response schemas with conversation metadata and state flags
+
+* [ ] **Task 9.4: Frontend Task Planning Interface**
+  * **Three-Tab TaskDetail Interface**: Task Specification, Implementation Plan, Planning Agent tabs
+  * **Document Editor Components**: Reuse existing ReactMarkdown + prose patterns with edit/view toggles
+  * **Edit Confirmation Modal**: Preview document changes with diff visualization before applying
+  * **State Transition Controls**: UI buttons for progressing through design → planning → implementation
+  * **Agent Conversation UI**: Chat interface with edit proposal rendering and research summaries
+  * **Document Locking**: Disable editing during agent processing with loading states
+
+* [ ] **Task 9.5: Document Structure Templates**
+  * **Task Specification Template**: Structured markdown template with Objective, Context, Requirements, Acceptance Criteria
+  * **Implementation Plan Template**: Technical plan template with Summary, Analysis, Steps, Testing Strategy
+  * **Template Initialization**: Auto-populate new tasks with structured templates
+
+* [ ] **Task 9.6: Task Implementation Agent**
   * Build Implementation Agent using Claude Code SDK with codebase access and GitHub PR creation.
-* [ ] **Task 8.4: Add Background Task Runner**
+  * Maintain existing "baton pass" handoff model from Planning Agent
+
+* [ ] **Task 9.7: Add Background Task Runner**
   * Implement Huey/Dramatiq for long-running agent sessions with WebSocket progress updates.
-* [ ] **Task 8.5: Enhanced UI Features**
-  * Task Detail View with Planning/Implementation phases and agent conversation history.

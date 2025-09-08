@@ -19,28 +19,6 @@ from devboard.services.resource_service import ResourceService, UnsupportedResou
 router = APIRouter()
 
 
-@router.get("/", response_model=list[TaskResponse])
-async def list_tasks(project_id: int = None, db: Session = Depends(get_db)):
-    """List tasks, optionally filtered by project."""
-    task_repo = TaskRepository(db)
-    if project_id:
-        tasks = task_repo.get_for_project(project_id)
-    else:
-        tasks = task_repo.get_all()
-    return tasks
-
-
-@router.post("/", response_model=TaskResponse)
-async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
-    """Create a new task."""
-    task_repo = TaskRepository(db)
-    db_task = Task(**task.model_dump())
-    created_task = task_repo.create(db_task)
-    db.commit()
-    db.refresh(created_task)
-    return created_task
-
-
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: int, db: Session = Depends(get_db)):
     """Get a specific task."""

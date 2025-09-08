@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import ProjectDashboard from './views/ProjectDashboard'
 import ProjectDetail from './views/ProjectDetail'
 import TaskDetail from './views/TaskDetail'
+import Codebases from './views/Codebases'
 import Settings from './views/Settings'
 import './App.css'
 
@@ -15,6 +16,7 @@ function App() {
           <Route path="/projects" element={<ProjectDashboard />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/tasks/:id" element={<TaskDetail />} />
+          <Route path="/codebases" element={<Codebases />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
