@@ -44,9 +44,7 @@ class TestTasksRouter:
         # Create test project first
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -77,9 +75,15 @@ class TestTasksRouter:
 
         # Create tasks for different projects
         task_repo = TaskRepository(db_session)
-        task1 = Task(title="Task 1", description="Task 1", status="todo", project_id=created_project1.id)
-        task2 = Task(title="Task 2", description="Task 2", status="todo", project_id=created_project2.id)
-        task3 = Task(title="Task 3", description="Task 3", status="todo", project_id=created_project1.id)
+        task1 = Task(
+            title="Task 1", description="Task 1", status="todo", project_id=created_project1.id
+        )
+        task2 = Task(
+            title="Task 2", description="Task 2", status="todo", project_id=created_project2.id
+        )
+        task3 = Task(
+            title="Task 3", description="Task 3", status="todo", project_id=created_project1.id
+        )
 
         task_repo.create(task1)
         task_repo.create(task2)
@@ -105,9 +109,7 @@ class TestTasksRouter:
         # Create test project first
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -324,9 +326,7 @@ class TestTaskPlanningAgentEndpoints:
         # Create project
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
 
@@ -336,7 +336,7 @@ class TestTaskPlanningAgentEndpoints:
             title="Test Task",
             description="Initial task description",
             status="Designing",
-            project_id=created_project.id
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -360,9 +360,12 @@ class TestTaskPlanningAgentEndpoints:
         # Add some conversation messages
         messages_data = [
             {"role": "user", "content": "Help me design this task"},
-            {"role": "assistant", "content": "I'll help you create a specification",
-             "tool_data": {"task_specification_edits": [{"find": "old", "replace": "new"}]}},
-            {"role": "user", "content": "Add more details please"}
+            {
+                "role": "assistant",
+                "content": "I'll help you create a specification",
+                "tool_data": {"task_specification_edits": [{"find": "old", "replace": "new"}]},
+            },
+            {"role": "user", "content": "Add more details please"},
         ]
 
         for msg_data in messages_data:
@@ -386,7 +389,9 @@ class TestTaskPlanningAgentEndpoints:
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
-    def test_apply_document_edits_specification_only(self, client, db_session, test_task_with_project):
+    def test_apply_document_edits_specification_only(
+        self, client, db_session, test_task_with_project
+    ):
         """Test applying edits to task specification only."""
         from devboard.db.models import TaskConversationMessage
 
@@ -397,7 +402,7 @@ class TestTaskPlanningAgentEndpoints:
             task_id=task.id,
             role="assistant",
             content="Updated specification",
-            tool_data={"task_specification_edits": [{"find": "old", "replace": "new"}]}
+            tool_data={"task_specification_edits": [{"find": "old", "replace": "new"}]},
         )
         db_session.add(message)
         db_session.commit()
@@ -407,8 +412,11 @@ class TestTaskPlanningAgentEndpoints:
         edit_request = {
             "message_id": message.id,
             "task_specification_edits": [
-                {"find": "Initial task description", "replace": "Updated task specification with new details"}
-            ]
+                {
+                    "find": "Initial task description",
+                    "replace": "Updated task specification with new details",
+                }
+            ],
         }
 
         response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
@@ -429,9 +437,7 @@ class TestTaskPlanningAgentEndpoints:
 
         # Create message
         message = TaskConversationMessage(
-            task_id=task.id,
-            role="assistant",
-            content="Updated both documents"
+            task_id=task.id, role="assistant", content="Updated both documents"
         )
         db_session.add(message)
         db_session.commit()
@@ -444,8 +450,11 @@ class TestTaskPlanningAgentEndpoints:
                 {"find": "Initial task description", "replace": "Enhanced task specification"}
             ],
             "task_implementation_plan_edits": [
-                {"find": "Initial implementation plan", "replace": "Detailed implementation plan with steps"}
-            ]
+                {
+                    "find": "Initial implementation plan",
+                    "replace": "Detailed implementation plan with steps",
+                }
+            ],
         }
 
         response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
@@ -461,7 +470,7 @@ class TestTaskPlanningAgentEndpoints:
 
         edit_request = {
             "message_id": 999,
-            "task_specification_edits": [{"find": "old", "replace": "new"}]
+            "task_specification_edits": [{"find": "old", "replace": "new"}],
         }
 
         response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
@@ -476,9 +485,7 @@ class TestTaskPlanningAgentEndpoints:
 
         # Create message
         message = TaskConversationMessage(
-            task_id=task.id,
-            role="assistant",
-            content="Attempted update"
+            task_id=task.id, role="assistant", content="Attempted update"
         )
         db_session.add(message)
         db_session.commit()
@@ -487,9 +494,7 @@ class TestTaskPlanningAgentEndpoints:
         # Try to edit text that doesn't exist
         edit_request = {
             "message_id": message.id,
-            "task_specification_edits": [
-                {"find": "nonexistent text", "replace": "new text"}
-            ]
+            "task_specification_edits": [{"find": "nonexistent text", "replace": "new text"}],
         }
 
         response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)

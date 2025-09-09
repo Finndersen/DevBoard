@@ -7,45 +7,54 @@ import logfire
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
-from .context_assembly import (
+from devboard.agents.llm_service import AgentType, llm_service
+from devboard.services.context_assembly import (
     ContextAssemblyService,
     EagerContextData,
     OnDemandResourceInfo,
     ProjectContextData,
 )
-from .llm_service import AgentType, llm_service
-from .template_service import template_service
+from devboard.services.template_service import TemplateType, template_service
 
 logger = logging.getLogger(__name__)
 
 
 class TaskState(str, Enum):
     """Task states that support document crafting."""
+
     DESIGNING = "Designing"
     PLANNING = "Planning"
 
 
 class DocumentType(str, Enum):
     """Document types that can be edited."""
+
     SPECIFICATION = "specification"
     IMPLEMENTATION_PLAN = "implementation_plan"
 
 
 class DocumentEdit(BaseModel):
     """A single find-replace edit operation on a document."""
+
     find: str = Field(..., description="Exact text to find in the document")
     replace: str = Field(..., description="Text to replace the found text with")
 
 
 class TaskPlanningResponse(BaseModel):
     """Structured response from the task planning agent."""
+
     message: str = Field(..., description="Natural language response to user")
-    task_specification_edits: list[DocumentEdit] | None = Field(None, description="Edits for task specification document")
-    task_implementation_plan_edits: list[DocumentEdit] | None = Field(None, description="Edits for implementation plan document")
+    task_specification_edits: list[DocumentEdit] | None = Field(
+        None, description="Edits for task specification document"
+    )
+    task_implementation_plan_edits: list[DocumentEdit] | None = Field(
+        None, description="Edits for implementation plan document"
+    )
 
 
 class TaskContext(BaseModel):
     """Context data structure for the task planning agent."""
+
     task_id: int
     task_title: str
     task_description: str | None
@@ -103,7 +112,7 @@ AVAILABLE ACTIONS:
 - Suggest transition to Implementing state when plan is complete
 
 Your responses should be technical, detailed, and focused on creating actionable implementation steps.
-"""
+""",
 }
 
 
@@ -134,23 +143,28 @@ class TaskPlanningAgentService:
                 ctx: RunContext[TaskContext], resource_uri: str, query: str
             ) -> str:
                 """Research specific information from project context.
-                
+
                 Args:
                     resource_uri: URI of the resource to query (from on_demand_resources)
                     query: Specific question about the resource
-                    
+
                 Returns:
                     Focused context relevant to your query
                 """
-                with logfire.span("task_agent.get_relevant_context",
-                                resource_uri=resource_uri, query_length=len(query)):
+                with logfire.span(
+                    "task_agent.get_relevant_context",
+                    resource_uri=resource_uri,
+                    query_length=len(query),
+                ):
                     try:
                         available_uris = [res.uri for res in ctx.deps.on_demand_resources]
                         if resource_uri not in available_uris:
                             logfire.warn("Resource not available", resource_uri=resource_uri)
                             return f"Error: Resource {resource_uri} not available"
 
-                        result = await self.context_service.get_on_demand_context(resource_uri, query)
+                        result = await self.context_service.get_on_demand_context(
+                            resource_uri, query
+                        )
                         logfire.info("Context retrieved", result_length=len(result))
                         return result
                     except Exception as e:
@@ -175,22 +189,29 @@ class TaskPlanningAgentService:
 
         state = TaskState(task_state)
 
-        with logfire.span("task_planning_agent.process_message",
-                         task_id=task_id, task_state=task_state):
+        with logfire.span(
+            "task_planning_agent.process_message", task_id=task_id, task_state=task_state
+        ):
             try:
                 # Assemble project context
                 with logfire.span("task_agent.context_assembly"):
-                    context_data = await self.context_service.get_project_context(project_id, user_message)
+                    context_data = await self.context_service.get_project_context(
+                        project_id, user_message
+                    )
 
                 # Initialize documents with templates if empty
                 current_description = task_description
                 current_plan = task_implementation_plan
 
                 if not current_description and state == TaskState.DESIGNING:
-                    current_description = template_service.get_task_specification_template().replace("[Title]", task_title)
+                    current_description = template_service.get_template(
+                        TemplateType.TASK_SPECIFICATION
+                    ).replace("[Title]", task_title)
 
                 if not current_plan and state == TaskState.PLANNING:
-                    current_plan = template_service.get_implementation_plan_template().replace("[Title]", task_title)
+                    current_plan = template_service.get_template(
+                        TemplateType.IMPLEMENTATION_PLAN
+                    ).replace("[Title]", task_title)
 
                 # Create agent context
                 task_context = TaskContext(
@@ -208,7 +229,9 @@ class TaskPlanningAgentService:
                 context_summary = self._build_context_summary(context_data)
 
                 # Create prompt with document state and context
-                documents_info = self._build_documents_info(current_description, current_plan, state)
+                documents_info = self._build_documents_info(
+                    current_description, current_plan, state
+                )
 
                 enhanced_prompt = f"""
 USER MESSAGE: {user_message}
@@ -235,10 +258,16 @@ EDITING GUIDELINES:
                 with logfire.span("task_agent.ai_inference", model=preferred_model):
                     result = await agent.run(enhanced_prompt, deps=task_context)
 
-                logfire.info("Task planning response generated",
-                           response_length=len(result.output.message),
-                           spec_edit_count=len(result.output.task_specification_edits) if result.output.task_specification_edits else 0,
-                           plan_edit_count=len(result.output.task_implementation_plan_edits) if result.output.task_implementation_plan_edits else 0)
+                logfire.info(
+                    "Task planning response generated",
+                    response_length=len(result.output.message),
+                    spec_edit_count=len(result.output.task_specification_edits)
+                    if result.output.task_specification_edits
+                    else 0,
+                    plan_edit_count=len(result.output.task_implementation_plan_edits)
+                    if result.output.task_implementation_plan_edits
+                    else 0,
+                )
 
                 return result.output
 
@@ -275,10 +304,7 @@ EDITING GUIDELINES:
         return "\n".join(summary_parts)
 
     def _build_documents_info(
-        self,
-        description: str | None,
-        implementation_plan: str | None,
-        state: TaskState
+        self, description: str | None, implementation_plan: str | None, state: TaskState
     ) -> str:
         """Build information about current document state."""
         info_parts: list[str] = []
@@ -301,7 +327,11 @@ EDITING GUIDELINES:
 
             info_parts.append("\nIMPLEMENTATION PLAN (editable):")
             if implementation_plan:
-                preview = implementation_plan[:150] + "..." if len(implementation_plan) > 150 else implementation_plan
+                preview = (
+                    implementation_plan[:150] + "..."
+                    if len(implementation_plan) > 150
+                    else implementation_plan
+                )
                 info_parts.append(f"Content preview: {preview}")
             else:
                 info_parts.append("Empty - will be initialized with template")

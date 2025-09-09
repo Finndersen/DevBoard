@@ -23,7 +23,7 @@ class Configuration(Base):
     schema_version: Mapped[str] = mapped_column(String(50), default="1.0")
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC),
-        onupdate=lambda: datetime.datetime.now(datetime.UTC)
+        onupdate=lambda: datetime.datetime.now(datetime.UTC),
     )
 
 

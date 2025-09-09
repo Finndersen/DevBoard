@@ -45,7 +45,6 @@ def db_tables(db_connection):
     yield
 
 
-
 @fixture()
 def db_session(db_connection: Connection, db_tables) -> Session:
     """

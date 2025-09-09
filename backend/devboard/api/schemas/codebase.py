@@ -37,8 +37,6 @@ class CodebaseResponse(CodebaseBase):
     model_config = {"from_attributes": True}
 
 
-
-
 class ArchitectureGenerationResponse(BaseModel):
     """Schema for architecture document generation response."""
 

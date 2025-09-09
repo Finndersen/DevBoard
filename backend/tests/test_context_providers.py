@@ -28,7 +28,7 @@ class TestContextProviderRegistry:
         mock_provider.provider_type = "test"
 
         # Create test registry with the mock provider
-        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
+        test_registry = ContextProviderRegistry([mock_provider], key_attr="provider_type")
 
         assert test_registry.get("test") == mock_provider
         assert test_registry.get("nonexistent") is None
@@ -41,7 +41,9 @@ class TestContextProviderRegistry:
         mock_provider2.provider_type = "test2"
 
         # Create test registry with both providers
-        test_registry = ContextProviderRegistry([mock_provider1, mock_provider2], key_attr='provider_type')
+        test_registry = ContextProviderRegistry(
+            [mock_provider1, mock_provider2], key_attr="provider_type"
+        )
 
         available = test_registry.list_keys()
         assert set(available) == {"test1", "test2"}
@@ -53,7 +55,7 @@ class TestContextProviderRegistry:
         mock_provider.can_handle_uri.return_value = True
 
         # Create test registry with mock provider
-        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
+        test_registry = ContextProviderRegistry([mock_provider], key_attr="provider_type")
 
         provider = test_registry.get_provider_for_uri("test://resource")
         assert provider == mock_provider
@@ -66,7 +68,7 @@ class TestContextProviderRegistry:
         mock_provider.can_handle_uri.return_value = False
 
         # Create test registry with mock provider
-        test_registry = ContextProviderRegistry([mock_provider], key_attr='provider_type')
+        test_registry = ContextProviderRegistry([mock_provider], key_attr="provider_type")
 
         provider = test_registry.get_provider_for_uri("unknown://resource")
         assert provider is None
@@ -289,8 +291,10 @@ class TestCodebaseContextProvider:
         from unittest.mock import patch
 
         # Mock the execute_gemini_prompt function
-        with patch('devboard.context_providers.codebase.execute_gemini_prompt',
-                   return_value="Analysis result from gemini-cli") as mock_gemini:
+        with patch(
+            "devboard.context_providers.codebase.execute_gemini_prompt",
+            return_value="Analysis result from gemini-cli",
+        ) as mock_gemini:
             result = await provider.get_relevant_context("src/", "What functions are defined?")
 
             assert result == "Analysis result from gemini-cli"
@@ -298,8 +302,8 @@ class TestCodebaseContextProvider:
 
             # Verify the correct parameters were passed
             call_args = mock_gemini.call_args
-            assert call_args[1]['model'] == "gemini-2.5-flash"
-            assert call_args[1]['operation_mode'] == "read_only"
+            assert call_args[1]["model"] == "gemini-2.5-flash"
+            assert call_args[1]["operation_mode"] == "read_only"
 
 
 class TestWebPageContextProvider:

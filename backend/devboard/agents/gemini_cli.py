@@ -68,21 +68,25 @@ READ_WRITE_TOOLS = READ_ONLY_TOOLS + [
 
 class GeminiCliError(Exception):
     """Base exception for Gemini CLI errors."""
+
     pass
 
 
 class GeminiCliTimeoutError(GeminiCliError):
     """Gemini CLI timeout error."""
+
     pass
 
 
 class GeminiCliNotFoundError(GeminiCliError):
     """Gemini CLI not found error."""
+
     pass
 
 
 class GeminiCliExecutionError(GeminiCliError):
     """Gemini CLI execution error."""
+
     pass
 
 
@@ -91,7 +95,7 @@ async def execute_gemini_prompt(
     model: str,
     working_dir: str | Path | None = None,
     timeout: float = 60.0,
-    operation_mode: str = "read_write"
+    operation_mode: str = "read_write",
 ) -> str:
     """Execute a single prompt using gemini-cli asynchronously.
 
@@ -113,7 +117,9 @@ async def execute_gemini_prompt(
     """
     # Validate operation mode
     if operation_mode not in ["read_only", "read_write"]:
-        raise ValueError(f"Invalid operation_mode: {operation_mode}. Must be 'read_only' or 'read_write'")
+        raise ValueError(
+            f"Invalid operation_mode: {operation_mode}. Must be 'read_only' or 'read_write'"
+        )
 
     # Resolve working directory
     if working_dir:
@@ -121,7 +127,9 @@ async def execute_gemini_prompt(
     else:
         cwd = str(Path.cwd())
 
-    logger.debug(f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s")
+    logger.debug(
+        f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s"
+    )
 
     try:
         # Build command arguments
@@ -141,15 +149,12 @@ async def execute_gemini_prompt(
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.DEVNULL
+            stdin=asyncio.subprocess.DEVNULL,
         )
 
         # Wait for completion with timeout
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         except TimeoutError as e:
             # Kill the process if it's still running
             try:
@@ -159,17 +164,17 @@ async def execute_gemini_prompt(
                 pass  # Process already terminated
 
             logger.error(f"Gemini CLI timed out after {timeout}s")
-            raise GeminiCliTimeoutError(
-                f"Gemini CLI timed out after {timeout} seconds"
-            ) from e
+            raise GeminiCliTimeoutError(f"Gemini CLI timed out after {timeout} seconds") from e
 
         # Decode output
-        stdout_text = stdout.decode('utf-8').strip()
-        stderr_text = stderr.decode('utf-8').strip()
+        stdout_text = stdout.decode("utf-8").strip()
+        stderr_text = stderr.decode("utf-8").strip()
 
         # Check return code
         if process.returncode == 0:
-            logger.info(f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})")
+            logger.info(
+                f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})"
+            )
             return stdout_text
         else:
             error_msg = stderr_text or "Unknown error"

@@ -230,14 +230,10 @@ class TestCodebasesRouter:
         db_session.commit()
 
         new_content = "# New Architecture\n\nThis is a new architecture document."
-        update_data = {
-            "content": new_content,
-            "original_hash": None
-        }
+        update_data = {"content": new_content, "original_hash": None}
 
         response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/",
-            json=update_data
+            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
         )
         assert response.status_code == 200
 
@@ -250,7 +246,9 @@ class TestCodebasesRouter:
         assert arch_file.exists()
         assert arch_file.read_text() == new_content
 
-    def test_update_architecture_document_existing_success(self, client, db_session, test_codebase_data):
+    def test_update_architecture_document_existing_success(
+        self, client, db_session, test_codebase_data
+    ):
         """Test updating existing architecture document with correct hash."""
         # Create test codebase with existing architecture document
         codebase_repo = CodebaseRepository(db_session)
@@ -268,14 +266,10 @@ class TestCodebasesRouter:
 
         # Update with new content
         new_content = "# Updated Architecture\n\nUpdated content."
-        update_data = {
-            "content": new_content,
-            "original_hash": original_hash
-        }
+        update_data = {"content": new_content, "original_hash": original_hash}
 
         response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/",
-            json=update_data
+            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
         )
         assert response.status_code == 200
 
@@ -306,14 +300,10 @@ class TestCodebasesRouter:
 
         # Try to update with old hash
         new_content = "# User Updated Architecture\n\nUser updated content."
-        update_data = {
-            "content": new_content,
-            "original_hash": "wrong_hash"
-        }
+        update_data = {"content": new_content, "original_hash": "wrong_hash"}
 
         response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/",
-            json=update_data
+            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
         )
         assert response.status_code == 409
 
@@ -325,8 +315,10 @@ class TestCodebasesRouter:
         # Verify file wasn't changed
         assert arch_file.read_text() == modified_content
 
-    @patch('devboard.services.codebase_investigation.execute_gemini_prompt', new_callable=AsyncMock)
-    def test_generate_architecture_document(self, mock_gemini_prompt, client, db_session, test_codebase_data):
+    @patch("devboard.services.codebase_investigation.execute_gemini_prompt", new_callable=AsyncMock)
+    def test_generate_architecture_document(
+        self, mock_gemini_prompt, client, db_session, test_codebase_data
+    ):
         """Test generating architecture document via AI."""
         # Mock the Gemini CLI response
         mock_architecture_content = """# Architecture Overview: Test Codebase
@@ -352,7 +344,9 @@ A simple Python codebase with a main module and utility functions.
         (src_dir / "main.py").write_text("def main():\n    pass")
         (src_dir / "utils.py").write_text("def helper():\n    pass")
 
-        response = client.post(f"/api/codebases/{created_codebase.id}/architecture_document/generate")
+        response = client.post(
+            f"/api/codebases/{created_codebase.id}/architecture_document/generate"
+        )
 
         # This should work with mocked gemini response
         assert response.status_code == 200
@@ -377,10 +371,7 @@ A simple Python codebase with a main module and utility functions.
 
     def test_update_architecture_document_nonexistent_codebase(self, client):
         """Test updating architecture document for non-existent codebase."""
-        update_data = {
-            "content": "# Test",
-            "original_hash": None
-        }
+        update_data = {"content": "# Test", "original_hash": None}
         response = client.put("/api/codebases/999/architecture_document/", json=update_data)
         assert response.status_code == 404
         assert response.json()["detail"] == "Codebase not found"

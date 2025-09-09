@@ -20,11 +20,10 @@ def setup_logfire(app: FastAPI) -> None:
         environment=environment,
         console={"verbose": environment == "development"},
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
-        send_to_logfire=bool(token)
+        send_to_logfire=bool(token),
     )
 
     # Enable instrumentation that doesn't require parameters
     logfire.instrument_sqlalchemy()
     logfire.instrument_httpx()
     logfire.instrument_fastapi(app)
-

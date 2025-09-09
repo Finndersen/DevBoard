@@ -90,7 +90,9 @@ class ContextAssemblyService:
         context_provider_registry_instance: ContextProviderRegistry | None = None,
     ):
         self.db_session_factory = db_session_factory
-        self.context_provider_registry = context_provider_registry_instance or context_provider_registry
+        self.context_provider_registry = (
+            context_provider_registry_instance or context_provider_registry
+        )
 
     def _get_provider_instance(
         self, resource_uri: str
@@ -178,13 +180,15 @@ class ContextAssemblyService:
                     [(resource.resource_uri, resource.description) for resource in linked_resources]
                 )
                 # Add detected URIs
-                all_resources.extend([(uri, None) for uri in detected_uris if uri not in linked_uris])
+                all_resources.extend(
+                    [(uri, None) for uri in detected_uris if uri not in linked_uris]
+                )
 
                 logfire.info(
                     "Resources discovered",
                     linked_resources=len(linked_resources),
                     detected_uris=len(detected_uris),
-                    total_resources=len(all_resources)
+                    total_resources=len(all_resources),
                 )
 
                 # Categorize resources by strategy
@@ -194,7 +198,9 @@ class ContextAssemblyService:
                             resource_info = await self.get_resource_info(resource_uri, description)
                         except (NoProviderFound, ContextProviderUnavailable) as e:
                             resource_errors.append(
-                                ResourceRetrievalError(resource_uri=resource_uri, error_message=str(e))
+                                ResourceRetrievalError(
+                                    resource_uri=resource_uri, error_message=str(e)
+                                )
                             )
                             continue
 
@@ -211,12 +217,18 @@ class ContextAssemblyService:
                             eager_resource_tasks.append(self._load_eager_context(resource_info))
 
                 # Load EAGER context in parallel
-                with logfire.span("context_assembly.load_eager_context", eager_tasks=len(eager_resource_tasks)):
-                    eager_results = await asyncio.gather(*eager_resource_tasks, return_exceptions=True)
+                with logfire.span(
+                    "context_assembly.load_eager_context", eager_tasks=len(eager_resource_tasks)
+                ):
+                    eager_results = await asyncio.gather(
+                        *eager_resource_tasks, return_exceptions=True
+                    )
 
                     for result in eager_results:
                         if isinstance(result, BaseException):
-                            logfire.error("Eager context loading failed", error=str(result), exc_info=result)
+                            logfire.error(
+                                "Eager context loading failed", error=str(result), exc_info=result
+                            )
                         else:
                             eager_context.append(result)
 
@@ -230,13 +242,15 @@ class ContextAssemblyService:
                     "Context assembly complete",
                     eager_contexts=len(eager_context),
                     on_demand_resources=len(on_demand_resources),
-                    errors=len(resource_errors)
+                    errors=len(resource_errors),
                 )
 
                 return result
 
             except Exception as e:
-                logfire.error("Context assembly failed", project_id=project_id, error=str(e), exc_info=e)
+                logfire.error(
+                    "Context assembly failed", project_id=project_id, error=str(e), exc_info=e
+                )
                 raise
 
     async def _load_eager_context(self, resource: ResourceInfo) -> EagerContextData:
@@ -264,11 +278,17 @@ class ContextAssemblyService:
         Returns:
             Focused context summary relevant to the query
         """
-        with logfire.span("context_assembly.get_on_demand_context", resource_uri=resource_uri, query_length=len(query)):
+        with logfire.span(
+            "context_assembly.get_on_demand_context",
+            resource_uri=resource_uri,
+            query_length=len(query),
+        ):
             try:
                 provider, error = self._get_provider_instance(resource_uri)
                 if not provider:
-                    logfire.warn("No provider found for URI", resource_uri=resource_uri, error=error)
+                    logfire.warn(
+                        "No provider found for URI", resource_uri=resource_uri, error=error
+                    )
                     raise ValueError(error or f"No provider found for URI: {resource_uri}")
 
                 logfire.info("Getting on-demand context", provider_type=provider.provider_type)
@@ -277,7 +297,12 @@ class ContextAssemblyService:
                 return result
 
             except Exception as e:
-                logfire.error("Failed to get on-demand context", resource_uri=resource_uri, error=str(e), exc_info=e)
+                logfire.error(
+                    "Failed to get on-demand context",
+                    resource_uri=resource_uri,
+                    error=str(e),
+                    exc_info=e,
+                )
                 raise
 
     async def get_resource_info(self, resource_uri: str, description: str | None) -> ResourceInfo:

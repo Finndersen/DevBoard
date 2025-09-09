@@ -1,6 +1,5 @@
 """Tests for the document editor service with simplified DocumentEdit schema."""
 
-
 from devboard.api.schemas.task import DocumentEdit
 from devboard.services.document_editor import DocumentEditorService
 
@@ -29,7 +28,7 @@ class TestDocumentEditorService:
         edits = [
             DocumentEdit(find="quick", replace="fast"),
             DocumentEdit(find="brown", replace="red"),
-            DocumentEdit(find="lazy", replace="sleepy")
+            DocumentEdit(find="lazy", replace="sleepy"),
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -86,7 +85,7 @@ class TestDocumentEditorService:
         content = "abc abc abc"
         edits = [
             DocumentEdit(find="abc", replace="xyz"),  # Only replaces first occurrence
-            DocumentEdit(find="abc", replace="123")   # Replaces first remaining occurrence
+            DocumentEdit(find="abc", replace="123"),  # Replaces first remaining occurrence
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -99,9 +98,9 @@ class TestDocumentEditorService:
         """Test that edit failure stops processing subsequent edits."""
         content = "Hello world!"
         edits = [
-            DocumentEdit(find="Hello", replace="Hi"),      # Should succeed
-            DocumentEdit(find="nonexistent", replace="x"), # Should fail
-            DocumentEdit(find="world", replace="universe") # Should not be processed
+            DocumentEdit(find="Hello", replace="Hi"),  # Should succeed
+            DocumentEdit(find="nonexistent", replace="x"),  # Should fail
+            DocumentEdit(find="world", replace="universe"),  # Should not be processed
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -115,7 +114,7 @@ class TestDocumentEditorService:
         content = "The quick brown fox"
         edits = [
             DocumentEdit(find="quick", replace="fast"),
-            DocumentEdit(find="brown", replace="red")
+            DocumentEdit(find="brown", replace="red"),
         ]
 
         errors = self.editor.validate_edits(content, edits)
@@ -126,10 +125,10 @@ class TestDocumentEditorService:
         """Test validation when some edits have errors."""
         content = "Hello world!"
         edits = [
-            DocumentEdit(find="Hello", replace="Hi"),        # Valid
-            DocumentEdit(find="", replace="something"),      # Invalid: empty find
-            DocumentEdit(find="nonexistent", replace="x"),   # Invalid: text not found
-            DocumentEdit(find="world", replace="universe")   # Valid
+            DocumentEdit(find="Hello", replace="Hi"),  # Valid
+            DocumentEdit(find="", replace="something"),  # Invalid: empty find
+            DocumentEdit(find="nonexistent", replace="x"),  # Invalid: text not found
+            DocumentEdit(find="world", replace="universe"),  # Valid
         ]
 
         errors = self.editor.validate_edits(content, edits)
@@ -143,7 +142,7 @@ class TestDocumentEditorService:
         content = "Hello world world"
         edits = [
             DocumentEdit(find="world", replace="universe"),  # First occurrence becomes 'universe'
-            DocumentEdit(find="world", replace="cosmos")     # Second occurrence becomes 'cosmos'
+            DocumentEdit(find="world", replace="cosmos"),  # Second occurrence becomes 'cosmos'
         ]
 
         errors = self.editor.validate_edits(content, edits)
@@ -165,12 +164,12 @@ Create a new authentication system.
         edits = [
             DocumentEdit(
                 find="Create a new authentication system.",
-                replace="Implement OAuth 2.0 authentication with JWT tokens."
+                replace="Implement OAuth 2.0 authentication with JWT tokens.",
             ),
             DocumentEdit(
                 find="- Use JWT tokens\n- Support multiple providers",
-                replace="- Implement OAuth 2.0 flow\n- Support Google, GitHub, and Microsoft providers\n- Use refresh tokens for session management"
-            )
+                replace="- Implement OAuth 2.0 flow\n- Support Google, GitHub, and Microsoft providers\n- Use refresh tokens for session management",
+            ),
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -186,8 +185,7 @@ Create a new authentication system.
         large_replacement = "Replaced\n" + "\n".join([f"New line {i}" for i in range(50)])
 
         edit = DocumentEdit(
-            find="\n".join([f"Line {i}" for i in range(10, 20)]),
-            replace=large_replacement
+            find="\n".join([f"Line {i}" for i in range(10, 20)]), replace=large_replacement
         )
 
         result = self.editor.apply_edits(content, [edit])

@@ -18,10 +18,14 @@ class UnsupportedResourceUriError(Exception):
 class ResourceService:
     """Service layer for context provider resource operations with M2M support."""
 
-    def __init__(self, db: Session, context_provider_registry_instance: ContextProviderRegistry | None = None):
+    def __init__(
+        self, db: Session, context_provider_registry_instance: ContextProviderRegistry | None = None
+    ):
         self.db = db
         self.repository = ContextProviderResourceRepository(db)
-        self.context_provider_registry = context_provider_registry_instance or context_provider_registry
+        self.context_provider_registry = (
+            context_provider_registry_instance or context_provider_registry
+        )
 
     def determine_provider_name(self, resource_uri: str) -> str:
         """Determine the provider name for a given resource URI.

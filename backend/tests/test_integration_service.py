@@ -35,7 +35,9 @@ class TestIntegrationService:
         mock_integration_class.integration_type = "github"
 
         # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        test_registry = Registry[type[BaseIntegration]](
+            [mock_integration_class], key_attr="integration_type"
+        )
         service = IntegrationService(test_registry)
 
         result = await service.test_integration_connection("github")
@@ -57,7 +59,9 @@ class TestIntegrationService:
         mock_integration_class.integration_type = "github"
 
         # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        test_registry = Registry[type[BaseIntegration]](
+            [mock_integration_class], key_attr="integration_type"
+        )
         service = IntegrationService(test_registry)
 
         result = await service.test_integration_connection("github")
@@ -82,7 +86,9 @@ class TestIntegrationService:
         mock_integration_class.integration_type = "github"
 
         # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr='integration_type')
+        test_registry = Registry[type[BaseIntegration]](
+            [mock_integration_class], key_attr="integration_type"
+        )
         service = IntegrationService(test_registry)
 
         result = await service.test_integration_connection("github")
@@ -102,10 +108,9 @@ class TestIntegrationService:
         jira_integration_class.integration_type = "jira"
 
         # Create test registry with both integrations
-        test_registry = Registry[type[BaseIntegration]]([
-            github_integration_class,
-            jira_integration_class
-        ], key_attr='integration_type')
+        test_registry = Registry[type[BaseIntegration]](
+            [github_integration_class, jira_integration_class], key_attr="integration_type"
+        )
         service = IntegrationService(test_registry)
 
         # Mock the test_integration_connection method to return predefined results

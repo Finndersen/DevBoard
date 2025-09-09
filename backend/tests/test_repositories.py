@@ -394,7 +394,7 @@ class TestContextProviderResourceRepository:
         created = repo.create_resource(
             resource_uri=sample_resource.resource_uri,
             provider_name=sample_resource.provider_name,
-            description=sample_resource.description
+            description=sample_resource.description,
         )
         assert created.id is not None
         assert created.description == "Test repository"
@@ -407,7 +407,7 @@ class TestContextProviderResourceRepository:
         created = repo.create_resource(
             resource_uri=sample_resource.resource_uri,
             provider_name=sample_resource.provider_name,
-            description=sample_resource.description
+            description=sample_resource.description,
         )
         retrieved = repo.get_by_id(created.id)
 
@@ -426,17 +426,17 @@ class TestContextProviderResourceRepository:
         resource1 = repo.create_resource(
             resource_uri="https://github.com/test/repo1",
             provider_name="github",
-            description="Test repo 1"
+            description="Test repo 1",
         )
         resource2 = repo.create_resource(
             resource_uri="https://jira.example.com/issue/123",
             provider_name="jira",
-            description="Test issue"
+            description="Test issue",
         )
         resource3 = repo.create_resource(
             resource_uri="https://github.com/test/repo2",
             provider_name="github",
-            description="Test repo 2"
+            description="Test repo 2",
         )
 
         # Link resources to projects
@@ -463,7 +463,7 @@ class TestContextProviderResourceRepository:
         created = repo.create_resource(
             resource_uri=sample_resource.resource_uri,
             provider_name=sample_resource.provider_name,
-            description=sample_resource.description
+            description=sample_resource.description,
         )
         created.provider_name = "updated_provider"
         created.resource_uri = "https://example.com/updated"
@@ -479,7 +479,7 @@ class TestContextProviderResourceRepository:
         created = repo.create_resource(
             resource_uri=sample_resource.resource_uri,
             provider_name=sample_resource.provider_name,
-            description=sample_resource.description
+            description=sample_resource.description,
         )
         result = repo.delete_resource(created.id)
 
@@ -497,12 +497,12 @@ class TestContextProviderResourceRepository:
         resource1 = repo.create_resource(
             resource_uri="https://github.com/test/repo1",
             provider_name="github",
-            description="Test repo 1"
+            description="Test repo 1",
         )
         resource2 = repo.create_resource(
             resource_uri="https://jira.example.com/issue/123",
             provider_name="jira",
-            description="Test issue"
+            description="Test issue",
         )
 
         # Link both resources to project 1

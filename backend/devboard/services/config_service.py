@@ -76,7 +76,9 @@ class ConfigService:
                 db.add(config)
             db.commit()
 
-    def update_config_fields(self, key: str, field_updates: dict[str, Any]) -> ConfigurationDetailResponse:
+    def update_config_fields(
+        self, key: str, field_updates: dict[str, Any]
+    ) -> ConfigurationDetailResponse:
         """Update only specific configuration fields, respecting environment variable precedence."""
         # Get the schema class
         schema_class = self.config_registry.get(key)
@@ -155,7 +157,7 @@ class ConfigService:
                 key=key,
                 fields=[],
                 validation_status="unconfigured",
-                validation_errors=[f"No schema registered for key: {key}"]
+                validation_errors=[f"No schema registered for key: {key}"],
             )
 
         # 2. Load raw DB data
@@ -174,7 +176,7 @@ class ConfigService:
             env_value_present = False
 
             # Calculate environment variable name for all fields
-            env_prefix = schema_class.model_config.get('env_prefix', '')
+            env_prefix = schema_class.model_config.get("env_prefix", "")
             env_var_name = f"{env_prefix}{field_name.upper()}"
             env_value_present = env_var_name in os.environ
 
@@ -195,24 +197,28 @@ class ConfigService:
                     # Using default value
                     value_source = "default"
 
-            fields.append(ConfigurationFieldInfo(
-                name=field_name,
-                type=self._get_field_type(field_info),
-                required=field_info.is_required(),
-                description=field_info.description,
-                current_value=current_value,
-                value_source=value_source,
-                is_secret=self._is_secret_field(field_name),
-                env_var_name=env_var_name,  # Now set for all fields
-                default_value=field_info.default if field_info.default is not PydanticUndefined else None,
-                env_value_present=env_value_present
-            ))
+            fields.append(
+                ConfigurationFieldInfo(
+                    name=field_name,
+                    type=self._get_field_type(field_info),
+                    required=field_info.is_required(),
+                    description=field_info.description,
+                    current_value=current_value,
+                    value_source=value_source,
+                    is_secret=self._is_secret_field(field_name),
+                    env_var_name=env_var_name,  # Now set for all fields
+                    default_value=field_info.default
+                    if field_info.default is not PydanticUndefined
+                    else None,
+                    env_value_present=env_value_present,
+                )
+            )
 
         return ConfigurationDetailResponse(
             key=key,
             fields=fields,
             validation_status="valid" if validation_result.success else "invalid",
-            validation_errors=validation_result.errors
+            validation_errors=validation_result.errors,
         )
 
     def _is_string_field(self, field_info: FieldInfo) -> bool:
@@ -254,7 +260,7 @@ class ConfigService:
 
     def _is_secret_field(self, field_name: str) -> bool:
         """Check if a field contains secret/sensitive data."""
-        secret_keywords = ['token', 'key', 'secret', 'password', 'api_key']
+        secret_keywords = ["token", "key", "secret", "password", "api_key"]
         field_lower = field_name.lower()
         return any(keyword in field_lower for keyword in secret_keywords)
 

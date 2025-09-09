@@ -16,9 +16,7 @@ class TestProjectConversationMessage:
         # Create a project first
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -27,7 +25,7 @@ class TestProjectConversationMessage:
         message = ProjectConversationMessage(
             project_id=created_project.id,
             role="user",
-            content="What is the current status of this project?"
+            content="What is the current status of this project?",
         )
         db_session.add(message)
         db_session.commit()
@@ -46,9 +44,7 @@ class TestProjectConversationMessage:
         # Create a project first
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -58,14 +54,11 @@ class TestProjectConversationMessage:
             "tool_name": "get_relevant_context",
             "resource_uri": "https://github.com/org/repo",
             "query": "recent commits",
-            "result": "Found 5 recent commits..."
+            "result": "Found 5 recent commits...",
         }
 
         message = ProjectConversationMessage(
-            project_id=created_project.id,
-            role="tool_result",
-            content=None,
-            tool_data=tool_data
+            project_id=created_project.id, role="tool_result", content=None, tool_data=tool_data
         )
         db_session.add(message)
         db_session.commit()
@@ -82,9 +75,7 @@ class TestProjectConversationMessage:
         # Create project with messages
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -93,14 +84,11 @@ class TestProjectConversationMessage:
         messages_data = [
             {"role": "user", "content": "First message"},
             {"role": "assistant", "content": "First response"},
-            {"role": "user", "content": "Second message"}
+            {"role": "user", "content": "Second message"},
         ]
 
         for msg_data in messages_data:
-            message = ProjectConversationMessage(
-                project_id=created_project.id,
-                **msg_data
-            )
+            message = ProjectConversationMessage(project_id=created_project.id, **msg_data)
             db_session.add(message)
 
         db_session.commit()
@@ -123,9 +111,7 @@ class TestTaskConversationMessage:
         # Create a task first (need project too)
         project_repo = ProjectRepository(db_session)
         project = Project(
-            name="Test Project",
-            details="Test project details",
-            current_status="active"
+            name="Test Project", details="Test project details", current_status="active"
         )
         created_project = project_repo.create(project)
         db_session.commit()
@@ -135,7 +121,7 @@ class TestTaskConversationMessage:
             title="Test Task",
             description="Test task description",
             status="Designing",
-            project_id=created_project.id
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -144,7 +130,7 @@ class TestTaskConversationMessage:
         message = TaskConversationMessage(
             task_id=created_task.id,
             role="user",
-            content="Please help me design this task specification."
+            content="Please help me design this task specification.",
         )
         db_session.add(message)
         db_session.commit()
@@ -171,7 +157,7 @@ class TestTaskConversationMessage:
             title="Test Task",
             description="Description",
             status="Planning",
-            project_id=created_project.id
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -180,18 +166,18 @@ class TestTaskConversationMessage:
         agent_response_data = {
             "task_specification_edits": [
                 {"find": "old objective", "replace": "new objective"},
-                {"find": "TODO", "replace": "Implement authentication"}
+                {"find": "TODO", "replace": "Implement authentication"},
             ],
             "task_implementation_plan_edits": [
                 {"find": "[Step 1]", "replace": "Set up OAuth configuration"}
-            ]
+            ],
         }
 
         message = TaskConversationMessage(
             task_id=created_task.id,
             role="assistant",
             content="I've updated both the specification and implementation plan based on your requirements.",
-            tool_data=agent_response_data
+            tool_data=agent_response_data,
         )
         db_session.add(message)
         db_session.commit()
@@ -219,7 +205,7 @@ class TestTaskConversationMessage:
             title="Test Task",
             description="Description",
             status="Designing",
-            project_id=created_project.id
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -227,16 +213,16 @@ class TestTaskConversationMessage:
         # Add conversation messages
         conversation = [
             {"role": "user", "content": "Start designing this task"},
-            {"role": "assistant", "content": "I'll help you create a task specification",
-             "tool_data": {"task_specification_edits": []}},
-            {"role": "user", "content": "Can you add more detail?"}
+            {
+                "role": "assistant",
+                "content": "I'll help you create a task specification",
+                "tool_data": {"task_specification_edits": []},
+            },
+            {"role": "user", "content": "Can you add more detail?"},
         ]
 
         for msg_data in conversation:
-            message = TaskConversationMessage(
-                task_id=created_task.id,
-                **msg_data
-            )
+            message = TaskConversationMessage(task_id=created_task.id, **msg_data)
             db_session.add(message)
 
         db_session.commit()
@@ -259,7 +245,9 @@ class TestTaskConversationMessage:
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        task = Task(title="Test Task", description="Desc", status="Planning", project_id=created_project.id)
+        task = Task(
+            title="Test Task", description="Desc", status="Planning", project_id=created_project.id
+        )
         created_task = task_repo.create(task)
         db_session.commit()
 
@@ -267,16 +255,17 @@ class TestTaskConversationMessage:
         roles_and_data = [
             ("user", "User message", None),
             ("assistant", "Agent response", None),
-            ("tool_call", None, {"tool": "get_relevant_context", "args": {"uri": "test", "query": "test"}}),
-            ("tool_result", None, {"result": "Context retrieved successfully"})
+            (
+                "tool_call",
+                None,
+                {"tool": "get_relevant_context", "args": {"uri": "test", "query": "test"}},
+            ),
+            ("tool_result", None, {"result": "Context retrieved successfully"}),
         ]
 
         for role, content, tool_data in roles_and_data:
             message = TaskConversationMessage(
-                task_id=created_task.id,
-                role=role,
-                content=content,
-                tool_data=tool_data
+                task_id=created_task.id, role=role, content=content, tool_data=tool_data
             )
             db_session.add(message)
 
@@ -300,7 +289,9 @@ class TestTaskConversationMessage:
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        task = Task(title="Test Task", description="Desc", status="Designing", project_id=created_project.id)
+        task = Task(
+            title="Test Task", description="Desc", status="Designing", project_id=created_project.id
+        )
         created_task = task_repo.create(task)
         db_session.commit()
 
@@ -308,9 +299,7 @@ class TestTaskConversationMessage:
         import time
 
         message1 = TaskConversationMessage(
-            task_id=created_task.id,
-            role="user",
-            content="First message"
+            task_id=created_task.id, role="user", content="First message"
         )
         db_session.add(message1)
         db_session.commit()
@@ -318,9 +307,7 @@ class TestTaskConversationMessage:
         time.sleep(0.01)  # Small delay
 
         message2 = TaskConversationMessage(
-            task_id=created_task.id,
-            role="assistant",
-            content="Second message"
+            task_id=created_task.id, role="assistant", content="Second message"
         )
         db_session.add(message2)
         db_session.commit()

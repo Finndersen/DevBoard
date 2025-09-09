@@ -4,17 +4,17 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from devboard.agents.task_planning_agent import (
+    DocumentType,
+    TaskContext,
+    TaskPlanningAgentService,
+    TaskState,
+)
 from devboard.api.schemas.task import DocumentEdit, TaskPlanningResponse
 from devboard.services.context_assembly import (
     EagerContextData,
     OnDemandResourceInfo,
     ProjectContextData,
-)
-from devboard.services.task_planning_agent import (
-    DocumentType,
-    TaskContext,
-    TaskPlanningAgentService,
-    TaskState,
 )
 
 
@@ -25,12 +25,10 @@ class TestTaskPlanningResponse:
         """Test creating TaskPlanningResponse with new structure."""
         response = TaskPlanningResponse(
             message="Task specification updated successfully.",
-            task_specification_edits=[
-                DocumentEdit(find="old text", replace="new text")
-            ],
+            task_specification_edits=[DocumentEdit(find="old text", replace="new text")],
             task_implementation_plan_edits=[
                 DocumentEdit(find="TODO", replace="Implement feature X")
-            ]
+            ],
         )
 
         assert response.message == "Task specification updated successfully."
@@ -41,9 +39,7 @@ class TestTaskPlanningResponse:
 
     def test_task_planning_response_optional_edits(self):
         """Test TaskPlanningResponse with optional edit fields."""
-        response = TaskPlanningResponse(
-            message="No changes needed at this time."
-        )
+        response = TaskPlanningResponse(message="No changes needed at this time.")
 
         assert response.message == "No changes needed at this time."
         assert response.task_specification_edits is None
@@ -54,7 +50,7 @@ class TestTaskPlanningResponse:
         response = TaskPlanningResponse(
             message="Review completed.",
             task_specification_edits=[],
-            task_implementation_plan_edits=[]
+            task_implementation_plan_edits=[],
         )
 
         assert response.message == "Review completed."
@@ -105,7 +101,7 @@ class TestTaskPlanningAgentService:
     @pytest.fixture
     def agent_service(self, mock_context_service):
         """Create agent service with mocked dependencies."""
-        with patch('devboard.services.task_planning_agent.llm_service') as mock_llm_service:
+        with patch("devboard.agents.task_planning_agent.llm_service") as mock_llm_service:
             mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
             return TaskPlanningAgentService(context_service=mock_context_service)
 
@@ -118,7 +114,7 @@ class TestTaskPlanningAgentService:
                     provider_type="github",
                     uri="https://github.com/org/repo",
                     description="Main repository",
-                    data={"content": "Repository content..."}
+                    data={"content": "Repository content..."},
                 )
             ],
             on_demand_resources=[
@@ -126,10 +122,10 @@ class TestTaskPlanningAgentService:
                     provider_type="jira",
                     uri="https://jira.company.com/PROJECT-123",
                     description="Related Jira ticket",
-                    has_user_description=True
+                    has_user_description=True,
                 )
             ],
-            provider_errors=[]
+            provider_errors=[],
         )
 
     def test_task_state_enum(self):
@@ -152,7 +148,7 @@ class TestTaskPlanningAgentService:
             task_state=TaskState.DESIGNING,
             project_id=100,
             eager_context=sample_context_data.eager_context,
-            on_demand_resources=sample_context_data.on_demand_resources
+            on_demand_resources=sample_context_data.on_demand_resources,
         )
 
         assert context.task_id == 1
@@ -170,7 +166,7 @@ class TestTaskPlanningAgentService:
         # Verify agents were created for each task state
         assert len(agents) == len(TaskState)
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     @pytest.mark.asyncio
     async def test_process_message_with_template_initialization(
         self, mock_llm_service, agent_service, mock_context_service, sample_context_data
@@ -182,13 +178,13 @@ class TestTaskPlanningAgentService:
         # Mock the agent run result
         mock_response = TaskPlanningResponse(
             message="Template initialized with task details.",
-            task_specification_edits=[
-                DocumentEdit(find="[Title]", replace="Test Task")
-            ]
+            task_specification_edits=[DocumentEdit(find="[Title]", replace="Test Task")],
         )
 
         # Mock the agent run method
-        with patch.object(agent_service.agents[TaskState.DESIGNING], 'run', new_callable=AsyncMock) as mock_run:
+        with patch.object(
+            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
+        ) as mock_run:
             mock_result = Mock()
             mock_result.output = mock_response
             mock_run.return_value = mock_result
@@ -200,7 +196,7 @@ class TestTaskPlanningAgentService:
                 task_implementation_plan=None,
                 task_state="Designing",
                 project_id=100,
-                user_message="Please help me create a task specification."
+                user_message="Please help me create a task specification.",
             )
 
             assert result.message == "Template initialized with task details."
@@ -208,7 +204,7 @@ class TestTaskPlanningAgentService:
             assert len(result.task_specification_edits) == 1
             mock_run.assert_called_once()
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     @pytest.mark.asyncio
     async def test_process_message_different_states(
         self, mock_llm_service, agent_service, mock_context_service, sample_context_data
@@ -222,30 +218,42 @@ class TestTaskPlanningAgentService:
         mock_result.output = mock_response
 
         # Test Designing state
-        with patch.object(agent_service.agents[TaskState.DESIGNING], 'run', new_callable=AsyncMock) as mock_designing_run:
+        with patch.object(
+            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
+        ) as mock_designing_run:
             mock_designing_run.return_value = mock_result
 
             await agent_service.process_message(
-                task_id=1, task_title="Test", task_description="desc",
-                task_implementation_plan=None, task_state="Designing",
-                project_id=100, user_message="test"
+                task_id=1,
+                task_title="Test",
+                task_description="desc",
+                task_implementation_plan=None,
+                task_state="Designing",
+                project_id=100,
+                user_message="test",
             )
 
             mock_designing_run.assert_called_once()
 
         # Test Planning state
-        with patch.object(agent_service.agents[TaskState.PLANNING], 'run', new_callable=AsyncMock) as mock_planning_run:
+        with patch.object(
+            agent_service.agents[TaskState.PLANNING], "run", new_callable=AsyncMock
+        ) as mock_planning_run:
             mock_planning_run.return_value = mock_result
 
             await agent_service.process_message(
-                task_id=1, task_title="Test", task_description="desc",
-                task_implementation_plan="plan", task_state="Planning",
-                project_id=100, user_message="test"
+                task_id=1,
+                task_title="Test",
+                task_description="desc",
+                task_implementation_plan="plan",
+                task_state="Planning",
+                project_id=100,
+                user_message="test",
             )
 
             mock_planning_run.assert_called_once()
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     def test_build_context_summary(self, mock_llm_service, agent_service, sample_context_data):
         """Test context summary building."""
         mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
@@ -259,7 +267,7 @@ class TestTaskPlanningAgentService:
         assert "Main repository" in summary
         assert "Related Jira ticket" in summary
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     def test_build_documents_info_designing_state(self, mock_llm_service, agent_service):
         """Test document info building for Designing state."""
         mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
@@ -267,14 +275,14 @@ class TestTaskPlanningAgentService:
         info = agent_service._build_documents_info(
             description="Current task description",
             implementation_plan=None,
-            state=TaskState.DESIGNING
+            state=TaskState.DESIGNING,
         )
 
         assert "TASK SPECIFICATION (editable):" in info
         assert "Current task description" in info
         assert "IMPLEMENTATION PLAN" not in info
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     def test_build_documents_info_planning_state(self, mock_llm_service, agent_service):
         """Test document info building for Planning state."""
         mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
@@ -282,7 +290,7 @@ class TestTaskPlanningAgentService:
         info = agent_service._build_documents_info(
             description="Task description",
             implementation_plan="Implementation plan",
-            state=TaskState.PLANNING
+            state=TaskState.PLANNING,
         )
 
         assert "TASK SPECIFICATION (editable):" in info
@@ -290,7 +298,7 @@ class TestTaskPlanningAgentService:
         assert "Task description" in info
         assert "Implementation plan" in info
 
-    @patch('devboard.services.task_planning_agent.llm_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
     @pytest.mark.asyncio
     async def test_error_handling(self, mock_llm_service, agent_service, mock_context_service):
         """Test error handling in message processing."""
@@ -298,30 +306,43 @@ class TestTaskPlanningAgentService:
         mock_context_service.get_project_context.side_effect = Exception("Context error")
 
         result = await agent_service.process_message(
-            task_id=1, task_title="Test", task_description="desc",
-            task_implementation_plan=None, task_state="Designing",
-            project_id=100, user_message="test"
+            task_id=1,
+            task_title="Test",
+            task_description="desc",
+            task_implementation_plan=None,
+            task_state="Designing",
+            project_id=100,
+            user_message="test",
         )
 
         assert "I encountered an error processing your message" in result.message
         assert "Context error" in result.message
 
-    @patch('devboard.services.task_planning_agent.llm_service')
-    @patch('devboard.services.task_planning_agent.template_service')
+    @patch("devboard.agents.task_planning_agent.llm_service")
+    @patch("devboard.agents.task_planning_agent.template_service")
     @pytest.mark.asyncio
     async def test_template_service_integration(
-        self, mock_template_service, mock_llm_service, agent_service, mock_context_service, sample_context_data
+        self,
+        mock_template_service,
+        mock_llm_service,
+        agent_service,
+        mock_context_service,
+        sample_context_data,
     ):
         """Test integration with template service."""
         mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
         mock_context_service.get_project_context.return_value = sample_context_data
-        mock_template_service.get_task_specification_template.return_value = "# Task Specification: [Title]\n\nTemplate content"
+        mock_template_service.get_template.return_value = (
+            "# Task Specification: [Title]\n\nTemplate content"
+        )
 
         mock_response = TaskPlanningResponse(message="Template applied")
         mock_result = Mock()
         mock_result.output = mock_response
 
-        with patch.object(agent_service.agents[TaskState.DESIGNING], 'run', new_callable=AsyncMock) as mock_run:
+        with patch.object(
+            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = mock_result
 
             await agent_service.process_message(
@@ -331,8 +352,9 @@ class TestTaskPlanningAgentService:
                 task_implementation_plan=None,
                 task_state="Designing",
                 project_id=100,
-                user_message="Initialize spec"
+                user_message="Initialize spec",
             )
 
-            # Verify template service was called
-            mock_template_service.get_task_specification_template.assert_called_once()
+            # Verify template service was called with correct TemplateType
+            from devboard.services.template_service import TemplateType
+            mock_template_service.get_template.assert_called_with(TemplateType.TASK_SPECIFICATION)

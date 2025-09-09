@@ -2,20 +2,21 @@
 
 from typing import Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class Registry(Generic[T]):
     """Generic registry for managing typed collections.
-    
+
     Provides a type-safe way to store and retrieve items by string keys.
     The registry is immutable after construction.
     """
+
     _items: dict[str, T]
 
     def __init__(self, items: list[T], key_attr: str):
         """Initialize the registry.
-        
+
         Args:
             items: List of items to register
             key_attr: The attribute name to use as keys (required)
@@ -24,10 +25,10 @@ class Registry(Generic[T]):
 
     def get(self, key: str) -> T | None:
         """Get an item by key.
-        
+
         Args:
             key: The key to look up
-            
+
         Returns:
             The item if found, None otherwise
         """
@@ -35,7 +36,7 @@ class Registry(Generic[T]):
 
     def list_keys(self) -> list[str]:
         """Get all keys in the registry.
-        
+
         Returns:
             Sorted list of all keys
         """
@@ -43,7 +44,7 @@ class Registry(Generic[T]):
 
     def list_values(self) -> list[T]:
         """Get all values in the registry.
-        
+
         Returns:
             List of all values
         """
@@ -51,12 +52,11 @@ class Registry(Generic[T]):
 
     def items(self) -> list[tuple[str, T]]:
         """Get all key-value pairs.
-        
+
         Returns:
             List of (key, value) tuples
         """
         return list(self._items.items())
-
 
     def __contains__(self, key: str) -> bool:
         """Check if a key exists in the registry."""

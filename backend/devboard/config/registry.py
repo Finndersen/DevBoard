@@ -20,20 +20,21 @@ from devboard.config.llm_config import (
 from devboard.core.registry import Registry
 
 # Create the config schema registry with all schemas
-config_schema_registry: Registry[type[BaseConfig]] = Registry([
-    # Integration configurations
-    GitHubIntegrationConfig,
-    JiraIntegrationConfig,
-    SlackIntegrationConfig,
-    # LLM provider configurations
-    OpenAIProviderConfig,
-    AnthropicProviderConfig,
-    GeminiProviderConfig,
-    # Agent configurations
-    QAAgentConfig,
-    PlanningAgentConfig,
-    ImplementationAgentConfig,
-    InvestigationAgentConfig,
-], key_attr='config_key')
-
-
+config_schema_registry: Registry[type[BaseConfig]] = Registry(
+    [
+        # Integration configurations
+        GitHubIntegrationConfig,
+        JiraIntegrationConfig,
+        SlackIntegrationConfig,
+        # LLM provider configurations
+        OpenAIProviderConfig,
+        AnthropicProviderConfig,
+        GeminiProviderConfig,
+        # Agent configurations
+        QAAgentConfig,
+        PlanningAgentConfig,
+        ImplementationAgentConfig,
+        InvestigationAgentConfig,
+    ],
+    key_attr="config_key",
+)

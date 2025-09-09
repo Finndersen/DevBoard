@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from devboard.agents.gemini_cli import GeminiCliError, execute_gemini_prompt
 from devboard.integrations.filesystem import FilesystemIntegration
-from devboard.utils.gemini_cli import GeminiCliError, execute_gemini_prompt
 
 from .base import (
     BaseContextProvider,
@@ -227,7 +227,7 @@ Focus on providing specific, actionable insights about the code organization, ar
                 model="gemini-2.5-flash",  # Fast model suitable for codebase analysis
                 working_dir=self.base_path,
                 timeout=60.0,
-                operation_mode="read_only"  # Codebase analysis should be read-only
+                operation_mode="read_only",  # Codebase analysis should be read-only
             )
 
             logger.info(f"Codebase investigation completed: {query}")

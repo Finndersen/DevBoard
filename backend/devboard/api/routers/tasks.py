@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from devboard.agents.task_planning_agent import task_planning_agent_service
 from devboard.api.schemas import (
     ApplyEditsRequest,
     DeleteResponse,
@@ -25,7 +26,6 @@ from devboard.db.repositories import (
 )
 from devboard.services.document_editor import document_editor_service
 from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
-from devboard.services.task_planning_agent import task_planning_agent_service
 
 router = APIRouter()
 
@@ -193,9 +193,7 @@ async def send_task_message(
         # Store user message
         message_repo = TaskConversationMessageRepository(db)
         user_message = TaskConversationMessageModel(
-            task_id=task_id,
-            role="user",
-            content=request.message
+            task_id=task_id, role="user", content=request.message
         )
         message_repo.create(user_message)
 
@@ -216,9 +214,17 @@ async def send_task_message(
             role="assistant",
             content=agent_response.message,
             tool_data={
-                "task_specification_edits": [edit.model_dump() for edit in agent_response.task_specification_edits] if agent_response.task_specification_edits else None,
-                "task_implementation_plan_edits": [edit.model_dump() for edit in agent_response.task_implementation_plan_edits] if agent_response.task_implementation_plan_edits else None,
-            }
+                "task_specification_edits": [
+                    edit.model_dump() for edit in agent_response.task_specification_edits
+                ]
+                if agent_response.task_specification_edits
+                else None,
+                "task_implementation_plan_edits": [
+                    edit.model_dump() for edit in agent_response.task_implementation_plan_edits
+                ]
+                if agent_response.task_implementation_plan_edits
+                else None,
+            },
         )
         saved_agent_message = message_repo.create(agent_message)
 
@@ -254,7 +260,9 @@ async def apply_document_edits(
         # Apply specification edits
         if request.task_specification_edits:
             current_content = task.description or ""
-            edit_result = document_editor_service.apply_edits(current_content, request.task_specification_edits)
+            edit_result = document_editor_service.apply_edits(
+                current_content, request.task_specification_edits
+            )
             if edit_result.success:
                 task.description = edit_result.content
             else:
@@ -263,7 +271,9 @@ async def apply_document_edits(
         # Apply implementation plan edits
         if request.task_implementation_plan_edits:
             current_content = task.implementation_plan or ""
-            edit_result = document_editor_service.apply_edits(current_content, request.task_implementation_plan_edits)
+            edit_result = document_editor_service.apply_edits(
+                current_content, request.task_implementation_plan_edits
+            )
             if edit_result.success:
                 task.implementation_plan = edit_result.content
             else:
@@ -271,7 +281,9 @@ async def apply_document_edits(
 
         if errors:
             db.rollback()
-            raise HTTPException(status_code=400, detail=f"Edit application failed: {'; '.join(errors)}")
+            raise HTTPException(
+                status_code=400, detail=f"Edit application failed: {'; '.join(errors)}"
+            )
 
         # Update task
         updated_task = task_repo.update(task)

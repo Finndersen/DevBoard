@@ -30,7 +30,9 @@ class IntegrationTestResult:
 class IntegrationService:
     """Service for handling integration operations and testing."""
 
-    def __init__(self, integration_registry_instance: Registry[type[BaseIntegration]] | None = None):
+    def __init__(
+        self, integration_registry_instance: Registry[type[BaseIntegration]] | None = None
+    ):
         self.integration_registry = integration_registry_instance or integration_registry
 
     async def test_integration_connection(self, integration_type: str) -> IntegrationTestResult:
@@ -62,11 +64,18 @@ class IntegrationService:
                     error_type=None if success else "connection_error",
                 )
 
-                logfire.info("Integration test complete", integration_type=integration_type, success=success)
+                logfire.info(
+                    "Integration test complete", integration_type=integration_type, success=success
+                )
                 return result
 
             except IntegrationConfigurationError as e:
-                logfire.error("Integration configuration error", integration_type=integration_type, error=str(e), exc_info=e)
+                logfire.error(
+                    "Integration configuration error",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
                 return IntegrationTestResult(
                     integration_type=integration_type,
                     success=False,
@@ -74,7 +83,12 @@ class IntegrationService:
                     error_type="config_error",
                 )
             except AuthenticationError as e:
-                logfire.error("Integration authentication error", integration_type=integration_type, error=str(e), exc_info=e)
+                logfire.error(
+                    "Integration authentication error",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
                 return IntegrationTestResult(
                     integration_type=integration_type,
                     success=False,
@@ -82,7 +96,12 @@ class IntegrationService:
                     error_type="auth_error",
                 )
             except RateLimitError as e:
-                logfire.error("Integration rate limit error", integration_type=integration_type, error=str(e), exc_info=e)
+                logfire.error(
+                    "Integration rate limit error",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
                 return IntegrationTestResult(
                     integration_type=integration_type,
                     success=False,
@@ -90,7 +109,12 @@ class IntegrationService:
                     error_type="rate_limit_error",
                 )
             except Exception as e:
-                logfire.error("Unexpected integration test error", integration_type=integration_type, error=str(e), exc_info=e)
+                logfire.error(
+                    "Unexpected integration test error",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
                 return IntegrationTestResult(
                     integration_type=integration_type,
                     success=False,
@@ -101,7 +125,9 @@ class IntegrationService:
     async def test_all_integrations(self) -> dict[str, IntegrationTestResult]:
         """Test connections for all available integration types."""
         available_types = self.integration_registry.list_keys()
-        with logfire.span("integration_service.test_all_integrations", total_integrations=len(available_types)):
+        with logfire.span(
+            "integration_service.test_all_integrations", total_integrations=len(available_types)
+        ):
             results: dict[str, IntegrationTestResult] = {}
             for integration_type in available_types:
                 results[integration_type] = await self.test_integration_connection(integration_type)
@@ -111,6 +137,6 @@ class IntegrationService:
                 "All integration tests complete",
                 total_integrations=len(results),
                 successful_integrations=successful_count,
-                failed_integrations=len(results) - successful_count
+                failed_integrations=len(results) - successful_count,
             )
             return results

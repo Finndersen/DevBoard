@@ -37,9 +37,7 @@ class TaskConversationMessageRepository(BaseRepository[TaskConversationMessage])
         )
         return list(self.db.execute(stmt).scalars().all())
 
-    def get_recent_by_task(
-        self, task_id: int, limit: int = 50
-    ) -> list[TaskConversationMessage]:
+    def get_recent_by_task(self, task_id: int, limit: int = 50) -> list[TaskConversationMessage]:
         """Get recent messages for a specific task.
 
         Args:

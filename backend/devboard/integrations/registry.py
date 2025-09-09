@@ -8,10 +8,11 @@ from .jira import JiraIntegration
 from .slack import SlackIntegration
 
 # Module-level singleton instance
-integration_registry: Registry[type[BaseIntegration]] = Registry([
-    GitHubIntegration,
-    JiraIntegration,
-    SlackIntegration,
-], key_attr='integration_type')
-
-
+integration_registry: Registry[type[BaseIntegration]] = Registry(
+    [
+        GitHubIntegration,
+        JiraIntegration,
+        SlackIntegration,
+    ],
+    key_attr="integration_type",
+)

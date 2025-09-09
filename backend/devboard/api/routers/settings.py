@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, HTTPException
 
+from devboard.agents.llm_service import AgentType, llm_service
 from devboard.api.schemas import AvailableModelsResponse, IntegrationTestResponse
 from devboard.services.integration_service import IntegrationService
-from devboard.services.llm_service import AgentType, llm_service
 
 router = APIRouter()
 

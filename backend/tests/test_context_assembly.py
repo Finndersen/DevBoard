@@ -145,7 +145,9 @@ class MockOnDemandProvider(BaseContextProvider):
 
     @classmethod
     def can_handle_uri(cls, resource_uri: str) -> bool:
-        return resource_uri.startswith("test://") and ("large-resource" in resource_uri or "on-demand" in resource_uri)
+        return resource_uri.startswith("test://") and (
+            "large-resource" in resource_uri or "on-demand" in resource_uri
+        )
 
     def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
         return ContextStrategy.ON_DEMAND
@@ -195,13 +197,16 @@ class TestContextAssemblyService:
     @pytest.fixture
     def test_registry(self):
         """Test registry with mock providers."""
-        return ContextProviderRegistry([
-            MockOnDemandProvider,  # Put this first so it gets priority for on-demand URIs
-            MockTestProvider,
-            MockTest1Provider,
-            MockTest2Provider,
-            MockGitHubProvider,
-        ], key_attr='provider_type')
+        return ContextProviderRegistry(
+            [
+                MockOnDemandProvider,  # Put this first so it gets priority for on-demand URIs
+                MockTestProvider,
+                MockTest1Provider,
+                MockTest2Provider,
+                MockGitHubProvider,
+            ],
+            key_attr="provider_type",
+        )
 
     @pytest.fixture
     def service(self, mock_session_factory, test_registry):
@@ -259,9 +264,7 @@ class TestContextAssemblyService:
             assert result.on_demand_resources == []
 
     @pytest.mark.asyncio
-    async def test_get_project_context_with_explicit_links(
-        self, service, mock_db_session
-    ):
+    async def test_get_project_context_with_explicit_links(self, service, mock_db_session):
         """Test context assembly with explicit provider resources."""
         project = Project(id=1, name="Test", details="Project description", current_status="active")
         link = ContextProviderResource(
@@ -286,7 +289,6 @@ class TestContextAssemblyService:
             mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
 
-
             result = await service.get_project_context(1, "test query")
 
             assert isinstance(result, ProjectContextData)
@@ -295,9 +297,7 @@ class TestContextAssemblyService:
             assert result.eager_context[0].description == "User provided description"
 
     @pytest.mark.asyncio
-    async def test_get_project_context_with_detected_uris(
-        self, service, mock_db_session
-    ):
+    async def test_get_project_context_with_detected_uris(self, service, mock_db_session):
         """Test context assembly with auto-detected URIs from project description."""
         project = Project(
             id=1,
@@ -322,13 +322,15 @@ class TestContextAssemblyService:
             mock_resource_repo.get_resources_for_project.return_value = []
             mock_resource_repo_class.return_value = mock_resource_repo
 
-
             result = await service.get_project_context(1, "test query")
 
             assert isinstance(result, ProjectContextData)
             assert len(result.eager_context) == 1
             assert result.eager_context[0].uri == "https://github.com/owner/repo/pull/123"
-            assert result.eager_context[0].description == "GitHub resource description" or result.eager_context[0].description == "Mock description"  # Generated description for auto-detected resource
+            assert (
+                result.eager_context[0].description == "GitHub resource description"
+                or result.eager_context[0].description == "Mock description"
+            )  # Generated description for auto-detected resource
 
     @pytest.mark.asyncio
     async def test_get_project_context_on_demand_with_user_description(
@@ -357,7 +359,6 @@ class TestContextAssemblyService:
             mock_resource_repo = Mock()
             mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
-
 
             result = await service.get_project_context(1, "test query")
 
@@ -394,7 +395,6 @@ class TestContextAssemblyService:
             mock_resource_repo = Mock()
             mock_resource_repo.get_resources_for_project.return_value = [link]
             mock_resource_repo_class.return_value = mock_resource_repo
-
 
             result = await service.get_project_context(1, "test query")
 

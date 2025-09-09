@@ -103,6 +103,7 @@ async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
 
 # Architecture document endpoints
 
+
 # New combined endpoint
 @router.get("/{codebase_id}/architecture_document/", response_model=ArchitectureDocumentResponse)
 async def get_architecture_document(codebase_id: int, db: Session = Depends(get_db)):
@@ -122,16 +123,14 @@ async def get_architecture_document(codebase_id: int, db: Session = Depends(get_
         content=document.content,
         content_hash=document.content_hash,
         file_path=str(document.file_path) if document.file_path else None,
-        size_bytes=document.size_bytes
+        size_bytes=document.size_bytes,
     )
 
 
 # New update endpoint
 @router.put("/{codebase_id}/architecture_document/", response_model=ArchitectureUpdateResponse)
 async def update_architecture_document(
-    codebase_id: int,
-    request: ArchitectureUpdateRequest,
-    db: Session = Depends(get_db)
+    codebase_id: int, request: ArchitectureUpdateRequest, db: Session = Depends(get_db)
 ):
     """Update architecture document with conflict detection."""
     # Get codebase from database
@@ -145,7 +144,7 @@ async def update_architecture_document(
     result = investigation_service.update_architecture_content(
         codebase_path=codebase.local_path,
         new_content=request.content,
-        original_hash=request.original_hash
+        original_hash=request.original_hash,
     )
 
     # Handle conflict as 409 status
@@ -156,35 +155,26 @@ async def update_architecture_document(
                 "success": False,
                 "message": result.message,
                 "error_type": result.error_type,
-                "current_hash": result.current_hash
-            }
+                "current_hash": result.current_hash,
+            },
         )
 
     # Handle other errors as 400
     if not result.success:
         raise HTTPException(
             status_code=400,
-            detail={
-                "success": False,
-                "message": result.message,
-                "error_type": result.error_type
-            }
+            detail={"success": False, "message": result.message, "error_type": result.error_type},
         )
 
     return ArchitectureUpdateResponse(
-        success=result.success,
-        content_hash=result.content_hash,
-        message=result.message
+        success=result.success, content_hash=result.content_hash, message=result.message
     )
 
 
-
-
-@router.post("/{codebase_id}/architecture_document/generate", response_model=ArchitectureGenerationResponse)
-async def generate_architecture_document(
-    codebase_id: int,
-    db: Session = Depends(get_db)
-):
+@router.post(
+    "/{codebase_id}/architecture_document/generate", response_model=ArchitectureGenerationResponse
+)
+async def generate_architecture_document(codebase_id: int, db: Session = Depends(get_db)):
     """Generate or update architecture document for a codebase using AI."""
     # Get codebase from database
     codebase_repo = CodebaseRepository(db)
@@ -204,5 +194,5 @@ async def generate_architecture_document(
         file_path=str(result.file_path) if result.file_path else None,
         content=result.content,
         error_message=result.error_message,
-        error_type=result.error_type
+        error_type=result.error_type,
     )

@@ -10,7 +10,7 @@ from .base import Base
 
 class BaseConversationMessage(Base):
     """Abstract base class for conversation messages.
-    
+
     Provides common fields for all conversation message types.
     """
 

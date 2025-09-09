@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.utils.gemini_cli import (
+from devboard.agents.gemini_cli import (
     GeminiCliExecutionError,
     GeminiCliNotFoundError,
     GeminiCliTimeoutError,
@@ -22,11 +22,9 @@ class TestExecuteGeminiPrompt:
         mock_process.returncode = 0
         mock_process.communicate = AsyncMock(return_value=(b"Test response", b""))
 
-        with patch('asyncio.create_subprocess_exec', return_value=mock_process) as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_subprocess:
             result = await execute_gemini_prompt(
-                prompt="Test prompt",
-                model="gemini-2.5-flash",
-                operation_mode="read_only"
+                prompt="Test prompt", model="gemini-2.5-flash", operation_mode="read_only"
             )
 
             assert result == "Test response"
@@ -49,11 +47,9 @@ class TestExecuteGeminiPrompt:
         mock_process.returncode = 0
         mock_process.communicate = AsyncMock(return_value=(b"Test response", b""))
 
-        with patch('asyncio.create_subprocess_exec', return_value=mock_process) as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_subprocess:
             result = await execute_gemini_prompt(
-                prompt="Test prompt",
-                model="gemini-1.5-pro",
-                operation_mode="read_write"
+                prompt="Test prompt", model="gemini-1.5-pro", operation_mode="read_write"
             )
 
             assert result == "Test response"
@@ -70,9 +66,7 @@ class TestExecuteGeminiPrompt:
         """Test that invalid operation mode raises ValueError."""
         with pytest.raises(ValueError, match="Invalid operation_mode"):
             await execute_gemini_prompt(
-                prompt="Test prompt",
-                model="gemini-2.5-flash",
-                operation_mode="invalid_mode"
+                prompt="Test prompt", model="gemini-2.5-flash", operation_mode="invalid_mode"
             )
 
     @pytest.mark.asyncio
@@ -82,22 +76,16 @@ class TestExecuteGeminiPrompt:
         mock_process.returncode = 1
         mock_process.communicate = AsyncMock(return_value=(b"", b"Command failed"))
 
-        with patch('asyncio.create_subprocess_exec', return_value=mock_process):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
             with pytest.raises(GeminiCliExecutionError, match="Gemini CLI error: Command failed"):
-                await execute_gemini_prompt(
-                    prompt="Test prompt",
-                    model="gemini-2.5-flash"
-                )
+                await execute_gemini_prompt(prompt="Test prompt", model="gemini-2.5-flash")
 
     @pytest.mark.asyncio
     async def test_gemini_not_found(self):
         """Test handling when gemini CLI is not found."""
-        with patch('asyncio.create_subprocess_exec', side_effect=FileNotFoundError()):
+        with patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
             with pytest.raises(GeminiCliNotFoundError, match="Gemini CLI not installed"):
-                await execute_gemini_prompt(
-                    prompt="Test prompt",
-                    model="gemini-2.5-flash"
-                )
+                await execute_gemini_prompt(prompt="Test prompt", model="gemini-2.5-flash")
 
     @pytest.mark.asyncio
     async def test_timeout_handling(self):
@@ -106,13 +94,11 @@ class TestExecuteGeminiPrompt:
         mock_process.kill = Mock()  # kill() is not async
         mock_process.wait = AsyncMock()  # wait() is async
 
-        with patch('asyncio.create_subprocess_exec', return_value=mock_process):
-            with patch('asyncio.wait_for', side_effect=TimeoutError()):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            with patch("asyncio.wait_for", side_effect=TimeoutError()):
                 with pytest.raises(GeminiCliTimeoutError, match="Gemini CLI timed out"):
                     await execute_gemini_prompt(
-                        prompt="Test prompt",
-                        model="gemini-2.5-flash",
-                        timeout=1.0
+                        prompt="Test prompt", model="gemini-2.5-flash", timeout=1.0
                     )
 
                 # Verify process was killed and waited for
@@ -126,13 +112,11 @@ class TestExecuteGeminiPrompt:
         mock_process.returncode = 0
         mock_process.communicate = AsyncMock(return_value=(b"Test response", b""))
 
-        with patch('asyncio.create_subprocess_exec', return_value=mock_process) as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_subprocess:
             await execute_gemini_prompt(
-                prompt="Test prompt",
-                model="gemini-2.5-flash",
-                working_dir="/private/tmp"
+                prompt="Test prompt", model="gemini-2.5-flash", working_dir="/private/tmp"
             )
 
             # Verify working directory was set
             call_kwargs = mock_subprocess.call_args[1]
-            assert call_kwargs['cwd'] == "/private/tmp"
+            assert call_kwargs["cwd"] == "/private/tmp"

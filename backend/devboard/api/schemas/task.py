@@ -61,6 +61,7 @@ class TaskResponse(TaskBase):
 
 # Task Planning Agent Schemas
 
+
 class DocumentEdit(BaseModel):
     """Schema for a single document edit."""
 

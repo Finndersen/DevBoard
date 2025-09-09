@@ -271,7 +271,9 @@ class TestProjectTasksRouter:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
+    def test_list_project_tasks_with_data(
+        self, client, db_session, test_project_data, test_task_data
+    ):
         """Test listing project tasks with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -301,4 +303,3 @@ class TestProjectTasksRouter:
         response = client.get("/api/projects/999/tasks")
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
-

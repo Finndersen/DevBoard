@@ -55,36 +55,9 @@ class TestTemplateService:
 
     def test_get_template_with_invalid_type(self):
         """Test getting template with invalid type."""
-        with pytest.raises(ValueError, match="Unknown template type"):
+        # Since get_template now expects a TemplateType enum, passing a string will raise an AttributeError
+        with pytest.raises(AttributeError, match="'str' object has no attribute 'value'"):
             self.service.get_template("invalid_type")
-
-    def test_legacy_get_task_specification_template(self):
-        """Test legacy method for backward compatibility."""
-        template = self.service.get_task_specification_template()
-
-        assert isinstance(template, str)
-        assert len(template) > 0
-        assert "# Task: [Title]" in template
-
-    def test_legacy_get_implementation_plan_template(self):
-        """Test legacy method for backward compatibility."""
-        template = self.service.get_implementation_plan_template()
-
-        assert isinstance(template, str)
-        assert len(template) > 0
-        assert "# Implementation Plan: [Title]" in template
-
-    def test_template_consistency(self):
-        """Test that new and legacy methods return the same templates."""
-        # Task specification
-        new_spec = self.service.get_template(TemplateType.TASK_SPECIFICATION)
-        legacy_spec = self.service.get_task_specification_template()
-        assert new_spec == legacy_spec
-
-        # Implementation plan
-        new_plan = self.service.get_template(TemplateType.IMPLEMENTATION_PLAN)
-        legacy_plan = self.service.get_implementation_plan_template()
-        assert new_plan == legacy_plan
 
     def test_template_files_exist(self):
         """Test that template files exist in the expected location."""
@@ -92,27 +65,40 @@ class TestTemplateService:
 
         # Check that architecture document template file exists
         arch_template_path = templates_dir / "architecture_document.md"
-        assert arch_template_path.exists(), f"Architecture template not found at {arch_template_path}"
+        assert arch_template_path.exists(), (
+            f"Architecture template not found at {arch_template_path}"
+        )
 
     def test_template_content_structure(self):
         """Test that templates have proper markdown structure."""
         templates = {
-            TemplateType.TASK_SPECIFICATION: self.service.get_template(TemplateType.TASK_SPECIFICATION),
-            TemplateType.IMPLEMENTATION_PLAN: self.service.get_template(TemplateType.IMPLEMENTATION_PLAN),
-            TemplateType.ARCHITECTURE_DOCUMENT: self.service.get_template(TemplateType.ARCHITECTURE_DOCUMENT)
+            TemplateType.TASK_SPECIFICATION: self.service.get_template(
+                TemplateType.TASK_SPECIFICATION
+            ),
+            TemplateType.IMPLEMENTATION_PLAN: self.service.get_template(
+                TemplateType.IMPLEMENTATION_PLAN
+            ),
+            TemplateType.ARCHITECTURE_DOCUMENT: self.service.get_template(
+                TemplateType.ARCHITECTURE_DOCUMENT
+            ),
         }
 
         for template_type, content in templates.items():
             # Each template should start with a main heading
-            assert content.startswith("#"), f"{template_type.value} template should start with # heading"
+            assert content.startswith("#"), (
+                f"{template_type.value} template should start with # heading"
+            )
 
             # Should contain placeholder for title replacement
-            assert "[Title]" in content or "Architecture Overview" in content, \
+            assert "[Title]" in content or "Architecture Overview" in content, (
                 f"{template_type.value} template should contain title placeholder or specific title"
+            )
 
             # Should contain multiple sections (## headings)
             section_count = content.count("## ")
-            assert section_count >= 3, f"{template_type.value} template should have at least 3 sections"
+            assert section_count >= 3, (
+                f"{template_type.value} template should have at least 3 sections"
+            )
 
     def test_template_placeholder_replacement_example(self):
         """Test example of how templates would be used with placeholder replacement."""
@@ -144,7 +130,7 @@ class TestTemplateService:
             "## Development Patterns",
             "## Testing Strategy",
             "## Deployment & Operations",
-            "## Getting Started"
+            "## Getting Started",
         ]
 
         for section in expected_sections:

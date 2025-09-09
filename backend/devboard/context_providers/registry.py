@@ -15,10 +15,10 @@ class ContextProviderRegistry(Registry[type[BaseContextProvider]]):
 
     def get_provider_for_uri(self, resource_uri: str) -> type[BaseContextProvider] | None:
         """Find the first provider that can handle the given resource URI.
-        
+
         Args:
             resource_uri: The URI to find a provider for
-            
+
         Returns:
             The provider class that can handle the URI, or None if not found
         """
@@ -28,12 +28,14 @@ class ContextProviderRegistry(Registry[type[BaseContextProvider]]):
         return None
 
 
-
 # Module-level singleton instance
-context_provider_registry = ContextProviderRegistry([
-    CodebaseContextProvider,
-    GitHubContextProvider,
-    JiraContextProvider,
-    SlackContextProvider,
-    WebPageContextProvider,
-], key_attr='provider_type')
+context_provider_registry = ContextProviderRegistry(
+    [
+        CodebaseContextProvider,
+        GitHubContextProvider,
+        JiraContextProvider,
+        SlackContextProvider,
+        WebPageContextProvider,
+    ],
+    key_attr="provider_type",
+)

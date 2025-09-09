@@ -115,8 +115,13 @@ class GitHubContextProvider(BaseContextProvider):
                 resource_type = parsed.get("type")
                 resource_id = parsed.get("id")
 
-                logfire.info("Retrieving GitHub resource",
-                            owner=owner, repo=repo, resource_type=resource_type, resource_id=resource_id)
+                logfire.info(
+                    "Retrieving GitHub resource",
+                    owner=owner,
+                    repo=repo,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                )
 
                 # Load full data for small-scope resources
                 if resource_type == "pull":
@@ -138,15 +143,24 @@ class GitHubContextProvider(BaseContextProvider):
 
             except Exception as e:
                 if isinstance(e, ResourceHandlingError | ContextRetrievalError):
-                    logfire.warn("GitHub resource retrieval failed", error_type=type(e).__name__, error=str(e))
+                    logfire.warn(
+                        "GitHub resource retrieval failed",
+                        error_type=type(e).__name__,
+                        error=str(e),
+                    )
                     raise
-                logfire.error("Unexpected error retrieving GitHub resource", error=str(e), exc_info=e)
+                logfire.error(
+                    "Unexpected error retrieving GitHub resource", error=str(e), exc_info=e
+                )
                 raise ContextRetrievalError(f"Failed to get GitHub resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
         """Get query-relevant context from GitHub resource."""
-        with logfire.span("github_context_provider.get_relevant_context",
-                         resource_uri=resource_uri, query_length=len(query)):
+        with logfire.span(
+            "github_context_provider.get_relevant_context",
+            resource_uri=resource_uri,
+            query_length=len(query),
+        ):
             if not self.can_handle_uri(resource_uri):
                 raise ResourceHandlingError(f"Cannot handle URI: {resource_uri}")
 
@@ -159,8 +173,13 @@ class GitHubContextProvider(BaseContextProvider):
                 resource_type = parsed.get("type")
                 resource_id = parsed.get("id")
 
-                logfire.info("Processing GitHub context request",
-                           owner=owner, repo=repo, resource_type=resource_type, resource_id=resource_id)
+                logfire.info(
+                    "Processing GitHub context request",
+                    owner=owner,
+                    repo=repo,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                )
 
                 # Fetch appropriate data based on resource type
                 if resource_type == "pull":
@@ -243,9 +262,13 @@ Based on this repository data, here is the relevant context for your query:
 
             except Exception as e:
                 if isinstance(e, ResourceHandlingError | ContextRetrievalError):
-                    logfire.warn("GitHub context retrieval failed", error_type=type(e).__name__, error=str(e))
+                    logfire.warn(
+                        "GitHub context retrieval failed", error_type=type(e).__name__, error=str(e)
+                    )
                     raise
-                logfire.error("Unexpected error in GitHub context retrieval", error=str(e), exc_info=e)
+                logfire.error(
+                    "Unexpected error in GitHub context retrieval", error=str(e), exc_info=e
+                )
                 raise ContextRetrievalError(f"Failed to get GitHub context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:

@@ -95,9 +95,7 @@ async def update_configuration(
 
 
 @router.patch("/{config_key}/fields", response_model=ConfigurationDetailResponse)
-async def update_configuration_fields(
-    config_key: str, field_updates: dict[str, Any]
-):
+async def update_configuration_fields(config_key: str, field_updates: dict[str, Any]):
     """Update specific configuration fields while respecting environment variable precedence."""
     try:
         result = config_service.update_config_fields(config_key, field_updates)

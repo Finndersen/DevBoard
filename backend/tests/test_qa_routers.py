@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from devboard.agents.project_agent import QAAgentService
 from devboard.context_providers import ContextStrategy
 from devboard.db.models import Project
 from devboard.services.context_assembly import (
@@ -13,7 +14,6 @@ from devboard.services.context_assembly import (
     ProjectContextData,
     ResourceInfo,
 )
-from devboard.services.qa_agent import QAAgentService
 
 
 @pytest.fixture
@@ -209,7 +209,9 @@ class TestQAAgentService:
         """Mock context assembly service."""
         service = Mock()
         service.get_project_context = AsyncMock(
-            return_value=ProjectContextData(eager_context=[], on_demand_resources=[], provider_errors=[])
+            return_value=ProjectContextData(
+                eager_context=[], on_demand_resources=[], provider_errors=[]
+            )
         )
         service.validate_resource_uri = AsyncMock()
         return service
