@@ -6,58 +6,28 @@ DevBoard is a "developer command centre" application designed to be a comprehens
 
 ## Architecture & Tech Stack 🏛️
 
-The system will be built on a local client-server architecture, ensuring access to local file systems for code repository management.
+The system follows a local client-server architecture with monorepo structure, ensuring access to local file systems for code repository management.
 
-* **Project Structure**: A monorepo structure with clearly separated `backend` and `frontend` applications is recommended. Each application will use a standard `src` layout for clean separation of source code from configuration and test files.
-    ```
-    /
-    ├── backend/
-    │   ├── devboard/           # Main Python package
-    │   │   ├── api/
-    │   │   │   ├── routers/    # API endpoints
-    │   │   │   └── schemas/    # Pydantic response/request models
-    │   │   ├── db/
-    │   │   │   ├── models/     # SQLAlchemy models
-    │   │   │   └── repositories/ # Data access layer
-    │   │   ├── services/       # Business logic, agent orchestration
-    │   │   ├── config/         # Configuration schemas and base classes
-    │   │   │   ├── registry.py # ConfigRegistry (domain-colocated)
-    │   │   │   └── base.py     # BaseConfig, ConfigValidationResult
-    │   │   ├── integrations/   # External API clients
-    │   │   │   └── registry.py # IntegrationRegistry (domain-colocated)
-    │   │   └── context_providers/ # Intelligent context gathering
-    │   │       └── registry.py # ContextProviderRegistry (domain-colocated)
-    │   ├── tests/
-    │   └── pyproject.toml
-    │
-    ├── frontend/
-    │   ├── src/
-    │   │   ├── components/ # Reusable UI components
-    │   │   ├── views/      # Main pages/screens (e.g., ProjectDashboard, TaskDetail)
-    │   │   ├── services/   # API client, state management
-    │   │   └── assets/
-    │   └── package.json
-    │
-    └── docker-compose.yml
-    ```
+**Backend**:
+- **Framework**: FastAPI with async Python
+- **Database**: SQLAlchemy ORM with SQLite (PostgreSQL migration path)
+- **Real-time**: WebSockets for agent progress streaming
+- **Tools**: uv (dependency management), ruff (linting), pyright (type checking)
+- **Observability**: Pydantic Logfire for monitoring and instrumentation
 
-* **Deployment**: A container-based approach (e.g., Docker) is recommended, with local code repositories mounted as volumes to provide necessary file system access.
-* **Backend**:
-  * **Framework**: An asynchronous Python web server using FastAPI.
-  * **Database**: SQLAlchemy as the ORM with a local SQLite database for initial phases, offering a clear migration path to PostgreSQL for future multi-user support. Use Alembic for DB schema management and migrations.
-  * **Real-time Communication**: WebSockets will be used for streaming agent progress and other real-time updates to the frontend.
-  * **Observability**: Pydantic Logfire for comprehensive observability, performance monitoring, and error tracking with automatic instrumentation for FastAPI, SQLAlchemy, and HTTPx requests.
-  * Use `uv` for dependency management,  `ruff` for linting and formatting and `pyright` for type checking
-* **Frontend**: A modern, web-based UI built with a framework like React.
-* **Long-Running Tasks**:
-  * **Challenge**: AI agent sessions are long-running and cannot be handled within a single synchronous API request.
-  * **Proposed Solution**: A background task queue is required. A lightweight option like Dramatiq or Huey will be used for initial phases. The flow will be: API triggers a background job -> job streams updates via WebSockets -> UI displays real-time progress.
-* **File Synchronization Strategy**:
-  * **Challenge**: Documents managed in the UI (e.g., `ARCHITECTURE.md`, `CLAUDE.md`) may also be edited directly on the filesystem, leading to conflicts.
-  * **Implemented Solution**: Architecture documents use SHA256 content hashing for conflict detection. When a user edits a document in the UI, the original content hash is stored. Upon saving, the current file content is hashed and compared - if different, a 409 Conflict response is returned with the current hash, allowing the user to review changes and retry. This prevents data loss while maintaining simplicity.
-  * **Future Enhancement**: For more complex scenarios, a three-way merge mechanism using libraries like `diff-match-patch` could be implemented to automatically reconcile changes when conflicts cannot be resolved through simple hash comparison.
-* **Multi-User Collaboration (Phase 3 Goal)**:
-  * While the initial focus is a local-first single-user experience, the architecture should not preclude future collaboration. This would likely involve a shared backend and database where project and task data can be synced between users.
+**Frontend**:
+- **Framework**: React 19+ with TypeScript
+- **Build**: Vite with Hot Module Replacement
+- **Styling**: Tailwind CSS with responsive design
+- **Routing**: React Router v7+
+- **Testing**: Vitest, React Testing Library, MSW
+- **State**: React hooks with API-driven data fetching
+
+**Key Features**:
+- **Long-running Tasks**: Background job queue (Dramatiq/Huey) with WebSocket progress updates
+- **File Synchronization**: SHA256 content hashing for conflict detection on architecture documents
+- **Container Deployment**: Docker with mounted local code repositories
+- **Future Multi-user**: Architecture supports shared backend and collaboration (Phase 3)
 
 ## Logical Objects & Entities 🧱
 
@@ -239,17 +209,17 @@ Represents a software codebase relevant to a project or task.
   * Full conversation history with the user
   * Task state awareness (Designing vs Planning phases)
 * **Tools/Capabilities**:
-  * **Document Editing**: Structured response format with find-replace edits for task specification and implementation plan
-  * **Context Research**: Full access to project context, codebase information, and external resources
+  * **Document Editing**: Simplified find-replace edits with precise text matching for task specification and implementation plan
+  * **Context Research**: Full access to project context, codebase information, and external resources via `get_relevant_context()` tool
   * **Conversational Refinement**: Interactive clarification and iterative document improvement
   * **State-Aware Prompting**: Different capabilities based on task state (Designing: spec only, Planning: both documents)
   * **Atomic Edit Application**: All document changes bundled and applied together with user approval
-* **Response Format**: Structured JSON with message, document edits array, and optional state transitions
-* **Model**: Intelligent model with a large context window (e.g., Gemini Pro).
+* **Response Format**: Structured JSON with explicit `task_specification_edits` and `task_implementation_plan_edits` arrays
+* **Model**: Configurable model selection via LLMService with agent type preferences (e.g., PLANNING agent type)
 * **Implementation**:
-  * Synchronous API processing with structured response format
+  * PydanticAI-based synchronous processing with structured response format
   * State-based prompt templates for different workflow phases
-  * Integration with existing context provider infrastructure
+  * Integration with existing context provider infrastructure and template system
 
 ### 5. Task Implementation Agent
 * **Function**: Executes the approved Implementation Plan.
@@ -355,86 +325,258 @@ This section outlines the "happy path" for a user completing a task from start t
     * Clicking it triggers an agent workflow to create the PR on GitHub.
     * The task status moves to `In Review`. The user can then follow their standard code review process outside of DevBoard.
 
-## UI/UX Component Design 🎨
+## Frontend Architecture & Implementation 🖥️
 
-This section breaks down the primary views of the application into their core components, providing a blueprint for frontend development.
+### Directory Structure & Organization
 
-### 1. Project Dashboard View
-This is the main landing page for a specific project. It provides a high-level overview and serves as the primary navigation hub.
-* **Header Component**:
-  * Displays the Project Name.
-  * Contains a primary action button like "+ New Task".
-  * Navigation tabs: "Board", "Details", "Settings".
-* **Task List / Kanban Board Component (Default View)**:
-  * **Columns**: Displays columns corresponding to the task statuses (`Pending`, `Planning`, `Implementing`, etc.).
-  * **Task Cards**: Each task is represented by a card within a column. Cards are draggable between columns to manually update status.
-  * **Card Details**: Each card shows the task title, a snippet of the description, and any relevant icons (e.g., Jira logo if linked).
-  * **Filtering**: Controls to filter tasks by name, associated codebase, etc.
-* **Project Details Component ("Details" Tab)**:
-  * A full-screen Markdown editor for viewing and editing the `Project Details` document.
-  * A chat interface on the side for interacting with the `Project Q&A Agent`.
-* **Settings Component ("Settings" Tab)**:
-  * UI for managing linked codebases.
-  * UI for managing linked `ContextProvider` resources (e.g., list of connected Slack channels, Notion pages).
+The frontend follows a clean, modular structure designed for maintainability and scalability:
 
-### 2. Global Settings View
-This is a comprehensive configuration management interface accessible from the main navigation. It provides centralized control over all application settings.
-* **Header Component**:
-  * Displays "Global Settings" title.
-  * Navigation tabs: "Integrations", "Codebases", "Context Providers", "Agents".
-* **Integrations Tab**:
-  * **Integration Cards**: Each integration (GitHub, Jira, Slack, OpenAI, Anthropic, Google) displayed as a card with:
-    * Connection status indicator (gray=untested, green=working, red=failed) updated only after testing
-    * "Test Connection" button with loading states that performs immediate connection verification
-    * Configuration form with masked API keys (e.g., "sk-...xyz123") and reveal option
-    * Save/Cancel buttons with validation feedback
-  * **On-Demand Testing**: Click "Test Connection" performs real-time connection test with immediate success/failure results and actionable error messages
-* **Codebases Tab**:
-  * **Path Management Interface**: Add/remove local repository paths with:
-    * Path input field with file system browser integration
-    * Path validation (directory exists, is git repository)
-    * List of configured codebases with edit/remove options
-* **Context Providers Tab**:
-  * **Resource Management**: Interface for managing context provider resources:
-    * Add resource form with URI input and provider auto-detection
-    * Resource validation and provider compatibility checking
-    * Auto-description generation toggle with manual override option
-    * List of configured resources grouped by provider type
-* **Agents Tab**:
-  * **Model Selection Interface**: Dropdown selectors for each agent type:
-    * Q&A Agent, Planning Agent, Implementation Agent
-    * Dynamic model lists populated based on configured and working LLM providers
-    * Fallback hierarchy display showing automatic model selection order
-    * Status indicators showing which providers are available for each model
+```
+frontend/
+├── src/
+│   ├── components/          # Reusable UI components
+│   │   ├── __tests__/      # Component tests
+│   │   ├── Layout.tsx      # Application shell with navigation
+│   │   ├── Chat.tsx        # Real-time chat interface
+│   │   ├── ConfigurationForm.tsx    # Settings form component
+│   │   └── ConfigurationField.tsx   # Individual config field
+│   ├── views/              # Main page components (routes)
+│   │   ├── __tests__/      # View component tests
+│   │   ├── ProjectDashboard.tsx     # Project listing and overview
+│   │   ├── ProjectDetail.tsx        # Individual project details
+│   │   ├── TaskDetail.tsx          # Task specification and planning
+│   │   ├── Codebases.tsx           # Codebase management
+│   │   └── Settings.tsx            # Global application settings
+│   ├── lib/                # Core utilities and services
+│   │   ├── __tests__/      # Service tests
+│   │   └── api.ts          # API client and TypeScript interfaces
+│   ├── test/               # Test configuration and utilities
+│   │   ├── setup.ts        # Test environment setup
+│   │   ├── utils.tsx       # Test utility functions
+│   │   └── mocks/          # MSW mock handlers
+│   ├── assets/             # Static assets (images, icons)
+│   ├── App.tsx             # Main application component with routing
+│   ├── main.tsx            # Application entry point
+│   └── index.css           # Global styles and Tailwind imports
+├── package.json            # Dependencies and scripts
+├── tailwind.config.js      # Tailwind CSS configuration
+├── tsconfig.json          # TypeScript configuration
+├── vite.config.ts         # Vite build configuration
+└── vitest.config.ts       # Test runner configuration
+```
 
-### 3. Task Detail View
-This is a focused, full-screen view that opens when a user clicks on a Task Card. It's the primary workspace for all agent interactions.
-* **Header Component**:
-  * Displays the full Task Title.
-  * Includes a Status Dropdown to manually change the task's status.
-  * "Back to Project" navigation link.
-* **Metadata Component**:
-  * A clean, readable section displaying key-value information:
-    * **Linked Ticket**: A clickable link to the remote Jira/Asana ticket.
-    * **Codebase**: The associated codebase for the task.
-    * **Created Date**: Timestamp of when the task was created.
-* **Main Content Component (Three-Tab Interface)**:
-  * **"Task Specification" Tab**: Markdown editor/viewer for task description with edit/view toggle pattern
-  * **"Implementation Plan" Tab**: Markdown editor/viewer for implementation plan with edit/view toggle pattern
-  * **"Planning Agent" Tab**: Conversation interface for Task Planning Agent interactions
-    * **User Messages**: Standard chat bubbles
-    * **Agent Responses**: Standard chat bubbles with structured edit proposals
-    * **Edit Confirmation Modals**: Preview document changes with diff view before applying
-    * **Research Summaries**: Collapsible blocks for agent context provider queries
-* **Action Bar Component**:
-  * State-based action buttons that change based on current task status:
-    * **Status `Pending`**: Shows "**Start Design**" (→ Designing state)
-    * **Status `Designing`**: Shows "**Begin Planning**" (→ Planning state)
-    * **Status `Planning`**: Shows "**Start Implementation**" (→ Implementing state)
-    * **Status `Implementing`**: Shows "**View Progress**" and "**Stop Agent**"
-    * **Status `Complete`**: Shows "**Create Pull Request**"
+### State Management Architecture
 
-## API Endpoints 🔌
+The application uses a **props-down, events-up** pattern with React hooks for state management:
+
+* **Local Component State**: Each view manages its own data using `useState` and `useEffect` hooks
+* **API-Driven Data**: All persistent data is fetched from the backend API using the centralized `ApiClient`
+* **Real-time Updates**: WebSocket connections provide live updates for long-running agent operations
+* **Form State**: Controlled components with local state for form inputs and editing modes
+* **Navigation State**: React Router handles URL state and navigation between views
+
+**Key State Patterns:**
+```typescript
+// Loading states for async operations
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+// Data fetching pattern
+useEffect(() => {
+  fetchData().catch(err => setError(err.message))
+}, [dependency])
+
+// Edit mode toggles for inline editing
+const [isEditing, setIsEditing] = useState(false)
+const [editedContent, setEditedContent] = useState(originalContent)
+```
+
+### Component Architecture & Design Patterns
+
+**1. Component Hierarchy:**
+```
+App (Router Setup)
+├── Layout (Navigation Shell)
+│   └── Views (Route Components)
+│       ├── Shared Components (Chat, Forms, etc.)
+│       └── View-Specific Logic
+```
+
+**2. TypeScript Integration:**
+* **Strict Type Safety**: All components use TypeScript with strict type checking
+* **Interface-First Design**: API responses and component props are fully typed
+* **Type-Only Imports**: Strict enforcement of `import type` syntax for type imports
+* **Generic Components**: Reusable components with generic type parameters where appropriate
+
+**3. Styling Approach:**
+* **Utility-First CSS**: Tailwind CSS for consistent, responsive styling
+* **Design System**: Custom color palette and spacing using Tailwind's configuration
+* **Dark Mode Support**: Built-in dark mode toggle with system preference detection
+* **Responsive Design**: Mobile-first approach with Tailwind's responsive utilities
+* **Component Variants**: Conditional styling based on component state and props
+
+### API Integration & Data Flow
+
+**1. Centralized API Client:**
+```typescript
+class ApiClient {
+  private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Centralized error handling and response processing
+  }
+  
+  // Typed methods for all API endpoints
+  async getProjects(): Promise<Project[]> { ... }
+  async createTask(projectId: number, task: CreateTaskRequest): Promise<Task> { ... }
+}
+```
+
+**2. Data Fetching Patterns:**
+* **Effect-Based Loading**: `useEffect` hooks trigger API calls on component mount and dependency changes
+* **Error Boundaries**: Graceful error handling with user-friendly error messages
+* **Optimistic Updates**: Immediate UI updates followed by API synchronization
+* **Loading States**: Skeleton screens and loading indicators for better UX
+
+**3. Real-time Communication:**
+* **WebSocket Integration**: Live updates for agent progress and system notifications
+* **Event-Driven Updates**: Real-time chat messages and agent status updates
+* **Connection Management**: Automatic reconnection and connection state handling
+
+### User Interface Patterns & Behaviors
+
+**1. Navigation & Routing:**
+* **Single-Page Application**: Client-side routing with React Router
+* **Persistent Navigation**: Global navigation bar with active state indicators
+* **Breadcrumb Navigation**: Clear navigation hierarchy for nested views
+* **Deep Linking**: All application states are URL-addressable
+
+**2. Interactive Elements:**
+* **Inline Editing**: Toggle between view and edit modes for documents and configurations
+* **Modal Dialogs**: Confirmation dialogs for destructive actions
+* **Form Validation**: Real-time validation with clear error messaging
+* **Progressive Enhancement**: Graceful degradation for JavaScript-disabled environments
+
+**3. Real-time Feedback:**
+* **Loading Indicators**: Skeleton screens and spinners for async operations
+* **Success/Error Toast**: Non-intrusive notifications for user actions
+* **Live Agent Updates**: Streaming progress indicators for long-running AI operations
+* **Auto-save Indicators**: Visual feedback for automatic content saving
+
+### Testing Strategy & Quality Assurance
+
+**1. Test Architecture:**
+* **Unit Testing**: Vitest for fast, isolated component testing
+* **Integration Testing**: React Testing Library for user-interaction testing
+* **API Mocking**: MSW (Mock Service Worker) for realistic API mocking
+* **Visual Testing**: Component testing with various props and states
+
+**2. Testing Patterns:**
+```typescript
+// Component testing with user interactions
+test('should update task status when status dropdown changes', async () => {
+  const user = userEvent.setup()
+  render(<TaskDetail />)
+  
+  await user.click(screen.getByRole('combobox'))
+  await user.click(screen.getByText('In Progress'))
+  
+  expect(screen.getByText('In Progress')).toBeInTheDocument()
+})
+
+// API integration testing with MSW
+test('should fetch and display projects', async () => {
+  server.use(
+    http.get('/api/projects', () => HttpResponse.json([mockProject]))
+  )
+  
+  render(<ProjectDashboard />)
+  await waitFor(() => expect(screen.getByText('Test Project')).toBeInTheDocument())
+})
+```
+
+**3. Code Quality Standards:**
+* **ESLint Configuration**: Strict linting rules for code consistency
+* **TypeScript Strict Mode**: Maximum type safety with strict compiler options
+* **Import Organization**: Consistent import ordering and type-only imports
+* **Component Conventions**: Consistent naming patterns and file organization
+
+### Performance & Optimization
+
+**1. Build Optimization:**
+* **Vite Build System**: Fast development builds with HMR and optimized production bundles
+* **Code Splitting**: Route-based code splitting for smaller initial bundle sizes
+* **Tree Shaking**: Automatic removal of unused code and dependencies
+* **Asset Optimization**: Image compression and efficient asset loading
+
+**2. Runtime Performance:**
+* **React Best Practices**: Proper use of keys, memoization where needed, and efficient re-renders
+* **Bundle Analysis**: Regular monitoring of bundle size and optimization opportunities
+* **Lazy Loading**: Dynamic imports for route components and heavy dependencies
+* **Efficient State Updates**: Minimal re-renders through proper state design
+
+## Backend Architecture & Implementation 🏗️
+
+### Directory Structure & Organization
+
+```
+backend/
+├── devboard/                       # Main Python package
+│   ├── api/                       # API layer
+│   │   ├── routers/               # FastAPI route handlers
+│   │   │   ├── projects.py        # Project endpoints
+│   │   │   ├── tasks.py           # Task management endpoints
+│   │   │   ├── codebases.py       # Codebase management
+│   │   │   ├── configurations.py  # Settings endpoints
+│   │   │   └── websocket.py       # WebSocket connections
+│   │   └── schemas/               # Pydantic models
+│   │       ├── project.py         # Project request/response schemas
+│   │       ├── task.py             # Task schemas with state management
+│   │       └── codebase.py        # Codebase and architecture schemas
+│   ├── core/                      # Core business logic
+│   │   ├── config.py              # Configuration service & registry
+│   │   ├── agent_config.py        # Agent-specific configurations
+│   │   └── integration_configs.py # Integration configurations
+│   ├── db/                        # Database layer
+│   │   ├── models/                # SQLAlchemy 2.0 models
+│   │   ├── repositories/          # Data access patterns
+│   │   └── session.py             # Database session management
+│   ├── services/                  # Business services
+│   │   ├── project_service.py     # Project management logic
+│   │   ├── task_service.py        # Task orchestration
+│   │   ├── llm_service.py         # LLM provider management
+│   │   ├── context_assembly.py    # Context aggregation
+│   │   └── codebase_investigation.py # Architecture generation
+│   ├── integrations/              # External service clients
+│   │   ├── __init__.py            # Integration registry
+│   │   ├── github.py              # GitHub API client
+│   │   ├── jira.py                # Jira integration
+│   │   └── slack.py               # Slack client
+│   ├── context_providers/         # Context gathering modules
+│   │   ├── __init__.py            # Provider registry
+│   │   ├── github.py              # GitHub context provider
+│   │   ├── jira.py                # Jira context provider
+│   │   ├── slack.py               # Slack context provider
+│   │   ├── codebase.py            # Local codebase provider
+│   │   └── webpage.py             # Web scraping provider
+│   ├── templates/                 # Document templates
+│   │   ├── task_specification.md  # Task spec template
+│   │   ├── implementation_plan.md # Implementation template
+│   │   └── architecture_document.md # Architecture template
+│   └── utils/                     # Utility modules
+│       ├── gemini_cli.py          # Gemini API utilities
+│       └── __init__.py
+├── tests/                         # Test suite
+│   ├── test_*.py                  # Unit & integration tests
+│   └── conftest.py                # Test fixtures
+├── alembic/                       # Database migrations
+│   └── versions/                  # Migration scripts
+├── Makefile                       # Development commands
+├── pyproject.toml                 # Project dependencies & config
+└── README.md                      # Backend documentation
+```
+
+### API Layer & Endpoints 🔌
 
 This section defines the core RESTful API contract between the frontend and the backend.
 
@@ -445,15 +587,16 @@ This section defines the core RESTful API contract between the frontend and the 
   * `PATCH /api/projects/{project_id}` - Update a project's details.
 
 * **Tasks**
-  * `GET /api/projects/{project_id}/tasks` - List all tasks for a project.
-  * `POST /api/tasks` - Create a new task.
+  * `GET /api/tasks` - List all tasks, optionally filtered by `?project_id=` parameter.
+  * `GET /api/projects/{project_id}/tasks` - List all tasks for a project (convenience endpoint).
+  * `POST /api/tasks` - Create a new task (requires `project_id` in request body).
   * `GET /api/tasks/{task_id}` - Get details for a single task.
   * `PATCH /api/tasks/{task_id}` - Update a task's details.
 
 * **Task Planning Agent**
   * `GET /api/tasks/{task_id}/messages` - Get task planning conversation history.
-  * `POST /api/tasks/{task_id}/messages` - Send message to task planning agent.
-  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits from agent response.
+  * `POST /api/tasks/{task_id}/messages` - Send message to task planning agent with structured response including explicit edit arrays.
+  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits with separate `task_specification_edits` and `task_implementation_plan_edits` fields.
   * `POST /api/tasks/{task_id}/state-transition` - Progress task through design/planning states.
 
 * **Codebases**
@@ -487,231 +630,279 @@ This section defines the core RESTful API contract between the frontend and the 
 * **Real-time Updates**
   * `WS /ws/jobs/{job_id}` - A WebSocket endpoint the frontend connects to after triggering an agent, to receive real-time progress updates.
 
-## Database Schema (SQLAlchemy Models) 🗄️
+### Database Schema & Data Models 🗄️
 
-This section defines the initial database models using modern, type-annotated SQLAlchemy syntax.
+The application uses modern SQLAlchemy 2.0 models with type annotations and a SQLite database (with PostgreSQL migration path).
 
-```python
-import datetime
-from typing import List, Optional
+#### Core Entities
 
-from sqlalchemy import Column, create_engine, DateTime, ForeignKey, Integer, JSON, String, Table, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+**Project**: High-level container for related tasks and codebases
+- Contains project details (name, description, status), creation metadata
+- Has many-to-many relationships with Codebases and ContextProviderResources
 
-class Base(DeclarativeBase):
-    pass
+**Task**: Individual work items with lifecycle management
+- Links to Projects, stores task specifications and implementation plans
+- Manages state transitions (Designing → Planning → Ready → In Progress → Done)
+- Supports document versioning and conversation history
 
-# Association table for the many-to-many relationship between Projects and Codebases
-project_codebase_association = Table(
-    "project_codebase_association",
-    Base.metadata,
-    Column("project_id", ForeignKey("projects.id"), primary_key=True),
-    Column("codebase_id", ForeignKey("codebases.id"), primary_key=True),
-)
+**Codebase**: Represents local software repositories
+- Stores path, metadata, and architecture document content with conflict detection
+- Maintains SHA256 content hashes for synchronization with file system
 
-class Project(Base):
-    """Represents a high-level project, acting as a container for tasks and codebases."""
-    __tablename__ = 'projects'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
-    details: Mapped[str] = mapped_column(Text)
-    current_status: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+#### Configuration & Context
 
-    tasks: Mapped[List["Task"]] = relationship(back_populates="project")
-    codebases: Mapped[List["Codebase"]] = relationship(
-        secondary=project_codebase_association, back_populates="projects"
-    )
-    context_resources: Mapped[List["ContextProviderResource"]] = relationship(
-        secondary=project_context_resource_association, back_populates="projects"
-    )
-    messages: Mapped[List["ProjectConversationMessage"]] = relationship(back_populates="project")
+**ContextProviderResource**: External linkable resources for project/task context
+- Represents GitHub repos, Jira tickets, Slack threads, web pages
+- Many-to-many relationships with Projects and Tasks for flexible resource sharing
 
-class Task(Base):
-    """Represents a single, self-contained piece of work within a project."""
-    __tablename__ = 'tasks'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'))
-    codebase_id: Mapped[Optional[int]] = mapped_column(ForeignKey('codebases.id'))
-    
-    title: Mapped[str] = mapped_column(String(255))
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(50), default='Pending')
-    remote_task_id: Mapped[Optional[str]] = mapped_column(String(100))
-    conversation_id: Mapped[Optional[str]] = mapped_column(String(100))
-    implementation_plan: Mapped[Optional[str]] = mapped_column(Text)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+**Configuration**: Hierarchical settings storage
+- Generic key-value system supporting nested configurations
+- JSON column for complex data structures with Pydantic validation
 
-    project: Mapped["Project"] = relationship(back_populates="tasks")
-    codebase: Mapped[Optional["Codebase"]] = relationship(back_populates="tasks")
-    context_resources: Mapped[List["ContextProviderResource"]] = relationship(
-        secondary=task_context_resource_association, back_populates="tasks"
-    )
+**ProjectConversationMessage**: Q&A agent conversation history
+- Supports multiple message types: user, assistant, tool_call, tool_result
+- Stores both text content and structured JSON data for tool interactions
+- Implements sliding window pattern to manage conversation length
 
-class Codebase(Base):
-    """Represents a software codebase that can be associated with projects and tasks."""
-    __tablename__ = 'codebases'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
-    description: Mapped[str] = mapped_column(Text)
-    repository_url: Mapped[Optional[str]] = mapped_column(String(512))
-    local_path: Mapped[Optional[str]] = mapped_column(String(512))
+#### Database Design Principles
 
-    projects: Mapped[List["Project"]] = relationship(
-        secondary=project_codebase_association, back_populates="codebases"
-    )
-    tasks: Mapped[List["Task"]] = relationship(back_populates="codebase")
+- **Modern SQLAlchemy 2.0**: Uses `Mapped[]` annotations and relationship patterns
+- **Type Safety**: Full type annotation support with optional nullable fields
+- **Resource Sharing**: Many-to-many relationships prevent duplication of shared resources
+- **Extensibility**: JSON fields and generic configuration system support future enhancements
+- **Migration Ready**: Clear upgrade path from SQLite to PostgreSQL for multi-user scenarios
 
-class Configuration(Base):
-    """Generic key-value configuration store for all application settings."""
-    __tablename__ = 'configurations'
-    key: Mapped[str] = mapped_column(String(255), primary_key=True)
-    value_json: Mapped[str] = mapped_column(Text)
-    schema_version: Mapped[str] = mapped_column(String(50), default="1.0")
-    updated_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+## UI/UX Component Design 🎨
 
-class ContextProviderResource(Base):
-    """Represents a context provider resource that can be shared across projects and tasks."""
-    __tablename__ = 'context_provider_resources'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    provider_name: Mapped[str] = mapped_column(String(255))
-    resource_uri: Mapped[str] = mapped_column(String(1024), unique=True)
-    description: Mapped[str] = mapped_column(String(1024))
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+This section breaks down the primary views of the application into their core components, detailing the current implementation and planned features.
 
-    projects: Mapped[List["Project"]] = relationship(
-        secondary=project_context_resource_association, back_populates="context_resources"
-    )
-    tasks: Mapped[List["Task"]] = relationship(
-        secondary=task_context_resource_association, back_populates="context_resources"
-    )
+### Application Layout & Navigation
 
-# Association table for Project <-> ContextProviderResource
-project_context_resource_association = Table(
-    "project_context_resources",
-    Base.metadata,
-    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
-    Column("resource_id", Integer, ForeignKey("context_provider_resources.id"), primary_key=True),
-    Column("added_at", DateTime, default=datetime.datetime.utcnow),
-)
+**Global Layout Component** (`components/Layout.tsx`):
+* **Navigation Bar**: Fixed header with DevBoard branding and navigation links
+  * **Logo**: Blue "DB" icon with "DevBoard" text link to dashboard
+  * **Active Navigation**: Visual indicators for current route (Projects, Codebases, Settings)
+  * **Responsive Design**: Horizontal layout with consistent spacing and hover effects
+  * **Dark Mode Support**: Automatic theme switching with dark/light color schemes
+* **Content Area**: Centered max-width container with consistent padding
+* **Navigation Links**: 
+  * `/projects` - Project dashboard and management
+  * `/codebases` - Codebase configuration and architecture documents
+  * `/settings` - Global application configuration
 
-# Association table for Task <-> ContextProviderResource
-task_context_resource_association = Table(
-    "task_context_resources",
-    Base.metadata,
-    Column("task_id", Integer, ForeignKey("tasks.id"), primary_key=True),
-    Column("resource_id", Integer, ForeignKey("context_provider_resources.id"), primary_key=True),
-    Column("added_at", DateTime, default=datetime.datetime.utcnow),
-)
-    
-class ProjectConversationMessage(Base):
-    """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
-    __tablename__ = 'project_conversation_messages'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'))
-    
-    # The role of the message sender, e.g., 'user', 'assistant', 'tool_call', 'tool_result'
-    role: Mapped[str] = mapped_column(String(50))
-    
-    # For text content from 'user' or 'assistant'
-    content: Mapped[Optional[str]] = mapped_column(Text)
-    
-    # For structured data from 'tool_call' or 'tool_result'
-    tool_data: Mapped[Optional[dict]] = mapped_column(JSON)
-    
-    created_at: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.utcnow)
+### 1. Project Dashboard View (`views/ProjectDashboard.tsx`)
+The main landing page displaying all projects with creation and management capabilities.
 
-    project: Mapped["Project"] = relationship(back_populates="messages")
+**Current Implementation:**
+* **Project Grid Layout**: Responsive card-based display of projects
+* **Create Project Button**: Prominent action button for new project creation
+* **Project Cards**: Individual project tiles with:
+  * Project name and description
+  * Creation date and last updated timestamp
+  * Quick action buttons (View, Edit, Delete)
+  * Status indicators and progress metrics
+* **Loading States**: Skeleton placeholders during data fetching
+* **Empty State**: Guidance for users with no projects
 
+**Planned Enhancements:**
+* **Project Filtering**: Search and filter by name, status, or date
+* **Kanban Board Toggle**: Switch between card grid and kanban board views
+* **Bulk Operations**: Multi-select for batch project operations
+
+### 2. Individual Project Detail View (`views/ProjectDetail.tsx`)
+Comprehensive project management interface with tabbed navigation.
+
+**Current Implementation:**
+* **Project Header**: Project name, description, and metadata display
+* **Tabbed Interface**:
+  * **Project Details Tab**: Markdown editor for project documentation
+  * **Tasks Tab**: List of all project tasks with status indicators
+  * **Settings Tab**: Project-specific configuration options
+* **Task Management**: 
+  * Create new tasks with title and description
+  * Task status indicators and quick actions
+  * Navigate to individual task detail views
+* **Real-time Chat**: Integrated Q&A agent interface (`components/Chat.tsx`)
+
+**Chat Component Features:**
+* **Message History**: Persistent conversation with Q&A agent
+* **Real-time Messaging**: WebSocket integration for live responses
+* **Typing Indicators**: Visual feedback during agent processing
+* **Message Formatting**: Markdown support for rich text responses
+* **Auto-scroll**: Automatic scroll to latest messages
+
+### 3. Task Detail View (`views/TaskDetail.tsx`)
+Comprehensive task management interface with state-based workflow.
+
+**Current Implementation:**
+* **Task Header**: 
+  * Back navigation to parent project
+  * Task title and status dropdown for manual state changes
+  * Metadata display (creation date, assigned codebase, remote task ID)
+* **Three-Tab Interface**:
+  * **Task Specification Tab**: Markdown editor with toggle between view/edit modes
+  * **Implementation Plan Tab**: Structured plan document with inline editing
+  * **Planning Agent Tab**: Conversational interface for task planning
+* **Document Editing Features**:
+  * **Inline Edit Mode**: Toggle between readonly and edit states
+  * **Auto-save Functionality**: Automatic content persistence
+  * **Markdown Rendering**: Rich text display with `react-markdown`
+  * **Edit/Save Actions**: Clear visual feedback for document state
+
+**State-Based Action Buttons**:
+* **Pending State**: "Start Design" button to begin task specification
+* **Designing State**: "Begin Planning" to transition to planning phase
+* **Planning State**: "Start Implementation" to trigger implementation agent
+* **Implementation State**: Live progress monitoring and agent controls
+* **Complete State**: "Create Pull Request" workflow trigger
+
+### 4. Codebases Management (`views/Codebases.tsx`)
+Centralized interface for managing local codebases and architecture documents.
+
+**Current Implementation:**
+* **Codebase Listing**: Table/card view of all configured codebases
+* **Add Codebase Form**: Path validation and repository detection
+* **Codebase Actions**:
+  * Edit codebase metadata (name, description)
+  * View/Edit architecture documents
+  * Delete codebase configuration
+* **Architecture Document Management**:
+  * View existing `ARCHITECTURE.md` files
+  * Generate new architecture documents using AI
+  * Edit and update architecture content
+  * Conflict detection for concurrent file system changes
+
+### 5. Global Settings View (`views/Settings.tsx`)
+Comprehensive configuration management with tabbed organization.
+
+**Current Implementation:**
+* **Integration Configuration**:
+  * **Configuration Cards**: Visual status indicators for each integration
+  * **Field-Level Editing**: Individual configuration field management using `ConfigurationForm.tsx`
+  * **Environment Variable Integration**: Display of value sources (env, database, defaults)
+  * **Connection Testing**: Real-time validation with immediate feedback
+  * **Masked Secrets**: Secure display of API keys and tokens
+* **Configuration Components**:
+  * **ConfigurationForm**: Dynamic form generation based on schema
+  * **ConfigurationField**: Individual field component with type-specific inputs
+  * **Field Types**: String, boolean, integer, number inputs with validation
+  * **Value Source Indicators**: Clear labeling of configuration value origins
+
+**Integration Management Features:**
+* **Status Indicators**: Visual connection state (Connected, Disconnected, Error)
+* **Test Connection**: On-demand connection verification
+* **Error Messaging**: Detailed error feedback for troubleshooting
+* **Field Validation**: Real-time validation with user-friendly error messages
+
+### Component Design Patterns & Standards
+
+**1. TypeScript Interface Design:**
+```typescript
+// Consistent prop interface patterns
+interface ComponentProps {
+  data: ApiDataType
+  onAction: (id: number) => void
+  loading?: boolean
+  className?: string
+}
+
+// Flexible event handler patterns
+type EventHandler<T = void> = (data: T) => void | Promise<void>
 ```
+
+**2. Consistent State Patterns:**
+```typescript
+// Standard loading/error state management
+const [data, setData] = useState<DataType[]>([])
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+// Edit mode patterns for inline editing
+const [isEditing, setIsEditing] = useState(false)
+const [editedContent, setEditedContent] = useState(originalContent)
+const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+```
+
+**3. Accessibility & User Experience:**
+* **Keyboard Navigation**: Full keyboard accessibility for all interactive elements
+* **ARIA Labels**: Proper screen reader support with descriptive labels
+* **Focus Management**: Logical tab order and focus indicators
+* **Loading States**: Skeleton screens prevent layout shift during loading
+* **Error Boundaries**: Graceful error handling with fallback UI components
+
+### Frontend Behavior Patterns & User Experience
+
+**1. Data Loading & State Management:**
+* **Progressive Loading**: Components render immediately with loading states, then populate with data
+* **Error Recovery**: Failed API requests show retry options and clear error messages
+* **Optimistic Updates**: UI updates immediately for better perceived performance, with rollback on API failure
+* **Skeleton Screens**: Loading placeholders match the structure of loaded content to prevent layout shift
+
+**2. Form Handling & Validation:**
+* **Real-time Validation**: Field-level validation as users type with immediate feedback
+* **Unsaved Changes Warning**: Browser prompt when navigating away from forms with unsaved data
+* **Auto-save Indicators**: Visual feedback showing when content is automatically saved
+* **Field State Management**: Clear indication of field sources (environment, database, default values)
+
+**3. Navigation & User Flow:**
+* **Breadcrumb Navigation**: Clear path indication for nested views (Project > Task > Details)
+* **Back Button Behavior**: Browser back button works correctly with React Router state
+* **Deep Linking**: All application states are URL-addressable and shareable
+* **Tab Persistence**: Active tab selection persists across page refreshes and navigation
+
+**4. Interactive Elements & Feedback:**
+* **Button States**: Loading, disabled, and active states with appropriate visual feedback
+* **Hover Effects**: Consistent hover states for interactive elements
+* **Click Feedback**: Visual confirmation of user interactions (button presses, link clicks)
+* **Drag & Drop**: Future kanban board functionality with drag-and-drop task management
+
+**5. Real-time Features:**
+* **WebSocket Connection**: Persistent connection for agent progress and chat functionality
+* **Live Updates**: Agent progress streams to the UI in real-time during long-running operations
+* **Connection Status**: Visual indicators for WebSocket connection state
+* **Reconnection Logic**: Automatic reconnection with exponential backoff on connection loss
+
+**6. Accessibility & Inclusive Design:**
+* **Screen Reader Support**: All interactive elements have proper ARIA labels and roles
+* **Keyboard Navigation**: Full application functionality available via keyboard shortcuts
+* **Focus Indicators**: Clear visual focus states for keyboard users
+* **Color Contrast**: WCAG compliant color combinations for text and background elements
+* **Responsive Text**: Text scales appropriately across different screen sizes and zoom levels
 
 ## Key Artifact Schemas 📝
 
-### 1. Implementation Plan Schema
-This artifact is the contract between the Planning and Implementation agents. It is a structured **Markdown document** designed to be comprehensive, providing all necessary context to minimize ambiguity and the need for further research by the implementation agent.
+### 1. Task Specification Schema
+A structured Markdown document created collaboratively between users and the Task Planning Agent during the **Designing** phase. Used to capture task requirements, context, and acceptance criteria before implementation planning begins.
 
-````markdown
-# Implementation Plan: Refactor Authentication Service
+**Template Structure**: `/backend/devboard/templates/task_specification.md`
+- **Objective**: Clear, specific goal statement
+- **Context & Background**: Current state, problem description, stakeholder needs
+- **Requirements**: Functional and non-functional requirements as checklists
+- **Acceptance Criteria**: Testable success criteria and quality gates
+- **Resources & References**: Related documentation, dependencies, external references
+- **Constraints & Assumptions**: Technical constraints and timeline assumptions
 
-## 1. Goal
-Refactor the authentication service to use a new JWT library for better security.
+### 2. Implementation Plan Schema
+The formal contract between Planning and Implementation agents. A comprehensive Markdown document providing all necessary context to execute the task without ambiguity or additional research.
 
-## 2. Context Summary
-- The current system uses the legacy `pyjwt` library which does not support the required PS256 algorithm.
-- A project-level decision was made (see Notion doc #123) to migrate to `python-jose`.
-- The user model is defined in `src/models/user.py` and contains `id`, `username`, and `role`.
+**Template Structure**: `/backend/devboard/templates/implementation_plan.md`
+- **Summary**: High-level approach and technical strategy
+- **Technical Analysis**: Architecture impact, dependencies, risk assessment
+- **Implementation Steps**: Phased approach with specific files, testing, and time estimates
+- **Testing Strategy**: Unit test requirements, integration scenarios, performance validation
+- **Definition of Done**: Completion criteria including code review, tests, and documentation
 
-## 3. Files to Modify
+### 3. Architecture Document Schema
+A living representation of codebases generated and maintained by the Codebase Investigation Agent. Provides comprehensive technical documentation for development teams.
 
-### `src/services/auth.py`
-- **Reason:** Main service file containing the token generation and validation logic.
-- **Relevant Snippets:**
-  ```python
-  # Snippet of the existing token creation function
-  def create_token(user_id: int) -> str:
-    payload = {'id': user_id}
-    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-  ```
-
-### `tests/test_auth.py`
-- **Reason:** Unit tests for the authentication service that will need to be updated.
-
-## 4. Implementation Steps
-1.  Add `python-jose` to the `requirements.txt` file.
-2.  In `src/services/auth.py`, import `jwt` from `jose` instead of `jwt`.
-3.  Update the `create_token` function to use `jose.jwt.encode` with the `PS256` algorithm.
-4.  Update the corresponding token decoding function to match.
-5.  Modify tests in `tests/test_auth.py` to assert the new token structure and algorithm.
-6.  Ensure all existing tests pass after the changes.
-
-## 5. Relevant Definitions
-
-### User Model (`src/models/user.py`)
-```python
-class User(Base):
-    __tablename__ = 'users'
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
-    role = Column(String, default='user')
-````
-
-### 2. Codebase Architecture Document (`ARCHITECTURE.md`)
-This document is a living representation of the codebase, generated and updated by the `Codebase Investigation Agent`. It follows a consistent Markdown structure to ensure clarity and navigability.
-
-```markdown
-# Architecture Overview: [Codebase Name]
-
-**Last Updated:** YYYY-MM-DD
-
-## 1. High-Level Summary
-A brief, one-paragraph description of the codebase's purpose, primary language, and framework.
-
-## 2. Key Directories & Files
-- `/src`: Main application source code.
-- `/tests`: Unit and integration tests.
-- `/docs`: Project documentation.
-- `Dockerfile`: Container build definition.
-
-## 3. Core Modules & Components
-### 3.1. Authentication Service (`src/services/auth.py`)
-- **Purpose:** Manages user authentication, token generation, and validation.
-- **Key Functions:** `create_token()`, `verify_token()`
-- **Dependencies:** `UserModel`, `jose.jwt`
-
-### 3.2. User Model (`src/models/user.py`)
-- **Purpose:** Defines the data structure for a user.
-- **Schema:** `id`, `username`, `hashed_password`, `role`
-
-## 4. Data Models & Database
-An overview of the database schema and the primary data models used in the application.
-
-## 5. API Endpoints (if applicable)
-- `POST /login`: Authenticates a user and returns a JWT.
-- `GET /users/me`: Returns the profile of the authenticated user.
-
-## 6. Design Patterns & Conventions
-A description of any major design patterns (e.g., Repository Pattern, Dependency Injection) or coding conventions used throughout the codebase.
-```
+**Template Structure**: `/backend/devboard/templates/architecture_document.md`
+- **Overview**: Purpose, goals, target audience
+- **Architecture Overview**: System architecture, component interactions, data flow
+- **Project Structure**: Directory organization, key files, module organization
+- **Technology Stack**: Languages, frameworks, dependencies, build tools
+- **Key Components**: Major modules, responsibilities, interfaces
+- **Configuration & Environment**: Environment variables, deployment considerations
+- **Development Patterns**: Code organization, naming conventions, error handling
 
 
 ## Generic Configuration Framework
@@ -733,145 +924,15 @@ A flexible, type-safe configuration system manages all application settings usin
   * Graceful degradation with logging for missing/invalid configurations
 
 * **Configuration Registry Pattern**:
-  ```python
-  from abc import ABC, abstractmethod
-  from typing import Dict, Type, TypeVar
-  from pydantic import BaseModel
-  
-  T = TypeVar('T', bound=BaseModel)
-  
-  class ConfigRegistry:
-      """Registry of configuration schemas using self-building pattern"""
-      
-      # Import configuration classes from centralized location
-      from devboard.config.agent_config import QAAgentConfig, PlanningAgentConfig
-      from devboard.config.integration_configs import SlackIntegrationConfig, GitHubIntegrationConfig, JiraIntegrationConfig
-      # ... other imports
-      
-      # Self-building registry using class attributes as single source of truth
-      _schemas = {
-          schema.config_key: schema
-          for schema in [
-              QAAgentConfig,
-              PlanningAgentConfig, 
-              SlackIntegrationConfig,
-              # ... other config classes
-          ]
-      }
-      
-      @classmethod
-      def get_schema(cls, key: str) -> Type[BaseConfig] | None:
-          """Get the registered schema for a configuration key."""
-          return cls._schemas.get(key)
-  ```
+  Implements a self-building registry system where configuration schemas automatically register themselves using class attributes. The registry builds itself from `config_key` attributes on Pydantic models, eliminating manual registration. Context providers and integrations check the registry for valid configurations before initialization, enabling graceful degradation with proper logging for missing or invalid configurations.
 
-* **Example Configuration Schemas**:
-  ```python
-  # Integration Layer - API credentials and connection details
-  class SlackIntegrationConfig(BaseSettings):
-      api_token: str  # From SLACK_API_TOKEN env var
-      workspace_url: Optional[str] = None  # From database
-      model_config = SettingsConfigDict(env_prefix='SLACK_')
-
-  # Context Provider Layer - Behavior and defaults  
-  class SlackContextProviderConfig(BaseModel):
-      integration_key: str = "integration.slack.main"
-      lookback_days: int = 7
-      max_messages_per_query: int = 50
-      agent_model: str = "gemini-flash"
-      
-  # Agent Configuration
-  class QAAgentConfig(BaseModel):
-      model_name: str = "gemini-flash"
-      max_context_tokens: int = 100000
-      temperature: float = 0.1
-      
-  # Register schemas with repository
-  ConfigRepository.register_schema("integration.slack.main", SlackIntegrationConfig)
-  ConfigRepository.register_schema("context_provider.slack.discussions", SlackContextProviderConfig) 
-  ConfigRepository.register_schema("agent.qa.default", QAAgentConfig)
-  ```
+* **Configuration Schema Types**:
+  - **Integration Schemas**: Handle API credentials and connection details for external services (Slack, GitHub, Jira), inheriting from BaseSettings to automatically load from environment variables with appropriate prefixes
+  - **Context Provider Schemas**: Define behavior parameters and defaults for data retrieval components, including lookback periods, query limits, and associated agent models
+  - **Agent Configuration Schemas**: Specify LLM parameters such as model names, context token limits, temperature settings, and other inference parameters
 
 * **Configuration Service Interface**:
-  ```python
-  from typing import Optional, List, Dict
-  from pydantic import ValidationError
-  
-  class ConfigValidationResult:
-      def __init__(self, success: bool, config: Optional[BaseModel] = None, errors: Optional[List[str]] = None):
-          self.success = success
-          self.config = config
-          self.errors = errors or []
-  
-  class ConfigService:
-      def get_config(self, key: str) -> Optional[BaseModel]:
-          """Simple getter - returns config if valid, None if not"""
-          result = self.validate_config(key)
-          return result.config if result.success else None
-      
-      def validate_config(self, key: str) -> ConfigValidationResult:
-          """Returns detailed validation result with error information"""
-          schema = ConfigRepository.get_schema(key)
-          if not schema:
-              return ConfigValidationResult(False, errors=[f"No schema registered for key: {key}"])
-          
-          try:
-              # Load DB data (empty dict if no entry exists)
-              db_data = self._load_from_db(key) or {}
-              
-              # Attempt to instantiate with DB + env vars
-              config = schema.model_validate(db_data)
-              return ConfigValidationResult(True, config=config)
-              
-          except ValidationError as e:
-              # Parse errors to provide helpful feedback
-              errors = []
-              for error in e.errors():
-                  field = error['loc'][0] if error['loc'] else 'unknown'
-                  if 'missing' in error['type']:
-                      errors.append(f"Missing required field '{field}' - check environment variables or database configuration")
-                  else:
-                      errors.append(f"Invalid value for '{field}': {error['msg']}")
-              
-              return ConfigValidationResult(False, errors=errors)
-      
-      def set_config(self, key: str, data: BaseModel) -> None: ...
-      def list_configs(self, prefix: str = None) -> List[str]: ...
-      def delete_config(self, key: str) -> None: ...
-      def get_provider_status(self, provider_type: str) -> Dict[str, ConfigValidationResult]: ...
-  ```
-
-## Configuration Framework Usage Examples
-
-The generic configuration framework manages all application settings through the unified key-value system:
-
-* **Basic Usage**:
-  ```python
-  # Simple config retrieval
-  slack_config = config_service.get_config("integration.slack.main")
-  if slack_config:
-      integration = SlackIntegration(slack_config)
-  
-  # Detailed validation for UI/diagnostics
-  result = config_service.validate_config("integration.slack.main")
-  if not result.success:
-      for error in result.errors:
-          # Show user: "Missing required field 'api_token' - check environment variables"
-          display_error(error)
-  ```
-
-* **Provider Availability Check**:
-  ```python
-  # Check if provider is fully configured and ready to use
-  provider_status = config_service.get_provider_status("slack")
-  if all(result.success for result in provider_status.values()):
-      # Provider is ready
-      setup_slack_provider()
-  else:
-      # Show configuration errors to user
-      show_provider_setup_errors(provider_status)
-  ```
-
+  Provides a unified API for configuration management with methods for getting, setting, validating, and listing configurations. Returns detailed validation results with specific error messages for missing environment variables or invalid values. Supports hierarchical key-based access and provider status checking across all configuration types.
 * **Configuration Hierarchy**:
 
 * **Integration Configurations** (API credentials from environment):
@@ -1009,6 +1070,13 @@ The codebase uses modern SQLAlchemy 2.0 syntax throughout:
 * **Exception Hierarchy**: `ContextProviderUnavailable` exceptions provide detailed error messages for missing/invalid configurations
 * **User Feedback**: Context assembly returns `ProjectContextData` with separate collections for successful context and provider errors
 * **Zero-Configuration Providers**: WebPageContextProvider and CodebaseContextProvider work without external configuration requirements
+
+### Template System
+Centralized template management for consistent document structure across the application.
+* **Template Types**: Enumerated template categories including task specifications, implementation plans, and architecture documents
+* **Template Service**: Generic service interface with `get_template(template_type: TemplateType)` method for retrieving structured document templates
+* **File-Based Storage**: Templates stored as separate Markdown files in `devboard/templates/` directory for easy maintenance
+* **Backward Compatibility**: Legacy template methods maintained during transition period
 
 ### Configuration Key Naming Convention
 * **Integration Layer**: `integration.{provider_type}.main` (e.g., `integration.github.main`)

@@ -7,6 +7,7 @@ from .context_provider_resource import ContextProviderResourceRepository
 from .project import ProjectRepository
 from .project_conversation_message import ProjectConversationMessageRepository
 from .task import TaskRepository
+from .task_conversation_message import TaskConversationMessageRepository
 
 __all__ = [
     "BaseRepository",
@@ -16,4 +17,5 @@ __all__ = [
     "CodebaseRepository",
     "TaskRepository",
     "ProjectConversationMessageRepository",
+    "TaskConversationMessageRepository",
 ]

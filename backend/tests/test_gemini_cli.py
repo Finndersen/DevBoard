@@ -103,9 +103,8 @@ class TestExecuteGeminiPrompt:
     async def test_timeout_handling(self):
         """Test timeout handling."""
         mock_process = Mock()
-        mock_process.communicate = AsyncMock(side_effect=TimeoutError())
-        mock_process.kill = AsyncMock()
-        mock_process.wait = AsyncMock()
+        mock_process.kill = Mock()  # kill() is not async
+        mock_process.wait = AsyncMock()  # wait() is async
 
         with patch('asyncio.create_subprocess_exec', return_value=mock_process):
             with patch('asyncio.wait_for', side_effect=TimeoutError()):
@@ -116,8 +115,9 @@ class TestExecuteGeminiPrompt:
                         timeout=1.0
                     )
 
-                # Verify process was killed
+                # Verify process was killed and waited for
                 mock_process.kill.assert_called_once()
+                mock_process.wait.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_custom_working_directory(self):

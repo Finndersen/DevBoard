@@ -1,6 +1,5 @@
 """Main FastAPI application."""
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from devboard.api.routers import codebases, configurations, projects, qa, settings, tasks
 from devboard.config.logfire_config import setup_logfire
+
 
 # Load environment variables from .env files
 # Priority: current directory -> home directory -> system environment

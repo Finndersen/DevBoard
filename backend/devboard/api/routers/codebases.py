@@ -7,10 +7,8 @@ from sqlalchemy.orm import Session
 
 from devboard.api.schemas import CodebaseCreate, CodebaseResponse, CodebaseUpdate, DeleteResponse
 from devboard.api.schemas.codebase import (
-    ArchitectureContentResponse,
     ArchitectureDocumentResponse,
     ArchitectureGenerationResponse,
-    ArchitectureStatusResponse,
     ArchitectureUpdateRequest,
     ArchitectureUpdateResponse,
 )
@@ -180,44 +178,6 @@ async def update_architecture_document(
     )
 
 
-# Keep existing endpoints for backward compatibility (mark as deprecated)
-@router.get("/{codebase_id}/architecture/status", response_model=ArchitectureStatusResponse, deprecated=True)
-async def get_architecture_status(codebase_id: int, db: Session = Depends(get_db)):
-    """[DEPRECATED - Use /architecture_document/ instead] Get architecture document status for a codebase."""
-    # Get codebase from database
-    codebase_repo = CodebaseRepository(db)
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
-
-    # Check architecture document status
-    investigation_service = CodebaseInvestigationService()
-    status = investigation_service.check_architecture_exists(codebase.local_path)
-
-    return ArchitectureStatusResponse(
-        exists=status.exists,
-        file_path=str(status.file_path) if status.file_path else None,
-        size_bytes=status.size_bytes
-    )
-
-
-@router.get("/{codebase_id}/architecture/content", response_model=ArchitectureContentResponse, deprecated=True)
-async def get_architecture_content(codebase_id: int, db: Session = Depends(get_db)):
-    """[DEPRECATED - Use /architecture_document/ instead] Get architecture document content for a codebase."""
-    # Get codebase from database
-    codebase_repo = CodebaseRepository(db)
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
-
-    # Read architecture content
-    investigation_service = CodebaseInvestigationService()
-    content = investigation_service.read_architecture_content(codebase.local_path)
-
-    return ArchitectureContentResponse(
-        content=content,
-        exists=content is not None
-    )
 
 
 @router.post("/{codebase_id}/architecture_document/generate", response_model=ArchitectureGenerationResponse)

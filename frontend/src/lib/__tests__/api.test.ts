@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { ApiClient } from '../api'
-import type { Project, Task } from '../api'
+import type { 
+  Project, 
+  Task,
+  DocumentEdit,
+  TaskPlanningResponse,
+  TaskConversationMessage,
+  TaskPlanningRequest,
+  ApplyEditsRequest,
+  StateTransitionRequest
+} from '../api'
 
 describe('ApiClient', () => {
   let apiClient: ApiClient
@@ -650,6 +659,362 @@ describe('ApiClient', () => {
       expect(capturedUrls[1]).toContain('/api/projects/1')
       expect(capturedUrls[2]).toContain('/api/tasks/2')
       expect(capturedUrls[3]).toContain('/api/tasks/2')
+    })
+  })
+
+  describe('Task Planning Agent API', () => {
+    const mockTaskMessages: TaskConversationMessage[] = [
+      {
+        id: 1,
+        task_id: 1,
+        role: 'user',
+        content: 'Help me design this task',
+        tool_data: null,
+        created_at: '2024-01-01T00:00:00Z'
+      },
+      {
+        id: 2,
+        task_id: 1,
+        role: 'assistant',
+        content: 'I\'ll help you create a specification',
+        tool_data: {
+          task_specification_edits: [
+            { find: '[Title]', replace: 'User Authentication Task' }
+          ],
+          task_implementation_plan_edits: []
+        },
+        created_at: '2024-01-01T00:01:00Z'
+      }
+    ]
+
+    const mockTask: Task = {
+      id: 1,
+      title: 'User Authentication Task',
+      description: 'Updated task specification',
+      status: 'Planning',
+      project_id: 1,
+      codebase_id: null,
+      remote_task_id: null,
+      conversation_id: 'conv-123',
+      implementation_plan: 'Detailed implementation plan',
+      created_at: '2024-01-01T00:00:00Z'
+    }
+
+    it('gets task messages', async () => {
+      server.use(
+        http.get('*/api/tasks/1/messages', () => {
+          return HttpResponse.json(mockTaskMessages)
+        })
+      )
+
+      const result = await apiClient.getTaskMessages(1)
+      expect(result).toEqual(mockTaskMessages)
+    })
+
+    it('gets task messages with string ID', async () => {
+      server.use(
+        http.get('*/api/tasks/1/messages', () => {
+          return HttpResponse.json([])
+        })
+      )
+
+      const result = await apiClient.getTaskMessages('1')
+      expect(result).toEqual([])
+    })
+
+    it('sends task planning message', async () => {
+      const request: TaskPlanningRequest = {
+        message: 'Please add more details to the requirements'
+      }
+
+      const mockResponse: TaskConversationMessage = {
+        id: 3,
+        task_id: 1,
+        role: 'user',
+        content: request.message,
+        tool_data: null,
+        created_at: '2024-01-01T00:02:00Z'
+      }
+
+      server.use(
+        http.post('*/api/tasks/1/messages', async ({ request: req }) => {
+          const body = await req.json() as TaskPlanningRequest
+          expect(body).toEqual(request)
+          return HttpResponse.json(mockResponse)
+        })
+      )
+
+      const result = await apiClient.sendTaskMessage(1, request)
+      expect(result).toEqual(mockResponse)
+    })
+
+    it('applies document edits', async () => {
+      const request: ApplyEditsRequest = {
+        message_id: 2,
+        task_specification_edits: [
+          { find: 'old requirement', replace: 'updated requirement' }
+        ],
+        task_implementation_plan_edits: [
+          { find: 'TODO: implement', replace: 'Step 1: Set up authentication middleware' }
+        ]
+      }
+
+      server.use(
+        http.post('*/api/tasks/1/apply-edits', async ({ request: req }) => {
+          const body = await req.json() as ApplyEditsRequest
+          expect(body).toEqual(request)
+          return HttpResponse.json(mockTask)
+        })
+      )
+
+      const result = await apiClient.applyDocumentEdits(1, request)
+      expect(result).toEqual(mockTask)
+    })
+
+    it('applies partial document edits', async () => {
+      const request: ApplyEditsRequest = {
+        message_id: 2,
+        task_specification_edits: [
+          { find: 'old text', replace: 'new text' }
+        ]
+        // task_implementation_plan_edits is optional
+      }
+
+      const partialTask = { ...mockTask, description: 'new text' }
+
+      server.use(
+        http.post('*/api/tasks/1/apply-edits', async ({ request: req }) => {
+          const body = await req.json() as ApplyEditsRequest
+          expect(body.task_specification_edits).toBeDefined()
+          expect(body.task_implementation_plan_edits).toBeUndefined()
+          return HttpResponse.json(partialTask)
+        })
+      )
+
+      const result = await apiClient.applyDocumentEdits(1, request)
+      expect(result.description).toBe('new text')
+    })
+
+    it('transitions task state', async () => {
+      const request: StateTransitionRequest = {
+        new_state: 'Planning'
+      }
+
+      const updatedTask = { ...mockTask, status: 'Planning' }
+
+      server.use(
+        http.post('*/api/tasks/1/state-transition', async ({ request: req }) => {
+          const body = await req.json() as StateTransitionRequest
+          expect(body).toEqual(request)
+          return HttpResponse.json(updatedTask)
+        })
+      )
+
+      const result = await apiClient.transitionTaskState(1, request)
+      expect(result.status).toBe('Planning')
+    })
+
+    it('handles different state transitions', async () => {
+      const states = ['Designing', 'Planning', 'Implementing']
+      
+      for (const state of states) {
+        const request: StateTransitionRequest = { new_state: state }
+        const stateTask = { ...mockTask, status: state }
+
+        server.use(
+          http.post(`*/api/tasks/1/state-transition`, async ({ request: req }) => {
+            const body = await req.json() as StateTransitionRequest
+            expect(body.new_state).toBe(state)
+            return HttpResponse.json(stateTask)
+          })
+        )
+
+        const result = await apiClient.transitionTaskState(1, request)
+        expect(result.status).toBe(state)
+      }
+    })
+
+    it('handles API errors for task planning endpoints', async () => {
+      server.use(
+        http.get('*/api/tasks/999/messages', () => {
+          return new HttpResponse(null, { status: 404, statusText: 'Not Found' })
+        })
+      )
+
+      await expect(apiClient.getTaskMessages(999)).rejects.toThrow('API request failed: 404 Not Found')
+    })
+
+    it('handles edit application errors', async () => {
+      const request: ApplyEditsRequest = {
+        message_id: 2,
+        task_specification_edits: [
+          { find: 'nonexistent text', replace: 'new text' }
+        ]
+      }
+
+      server.use(
+        http.post('*/api/tasks/1/apply-edits', () => {
+          return new HttpResponse(null, { status: 400, statusText: 'Bad Request' })
+        })
+      )
+
+      await expect(apiClient.applyDocumentEdits(1, request)).rejects.toThrow('API request failed: 400 Bad Request')
+    })
+
+    it('handles state transition errors', async () => {
+      const request: StateTransitionRequest = {
+        new_state: 'InvalidState'
+      }
+
+      server.use(
+        http.post('*/api/tasks/1/state-transition', () => {
+          return new HttpResponse(null, { status: 400, statusText: 'Bad Request' })
+        })
+      )
+
+      await expect(apiClient.transitionTaskState(1, request)).rejects.toThrow('API request failed: 400 Bad Request')
+    })
+  })
+
+  describe('Updated Task Interface', () => {
+    it('supports all new Task fields', () => {
+      const fullTask: Task = {
+        id: 1,
+        title: 'Test Task',
+        description: 'Task description',
+        status: 'Planning',
+        project_id: 1,
+        codebase_id: 2,
+        remote_task_id: 'PROJ-123',
+        conversation_id: 'conv-456',
+        implementation_plan: 'Implementation details',
+        created_at: '2024-01-01T00:00:00Z'
+      }
+
+      expect(fullTask.codebase_id).toBe(2)
+      expect(fullTask.remote_task_id).toBe('PROJ-123')
+      expect(fullTask.conversation_id).toBe('conv-456')
+      expect(fullTask.implementation_plan).toBe('Implementation details')
+    })
+
+    it('allows nullable fields', () => {
+      const minimalTask: Task = {
+        id: 1,
+        title: 'Minimal Task',
+        description: null,
+        status: 'Pending',
+        project_id: 1,
+        codebase_id: null,
+        remote_task_id: null,
+        conversation_id: null,
+        implementation_plan: null,
+        created_at: '2024-01-01T00:00:00Z'
+      }
+
+      expect(minimalTask.description).toBeNull()
+      expect(minimalTask.codebase_id).toBeNull()
+      expect(minimalTask.remote_task_id).toBeNull()
+      expect(minimalTask.conversation_id).toBeNull()
+      expect(minimalTask.implementation_plan).toBeNull()
+    })
+  })
+
+  describe('Document Edit Interface', () => {
+    it('has simplified structure', () => {
+      const edit: DocumentEdit = {
+        find: 'old text',
+        replace: 'new text'
+      }
+
+      expect(edit.find).toBe('old text')
+      expect(edit.replace).toBe('new text')
+      
+      // Ensure old fields are not present
+      expect('context' in edit).toBe(false)
+      expect('rationale' in edit).toBe(false)
+    })
+
+    it('allows empty replace text', () => {
+      const edit: DocumentEdit = {
+        find: 'text to remove',
+        replace: ''
+      }
+
+      expect(edit.find).toBe('text to remove')
+      expect(edit.replace).toBe('')
+    })
+  })
+
+  describe('Task Planning Response Interface', () => {
+    it('has explicit edit fields', () => {
+      const response: TaskPlanningResponse = {
+        message: 'Task updated successfully',
+        task_specification_edits: [
+          { find: 'old spec', replace: 'new spec' }
+        ],
+        task_implementation_plan_edits: [
+          { find: 'old plan', replace: 'new plan' }
+        ]
+      }
+
+      expect(response.message).toBe('Task updated successfully')
+      expect(response.task_specification_edits).toBeDefined()
+      expect(response.task_implementation_plan_edits).toBeDefined()
+      expect(Array.isArray(response.task_specification_edits)).toBe(true)
+      expect(Array.isArray(response.task_implementation_plan_edits)).toBe(true)
+    })
+
+    it('allows optional edit fields', () => {
+      const response: TaskPlanningResponse = {
+        message: 'No changes needed'
+      }
+
+      expect(response.message).toBe('No changes needed')
+      expect(response.task_specification_edits).toBeUndefined()
+      expect(response.task_implementation_plan_edits).toBeUndefined()
+    })
+  })
+
+  describe('Task Conversation Message Interface', () => {
+    it('supports all role types', () => {
+      const roles: TaskConversationMessage['role'][] = ['user', 'assistant', 'tool_call', 'tool_result']
+      
+      roles.forEach(role => {
+        const message: TaskConversationMessage = {
+          id: 1,
+          task_id: 1,
+          role: role,
+          content: role === 'user' ? 'User message' : null,
+          tool_data: role.startsWith('tool') ? { some: 'data' } : null,
+          created_at: '2024-01-01T00:00:00Z'
+        }
+
+        expect(message.role).toBe(role)
+        expect(typeof message.id).toBe('number')
+        expect(typeof message.task_id).toBe('number')
+      })
+    })
+
+    it('stores structured agent response data', () => {
+      const message: TaskConversationMessage = {
+        id: 1,
+        task_id: 1,
+        role: 'assistant',
+        content: 'Updated task specification and plan',
+        tool_data: {
+          task_specification_edits: [
+            { find: 'old objective', replace: 'new objective' }
+          ],
+          task_implementation_plan_edits: [
+            { find: 'old step', replace: 'new step' }
+          ]
+        },
+        created_at: '2024-01-01T00:00:00Z'
+      }
+
+      expect(message.tool_data).toBeDefined()
+      expect(message.tool_data!.task_specification_edits).toBeDefined()
+      expect(message.tool_data!.task_implementation_plan_edits).toBeDefined()
     })
   })
 })

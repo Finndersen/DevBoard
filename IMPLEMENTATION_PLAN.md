@@ -36,6 +36,7 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * Use Alembic (alembic revision --autogenerate) to generate the initial migration script for the core models.
 * [x] **Task 2.3: Implement Core API Endpoints**
   * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for `Project`, `Task`, and `Codebase` entities with Pydantic schemas.
+  * **UPDATED**: Consolidated Task API architecture - moved task creation to `/api/tasks/` while keeping project task listing at `/api/projects/{id}/tasks` for convenience. Added task list endpoint at `/api/tasks/` with optional project filtering.
 * [x] **Task 2.4: Implement Configuration API Endpoints**
   * Create `GET`, `POST`, `PATCH`, `DELETE` endpoints for the generic Configuration table.
   * Create endpoints for managing Context Provider Resources with M2M linking to Projects and Tasks.
@@ -212,27 +213,59 @@ This document outlines the detailed, step-by-step tasks required to build the De
 
 ## Phase 2: Advanced Agent Features
 
-* [ ] **Task 9.1: Implement Task Conversation History** 
-  * Add `TaskConversationMessage` model mirroring `ProjectConversationMessage` pattern
-  * Implement conversation storage with role-based messages and structured tool data
-  * Full conversation history storage (sliding window optimizations deferred)
+### Epic 9: Task Planning Agent Implementation ✅
 
-* [ ] **Task 9.2: Enhanced Task Planning Agent with Interactive Document Crafting**
-  * **State-Based Workflow**: Implement task state progression (Pending → Designing → Planning → Implementing)
-  * **Structured Response Format**: Agent returns JSON with message + document edits arrays
-  * **Document Editing Tools**: Find-replace edit capability for task specification and implementation plan
-  * **Context Research Integration**: Full access to context providers during design and planning phases
-  * **State-Aware Prompting**: Different agent prompts and capabilities based on task state
-  * **Atomic Edit Application**: Batch edit processing with user approval workflow
+**Major Refactoring Complete - Task Planning Agent Architecture**: Successfully implemented and refined the Task Planning Agent system with significant architectural improvements:
 
-* [ ] **Task 9.3: Task Planning API Layer**
-  * `GET /api/tasks/{task_id}/messages` - Task conversation history endpoint
-  * `POST /api/tasks/{task_id}/messages` - Send message to planning agent endpoint  
-  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits endpoint
-  * `POST /api/tasks/{task_id}/state-transition` - Manual state progression endpoint
-  * Enhanced task response schemas with conversation metadata and state flags
+**Schema Simplification & Clarity**: 
+- **DocumentEdit Schema**: Simplified from `{find, replace, context, rationale}` to `{find, replace}` for cleaner, more precise editing
+- **TaskPlanningResponse Structure**: Refactored from dictionary-based `edits` field to explicit `task_specification_edits` and `task_implementation_plan_edits` arrays
+- **TaskResponse Schema**: Removed unnecessary frontend state management fields (`can_edit_*`, `agent_processing`, `messages_count`) allowing frontend to handle state during HTTP requests
 
-* [ ] **Task 9.4: Frontend Task Planning Interface**
+**Template System Modernization**:
+- **Generic Template Service**: Refactored from method-based to enum-driven `get_template(TemplateType)` interface
+- **Centralized Template Storage**: Moved architecture document template to file-based storage in `devboard/templates/architecture_document.md`
+- **Template Type Enum**: Added `TASK_SPECIFICATION`, `IMPLEMENTATION_PLAN`, and `ARCHITECTURE_DOCUMENT` template types
+- **Service Integration**: Updated Codebase Investigation Service to use centralized template system
+
+**Model Architecture & Inheritance**:
+- **BaseConversationMessage**: Created shared abstract parent for `TaskConversationMessage` and `ProjectConversationMessage` with common fields (`role`, `content`, `tool_data`, `created_at`)
+- **Conversation Model Simplification**: Reduced duplication by moving shared logic to base class while maintaining domain-specific relationships
+
+**Agent Configuration Integration**:
+- **LLMService Integration**: Replaced hardcoded "openai:gpt-4o-mini" with `llm_service.get_preferred_model_for_agent(AgentType.PLANNING)`
+- **Dynamic Model Selection**: Agent now uses configured model preferences with fallback hierarchy
+- **Centralized Configuration**: Consistent with other agents using the configuration framework
+
+* [x] **Task 9.1: Implement Task Conversation History** 
+  * **COMPLETED**: Added `TaskConversationMessage` model inheriting from `BaseConversationMessage` pattern
+  * **COMPLETED**: Implemented conversation storage with role-based messages and structured tool data
+  * **COMPLETED**: Full conversation history storage (sliding window optimizations deferred)
+
+* [x] **Task 9.2: Enhanced Task Planning Agent with Interactive Document Crafting**
+  * **COMPLETED**: **State-Based Workflow**: Implemented task state progression (Pending → Designing → Planning → Implementing)
+  * **COMPLETED**: **Structured Response Format**: Agent returns JSON with explicit `task_specification_edits` and `task_implementation_plan_edits` arrays
+  * **COMPLETED**: **Document Editing Tools**: Simplified find-replace edit capability with precise text matching
+  * **COMPLETED**: **Context Research Integration**: Full access to context providers during design and planning phases via `get_relevant_context()` tool
+  * **COMPLETED**: **State-Aware Prompting**: Different agent prompts and capabilities based on task state (Designing vs Planning)
+  * **COMPLETED**: **Atomic Edit Application**: Batch edit processing with user approval workflow
+  * **COMPLETED**: **Model Configuration**: Dynamic model selection via LLMService configuration
+
+* [x] **Task 9.3: Task Planning API Layer**
+  * **COMPLETED**: `GET /api/tasks/{task_id}/messages` - Task conversation history endpoint
+  * **COMPLETED**: `POST /api/tasks/{task_id}/messages` - Send message to planning agent endpoint with structured response storage
+  * **COMPLETED**: `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits endpoint with separate field handling
+  * **COMPLETED**: `POST /api/tasks/{task_id}/state-transition` - Manual state progression endpoint
+  * **COMPLETED**: Enhanced task response schemas with simplified field structure
+
+* [x] **Task 9.4: Frontend TypeScript Interface Updates**
+  * **COMPLETED**: Updated `Task` interface to match backend schema with all required fields
+  * **COMPLETED**: Added `DocumentEdit`, `TaskPlanningResponse`, `TaskConversationMessage` interfaces
+  * **COMPLETED**: Added `TaskPlanningRequest`, `ApplyEditsRequest`, `StateTransitionRequest` interfaces  
+  * **COMPLETED**: Added API client methods: `getTaskMessages()`, `sendTaskMessage()`, `applyDocumentEdits()`, `transitionTaskState()`
+  * **COMPLETED**: Maintained type safety across frontend-backend communication
+
+* [ ] **Task 9.5: Frontend Task Planning Interface**
   * **Three-Tab TaskDetail Interface**: Task Specification, Implementation Plan, Planning Agent tabs
   * **Document Editor Components**: Reuse existing ReactMarkdown + prose patterns with edit/view toggles
   * **Edit Confirmation Modal**: Preview document changes with diff visualization before applying
@@ -240,14 +273,14 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Agent Conversation UI**: Chat interface with edit proposal rendering and research summaries
   * **Document Locking**: Disable editing during agent processing with loading states
 
-* [ ] **Task 9.5: Document Structure Templates**
+* [ ] **Task 9.6: Document Structure Templates**
   * **Task Specification Template**: Structured markdown template with Objective, Context, Requirements, Acceptance Criteria
   * **Implementation Plan Template**: Technical plan template with Summary, Analysis, Steps, Testing Strategy
   * **Template Initialization**: Auto-populate new tasks with structured templates
 
-* [ ] **Task 9.6: Task Implementation Agent**
+* [ ] **Task 9.7: Task Implementation Agent**
   * Build Implementation Agent using Claude Code SDK with codebase access and GitHub PR creation.
   * Maintain existing "baton pass" handoff model from Planning Agent
 
-* [ ] **Task 9.7: Add Background Task Runner**
+* [ ] **Task 9.8: Add Background Task Runner**
   * Implement Huey/Dramatiq for long-running agent sessions with WebSocket progress updates.

@@ -9,7 +9,7 @@ from devboard.context_providers.base import (
     BaseContextProvider,
     ContextStrategy,
 )
-from devboard.context_providers.registry import ContextProviderRegistry, context_provider_registry
+from devboard.context_providers.registry import ContextProviderRegistry
 from devboard.db.models import ContextProviderResource, Project
 from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
 from devboard.services.context_assembly import (
@@ -198,7 +198,7 @@ class TestContextAssemblyService:
         return ContextProviderRegistry([
             MockOnDemandProvider,  # Put this first so it gets priority for on-demand URIs
             MockTestProvider,
-            MockTest1Provider, 
+            MockTest1Provider,
             MockTest2Provider,
             MockGitHubProvider,
         ], key_attr='provider_type')
@@ -221,7 +221,7 @@ class TestContextAssemblyService:
         # All URLs should be extracted since test registry has providers that handle all URLs
         expected_uris = [
             "https://github.com/owner/repo/pull/123",
-            "https://github.com/owner/repo/issues/456", 
+            "https://github.com/owner/repo/issues/456",
             "https://unknown.com/resource",
         ]
         assert set(uris) == set(expected_uris)

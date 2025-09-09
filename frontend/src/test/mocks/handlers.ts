@@ -25,9 +25,12 @@ const mockTasks: Task[] = [
     project_id: 1,
     title: 'Test Task',
     description: 'A test task for development',
-    status: 'Pending',
+    status: 'Designing',
+    codebase_id: null,
+    remote_task_id: null,
+    conversation_id: null,
+    implementation_plan: null,
     created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
   },
   {
     id: 2,
@@ -35,8 +38,11 @@ const mockTasks: Task[] = [
     title: 'Another Task',
     description: 'Another test task',
     status: 'Planning',
+    codebase_id: null,
+    remote_task_id: 'PROJ-123',
+    conversation_id: 'conv-456',
+    implementation_plan: 'Implementation details here',
     created_at: '2024-01-02T00:00:00Z',
-    updated_at: '2024-01-02T00:00:00Z',
   },
 ]
 

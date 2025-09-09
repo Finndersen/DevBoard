@@ -7,6 +7,7 @@ from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, task_context_resource_association
+from .base_conversation import BaseConversationMessage
 
 if TYPE_CHECKING:
     from .codebase import Codebase
@@ -38,3 +39,13 @@ class Task(Base):
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=task_context_resource_association, back_populates="tasks"
     )
+    messages: Mapped[list["TaskConversationMessage"]] = relationship(back_populates="task")
+
+
+class TaskConversationMessage(BaseConversationMessage):
+    """Represents a single message or tool call in the conversation with a Task Planning Agent."""
+
+    __tablename__ = "task_conversation_messages"
+
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+    task: Mapped["Task"] = relationship(back_populates="messages")

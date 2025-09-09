@@ -3,10 +3,11 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, project_codebase_association, project_context_resource_association
+from .base_conversation import BaseConversationMessage
 
 if TYPE_CHECKING:
     from .codebase import Codebase
@@ -37,25 +38,10 @@ class Project(Base):
     messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
 
-class ProjectConversationMessage(Base):
+class ProjectConversationMessage(BaseConversationMessage):
     """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
 
     __tablename__ = "project_conversation_messages"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
-
-    # The role of the message sender, e.g., 'user', 'assistant', 'tool_call', 'tool_result'
-    role: Mapped[str] = mapped_column(String(50))
-
-    # For text content from 'user' or 'assistant'
-    content: Mapped[str | None] = mapped_column(Text)
-
-    # For structured data from 'tool_call' or 'tool_result'
-    tool_data: Mapped[dict | None] = mapped_column(JSON)  # JSON stored as text
-
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        default=lambda: datetime.datetime.now(datetime.UTC)
-    )
-
     project: Mapped["Project"] = relationship(back_populates="messages")

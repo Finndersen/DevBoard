@@ -37,19 +37,6 @@ class CodebaseResponse(CodebaseBase):
     model_config = {"from_attributes": True}
 
 
-class ArchitectureStatusResponse(BaseModel):
-    """Schema for architecture document status response."""
-
-    exists: bool
-    file_path: str | None = None
-    size_bytes: int | None = None
-
-
-class ArchitectureContentResponse(BaseModel):
-    """Schema for architecture document content response."""
-
-    content: str | None = None
-    exists: bool
 
 
 class ArchitectureGenerationResponse(BaseModel):

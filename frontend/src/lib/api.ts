@@ -9,12 +9,48 @@ export interface Project {
 export interface Task {
   id: number
   title: string
-  description: string
+  description: string | null
   status: string
   project_id: number
+  codebase_id: number | null
+  remote_task_id: string | null
+  conversation_id: string | null
+  implementation_plan: string | null
   created_at: string
-  updated_at: string
-  implementation_plan?: string
+}
+
+export interface DocumentEdit {
+  find: string
+  replace: string
+}
+
+export interface TaskPlanningResponse {
+  message: string
+  task_specification_edits?: DocumentEdit[]
+  task_implementation_plan_edits?: DocumentEdit[]
+}
+
+export interface TaskConversationMessage {
+  id: number
+  task_id: number
+  role: 'user' | 'assistant' | 'tool_call' | 'tool_result'
+  content: string | null
+  tool_data: Record<string, any> | null
+  created_at: string
+}
+
+export interface TaskPlanningRequest {
+  message: string
+}
+
+export interface ApplyEditsRequest {
+  message_id: number
+  task_specification_edits?: DocumentEdit[]
+  task_implementation_plan_edits?: DocumentEdit[]
+}
+
+export interface StateTransitionRequest {
+  new_state: string
 }
 
 export interface Message {
@@ -48,16 +84,6 @@ export interface Codebase {
   local_path: string
 }
 
-export interface ArchitectureStatus {
-  exists: boolean
-  file_path: string | null
-  size_bytes: number | null
-}
-
-export interface ArchitectureContent {
-  content: string | null
-  exists: boolean
-}
 
 export interface ArchitectureDocument {
   exists: boolean
@@ -193,6 +219,32 @@ export class ApiClient {
     return this.request<void>(`/api/tasks/${id}`, { method: 'DELETE' })
   }
 
+  // Task Planning Agent
+  async getTaskMessages(taskId: number | string): Promise<TaskConversationMessage[]> {
+    return this.request<TaskConversationMessage[]>(`/api/tasks/${taskId}/messages`)
+  }
+
+  async sendTaskMessage(taskId: number | string, request: TaskPlanningRequest): Promise<TaskConversationMessage> {
+    return this.request<TaskConversationMessage>(`/api/tasks/${taskId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async applyDocumentEdits(taskId: number | string, request: ApplyEditsRequest): Promise<Task> {
+    return this.request<Task>(`/api/tasks/${taskId}/apply-edits`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async transitionTaskState(taskId: number | string, request: StateTransitionRequest): Promise<Task> {
+    return this.request<Task>(`/api/tasks/${taskId}/state-transition`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
   // Project Q&A
   async getProjectQAHistory(projectId: number | string): Promise<Message[]> {
     return this.request<Message[]>(`/api/projects/${projectId}/qa/history`)
@@ -272,15 +324,6 @@ export class ApiClient {
   }
 
   // Architecture operations
-  async getArchitectureStatus(codebaseId: number | string): Promise<ArchitectureStatus> {
-    return this.request<ArchitectureStatus>(`/api/codebases/${codebaseId}/architecture/status`)
-  }
-
-  async getArchitectureContent(codebaseId: number | string): Promise<ArchitectureContent> {
-    return this.request<ArchitectureContent>(`/api/codebases/${codebaseId}/architecture/content`)
-  }
-
-  // New combined endpoint
   async getArchitectureDocument(codebaseId: number | string): Promise<ArchitectureDocument> {
     return this.request<ArchitectureDocument>(`/api/codebases/${codebaseId}/architecture_document/`)
   }

@@ -302,25 +302,3 @@ class TestProjectTasksRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
-    def test_create_project_task(self, client, db_session, test_project_data, test_task_data):
-        """Test creating a new task in a project."""
-        # Create test project
-        project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
-        db_session.commit()
-
-        response = client.post(f"/api/projects/{created_project.id}/tasks", json=test_task_data)
-        assert response.status_code == 200
-
-        task_data = response.json()
-        assert task_data["title"] == test_task_data["title"]
-        assert task_data["description"] == test_task_data["description"]
-        assert task_data["project_id"] == created_project.id
-        assert "id" in task_data
-
-    def test_create_project_task_project_not_found(self, client, test_task_data):
-        """Test creating a task for non-existent project."""
-        response = client.post("/api/projects/999/tasks", json=test_task_data)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Project not found"

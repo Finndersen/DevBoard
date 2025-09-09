@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeftIcon, ChatBubbleLeftIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
-import Chat from '../components/Chat'
+import { ArrowLeftIcon, ChatBubbleLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
+import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Task, Project } from '../lib/api'
 
@@ -10,7 +10,11 @@ export default function TaskDetail() {
   const [task, setTask] = useState<Task | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'details' | 'chat'>('details')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'conversation'>('specification')
+  const [isEditingSpec, setIsEditingSpec] = useState(false)
+  const [isEditingPlan, setIsEditingPlan] = useState(false)
+  const [editedDescription, setEditedDescription] = useState('')
+  const [editedPlan, setEditedPlan] = useState('')
 
   useEffect(() => {
     fetchTask()
@@ -20,6 +24,8 @@ export default function TaskDetail() {
     try {
       const data = await apiClient.getTask(id!)
       setTask(data)
+      setEditedDescription(data.description || '')
+      setEditedPlan(data.implementation_plan || '')
       // Fetch project details
       fetchProject(data.project_id)
     } catch (error) {
@@ -38,10 +44,100 @@ export default function TaskDetail() {
     }
   }
 
+  const handleSaveSpecification = async () => {
+    try {
+      await apiClient.updateTask(id!, { description: editedDescription })
+      setTask(prev => prev ? { ...prev, description: editedDescription } : null)
+      setIsEditingSpec(false)
+    } catch (error) {
+      console.error('Failed to update task specification:', error)
+    }
+  }
+
+  const handleSavePlan = async () => {
+    try {
+      await apiClient.updateTask(id!, { implementation_plan: editedPlan })
+      setTask(prev => prev ? { ...prev, implementation_plan: editedPlan } : null)
+      setIsEditingPlan(false)
+    } catch (error) {
+      console.error('Failed to update implementation plan:', error)
+    }
+  }
+
+  const handleCancelSpecEdit = () => {
+    setEditedDescription(task?.description || '')
+    setIsEditingSpec(false)
+  }
+
+  const handleCancelPlanEdit = () => {
+    setEditedPlan(task?.implementation_plan || '')
+    setIsEditingPlan(false)
+  }
+
+  const handleStateTransition = async (newState: string) => {
+    try {
+      // TODO: Call the state transition API
+      // await apiClient.transitionTaskState(id!, newState)
+      
+      // For now, just update the task status locally
+      setTask(prev => prev ? { ...prev, status: newState } : null)
+    } catch (error) {
+      console.error('Failed to transition task state:', error)
+    }
+  }
+
+  const getNextStateButton = () => {
+    if (!task) return null
+    const status = task.status.toLowerCase()
+    
+    switch (status) {
+      case 'pending':
+        return (
+          <button
+            onClick={() => handleStateTransition('Designing')}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Start Design
+          </button>
+        )
+      case 'designing':
+        return (
+          <button
+            onClick={() => handleStateTransition('Planning')}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Begin Planning
+          </button>
+        )
+      case 'planning':
+        return (
+          <button
+            onClick={() => handleStateTransition('Implementing')}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            Start Implementation
+          </button>
+        )
+      case 'implementing':
+        return (
+          <button
+            onClick={() => setActiveTab('conversation')}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            View Progress
+          </button>
+        )
+      default:
+        return null
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+      case 'designing':
+        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400'
       case 'planning':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
       case 'implementing':
@@ -99,14 +195,20 @@ export default function TaskDetail() {
             </div>
           </div>
         </div>
+        
+        {/* State Transition Controls */}
+        <div className="flex items-center space-x-3">
+          {getNextStateButton()}
+        </div>
       </div>
 
       {/* Navigation Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'details' as const, name: 'Details', icon: DocumentTextIcon },
-            { id: 'chat' as const, name: 'Task Agent', icon: ChatBubbleLeftIcon },
+            { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
+            { id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon },
+            { id: 'conversation' as const, name: 'Planning Agent', icon: ChatBubbleLeftIcon },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -125,88 +227,132 @@ export default function TaskDetail() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'details' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Task Details */}
-          <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Task Description</h3>
-              <div className="prose dark:prose-invert max-w-none">
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                  {task.description || 'No description provided.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Task Metadata */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mt-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Task Information</h3>
-              <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
-                  <dd className="mt-1">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                      {task.status}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Project</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">
-                    {project ? (
-                      <Link 
-                        to={`/projects/${project.id}`}
-                        className="text-blue-600 hover:text-blue-500 dark:text-blue-400"
-                      >
-                        {project.name}
-                      </Link>
-                    ) : (
-                      'Loading...'
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">
-                    {new Date(task.created_at).toLocaleString()}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">
-                    {new Date(task.updated_at).toLocaleString()}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                <button 
-                  onClick={() => setActiveTab('chat')}
-                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+      {activeTab === 'specification' && (
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Task Specification</h3>
+              {!isEditingSpec ? (
+                <button
+                  onClick={() => setIsEditingSpec(true)}
+                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
-                  <ChatBubbleLeftIcon className="w-4 h-4 mr-2" />
-                  Ask Task Agent
+                  <PencilIcon className="w-4 h-4 mr-2" />
+                  Edit
                 </button>
-              </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleSaveSpecification}
+                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <CheckIcon className="w-4 h-4 mr-2" />
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelSpecEdit}
+                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
+            
+            {isEditingSpec ? (
+              <textarea
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                className="w-full h-96 px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                placeholder="Enter task specification in Markdown format..."
+              />
+            ) : (
+              <div className="prose prose-sm dark:prose-invert max-w-none text-left">
+                {task.description ? (
+                  <ReactMarkdown>{task.description}</ReactMarkdown>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400 italic">No task specification provided. Click Edit to add specification.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {activeTab === 'chat' && (
+      {activeTab === 'plan' && (
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 h-96">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Implementation Plan</h3>
+              {!isEditingPlan ? (
+                <button
+                  onClick={() => setIsEditingPlan(true)}
+                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <PencilIcon className="w-4 h-4 mr-2" />
+                  Edit
+                </button>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleSavePlan}
+                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <CheckIcon className="w-4 h-4 mr-2" />
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelPlanEdit}
+                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {isEditingPlan ? (
+              <textarea
+                value={editedPlan}
+                onChange={(e) => setEditedPlan(e.target.value)}
+                className="w-full h-96 px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                placeholder="Enter implementation plan in Markdown format..."
+              />
+            ) : (
+              <div className="prose prose-sm dark:prose-invert max-w-none text-left">
+                {task.implementation_plan ? (
+                  <ReactMarkdown>{task.implementation_plan}</ReactMarkdown>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400 italic">No implementation plan provided. Click Edit to add plan.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'conversation' && (
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 h-[600px]">
             <div className="flex items-center mb-4">
               <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Task Agent</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Planning Agent</h3>
+              <div className="ml-auto">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Status: {task.status}
+                </span>
+              </div>
             </div>
-            <Chat projectId={task.project_id} />
+            <div className="h-full border border-gray-200 dark:border-gray-600 rounded-lg">
+              {/* TODO: Replace with TaskPlanningChat component */}
+              <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                <div className="text-center">
+                  <ChatBubbleLeftIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Task Planning Agent coming soon...</p>
+                  <p className="text-sm mt-2">This will enable interactive document crafting</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

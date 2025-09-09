@@ -7,17 +7,17 @@ from devboard.config.agent_config import (
     QAAgentConfig,
 )
 from devboard.config.base import BaseConfig
+from devboard.config.integration_configs import (
+    GitHubIntegrationConfig,
+    JiraIntegrationConfig,
+    SlackIntegrationConfig,
+)
 from devboard.config.llm_config import (
     AnthropicProviderConfig,
     GeminiProviderConfig,
     OpenAIProviderConfig,
 )
 from devboard.core.registry import Registry
-from devboard.config.integration_configs import (
-    GitHubIntegrationConfig,
-    JiraIntegrationConfig,
-    SlackIntegrationConfig,
-)
 
 # Create the config schema registry with all schemas
 config_schema_registry: Registry[type[BaseConfig]] = Registry([

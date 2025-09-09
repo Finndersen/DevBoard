@@ -10,11 +10,10 @@ from devboard.api.schemas import (
     ProjectResponse,
     ProjectUpdate,
     ResourceResponse,
-    TaskCreateNested,
     TaskResponse,
 )
 from devboard.db.database import get_db
-from devboard.db.models import Project, Task
+from devboard.db.models import Project
 from devboard.db.repositories import ProjectRepository, TaskRepository
 from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
 
@@ -96,27 +95,6 @@ async def list_project_tasks(project_id: int, db: Session = Depends(get_db)):
     tasks = task_repo.get_for_project(project_id)
     return tasks
 
-
-@router.post("/{project_id}/tasks", response_model=TaskResponse)
-async def create_project_task(
-    project_id: int, task: TaskCreateNested, db: Session = Depends(get_db)
-):
-    """Create a new task in a project."""
-    # Verify project exists
-    project_repo = ProjectRepository(db)
-    project = project_repo.get_by_id(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Create task with the project_id from the URL
-    task_repo = TaskRepository(db)
-    task_data = task.model_dump()
-    task_data["project_id"] = project_id  # Ensure project_id from URL is used
-    db_task = Task(**task_data)
-    created_task = task_repo.create(db_task)
-    db.commit()
-    db.refresh(created_task)
-    return created_task
 
 
 # Project Resource Endpoints

@@ -3,6 +3,7 @@
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -317,15 +318,28 @@ class TestCodebasesRouter:
         assert response.status_code == 409
 
         data = response.json()
-        assert "conflict detected" in data["detail"].lower()
+        assert "modified by another process" in data["detail"]["message"].lower()
         # Conflict response includes current_hash for retry
-        assert "current_hash" in data
+        assert "current_hash" in data["detail"]
 
         # Verify file wasn't changed
         assert arch_file.read_text() == modified_content
 
-    def test_generate_architecture_document(self, client, db_session, test_codebase_data):
+    @patch('devboard.services.codebase_investigation.execute_gemini_prompt', new_callable=AsyncMock)
+    def test_generate_architecture_document(self, mock_gemini_prompt, client, db_session, test_codebase_data):
         """Test generating architecture document via AI."""
+        # Mock the Gemini CLI response
+        mock_architecture_content = """# Architecture Overview: Test Codebase
+
+## High-Level Summary
+A simple Python codebase with a main module and utility functions.
+
+## Key Components
+- main.py: Entry point with main() function
+- utils.py: Helper utilities with helper() function
+"""
+        mock_gemini_prompt.return_value = mock_architecture_content
+
         # Create test codebase
         codebase_repo = CodebaseRepository(db_session)
         codebase = Codebase(**test_codebase_data)
@@ -340,15 +354,20 @@ class TestCodebasesRouter:
 
         response = client.post(f"/api/codebases/{created_codebase.id}/architecture_document/generate")
 
-        # This should work since we have gemini integration available
+        # This should work with mocked gemini response
         assert response.status_code == 200
 
         data = response.json()
         assert data["success"] is True
         assert data["file_path"] is not None
-        # Verify architecture file was created
+
+        # Verify architecture file was created with mocked content
         arch_file = Path(test_codebase_data["local_path"]) / "ARCHITECTURE.md"
         assert arch_file.exists()
+        assert "Test Codebase" in arch_file.read_text()
+
+        # Verify the mock was called
+        mock_gemini_prompt.assert_called_once()
 
     def test_get_architecture_document_nonexistent_codebase(self, client):
         """Test getting architecture document for non-existent codebase."""

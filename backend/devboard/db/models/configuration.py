@@ -22,7 +22,8 @@ class Configuration(Base):
     value_json: Mapped[str] = mapped_column(Text)
     schema_version: Mapped[str] = mapped_column(String(50), default="1.0")
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+        default=lambda: datetime.datetime.now(datetime.UTC),
+        onupdate=lambda: datetime.datetime.now(datetime.UTC)
     )
 
 
