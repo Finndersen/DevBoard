@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from devboard.agents.project_agent import QAAgentService
+from devboard.agents.project_agent import ProjectAgent
 from devboard.context_providers import ContextStrategy
 from devboard.db.models import Project
 from devboard.services.context_assembly import (
@@ -54,7 +54,7 @@ def sample_context_data():
 class TestChatEndpoint:
     """Test the project chat endpoint."""
 
-    @patch("devboard.api.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.projects.qa_agent_service")
     def test_chat_with_project_success(self, mock_qa_service, client, db_session, sample_project):
         """Test successful chat with project."""
         # Add project to database
@@ -84,7 +84,7 @@ class TestChatEndpoint:
         assert response.status_code == 404
         assert "Project not found" in response.json()["detail"]
 
-    @patch("devboard.api.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.projects.qa_agent_service")
     def test_chat_service_error(self, mock_qa_service, client, db_session, sample_project):
         """Test chat endpoint when service raises error."""
         # Add project to database
@@ -103,7 +103,7 @@ class TestChatEndpoint:
 class TestContextEndpoint:
     """Test the project context endpoint."""
 
-    @patch("devboard.api.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.projects.qa_agent_service")
     def test_get_project_context_success(
         self, mock_qa_service, client, db_session, sample_project, sample_context_data
     ):
@@ -156,7 +156,7 @@ class TestContextEndpoint:
 class TestValidateResourceEndpoint:
     """Test the resource validation endpoint."""
 
-    @patch("devboard.api.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.projects.qa_agent_service")
     def test_validate_resource_success(self, mock_qa_service, client):
         """Test successful resource validation."""
         uri = "https://github.com/owner/repo/pull/123"
@@ -183,7 +183,7 @@ class TestValidateResourceEndpoint:
         assert data["description"] == "Test PR description"
         assert data["error"] is None
 
-    @patch("devboard.api.routers.qa.qa_agent_service")
+    @patch("devboard.api.routers.projects.qa_agent_service")
     def test_validate_resource_invalid(self, mock_qa_service, client):
         """Test validation of invalid resource."""
 
@@ -225,24 +225,24 @@ class TestQAAgentService:
         agent.run = AsyncMock(return_value=result_mock)
         return agent
 
-    @patch("devboard.services.qa_agent.Agent")
+    @patch("devboard.agents.project_agent.Agent")
     def test_qa_agent_initialization(self, mock_agent_class, mock_context_service):
         """Test Q&A agent service initialization."""
         mock_agent_class.return_value = Mock()
 
-        service = QAAgentService(mock_context_service)
+        service = ProjectAgent(mock_context_service)
 
         assert service.context_service == mock_context_service
         assert service.agent is not None
         mock_agent_class.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("devboard.services.qa_agent.Agent")
+    @patch("devboard.agents.project_agent.Agent")
     async def test_chat_success(self, mock_agent_class, mock_context_service, mock_agent):
         """Test successful chat processing."""
         mock_agent_class.return_value = mock_agent
 
-        service = QAAgentService(mock_context_service)
+        service = ProjectAgent(mock_context_service)
 
         result = await service.chat(1, "test query")
 
@@ -251,13 +251,13 @@ class TestQAAgentService:
         mock_agent.run.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("devboard.services.qa_agent.Agent")
+    @patch("devboard.agents.project_agent.Agent")
     async def test_chat_context_error(self, mock_agent_class, mock_context_service):
         """Test chat when context assembly fails."""
         mock_agent_class.return_value = Mock()
         mock_context_service.get_project_context.side_effect = Exception("Context error")
 
-        service = QAAgentService(mock_context_service)
+        service = ProjectAgent(mock_context_service)
 
         result = await service.chat(1, "test query")
 

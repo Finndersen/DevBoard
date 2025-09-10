@@ -20,7 +20,7 @@ class TestDocumentEditorService:
 
         assert result.success is True
         assert result.content == "Hello universe! This is a test document."
-        assert result.error is None
+        assert result.errors == []
 
     def test_apply_multiple_edits_success(self):
         """Test applying multiple edits successfully."""
@@ -35,7 +35,7 @@ class TestDocumentEditorService:
 
         assert result.success is True
         assert result.content == "The fast red fox jumps over the sleepy dog."
-        assert result.error is None
+        assert result.errors == []
 
     def test_apply_edit_text_not_found(self):
         """Test applying edit when find text doesn't exist."""
@@ -46,7 +46,8 @@ class TestDocumentEditorService:
 
         assert result.success is False
         assert result.content == content  # Unchanged
-        assert "Text to find not found" in result.error
+        assert len(result.errors) == 1
+        assert "Text not found" in result.errors[0]
 
     def test_apply_edit_empty_find_text(self):
         """Test applying edit with empty find text."""
@@ -57,7 +58,8 @@ class TestDocumentEditorService:
 
         assert result.success is False
         assert result.content == content
-        assert "Edit 'find' text cannot be empty" in result.error
+        assert len(result.errors) == 1
+        assert "'find' text cannot be empty" in result.errors[0]
 
     def test_apply_edit_identical_find_replace(self):
         """Test applying edit where find and replace are identical."""
@@ -68,7 +70,8 @@ class TestDocumentEditorService:
 
         assert result.success is False
         assert result.content == content
-        assert "Edit did not change content" in result.error
+        assert len(result.errors) == 1
+        assert "Edit did not change content" in result.errors[0]
 
     def test_apply_edits_empty_list(self):
         """Test applying empty list of edits."""
@@ -78,76 +81,87 @@ class TestDocumentEditorService:
 
         assert result.success is True
         assert result.content == content
-        assert result.error is None
+        assert result.errors == []
 
-    def test_apply_edits_sequential_processing(self):
-        """Test that edits are applied sequentially."""
+    def test_apply_edits_ambiguous_text_error(self):
+        """Test that ambiguous edits are treated as errors."""
         content = "abc abc abc"
         edits = [
-            DocumentEdit(find="abc", replace="xyz"),  # Only replaces first occurrence
-            DocumentEdit(find="abc", replace="123"),  # Replaces first remaining occurrence
-        ]
-
-        result = self.editor.apply_edits(content, edits)
-
-        assert result.success is True
-        assert result.content == "xyz 123 abc"  # Third 'abc' remains
-        assert result.error is None
-
-    def test_apply_edits_failure_stops_processing(self):
-        """Test that edit failure stops processing subsequent edits."""
-        content = "Hello world!"
-        edits = [
-            DocumentEdit(find="Hello", replace="Hi"),  # Should succeed
-            DocumentEdit(find="nonexistent", replace="x"),  # Should fail
-            DocumentEdit(find="world", replace="universe"),  # Should not be processed
+            DocumentEdit(find="abc", replace="xyz"),  # Should fail due to ambiguity
         ]
 
         result = self.editor.apply_edits(content, edits)
 
         assert result.success is False
-        assert result.content == "Hello world!"  # Original content returned
-        assert "Text to find not found" in result.error
+        assert result.content == content  # Original content unchanged
+        assert len(result.errors) == 1
+        assert "Ambiguous edit" in result.errors[0]
+        assert "appears 3 times" in result.errors[0]
+        assert "make the find text more specific" in result.errors[0]
 
-    def test_validate_edits_all_valid(self):
-        """Test validation when all edits are valid."""
-        content = "The quick brown fox"
+    def test_apply_edits_ambiguous_text_long_truncation(self):
+        """Test that long ambiguous find text is properly truncated in error messages."""
+        long_text = "a" * 60  # Longer than 50 character limit
+        content = f"{long_text} some text {long_text} more text {long_text}"
         edits = [
-            DocumentEdit(find="quick", replace="fast"),
-            DocumentEdit(find="brown", replace="red"),
+            DocumentEdit(find=long_text, replace="short"),
         ]
 
-        errors = self.editor.validate_edits(content, edits)
+        result = self.editor.apply_edits(content, edits)
 
-        assert errors == []
+        assert result.success is False
+        assert "appears 3 times" in result.errors[0]
+        assert "..." in result.errors[0]  # Should be truncated
 
-    def test_validate_edits_with_errors(self):
-        """Test validation when some edits have errors."""
+    def test_apply_edits_collects_errors_and_continues(self):
+        """Test that edit failures are collected and processing continues."""
+        content = "Hello world!"
+        edits = [
+            DocumentEdit(find="Hello", replace="Hi"),  # Should succeed
+            DocumentEdit(find="nonexistent", replace="x"),  # Should fail
+            DocumentEdit(find="!", replace="?"),  # Should succeed
+        ]
+
+        result = self.editor.apply_edits(content, edits)
+
+        assert result.success is False  # Overall failure due to one failed edit
+        assert result.content == "Hello world!"  # Original content returned on any failure
+        assert len(result.errors) == 1
+        assert "Text not found: 'nonexistent'" in result.errors[0]
+
+    def test_apply_edits_collects_all_errors(self):
+        """Test that apply_edits collects all errors when multiple edits fail."""
         content = "Hello world!"
         edits = [
             DocumentEdit(find="Hello", replace="Hi"),  # Valid
             DocumentEdit(find="", replace="something"),  # Invalid: empty find
             DocumentEdit(find="nonexistent", replace="x"),  # Invalid: text not found
-            DocumentEdit(find="world", replace="universe"),  # Valid
+            DocumentEdit(find="world", replace="universe"),  # Would be valid but after Hi
         ]
 
-        errors = self.editor.validate_edits(content, edits)
+        result = self.editor.apply_edits(content, edits)
 
-        assert len(errors) == 2
-        assert "Edit 2: 'find' text cannot be empty" in errors
-        assert "Edit 3: Text not found: 'nonexistent'" in errors
+        assert result.success is False
+        assert result.content == "Hello world!"  # Original content unchanged
+        assert len(result.errors) == 3  # First succeeds, rest fail
+        assert "'find' text cannot be empty" in result.errors[0]
+        assert "Text not found: 'nonexistent'" in result.errors[1]
+        assert "Text not found: 'world'" in result.errors[2]  # 'world' not found after "Hi" replaces "Hello"
 
-    def test_validate_edits_sequential_context(self):
-        """Test that validation considers sequential edit context."""
-        content = "Hello world world"
+    def test_apply_edits_unique_text_success(self):
+        """Test that edits with unique find text succeed."""
+        content = "Hello wonderful world"
         edits = [
-            DocumentEdit(find="world", replace="universe"),  # First occurrence becomes 'universe'
-            DocumentEdit(find="world", replace="cosmos"),  # Second occurrence becomes 'cosmos'
+            DocumentEdit(find="Hello", replace="Hi"),  # Unique
+            DocumentEdit(find="wonderful", replace="amazing"),  # Unique
+            DocumentEdit(find="world", replace="universe"),  # Unique
         ]
 
-        errors = self.editor.validate_edits(content, edits)
+        result = self.editor.apply_edits(content, edits)
 
-        assert errors == []  # Both should be valid
+        assert result.success is True
+        assert result.content == "Hi amazing universe"
+        assert result.errors == []
 
     def test_markdown_content_editing(self):
         """Test editing markdown content with formatting."""

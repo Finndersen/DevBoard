@@ -3,8 +3,10 @@
 from .base import Base
 from .codebase import Codebase
 from .configuration import Configuration, ContextProviderResource
-from .project import Project, ProjectConversationMessage
-from .task import Task, TaskConversationMessage
+from .document import Document, DocumentType
+from .messages import ProjectConversationMessage, TaskConversationMessage
+from .project import Project
+from .task import Task
 
 __all__ = [
     "Base",
@@ -13,6 +15,8 @@ __all__ = [
     "Codebase",
     "Configuration",
     "ContextProviderResource",
+    "Document",
+    "DocumentType",
     "ProjectConversationMessage",
     "TaskConversationMessage",
 ]

@@ -6,8 +6,8 @@ import pytest
 
 from devboard.agents.task_planning_agent import (
     DocumentType,
-    TaskContext,
-    TaskPlanningAgentService,
+    TaskDeps,
+    TaskSpecificationAgent,
     TaskState,
 )
 from devboard.api.schemas.task import DocumentEdit, TaskPlanningResponse
@@ -103,7 +103,7 @@ class TestTaskPlanningAgentService:
         """Create agent service with mocked dependencies."""
         with patch("devboard.agents.task_planning_agent.llm_service") as mock_llm_service:
             mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-            return TaskPlanningAgentService(context_service=mock_context_service)
+            return TaskSpecificationAgent(context_service=mock_context_service)
 
     @pytest.fixture
     def sample_context_data(self):
@@ -140,7 +140,7 @@ class TestTaskPlanningAgentService:
 
     def test_task_context_creation(self, sample_context_data):
         """Test TaskContext creation."""
-        context = TaskContext(
+        context = TaskDeps(
             task_id=1,
             task_title="Test Task",
             task_description="Description",
@@ -357,4 +357,5 @@ class TestTaskPlanningAgentService:
 
             # Verify template service was called with correct TemplateType
             from devboard.services.template_service import TemplateType
+
             mock_template_service.get_template.assert_called_with(TemplateType.TASK_SPECIFICATION)

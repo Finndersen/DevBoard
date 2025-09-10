@@ -343,164 +343,61 @@ class TestTaskPlanningAgentEndpoints:
 
         return created_task
 
-    def test_get_task_messages_empty(self, client, test_task_with_project):
-        """Test getting task messages when none exist."""
+    @pytest.mark.skip(reason="Message sending requires actual AI agent - integration test only")
+    def test_send_task_conversation_message(self, client, test_task_with_project):
+        """Test sending a message to the task planning agent."""
         task = test_task_with_project
 
-        response = client.get(f"/api/tasks/{task.id}/messages")
-        assert response.status_code == 200
-        assert response.json() == []
+        message_request = {
+            "message": "Help me create a task specification for user authentication."
+        }
 
-    def test_get_task_messages_with_data(self, client, db_session, test_task_with_project):
-        """Test getting task messages with existing conversation."""
-        from devboard.db.models import TaskConversationMessage
-
-        task = test_task_with_project
-
-        # Add some conversation messages
-        messages_data = [
-            {"role": "user", "content": "Help me design this task"},
-            {
-                "role": "assistant",
-                "content": "I'll help you create a specification",
-                "tool_data": {"task_specification_edits": [{"find": "old", "replace": "new"}]},
-            },
-            {"role": "user", "content": "Add more details please"},
-        ]
-
-        for msg_data in messages_data:
-            message = TaskConversationMessage(task_id=task.id, **msg_data)
-            db_session.add(message)
-        db_session.commit()
-
-        response = client.get(f"/api/tasks/{task.id}/messages")
+        response = client.post(f"/api/tasks/{task.id}/conversation", json=message_request)
         assert response.status_code == 200
 
-        messages = response.json()
-        assert len(messages) == 3
-        assert messages[0]["role"] == "user"
-        assert messages[1]["role"] == "assistant"
-        assert messages[1]["tool_data"] is not None
-        assert "task_specification_edits" in messages[1]["tool_data"]
+        conversation_response = response.json()
+        assert "messages" in conversation_response
+        assert "pending_approvals" in conversation_response
+        assert "conversation_complete" in conversation_response
 
-    def test_get_task_messages_task_not_found(self, client):
-        """Test getting messages for non-existent task."""
-        response = client.get("/api/tasks/999/messages")
+    def test_send_task_conversation_message_task_not_found(self, client):
+        """Test sending message to non-existent task."""
+        message_request = {"message": "Test message"}
+
+        response = client.post("/api/tasks/999/conversation", json=message_request)
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
-    def test_apply_document_edits_specification_only(
-        self, client, db_session, test_task_with_project
-    ):
-        """Test applying edits to task specification only."""
-        from devboard.db.models import TaskConversationMessage
-
+    @pytest.mark.skip(
+        reason="Tool approval requires pending tools from AI agent - integration test only"
+    )
+    def test_approve_task_tools(self, client, test_task_with_project):
+        """Test approving tool calls from the task planning agent."""
         task = test_task_with_project
 
-        # Create a message with edits
-        message = TaskConversationMessage(
-            task_id=task.id,
-            role="assistant",
-            content="Updated specification",
-            tool_data={"task_specification_edits": [{"find": "old", "replace": "new"}]},
-        )
-        db_session.add(message)
-        db_session.commit()
-        db_session.refresh(message)
-
-        # Apply edits request
-        edit_request = {
-            "message_id": message.id,
-            "task_specification_edits": [
-                {
-                    "find": "Initial task description",
-                    "replace": "Updated task specification with new details",
-                }
-            ],
+        approval_request = {
+            "approvals": {
+                "test_call_1": {"approved": True, "feedback": "Looks good, proceed with the edit"}
+            }
         }
 
-        response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
+        response = client.post(
+            f"/api/tasks/{task.id}/conversation/approve-tools", json=approval_request
+        )
         assert response.status_code == 200
 
-        updated_task = response.json()
-        assert updated_task["description"] == "Updated task specification with new details"
-        assert updated_task["implementation_plan"] is None  # Should remain unchanged
+        conversation_response = response.json()
+        assert "messages" in conversation_response
+        assert "pending_approvals" in conversation_response
+        assert conversation_response["conversation_complete"] is True
 
-    def test_apply_document_edits_both_documents(self, client, db_session, test_task_with_project):
-        """Test applying edits to both specification and implementation plan."""
-        from devboard.db.models import TaskConversationMessage
+    def test_approve_task_tools_task_not_found(self, client):
+        """Test tool approval for non-existent task."""
+        approval_request = {"approvals": {"test_call_1": {"approved": True}}}
 
-        task = test_task_with_project
-        # Set initial implementation plan
-        task.implementation_plan = "Initial implementation plan"
-        db_session.commit()
-
-        # Create message
-        message = TaskConversationMessage(
-            task_id=task.id, role="assistant", content="Updated both documents"
-        )
-        db_session.add(message)
-        db_session.commit()
-        db_session.refresh(message)
-
-        # Apply edits to both documents
-        edit_request = {
-            "message_id": message.id,
-            "task_specification_edits": [
-                {"find": "Initial task description", "replace": "Enhanced task specification"}
-            ],
-            "task_implementation_plan_edits": [
-                {
-                    "find": "Initial implementation plan",
-                    "replace": "Detailed implementation plan with steps",
-                }
-            ],
-        }
-
-        response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
-        assert response.status_code == 200
-
-        updated_task = response.json()
-        assert updated_task["description"] == "Enhanced task specification"
-        assert updated_task["implementation_plan"] == "Detailed implementation plan with steps"
-
-    def test_apply_document_edits_invalid_message(self, client, test_task_with_project):
-        """Test applying edits with invalid message ID."""
-        task = test_task_with_project
-
-        edit_request = {
-            "message_id": 999,
-            "task_specification_edits": [{"find": "old", "replace": "new"}],
-        }
-
-        response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
+        response = client.post("/api/tasks/999/conversation/approve-tools", json=approval_request)
         assert response.status_code == 404
-        assert response.json()["detail"] == "Message not found"
-
-    def test_apply_document_edits_edit_failure(self, client, db_session, test_task_with_project):
-        """Test applying edits when edit operation fails."""
-        from devboard.db.models import TaskConversationMessage
-
-        task = test_task_with_project
-
-        # Create message
-        message = TaskConversationMessage(
-            task_id=task.id, role="assistant", content="Attempted update"
-        )
-        db_session.add(message)
-        db_session.commit()
-        db_session.refresh(message)
-
-        # Try to edit text that doesn't exist
-        edit_request = {
-            "message_id": message.id,
-            "task_specification_edits": [{"find": "nonexistent text", "replace": "new text"}],
-        }
-
-        response = client.post(f"/api/tasks/{task.id}/apply-edits", json=edit_request)
-        assert response.status_code == 400
-        assert "Edit application failed" in response.json()["detail"]
-        assert "Text to find not found" in response.json()["detail"]
+        assert response.json()["detail"] == "Task not found"
 
     def test_transition_task_state_success(self, client, test_task_with_project):
         """Test successful task state transition."""

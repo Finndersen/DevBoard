@@ -47,7 +47,7 @@ class GitHubIntegration(BaseIntegration):
         """Create GitHub integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(GitHubIntegrationConfig.config_key)
+            config = config_service.get_config(GitHubIntegrationConfig)
             if not config:
                 raise IntegrationConfigurationError(
                     "GitHub configuration not found or invalid. Please configure the GitHub integration."

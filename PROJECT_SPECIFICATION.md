@@ -118,6 +118,12 @@ Represents a software codebase relevant to a project or task.
   * **Context Provider Configuration**: Manage context provider resource links with URI validation and auto-description generation
   * **Agent Configuration**: Select models for each agent type (Q&A, Planning, Implementation) with dynamic model lists based on configured LLM providers and intelligent fallback hierarchy
   * **Connection Testing**: On-demand connection verification with immediate results and actionable error messages for troubleshooting
+  * **Type-Safe Configuration Service**: Enhanced configuration management with dual-interface design:
+    * **Typed Methods**: `get_config(ConfigClass)` and `validate_config(ConfigClass)` for compile-time type safety when config type is known
+    * **Dynamic Methods**: `get_config_by_key(key)` and `validate_config_by_key(key)` for runtime key-based access
+    * **Generic Validation Results**: `ConfigValidationResult[T]` provides strongly-typed configuration validation with proper error handling
+    * **Automatic Key Extraction**: Configuration classes define their own keys via `config_key` attribute, eliminating duplication
+    * **Integration Benefits**: GitHub, Slack, and Jira integrations use typed methods for improved developer experience and compile-time error detection
 * **Phase 2**: Advanced configuration features including configuration templates, bulk operations, and enhanced diagnostics
 * **Phase 3**: A unified MCP (tool) server that provides integrations from all configured context providers to the Implementation Agent.
 
@@ -158,22 +164,23 @@ Represents a software codebase relevant to a project or task.
 
 ## AI Agents & Orchestration 🤖
 
-### 1. Project Q&A Agent
-* **Function**: Answers questions about a project's status and context.
+### 1. Project Q&A Agent (Enhanced with Shared Architecture)
+* **Function**: Answers questions about a project's status and context through conversational interface
 * **Context**:
   * Project overview document.
   * Full list of tasks and their statuses.
   * List of available ON_DEMAND resources with URIs and descriptions
+  * Full conversation history with the user (stored as PydanticAI message format)
 * **Tools/Capabilities**:
-  * Conversational interaction.
-  * **Single Query Tool**: `get_relevant_context(resource_uri, query)` - works with any resource type
+  * **Context Research**: `get_relevant_context(resource_uri, query)` - works with any resource type
   * **Resource Discovery**: Agent can see available resources and their descriptions to decide which to query
   * **Read-Only**: Cannot perform write operations like updating tickets or creating PRs
-  * Reading more details & state of individual tasks
-  * Updating project details/summary and status
-* **Model**: Fast & cheap model with a large context window (e.g., Gemini Flash).
+  * **Future Enhancement**: Could be extended with deferred document editing tools for project documentation
+* **Message Storage**: Full PydanticAI message history (ModelRequest/ModelResponse) stored in JSON format with minimal schema
+* **Model**: Configurable model selection via LLMService with agent type preferences (e.g., QA agent type)
 * **Implementation**:
-  * Can run in app within API request using framework like PydanticAI
+  * PydanticAI-based using shared base agent service infrastructure
+  * Shared API patterns with Task Planning Agent for consistency
 
 ### 2. Context Provider Investigation Agent (Sub-Agent)
 * **Function**: Acts as a sub-agent to implement the `get_relevant_context()` API for a context provider.
@@ -201,25 +208,29 @@ Represents a software codebase relevant to a project or task.
 * **Implementation**:
   * Possibly wrapping a single-shot Gemini CLI agent run in a background task.
 
-### 4. Task Planning Agent (Enhanced)
-* **Function**: Interactive document crafting for task specifications and implementation plans through state-based conversational workflow
+### 4. Task Planning Agent (Enhanced with Deferred Tools)
+* **Function**: Interactive document crafting for task specifications and implementation plans through state-based conversational workflow with user approval for document changes
 * **Context**:
   * Current task specification and implementation plan documents
   * Access to all configured context providers for research
-  * Full conversation history with the user
+  * Full conversation history with the user (stored as PydanticAI message format)
   * Task state awareness (Designing vs Planning phases)
 * **Tools/Capabilities**:
-  * **Document Editing**: Simplified find-replace edits with precise text matching for task specification and implementation plan
+  * **Document Editing Tools**: Deferred tools with `approval_required=True` for editing task specification and implementation plan documents
+    * `edit_task_specification(edits: list[DocumentEdit], reasoning: str)`
+    * `edit_implementation_plan(edits: list[DocumentEdit], reasoning: str)`
+    * Pre-validation ensures edits can be applied before presenting to user
   * **Context Research**: Full access to project context, codebase information, and external resources via `get_relevant_context()` tool
-  * **Conversational Refinement**: Interactive clarification and iterative document improvement
+  * **Interactive Approval Workflow**: Agent execution pauses for user to approve/deny document changes with optional feedback
+  * **Conversational Refinement**: Agent can revise edits based on user feedback when edits are denied
   * **State-Aware Prompting**: Different capabilities based on task state (Designing: spec only, Planning: both documents)
-  * **Atomic Edit Application**: All document changes bundled and applied together with user approval
-* **Response Format**: Structured JSON with explicit `task_specification_edits` and `task_implementation_plan_edits` arrays
+* **Message Storage**: Full PydanticAI message history (ModelRequest/ModelResponse) stored in JSON format with minimal schema
 * **Model**: Configurable model selection via LLMService with agent type preferences (e.g., PLANNING agent type)
 * **Implementation**:
-  * PydanticAI-based synchronous processing with structured response format
+  * PydanticAI-based with deferred tools for document editing
   * State-based prompt templates for different workflow phases
-  * Integration with existing context provider infrastructure and template system
+  * Shared base agent service for common functionality
+  * API endpoints for tool approval/denial workflow
 
 ### 5. Task Implementation Agent
 * **Function**: Executes the approved Implementation Plan.

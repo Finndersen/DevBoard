@@ -7,11 +7,11 @@ from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, project_codebase_association, project_context_resource_association
-from .base_conversation import BaseConversationMessage
 
 if TYPE_CHECKING:
     from .codebase import Codebase
     from .configuration import ContextProviderResource
+    from .document import Document
     from .task import Task
 
 
@@ -22,8 +22,11 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
-    details: Mapped[str] = mapped_column(Text)
     current_status: Mapped[str] = mapped_column(Text)
+
+    # Document relationship
+    details_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC)
     )
@@ -37,11 +40,10 @@ class Project(Base):
     )
     messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
+    # Document relationship with eager loading
+    details: Mapped["Document"] = relationship(
+        foreign_keys=[details_id],
+        lazy="joined"  # Always eager load
+    )
 
-class ProjectConversationMessage(BaseConversationMessage):
-    """Represents a single message or tool call in the conversation with a Project Q&A Agent."""
 
-    __tablename__ = "project_conversation_messages"
-
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
-    project: Mapped["Project"] = relationship(back_populates="messages")

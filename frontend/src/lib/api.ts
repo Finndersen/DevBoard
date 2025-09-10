@@ -30,13 +30,48 @@ export interface TaskPlanningResponse {
   task_implementation_plan_edits?: DocumentEdit[]
 }
 
-export interface TaskConversationMessage {
+export interface ConversationMessageResponse {
   id: number
-  task_id: number
-  role: 'user' | 'assistant' | 'tool_call' | 'tool_result'
-  content: string | null
-  tool_data: Record<string, any> | null
+  message_type: 'request' | 'response'
+  text_content: string | null
+  tool_calls: ToolCallInfo[] | null
   created_at: string
+}
+
+export interface ToolCallInfo {
+  tool_call_id: string
+  tool_name: string
+  status: 'pending_approval' | 'approved' | 'denied'
+  arguments: Record<string, any>
+  preview: Record<string, any> | null
+}
+
+export interface PendingApproval {
+  tool_call_id: string
+  tool_name: string
+  document_type: string | null
+  edits: DocumentEdit[] | null
+  diff_preview: string | null
+  reasoning: string | null
+}
+
+export interface ConversationResponse {
+  messages: ConversationMessageResponse[]
+  pending_approvals: PendingApproval[] | null
+  conversation_complete: boolean
+}
+
+export interface MessageRequest {
+  message: string
+}
+
+export interface ToolApprovalDecision {
+  approved: boolean
+  feedback?: string
+}
+
+export interface ToolApprovalRequest {
+  approvals: Record<string, ToolApprovalDecision>
 }
 
 export interface TaskPlanningRequest {
@@ -219,20 +254,16 @@ export class ApiClient {
     return this.request<void>(`/api/tasks/${id}`, { method: 'DELETE' })
   }
 
-  // Task Planning Agent
-  async getTaskMessages(taskId: number | string): Promise<TaskConversationMessage[]> {
-    return this.request<TaskConversationMessage[]>(`/api/tasks/${taskId}/messages`)
-  }
-
-  async sendTaskMessage(taskId: number | string, request: TaskPlanningRequest): Promise<TaskConversationMessage> {
-    return this.request<TaskConversationMessage>(`/api/tasks/${taskId}/messages`, {
+  // Task Planning Agent - New Deferred Tools API
+  async sendTaskConversationMessage(taskId: number | string, request: MessageRequest): Promise<ConversationResponse> {
+    return this.request<ConversationResponse>(`/api/tasks/${taskId}/conversation`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
   }
 
-  async applyDocumentEdits(taskId: number | string, request: ApplyEditsRequest): Promise<Task> {
-    return this.request<Task>(`/api/tasks/${taskId}/apply-edits`, {
+  async approveTaskTools(taskId: number | string, request: ToolApprovalRequest): Promise<ConversationResponse> {
+    return this.request<ConversationResponse>(`/api/tasks/${taskId}/conversation/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })

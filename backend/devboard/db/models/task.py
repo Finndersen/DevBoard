@@ -3,15 +3,14 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, task_context_resource_association
-from .base_conversation import BaseConversationMessage
 
 if TYPE_CHECKING:
-    from .codebase import Codebase
     from .configuration import ContextProviderResource
+    from .document import Document
     from .project import Project
 
 
@@ -25,11 +24,14 @@ class Task(Base):
     codebase_id: Mapped[int | None] = mapped_column(ForeignKey("codebases.id"))
 
     title: Mapped[str] = mapped_column(String(255))
-    description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(50), default="Pending")
     remote_task_id: Mapped[str | None] = mapped_column(String(100))
     conversation_id: Mapped[str | None] = mapped_column(String(100))
-    implementation_plan: Mapped[str | None] = mapped_column(Text)
+
+    # Document relationships
+    specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
+    implementation_plan_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC)
     )
@@ -41,11 +43,14 @@ class Task(Base):
     )
     messages: Mapped[list["TaskConversationMessage"]] = relationship(back_populates="task")
 
+    # Document relationships with eager loading
+    specification: Mapped["Document"] = relationship(
+        foreign_keys=[specification_id],
+        lazy="joined"  # Always eager load
+    )
+    implementation_plan: Mapped["Document | None"] = relationship(
+        foreign_keys=[implementation_plan_id],
+        lazy="joined"  # Always eager load
+    )
 
-class TaskConversationMessage(BaseConversationMessage):
-    """Represents a single message or tool call in the conversation with a Task Planning Agent."""
 
-    __tablename__ = "task_conversation_messages"
-
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
-    task: Mapped["Task"] = relationship(back_populates="messages")

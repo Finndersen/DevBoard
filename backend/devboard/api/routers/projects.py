@@ -1,12 +1,13 @@
 """Project API endpoints."""
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from devboard.agents.project_agent import qa_agent_service
+from devboard.agents.project_agent import ProjectAgent
 from devboard.api.schemas import (
     DeleteResponse,
     ProjectCreate,
@@ -20,9 +21,13 @@ from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.database import get_db
 from devboard.db.models import Project
 from devboard.db.repositories import ProjectRepository, TaskRepository
-from devboard.services.context_assembly import NoProviderFound
+from devboard.services.context_assembly import (
+    NoProviderFound,
+    context_assembly_service,
+)
 from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -202,8 +207,9 @@ async def chat_with_project(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        agent = ProjectAgent()
         # Process query with Q&A agent
-        response = await qa_agent_service.chat(project_id, request.query)
+        response = await agent.chat(project_id, request.query)
 
         return ChatResponse(response=response, project_id=project_id)
 
@@ -239,7 +245,7 @@ async def get_project_context(
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Get context assembly
-        context_data = await qa_agent_service.context_service.get_project_context(project_id, query)
+        context_data = await context_assembly_service.get_project_context(project_id, query)
 
         return {
             "project_id": project_id,
@@ -286,7 +292,7 @@ async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
         Validation results and provider information
     """
     try:
-        result = await qa_agent_service.context_service.get_resource_info(resource_uri)
+        result = await context_assembly_service.get_resource_info(resource_uri)
         return {
             "resource_uri": resource_uri,
             "valid": True,

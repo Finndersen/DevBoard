@@ -13,3 +13,7 @@ class BaseRepository[T]:
             db_session: SQLAlchemy session for database operations
         """
         self.db = db_session
+
+    def commit(self):
+        """Commit the current transaction."""
+        self.db.commit()

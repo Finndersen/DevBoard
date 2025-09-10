@@ -1,11 +1,11 @@
 """Generic registry implementation for type-safe collections."""
 
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 
-class Registry(Generic[T]):
+class Registry[T]:
     """Generic registry for managing typed collections.
 
     Provides a type-safe way to store and retrieve items by string keys.

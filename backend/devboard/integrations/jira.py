@@ -44,7 +44,7 @@ class JiraIntegration(BaseIntegration):
         """Create Jira integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(JiraIntegrationConfig.config_key)
+            config = config_service.get_config(JiraIntegrationConfig)
             if not config:
                 raise IntegrationConfigurationError(
                     "Jira configuration not found or invalid. Please configure the Jira integration."

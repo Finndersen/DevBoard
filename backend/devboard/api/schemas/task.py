@@ -4,12 +4,13 @@ import datetime
 
 from pydantic import BaseModel
 
+from .document import DocumentResponse
+
 
 class TaskBase(BaseModel):
     """Base task schema."""
 
     title: str
-    description: str | None = None
     project_id: int
     codebase_id: int | None = None
     status: str = "Pending"
@@ -20,7 +21,6 @@ class TaskCreate(BaseModel):
     """Schema for creating a new task."""
 
     title: str
-    description: str | None = None
     project_id: int
     codebase_id: int | None = None
     status: str = "Pending"
@@ -31,7 +31,6 @@ class TaskCreateNested(BaseModel):
     """Schema for creating a new task under a project (project_id from URL)."""
 
     title: str
-    description: str | None = None
     codebase_id: int | None = None
     status: str = "Pending"
     remote_task_id: str | None = None
@@ -41,11 +40,9 @@ class TaskUpdate(BaseModel):
     """Schema for updating a task."""
 
     title: str | None = None
-    description: str | None = None
     status: str | None = None
     remote_task_id: str | None = None
     conversation_id: str | None = None
-    implementation_plan: str | None = None
 
 
 class TaskResponse(TaskBase):
@@ -53,8 +50,11 @@ class TaskResponse(TaskBase):
 
     id: int
     conversation_id: str | None = None
-    implementation_plan: str | None = None
     created_at: datetime.datetime
+    
+    # Document relationships - automatically loaded
+    specification: DocumentResponse
+    implementation_plan: DocumentResponse | None = None
 
     model_config = {"from_attributes": True}
 
@@ -84,7 +84,7 @@ class TaskConversationMessage(BaseModel):
     task_id: int
     role: str  # 'user', 'assistant', 'tool_call', 'tool_result'
     content: str | None = None
-    tool_data: dict | None = None
+    tool_data: dict[str, str] | None = None
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}

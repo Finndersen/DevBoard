@@ -3,11 +3,17 @@
 from sqlalchemy import select
 
 from devboard.db.models import Task
+from devboard.db.models.document import DocumentType
 from devboard.db.repositories.base import BaseRepository
+from devboard.db.repositories.document import DocumentRepository
 
 
 class TaskRepository(BaseRepository[Task]):
-    """Repository for task data access operations."""
+    """Repository for task data access operations with document management."""
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.document_repo = DocumentRepository(db)
 
     def get_by_id(self, task_id: int) -> Task | None:
         """Get a task by its ID.
@@ -42,17 +48,49 @@ class TaskRepository(BaseRepository[Task]):
         stmt = select(Task).where(Task.project_id == project_id)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, task: Task) -> Task:
-        """Create a new task.
+    def create(self, project_id: int, title: str, **kwargs) -> Task:
+        """Create a new task with required documents.
 
         Args:
-            task: Task instance to create
+            project_id: ID of the project this task belongs to
+            title: Task title
+            **kwargs: Additional task fields
 
         Returns:
-            Created task with assigned ID
+            Created task with assigned ID and documents
         """
+        # Create required specification document
+        specification_doc = self.document_repo.create(
+            DocumentType.TASK_SPECIFICATION, ""
+        )
+
+        # Create task with document references
+        task = Task(
+            project_id=project_id,
+            title=title,
+            specification_id=specification_doc.id,
+            **kwargs
+        )
+        
         self.db.add(task)
         self.db.flush()  # Get the ID without committing
+        return task
+
+    def create_implementation_plan(self, task: Task) -> Task:
+        """Create implementation plan document for a task if it doesn't exist.
+
+        Args:
+            task: Task instance to add implementation plan to
+
+        Returns:
+            Updated task with implementation plan
+        """
+        if task.implementation_plan_id is None:
+            implementation_plan_doc = self.document_repo.create(
+                DocumentType.TASK_IMPLEMENTATION_PLAN, ""
+            )
+            task.implementation_plan_id = implementation_plan_doc.id
+            self.db.flush()
         return task
 
     def update(self, task: Task) -> Task:
@@ -67,6 +105,35 @@ class TaskRepository(BaseRepository[Task]):
         self.db.merge(task)
         return task
 
+    def update_specification_content(self, task: Task, content: str) -> Task:
+        """Update task specification content.
+
+        Args:
+            task: Task instance
+            content: New specification content
+
+        Returns:
+            Updated task
+        """
+        self.document_repo.update_content(task.specification, content)
+        return task
+
+    def update_implementation_plan_content(self, task: Task, content: str) -> Task:
+        """Update task implementation plan content.
+
+        Args:
+            task: Task instance
+            content: New implementation plan content
+
+        Returns:
+            Updated task
+        """
+        if task.implementation_plan is None:
+            self.create_implementation_plan(task)
+        
+        self.document_repo.update_content(task.implementation_plan, content)
+        return task
+
     def delete_by_id(self, task_id: int) -> bool:
         """Delete a task by its ID.
 
@@ -78,6 +145,7 @@ class TaskRepository(BaseRepository[Task]):
         """
         task = self.get_by_id(task_id)
         if task:
+            # Documents will be cascade deleted via foreign key constraints
             self.db.delete(task)
             return True
         return False

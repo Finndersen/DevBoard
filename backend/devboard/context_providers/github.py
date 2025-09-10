@@ -283,7 +283,7 @@ Based on this repository data, here is the relevant context for your query:
 
             owner, repo = parsed["owner"], parsed["repo"]
             resource_type = parsed.get("type")
-            resource_id = parsed.get("id")
+            resource_id: str = parsed.get("id")
 
             if resource_type == "pull":
                 pr_data = await self.integration.get_pull_request(owner, repo, int(resource_id))

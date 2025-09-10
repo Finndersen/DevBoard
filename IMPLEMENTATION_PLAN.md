@@ -265,13 +265,58 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **COMPLETED**: Added API client methods: `getTaskMessages()`, `sendTaskMessage()`, `applyDocumentEdits()`, `transitionTaskState()`
   * **COMPLETED**: Maintained type safety across frontend-backend communication
 
-* [ ] **Task 9.5: Frontend Task Planning Interface**
+### Epic 10: PydanticAI Deferred Tools Migration 🚧
+
+**Major Architecture Upgrade**: Migrating to PydanticAI's deferred tools pattern for enhanced user control over AI agent document editing operations.
+
+**Key Changes**:
+- **Deferred Tools Pattern**: Replace structured output with `approval_required=True` tools that pause execution for user approval
+- **Simplified Message Storage**: Store full PydanticAI messages as JSON with minimal metadata schema
+- **Shared Agent Infrastructure**: Create base agent service to reduce duplication between Task and Project agents
+- **Interactive Approval Workflow**: UI for reviewing and approving/denying proposed document edits with feedback
+
+* [ ] **Task 10.1: Database Schema Updates**
+  * **BaseConversationMessage Refactor**: Update to store PydanticAI messages with `message_type` ('request'/'response') and `pydantic_content` (JSON) fields
+  * **Remove Deprecated Fields**: Clean up old `role`, `content`, `tool_data` approach in favor of PydanticAI format
+  * **Migration Scripts**: Data migration for existing conversation history
+  * **Schema Validation**: Ensure new format works with ModelMessagesTypeAdapter serialization/deserialization
+
+* [ ] **Task 10.2: Shared Base Agent Service**
+  * **BaseAgentService Class**: Abstract base class with common functionality for message history management
+  * **Document Edit Tool Factory**: Shared `create_document_edit_tool()` function with approval_required=True
+  * **Message Serialization Helpers**: Functions for converting to/from PydanticAI message format using `to_jsonable_python` and `ModelMessagesTypeAdapter`
+  * **Tool Approval Processing**: Shared logic for handling `DeferredToolResults` after user approval/denial
+
+* [ ] **Task 10.3: Task Planning Agent Refactor**
+  * **Deferred Tools Implementation**: Replace structured output with `edit_task_specification` and `edit_implementation_plan` tools
+  * **Edit Validation**: Pre-validate edits can be applied before presenting to user (use existing `document_editor_service.validate_edits`)
+  * **Agent Continuations**: Handle agent execution resumption after tool approval with proper message history
+  * **State Awareness**: Maintain existing state-based prompting (Designing vs Planning phases)
+
+* [ ] **Task 10.4: Shared API Infrastructure**
+  * **AgentConversationRouter**: Shared router logic for both task and project conversations
+  * **New Endpoints**: `/tool-approval` endpoints for both tasks and projects to handle approval/denial
+  * **Message History Loading**: Efficient deserialization of stored PydanticAI messages for agent context
+  * **Response Simplification**: API layer extracts display information from PydanticAI messages for frontend
+
+* [ ] **Task 10.5: Project Agent Integration**
+  * **Migrate Project Agent**: Update to use shared BaseAgentService pattern
+  * **Consistent Message Storage**: Use same PydanticAI message format as Task agent
+  * **Future Document Editing**: Prepare infrastructure for potential project documentation editing capabilities
+
+* [ ] **Task 10.6: Frontend Deferred Tools UI**
+  * **Tool Approval Interface**: Modal or inline UI for reviewing proposed document edits with diff preview
+  * **Approval/Denial Actions**: Buttons for approving changes or denying with feedback comments
+  * **Conversation State Management**: Handle pending approvals and agent continuations in chat interface  
+  * **Loading States**: Show when agent is waiting for approval vs processing
+
+* [ ] **Task 9.5: Frontend Task Planning Interface** (Updated)
   * **Three-Tab TaskDetail Interface**: Task Specification, Implementation Plan, Planning Agent tabs
   * **Document Editor Components**: Reuse existing ReactMarkdown + prose patterns with edit/view toggles
-  * **Edit Confirmation Modal**: Preview document changes with diff visualization before applying
+  * **Deferred Tool Approval UI**: Replace edit confirmation modal with deferred tool approval interface
   * **State Transition Controls**: UI buttons for progressing through design → planning → implementation
-  * **Agent Conversation UI**: Chat interface with edit proposal rendering and research summaries
-  * **Document Locking**: Disable editing during agent processing with loading states
+  * **Agent Conversation UI**: Chat interface with tool approval rendering and research summaries
+  * **Document Locking**: Disable editing during agent processing and pending approvals
 
 * [ ] **Task 9.6: Document Structure Templates**
   * **Task Specification Template**: Structured markdown template with Objective, Context, Requirements, Acceptance Criteria

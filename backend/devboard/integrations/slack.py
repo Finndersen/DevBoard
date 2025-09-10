@@ -42,7 +42,7 @@ class SlackIntegration(BaseIntegration):
         """Create Slack integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(SlackIntegrationConfig.config_key)
+            config = config_service.get_config(SlackIntegrationConfig)
             if not config:
                 raise IntegrationConfigurationError(
                     "Slack configuration not found or invalid. Please configure the Slack integration."

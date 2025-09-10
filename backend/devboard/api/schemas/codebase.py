@@ -26,7 +26,7 @@ class CodebaseUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     repository_url: str | None = None
-    local_path: str | None = None
+    local_path: str
 
 
 class CodebaseResponse(CodebaseBase):

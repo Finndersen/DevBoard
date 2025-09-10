@@ -3,11 +3,17 @@
 from sqlalchemy import select
 
 from devboard.db.models import Project
+from devboard.db.models.document import DocumentType
 from devboard.db.repositories.base import BaseRepository
+from devboard.db.repositories.document import DocumentRepository
 
 
 class ProjectRepository(BaseRepository[Project]):
-    """Repository for project data access operations."""
+    """Repository for project data access operations with document management."""
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.document_repo = DocumentRepository(db)
 
     def get_by_id(self, project_id: int) -> Project | None:
         """Get a project by its ID.
@@ -30,15 +36,30 @@ class ProjectRepository(BaseRepository[Project]):
         stmt = select(Project)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, project: Project) -> Project:
-        """Create a new project.
+    def create(self, name: str, current_status: str = "", **kwargs) -> Project:
+        """Create a new project with required documents.
 
         Args:
-            project: Project instance to create
+            name: Project name
+            current_status: Current project status
+            **kwargs: Additional project fields
 
         Returns:
-            Created project with assigned ID
+            Created project with assigned ID and documents
         """
+        # Create required details document
+        details_doc = self.document_repo.create(
+            DocumentType.PROJECT_DETAILS, ""
+        )
+
+        # Create project with document reference
+        project = Project(
+            name=name,
+            current_status=current_status,
+            details_id=details_doc.id,
+            **kwargs
+        )
+        
         self.db.add(project)
         self.db.flush()  # Get the ID without committing
         return project
@@ -55,6 +76,19 @@ class ProjectRepository(BaseRepository[Project]):
         self.db.merge(project)
         return project
 
+    def update_details_content(self, project: Project, content: str) -> Project:
+        """Update project details content.
+
+        Args:
+            project: Project instance
+            content: New details content
+
+        Returns:
+            Updated project
+        """
+        self.document_repo.update_content(project.details, content)
+        return project
+
     def delete_by_id(self, project_id: int) -> bool:
         """Delete a project by its ID.
 
@@ -66,6 +100,7 @@ class ProjectRepository(BaseRepository[Project]):
         """
         project = self.get_by_id(project_id)
         if project:
+            # Document will be cascade deleted via foreign key constraint
             self.db.delete(project)
             return True
         return False

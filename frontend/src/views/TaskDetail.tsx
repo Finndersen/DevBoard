@@ -4,6 +4,7 @@ import { ArrowLeftIcon, ChatBubbleLeftIcon, DocumentTextIcon, ClipboardDocumentL
 import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Task, Project } from '../lib/api'
+import TaskPlanningChat from '../components/TaskPlanningChat'
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>()
@@ -344,14 +345,7 @@ export default function TaskDetail() {
               </div>
             </div>
             <div className="h-full border border-gray-200 dark:border-gray-600 rounded-lg">
-              {/* TODO: Replace with TaskPlanningChat component */}
-              <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <ChatBubbleLeftIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Task Planning Agent coming soon...</p>
-                  <p className="text-sm mt-2">This will enable interactive document crafting</p>
-                </div>
-              </div>
+              <TaskPlanningChat taskId={parseInt(id!)} />
             </div>
           </div>
         </div>

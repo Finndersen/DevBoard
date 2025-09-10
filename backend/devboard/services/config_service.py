@@ -2,36 +2,46 @@
 
 import json
 import os
-from typing import Any, Union, get_args, get_origin
+from typing import Any, TypeVar, Union, cast, get_args, get_origin
 
 from pydantic import ValidationError
-from pydantic.fields import FieldInfo, PydanticUndefined
+from pydantic._internal._fields import PydanticUndefined
+from pydantic.fields import FieldInfo
 from sqlalchemy import select
 
 from devboard.api.schemas.configuration import ConfigurationDetailResponse, ConfigurationFieldInfo
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import config_schema_registry
+from devboard.core.registry import Registry
 from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.models import Configuration
+
+T = TypeVar("T", bound="BaseConfig")
 
 
 class ConfigService:
     """Service for managing application configuration."""
 
-    def __init__(self, db_session_factory: SessionMakerType = SessionLocal, config_registry=None):
+    def __init__(
+        self,
+        db_session_factory: SessionMakerType = SessionLocal,
+        config_registry: Registry[type[BaseConfig]] | None = None,
+    ):
         self.db_session_factory = db_session_factory
         self.config_registry = config_registry or config_schema_registry
 
-    def get_config(self, key: str) -> BaseConfig | None:
+    def get_config_by_key(self, key: str) -> BaseConfig | None:
         """Simple getter - returns config if valid, None if not."""
-        result = self.validate_config(key)
+        result = self.validate_config_by_key(key)
         return result.config if result.success else None
 
-    def validate_config(self, key: str) -> ConfigValidationResult:
+    def validate_config_by_key(self, key: str) -> ConfigValidationResult[BaseConfig]:
         """Returns detailed validation result with error information."""
         schema = self.config_registry.get(key)
         if not schema:
-            return ConfigValidationResult(False, errors=[f"No schema registered for key: {key}"])
+            return ConfigValidationResult[BaseConfig](
+                False, errors=[f"No schema registered for key: {key}"]
+            )
 
         try:
             # Load DB data (empty dict if no entry exists)
@@ -39,7 +49,7 @@ class ConfigService:
 
             # Attempt to instantiate with DB + env vars
             config = schema.model_validate(db_data)
-            return ConfigValidationResult(True, config=config)
+            return ConfigValidationResult[BaseConfig](True, config=config)
 
         except ValidationError as e:
             # Parse errors to provide helpful feedback
@@ -53,7 +63,21 @@ class ConfigService:
                 else:
                     errors.append(f"Invalid value for '{field}': {error['msg']}")
 
-            return ConfigValidationResult(False, errors=errors)
+            return ConfigValidationResult[BaseConfig](False, errors=errors)
+
+    # Type-safe methods for known config types
+    def get_config(self, config_class: type[T]) -> T | None:
+        """Type-safe getter - returns config if valid, None if not."""
+        result = self.validate_config(config_class)
+        return result.config if result.success else None
+
+    def validate_config(self, config_class: type[T]) -> ConfigValidationResult[T]:
+        """Type-safe validation - returns typed config validation result."""
+        key = config_class.config_key
+        result = self.validate_config_by_key(key)
+        if result.success:
+            return ConfigValidationResult[T](True, config=cast(T, result.config))
+        return ConfigValidationResult[T](False, errors=result.errors)
 
     def set_config(self, key: str, data: BaseConfig) -> None:
         """Set configuration data."""
@@ -170,10 +194,8 @@ class ConfigService:
         # 4. Analyze each field
         fields = []
         for field_name, field_info in schema_class.model_fields.items():
-            env_var_name = None
             value_source = None
             current_value = None
-            env_value_present = False
 
             # Calculate environment variable name for all fields
             env_prefix = schema_class.model_config.get("env_prefix", "")

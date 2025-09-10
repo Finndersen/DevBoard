@@ -18,7 +18,9 @@ def setup_logfire(app: FastAPI) -> None:
         service_name="devboard",
         service_version="0.1.0",
         environment=environment,
-        console={"verbose": environment == "development"},
+        console={"verbose": environment == "development"}
+        if environment == "development"
+        else False,
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
         send_to_logfire=bool(token),
     )

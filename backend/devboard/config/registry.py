@@ -4,7 +4,7 @@ from devboard.config.agent_config import (
     ImplementationAgentConfig,
     InvestigationAgentConfig,
     PlanningAgentConfig,
-    QAAgentConfig,
+    ProjectAgentConfig,
 )
 from devboard.config.base import BaseConfig
 from devboard.config.integration_configs import (
@@ -20,7 +20,7 @@ from devboard.config.llm_config import (
 from devboard.core.registry import Registry
 
 # Create the config schema registry with all schemas
-config_schema_registry: Registry[type[BaseConfig]] = Registry(
+config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
     [
         # Integration configurations
         GitHubIntegrationConfig,
@@ -31,7 +31,7 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry(
         AnthropicProviderConfig,
         GeminiProviderConfig,
         # Agent configurations
-        QAAgentConfig,
+        ProjectAgentConfig,
         PlanningAgentConfig,
         ImplementationAgentConfig,
         InvestigationAgentConfig,

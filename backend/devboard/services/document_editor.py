@@ -15,7 +15,7 @@ class EditResult(NamedTuple):
 
     success: bool
     content: str
-    error: str | None = None
+    errors: list[str] = []
 
 
 class DocumentEditError(Exception):
@@ -27,6 +27,10 @@ class DocumentEditError(Exception):
 class DocumentEditorService:
     """Service for applying find-replace edits to documents."""
 
+    def __init__(self):
+        """Initialize the document editor service."""
+        pass
+
     def apply_edits(self, content: str, edits: list[DocumentEdit]) -> EditResult:
         """Apply a list of edits to document content.
 
@@ -35,42 +39,44 @@ class DocumentEditorService:
             edits: List of find-replace edits to apply
 
         Returns:
-            EditResult with success status, final content, and any errors
+            EditResult with success status, final content, and list of errors
         """
         if not edits:
             return EditResult(success=True, content=content)
 
         with logfire.span("document_editor.apply_edits", edit_count=len(edits)):
-            try:
-                current_content = content
+            current_content = content
+            errors: list[str] = []
 
-                for i, edit in enumerate(edits):
-                    with logfire.span(
-                        "document_editor.apply_single_edit",
-                        edit_index=i,
-                        find_length=len(edit.find),
-                    ):
-                        edit_result = self._apply_single_edit(current_content, edit)
-                        if not edit_result.success:
-                            logfire.error("Edit failed", edit_index=i, error=edit_result.error)
-                            return EditResult(
-                                success=False,
-                                content=content,  # Return original content on failure
-                                error=edit_result.error,
-                            )
+            for i, edit in enumerate(edits):
+                with logfire.span(
+                    "document_editor.apply_single_edit",
+                    edit_index=i,
+                    find_length=len(edit.find),
+                ):
+                    edit_result = self._apply_single_edit(current_content, edit)
+                    if not edit_result.success:
+                        error_msg = f"Edit {i + 1}: {edit_result.errors[0]}" if edit_result.errors else f"Edit {i + 1}: Unknown error"
+                        errors.append(error_msg)
+                    else:
                         current_content = edit_result.content
 
-                logfire.info(
-                    "All edits applied successfully",
-                    original_length=len(content),
-                    final_length=len(current_content),
+            if errors:
+                logfire.error("Edit failed", errors=errors)
+                return EditResult(
+                    success=False,
+                    content=content,  # Return original content on failure
+                    errors=errors,
                 )
 
-                return EditResult(success=True, content=current_content)
+            logfire.info(
+                "All edits applied successfully",
+                original_length=len(content),
+                final_length=len(current_content),
+            )
 
-            except Exception as e:
-                logfire.error("Unexpected error applying edits", error=str(e), exc_info=e)
-                return EditResult(success=False, content=content, error=f"Unexpected error: {e}")
+            return EditResult(success=True, content=current_content)
+
 
     def _apply_single_edit(self, content: str, edit: DocumentEdit) -> EditResult:
         """Apply a single find-replace edit.
@@ -82,91 +88,59 @@ class DocumentEditorService:
         Returns:
             EditResult with success status and updated content
         """
-        try:
-            if not edit.find:
-                return EditResult(
-                    success=False, content=content, error="Edit 'find' text cannot be empty"
-                )
-
-            # Check if the find text exists
-            if edit.find not in content:
-                # Only add ... if text was actually truncated
-                display_text = edit.find[:100]
-                if len(edit.find) > 100:
-                    display_text += "..."
-                return EditResult(
-                    success=False,
-                    content=content,
-                    error=f"Text to find not found: '{display_text}'",
-                )
-
-            # Count occurrences to warn about ambiguous edits
-            occurrences = content.count(edit.find)
-            if occurrences > 1:
-                logger.warning(
-                    "Ambiguous edit: find text appears %d times, replacing first occurrence",
-                    occurrences,
-                    extra={"find_text": edit.find[:50]},
-                )
-
-            # Apply the replacement
-            new_content = content.replace(
-                edit.find, edit.replace, 1
-            )  # Replace only first occurrence
-
-            # Check if find and replace are identical (no-op edit)
-            if edit.find == edit.replace:
-                return EditResult(
-                    success=False, content=content, error="Edit did not change content"
-                )
-
-            # Verify the edit was applied (should not happen with valid find/replace)
-            if new_content == content:
-                return EditResult(
-                    success=False,
-                    content=content,
-                    error="Edit did not change content - unexpected failure",
-                )
-
-            logfire.info(
-                "Edit applied", find_length=len(edit.find), replace_length=len(edit.replace)
+        if not edit.find:
+            return EditResult(
+                success=False, content=content, errors=["'find' text cannot be empty"]
             )
 
-            return EditResult(success=True, content=new_content)
+        # Check if the find text exists
+        if edit.find not in content:
+            # Only add ... if text was actually truncated
+            display_text = edit.find[:100]
+            if len(edit.find) > 100:
+                display_text += "..."
+            return EditResult(
+                success=False,
+                content=content,
+                errors=[f"Text not found: '{display_text}'"],
+            )
 
-        except Exception as e:
-            return EditResult(success=False, content=content, error=f"Error applying edit: {e}")
+        # Check for ambiguous edits
+        occurrences = content.count(edit.find)
+        if occurrences > 1:
+            display_text = edit.find[:50]
+            if len(edit.find) > 50:
+                display_text += "..."
+            return EditResult(
+                success=False,
+                content=content,
+                errors=[f"Ambiguous edit: text appears {occurrences} times. Please make the find text more specific to uniquely identify the location: '{display_text}'"],
+            )
 
-    def validate_edits(self, content: str, edits: list[DocumentEdit]) -> list[str]:
-        """Validate that all edits can be applied without actually applying them.
+        # Apply the replacement
+        new_content = content.replace(
+            edit.find, edit.replace, 1
+        )  # Replace only first occurrence
 
-        Args:
-            content: Document content to validate against
-            edits: List of edits to validate
+        # Check if find and replace are identical (no-op edit)
+        if edit.find == edit.replace:
+            return EditResult(
+                success=False, content=content, errors=["Edit did not change content"]
+            )
 
-        Returns:
-            List of error messages, empty if all edits are valid
-        """
-        errors = []
-        current_content = content
+        # Verify the edit was applied (should not happen with valid find/replace)
+        if new_content == content:
+            return EditResult(
+                success=False,
+                content=content,
+                errors=["Edit did not change content - unexpected failure"],
+            )
 
-        for i, edit in enumerate(edits):
-            if not edit.find:
-                errors.append(f"Edit {i + 1}: 'find' text cannot be empty")
-                continue
+        logfire.info(
+            "Edit applied", find_length=len(edit.find), replace_length=len(edit.replace)
+        )
 
-            if edit.find not in current_content:
-                # Only add ... if text was actually truncated
-                display_text = edit.find[:100]
-                if len(edit.find) > 100:
-                    display_text += "..."
-                errors.append(f"Edit {i + 1}: Text not found: '{display_text}'")
-                continue
-
-            # Simulate applying the edit for subsequent validations
-            current_content = current_content.replace(edit.find, edit.replace, 1)
-
-        return errors
+        return EditResult(success=True, content=new_content)
 
 
 # Global document editor service instance

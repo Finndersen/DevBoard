@@ -26,13 +26,13 @@ class BaseConfig(BaseSettings):
 T = TypeVar("T", bound=BaseConfig)
 
 
-class ConfigValidationResult:
+class ConfigValidationResult[T: BaseConfig]:
     """Result of configuration validation with detailed error information."""
 
     def __init__(
         self,
         success: bool,
-        config: BaseConfig | None = None,
+        config: T | None = None,
         errors: list[str] | None = None,
     ):
         self.success = success

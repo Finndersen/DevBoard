@@ -429,7 +429,7 @@ requires-dist = [
     { name = "jira", specifier = ">=3.5.0" },
     { name = "logfire", extras = ["fastapi", "httpx", "sqlalchemy"], specifier = ">=0.60.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pydantic-ai", specifier = ">=0.0.14" },
+    { name = "pydantic-ai", specifier = ">=1.0.2" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
     { name = "pygithub", specifier = ">=1.59.0" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.338" },
@@ -1534,22 +1534,21 @@ wheels = [
 
 [[package]]
 name = "pydantic-ai"
-version = "0.8.1"
+version = "1.0.2"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
 dependencies = [
-    { name = "pydantic-ai-slim", extra = ["ag-ui", "anthropic", "bedrock", "cli", "cohere", "evals", "google", "groq", "huggingface", "mcp", "mistral", "openai", "retries", "temporal", "vertexai"] },
+    { name = "pydantic-ai-slim", extra = ["ag-ui", "anthropic", "bedrock", "cli", "cohere", "evals", "google", "groq", "huggingface", "logfire", "mcp", "mistral", "openai", "retries", "temporal", "vertexai"] },
 ]
-sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai/0.8.1/pydantic_ai-0.8.1.tar.gz", hash = "sha256:05974382082ee4f3706909d06bdfcc5e95f39e29230cc4d00e47429080099844" }
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai/1.0.2/pydantic_ai-1.0.2.tar.gz", hash = "sha256:0ed625db02bece2ce6e52c6326fc5f9c78482693ff89ce93477aec17687b20a5" }
 wheels = [
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai/0.8.1/pydantic_ai-0.8.1-py3-none-any.whl", hash = "sha256:5fa923097132aa69b4d6a310b462dc091009c7b87705edf4443d37b887d5ef9a" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai/1.0.2/pydantic_ai-1.0.2-py3-none-any.whl", hash = "sha256:616c224948097c2bb1607cd4aa87e971f94d3eb891156c9d77e94c18e346c839" },
 ]
 
 [[package]]
 name = "pydantic-ai-slim"
-version = "0.8.1"
+version = "1.0.2"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
 dependencies = [
-    { name = "eval-type-backport" },
     { name = "genai-prices" },
     { name = "griffe" },
     { name = "httpx" },
@@ -1558,9 +1557,9 @@ dependencies = [
     { name = "pydantic-graph" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai-slim/0.8.1/pydantic_ai_slim-0.8.1.tar.gz", hash = "sha256:12ef3dcbe5e1dad195d5e256746ef960f6e59aeddda1a55bdd553ee375ff53ae" }
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai-slim/1.0.2/pydantic_ai_slim-1.0.2.tar.gz", hash = "sha256:a41642f9c248ab1e12911f54c5c5adff4b2667ef48c5578eeea718febb108395" }
 wheels = [
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai-slim/0.8.1/pydantic_ai_slim-0.8.1-py3-none-any.whl", hash = "sha256:fc7edc141b21fe42bc54a2d92c1127f8a75160c5e57a168dba154d3f4adb963f" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-ai-slim/1.0.2/pydantic_ai_slim-1.0.2-py3-none-any.whl", hash = "sha256:d72922f7c0684c556c1182eee5281510a357c2f18bb3e54a9f117f548a74c236" },
 ]
 
 [package.optional-dependencies]
@@ -1594,6 +1593,9 @@ groq = [
 ]
 huggingface = [
     { name = "huggingface-hub", extra = ["inference"] },
+]
+logfire = [
+    { name = "logfire", extra = ["httpx"] },
 ]
 mcp = [
     { name = "mcp" },
@@ -1659,7 +1661,7 @@ wheels = [
 
 [[package]]
 name = "pydantic-evals"
-version = "0.8.1"
+version = "1.0.2"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
 dependencies = [
     { name = "anyio" },
@@ -1669,14 +1671,14 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
 ]
-sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-evals/0.8.1/pydantic_evals-0.8.1.tar.gz", hash = "sha256:c398a623c31c19ce70e346ad75654fcb1517c3f6a821461f64fe5cbbe0813023" }
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-evals/1.0.2/pydantic_evals-1.0.2.tar.gz", hash = "sha256:071bc4b80e1ced065ebcea53e03f06eca868266658a56dfb98ca78976f9022c8" }
 wheels = [
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-evals/0.8.1/pydantic_evals-0.8.1-py3-none-any.whl", hash = "sha256:6c76333b1d79632f619eb58a24ac656e9f402c47c75ad750ba0230d7f5514344" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-evals/1.0.2/pydantic_evals-1.0.2-py3-none-any.whl", hash = "sha256:48ea9510bc66ca2052298cd5a587306fa450f615d3e6542cbb021168b4cfc375" },
 ]
 
 [[package]]
 name = "pydantic-graph"
-version = "0.8.1"
+version = "1.0.2"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
 dependencies = [
     { name = "httpx" },
@@ -1684,9 +1686,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-graph/0.8.1/pydantic_graph-0.8.1.tar.gz", hash = "sha256:c61675a05c74f661d4ff38d04b74bd652c1e0959467801986f2f85dc7585410d" }
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-graph/1.0.2/pydantic_graph-1.0.2.tar.gz", hash = "sha256:249e0b834a37ae31846c93491c949a981179e6206f5b487e7421eb6380abb682" }
 wheels = [
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-graph/0.8.1/pydantic_graph-0.8.1-py3-none-any.whl", hash = "sha256:f1dd5db0fe22f4e3323c04c65e2f0013846decc312b3efc3196666764556b765" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/pydantic-graph/1.0.2/pydantic_graph-1.0.2-py3-none-any.whl", hash = "sha256:383811cf6802697d31eea3309fdf2738aef333c68e780e1b3f9dbd60c4e2ad97" },
 ]
 
 [[package]]
@@ -2171,7 +2173,7 @@ wheels = [
 
 [[package]]
 name = "temporalio"
-version = "1.16.0"
+version = "1.17.0"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
 dependencies = [
     { name = "nexus-rpc" },
@@ -2179,12 +2181,13 @@ dependencies = [
     { name = "types-protobuf" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.16.0/temporalio-1.16.0.tar.gz", hash = "sha256:dd926f3e30626fd4edf5e0ce596b75ecb5bbe0e4a0281e545ac91b5577967c91" }
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0.tar.gz", hash = "sha256:1ac8f1ade36fafe7110b979b6a16d89203e1f4fb9c874f2fe3b5d83c17b13244" }
 wheels = [
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.16.0/temporalio-1.16.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:547c0853310350d3e5b5b9c806246cbf2feb523f685b05bf14ec1b0ece8a7bb6" },
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.16.0/temporalio-1.16.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5b05bb0d06025645aed6f936615311a6774eb8dc66280f32a810aac2283e1258" },
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.16.0/temporalio-1.16.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0a08aed4e0f6c2b6bfc779b714e91dfe8c8491a0ddb4c4370627bb07f9bddcfd" },
-    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.16.0/temporalio-1.16.0-cp39-abi3-win_amd64.whl", hash = "sha256:7c190362b0d7254f1f93fb71456063e7b299ac85a89f6227758af82c6a5aa65b" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:7a86948c74a872b7f5ecb51c5d7e8013fdda4d6a220fe92185629342e94393e7" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:00b34a986012a355bdadf0e7eb9e57e176f2e0b1d69ea4be9eb73c21672e7fd0" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:36a84e52727e287e13777d86fa0bbda11ba6523f75a616b811cc9d799b37b98c" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:617f37edce3db97cc7d2ff81c145a1b92c100f6e0e42207739271d10c2eea38e" },
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/temporalio/1.17.0/temporalio-1.17.0-cp39-abi3-win_amd64.whl", hash = "sha256:f2724220fda1fd5948d917350ac25069c62624f46e53d4d6c6171baa75681145" },
 ]
 
 [[package]]

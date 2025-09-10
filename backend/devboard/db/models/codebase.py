@@ -21,7 +21,7 @@ class Codebase(Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text)
     repository_url: Mapped[str | None] = mapped_column(String(512))
-    local_path: Mapped[str | None] = mapped_column(String(512))
+    local_path: Mapped[str] = mapped_column(String(512))
 
     projects: Mapped[list["Project"]] = relationship(
         secondary=project_codebase_association, back_populates="codebases"

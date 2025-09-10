@@ -4,26 +4,27 @@ import datetime
 
 from pydantic import BaseModel
 
+from .document import DocumentResponse
+
 
 class ProjectBase(BaseModel):
     """Base project schema."""
 
     name: str
-    details: str
     current_status: str
 
 
-class ProjectCreate(ProjectBase):
+class ProjectCreate(BaseModel):
     """Schema for creating a new project."""
 
-    pass
+    name: str
+    current_status: str = ""
 
 
 class ProjectUpdate(BaseModel):
     """Schema for updating a project."""
 
     name: str | None = None
-    details: str | None = None
     current_status: str | None = None
 
 
@@ -32,5 +33,8 @@ class ProjectResponse(ProjectBase):
 
     id: int
     created_at: datetime.datetime
+    
+    # Document relationship - automatically loaded
+    details: DocumentResponse
 
     model_config = {"from_attributes": True}

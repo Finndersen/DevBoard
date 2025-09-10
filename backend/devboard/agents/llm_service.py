@@ -2,21 +2,15 @@
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from typing import cast
 
+from devboard.agents.types import AgentType
+from devboard.config.agent_config import AgentConfig
+from devboard.config.base import ConfigValidationResult
 from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES, PROVIDER_MODELS
 from devboard.services.config_service import config_service
 
 logger = logging.getLogger(__name__)
-
-
-class AgentType(Enum):
-    """Available agent types in the system."""
-
-    QA = "qa"
-    PLANNING = "planning"
-    IMPLEMENTATION = "implementation"
-    INVESTIGATION = "investigation"
 
 
 @dataclass
@@ -46,7 +40,7 @@ class LLMService:
         working_providers: list[str] = []
         for provider_type in ["openai", "anthropic", "gemini"]:
             config_key = f"llm.{provider_type}.main"
-            config_result = config_service.validate_config(config_key)
+            config_result = config_service.validate_config_by_key(config_key)
             if config_result.success:
                 working_providers.append(provider_type)
 
@@ -63,7 +57,7 @@ class LLMService:
 
         return available_models
 
-    def get_preferred_model_for_agent(self, agent_type: AgentType) -> str | None:
+    def get_preferred_model_for_agent(self, agent_type: AgentType) -> str:
         """Get the preferred model for an agent based on configuration and availability.
 
         Args:
@@ -74,7 +68,9 @@ class LLMService:
         """
         # Get agent configuration
         config_key = f"agent.{agent_type.value}.default"
-        config_result = config_service.validate_config(config_key)
+        config_result = cast(
+            ConfigValidationResult[AgentConfig], config_service.validate_config_by_key(config_key)
+        )
 
         # Get available models
         available_models = self.get_available_models()
@@ -91,7 +87,7 @@ class LLMService:
             if model_id in available_model_ids:
                 return model_id
 
-        return None
+        raise ValueError(f"Could not find model configuration for agent type '{agent_type}'")
 
 
 # Global LLM service instance
