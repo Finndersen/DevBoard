@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.agents.task_planning_agent import (
+from devboard.agents.task_agent import (
     DocumentType,
     TaskDeps,
     TaskSpecificationAgent,

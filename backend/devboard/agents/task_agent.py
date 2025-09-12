@@ -1,10 +1,9 @@
 """Task Planning Agent using PydanticAI for interactive document crafting with deferred tools."""
 
 import logging
+from abc import ABCMeta
 from enum import Enum
-from typing import Any
 
-import logfire
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
@@ -12,12 +11,8 @@ from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
 from devboard.agents.tools import create_document_edit_tool
 from devboard.agents.types import AgentType
-from devboard.services.context_assembly import (
-    EagerContextData,
-    OnDemandResourceInfo,
-    ProjectContextData,
-)
-from devboard.services.template_service import TemplateType, template_service
+from devboard.db.models import Task
+from devboard.db.repositories import DocumentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,27 +31,18 @@ class DocumentType(str, Enum):
     IMPLEMENTATION_PLAN = "implementation_plan"
 
 
-class TaskDeps(BaseDeps):
-    """Context data structure for the task planning agent."""
+class BaseTaskAgent(BaseAgent[BaseDeps], metaclass=ABCMeta):
+    """Base class for task-related agents."""
 
-    task_id: int
-    task_title: str
-    task_description: str | None
-    task_implementation_plan: str | None
-    task_state: TaskState
-    project_id: int
-    eager_context: list[EagerContextData]
-    on_demand_resources: list[OnDemandResourceInfo]
+    deps_type = BaseDeps
 
-    def get_task_specification_content(self) -> str:
-        """Get current task specification content."""
-        return self.task_description or ""
+    def __init__(self, task: Task, document_repository: DocumentRepository, **kwargs):
+        super().__init__(**kwargs)
+        self.task = task
+        self.document_repository = document_repository
 
-    def get_implementation_plan_content(self) -> str:
-        """Get current implementation plan content."""
-        return self.task_implementation_plan or ""
 
-SPECIFICATION_SYSTEM_PROMPT =  """
+SPECIFICATION_SYSTEM_PROMPT = """
 You are a Task Specification Assistant for DevBoard, helping developers craft detailed task specifications.
 
 Your role is to help iteratively improve the Task Specification document (task description) based on:
@@ -81,24 +67,31 @@ Your responses should be helpful, accurate, and focused on creating a clear, act
 """
 
 
-class TaskSpecificationAgent(BaseAgent[TaskDeps]):
+class TaskSpecificationAgent(BaseTaskAgent):
     """Service for task planning using AI with deferred document editing tools."""
+
     agent_type = AgentType.TASK_SPECIFICATION
 
-
-    def get_context_message_content(self, deps: TaskDeps) -> str:
-        # TODO
+    async def _get_context_message_content(self, deps: BaseDeps) -> str:
+        """Construct the first user message that contains context information for the agent."""
+        context_message = f"""
+        TASK SPECIFICATION DOCUMENT:
+        ```markdown
+        {self.task.specification.content}
+        ```
+        """
+        return context_message
 
     def _get_system_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
         return SPECIFICATION_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        # TODO: Provide relevant Document model instance to tool, so content can be read and saved
-        return [create_document_edit_tool(
-                document_type="task_specification", current_content = ctx.get_task_specification_content()
-            )]
-
+        return [
+            create_document_edit_tool(
+                document=self.task.specification, document_repo=self.document_repository
+            )
+        ]
 
 
 PLANNING_SYSTEM_PROMPT = """
@@ -125,24 +118,38 @@ AVAILABLE ACTIONS:
 
 Your responses should be technical, detailed, and focused on creating actionable implementation steps.
 """
-class TaskPlanningAgent(BaseAgent[TaskDeps]):
+
+
+class TaskPlanningAgent(BaseTaskAgent):
     """Service for task planning using AI with deferred document editing tools."""
+
     agent_type = AgentType.TASK_PLANNING
 
+    async def _get_context_message_content(self, deps: BaseDeps) -> str:
+        """Construct the first user message that contains context information for the agent."""
+        context_message = f"""
+        TASK SPECIFICATION DOCUMENT:
+        ```markdown
+        {self.task.specification.content}
+        ```
 
-    def get_context_message_content(self, deps: TaskDeps) -> str:
-        # TODO
+        TASK IMPLEMENTATION PLAN DOCUMENT:
+        ```markdown
+        {self.task.implementation_plan.content}
+        ```
+        """
+        return context_message
 
     def _get_system_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
         return PLANNING_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        # TODO: Provide relevant Document model instance to tool, so content can be read and saved
-        return [create_document_edit_tool(
-                document_type="task_specification", current_content = ctx.get_task_specification_content()
+        return [
+            create_document_edit_tool(
+                document=self.task.specification, document_repo=self.document_repository
             ),
             create_document_edit_tool(
-                document_type="task_specification", current_content = ctx.get_task_specification_content()
-            )
+                document=self.task.implementation_plan, document_repo=self.document_repository
+            ),
         ]

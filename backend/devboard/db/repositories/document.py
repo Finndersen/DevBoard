@@ -15,10 +15,10 @@ class DocumentRepository(BaseRepository[Document]):
     @staticmethod
     def calculate_hash(content: str) -> str:
         """Calculate MD5 hash of content for conflict detection.
-        
+
         Args:
             content: The document content to hash
-            
+
         Returns:
             MD5 hash as 32-character hex string
         """
@@ -49,7 +49,7 @@ class DocumentRepository(BaseRepository[Document]):
         document = Document(
             document_type=document_type.value,
             content=content,
-            content_hash=self.calculate_hash(content)
+            content_hash=self.calculate_hash(content),
         )
         self.db.add(document)
         self.db.flush()  # Get the ID without committing
@@ -70,7 +70,9 @@ class DocumentRepository(BaseRepository[Document]):
         document.updated_at = datetime.now(UTC)
         return document
 
-    def update_content_if_changed(self, document: Document, new_content: str) -> tuple[Document, bool]:
+    def update_content_if_changed(
+        self, document: Document, new_content: str
+    ) -> tuple[Document, bool]:
         """Update document content only if it has changed.
 
         Args:

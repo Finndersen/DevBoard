@@ -17,15 +17,31 @@ from devboard.api.schemas import (
     ResourceResponse,
     TaskResponse,
 )
+from devboard.api.schemas.agent_conversation import (
+    ConversationMessage,
+    MessageRole,
+    PromptResponse,
+    ToolApprovalRequest,
+)
 from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.database import get_db
 from devboard.db.models import Project
-from devboard.db.repositories import ProjectRepository, TaskRepository
+from devboard.db.models.messages import MessageType
+from devboard.db.repositories import (
+    DocumentRepository,
+    ProjectConversationMessageRepository,
+    ProjectRepository,
+    TaskRepository,
+)
+from devboard.services.agent_conversation import AgentConversationService
 from devboard.services.context_assembly import (
     NoProviderFound,
     context_assembly_service,
 )
-from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
+from devboard.services.resource_service import (
+    ResourceService,
+    UnsupportedResourceUriError,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -163,7 +179,8 @@ async def delete_project_resource(project_id: int, resource_id: int, db: Session
     deleted = resource_service.delete_project_resource(project_id, resource_id)
     if not deleted:
         raise HTTPException(
-            status_code=404, detail="Resource not found or does not belong to this project"
+            status_code=404,
+            detail="Resource not found or does not belong to this project",
         )
 
     db.commit()
@@ -176,18 +193,46 @@ class ChatRequest(BaseModel):
     query: str
 
 
-class ChatResponse(BaseModel):
-    """Response model for project chat."""
+@router.get("/{project_id}/agent/messages", response_model=list[ConversationMessage])
+def list_project_agent_messages(
+    project_id: int, db: Session = Depends(get_db)
+) -> list[ConversationMessage]:
+    """List all conversation messages for a project's agent.
 
-    response: str
-    project_id: int
+    Args:
+        project_id: The project to get messages for
+        db: Database session
+
+    Returns:
+        List of conversation messages
+    """
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    message_repo = ProjectConversationMessageRepository(db)
+    messages = message_repo.get_all_for_entity(entity_id=project_id, exclude_tool_calls=True)
+
+    return [
+        ConversationMessage(
+            id=msg.id,
+            role=MessageRole.USER
+            if msg.message_type == MessageType.USER_PROMPT
+            else MessageRole.AGENT,
+            text_content=msg.text_content,
+            timestamp=msg.timestamp,
+        )
+        for msg in messages
+    ]
 
 
-@router.post("/{project_id}/chat", response_model=ChatResponse)
-async def chat_with_project(
+@router.post("/{project_id}/agent/messages", response_model=PromptResponse)
+async def send_project_agent_message(
     project_id: int, request: ChatRequest, db: Session = Depends(get_db)
-) -> ChatResponse:
-    """Chat with the project Q&A agent.
+) -> PromptResponse:
+    """Chat with the project agent.
 
     This endpoint allows users to ask questions about their project and get
     AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
@@ -207,11 +252,58 @@ async def chat_with_project(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        agent = ProjectAgent()
+        agent = ProjectAgent(project, document_repository=DocumentRepository(db))
+        conversation_service = AgentConversationService(
+            agent, message_repository=ProjectConversationMessageRepository(db)
+        )
         # Process query with Q&A agent
-        response = await agent.chat(project_id, request.query)
+        response = await conversation_service.send_message(
+            message=request.query, entity_id=project_id
+        )
 
-        return ChatResponse(response=response, project_id=project_id)
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in project chat for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+
+
+@router.post("/{project_id}/agent/approve-tools", response_model=PromptResponse)
+async def approve_project_agent_tools(
+    project_id: int, request: ToolApprovalRequest, db: Session = Depends(get_db)
+) -> PromptResponse:
+    """Chat with the project agent.
+
+    This endpoint allows users to ask questions about their project and get
+    AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
+
+    Args:
+        project_id: The project to query
+        request: The chat request with user query
+        db: Database session
+
+    Returns:
+        AI-generated response based on project context
+    """
+    try:
+        # Verify project exists
+        project_repo = ProjectRepository(db)
+        project = project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        agent = ProjectAgent(project, document_repository=DocumentRepository(db))
+        conversation_service = AgentConversationService(
+            agent, message_repository=ProjectConversationMessageRepository(db)
+        )
+        # Process query with Q&A agent
+        response = await conversation_service.process_tool_approvals(
+            approvals=request.approvals, entity_id=project_id
+        )
+
+        return response
 
     except HTTPException:
         raise

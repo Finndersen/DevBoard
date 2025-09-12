@@ -4,7 +4,12 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from devboard.db.models import Project, ProjectConversationMessage, Task, TaskConversationMessage
+from devboard.db.models import (
+    Project,
+    ProjectConversationMessage,
+    Task,
+    TaskConversationMessage,
+)
 from devboard.db.repositories import ProjectRepository, TaskRepository
 
 
@@ -37,7 +42,7 @@ class TestProjectConversationMessage:
         assert message.role == "user"
         assert message.content == "What is the current status of this project?"
         assert message.tool_data is None
-        assert isinstance(message.created_at, datetime.datetime)
+        assert isinstance(message.timestamp, datetime.datetime)
 
     def test_project_conversation_message_with_tool_data(self, db_session: Session):
         """Test ProjectConversationMessage with tool data."""
@@ -58,7 +63,10 @@ class TestProjectConversationMessage:
         }
 
         message = ProjectConversationMessage(
-            project_id=created_project.id, role="tool_result", content=None, tool_data=tool_data
+            project_id=created_project.id,
+            role="tool_result",
+            content=None,
+            tool_data=tool_data,
         )
         db_session.add(message)
         db_session.commit()
@@ -142,7 +150,7 @@ class TestTaskConversationMessage:
         assert message.role == "user"
         assert message.content == "Please help me design this task specification."
         assert message.tool_data is None
-        assert isinstance(message.created_at, datetime.datetime)
+        assert isinstance(message.timestamp, datetime.datetime)
 
     def test_task_conversation_message_agent_response(self, db_session: Session):
         """Test TaskConversationMessage storing agent response with edits."""
@@ -246,7 +254,10 @@ class TestTaskConversationMessage:
 
         task_repo = TaskRepository(db_session)
         task = Task(
-            title="Test Task", description="Desc", status="Planning", project_id=created_project.id
+            title="Test Task",
+            description="Desc",
+            status="Planning",
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -258,7 +269,10 @@ class TestTaskConversationMessage:
             (
                 "tool_call",
                 None,
-                {"tool": "get_relevant_context", "args": {"uri": "test", "query": "test"}},
+                {
+                    "tool": "get_relevant_context",
+                    "args": {"uri": "test", "query": "test"},
+                },
             ),
             ("tool_result", None, {"result": "Context retrieved successfully"}),
         ]
@@ -290,7 +304,10 @@ class TestTaskConversationMessage:
 
         task_repo = TaskRepository(db_session)
         task = Task(
-            title="Test Task", description="Desc", status="Designing", project_id=created_project.id
+            title="Test Task",
+            description="Desc",
+            status="Designing",
+            project_id=created_project.id,
         )
         created_task = task_repo.create(task)
         db_session.commit()
@@ -316,6 +333,6 @@ class TestTaskConversationMessage:
         db_session.refresh(message2)
 
         # Verify timestamps
-        assert message1.created_at < message2.created_at
-        assert isinstance(message1.created_at, datetime.datetime)
-        assert isinstance(message2.created_at, datetime.datetime)
+        assert message1.timestamp < message2.timestamp
+        assert isinstance(message1.timestamp, datetime.datetime)
+        assert isinstance(message2.timestamp, datetime.datetime)

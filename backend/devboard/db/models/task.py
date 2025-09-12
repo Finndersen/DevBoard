@@ -1,17 +1,30 @@
 """Task-related database models."""
 
 import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, task_context_resource_association
 
 if TYPE_CHECKING:
+    from .codebase import Codebase
     from .configuration import ContextProviderResource
     from .document import Document
+    from .messages import TaskConversationMessage
     from .project import Project
+
+
+class TaskStatus(StrEnum):
+    """Enumeration of possible task statuses."""
+
+    DEFINING = "defining"
+    PLANNING = "planning"
+    IMPLEMENTING = "implementing"
+    REVIEWING = "reviewing"
+    COMPLETE = "complete"
 
 
 class Task(Base):
@@ -24,9 +37,8 @@ class Task(Base):
     codebase_id: Mapped[int | None] = mapped_column(ForeignKey("codebases.id"))
 
     title: Mapped[str] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(50), default="Pending")
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.DEFINING)
     remote_task_id: Mapped[str | None] = mapped_column(String(100))
-    conversation_id: Mapped[str | None] = mapped_column(String(100))
 
     # Document relationships
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
@@ -46,11 +58,9 @@ class Task(Base):
     # Document relationships with eager loading
     specification: Mapped["Document"] = relationship(
         foreign_keys=[specification_id],
-        lazy="joined"  # Always eager load
+        lazy="joined",  # Always eager load
     )
     implementation_plan: Mapped["Document | None"] = relationship(
         foreign_keys=[implementation_plan_id],
-        lazy="joined"  # Always eager load
+        lazy="joined",  # Always eager load
     )
-
-

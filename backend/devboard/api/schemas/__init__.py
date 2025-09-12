@@ -26,6 +26,7 @@ from .configuration import (
     ResourceResponse,
     TaskResourceCreate,
 )
+from .document import DocumentCreate, DocumentResponse, DocumentUpdate
 from .integration import (
     AgentModelInfo,
     AvailableModelsResponse,
@@ -33,7 +34,6 @@ from .integration import (
     ModelInfo,
 )
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
-from .document import DocumentCreate, DocumentResponse, DocumentUpdate
 from .task import (
     ApplyEditsRequest,
     DocumentEdit,

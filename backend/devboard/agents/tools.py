@@ -1,4 +1,3 @@
-
 import logfire
 from pydantic_ai import ApprovalRequired, RunContext, Tool
 
@@ -11,6 +10,8 @@ from devboard.services.document_editor import DocumentEditorService
 
 def create_document_edit_tool(document: Document, document_repo: DocumentRepository) -> Tool:
     """Create a document editing tool.
+    First, the edits are validated to ensure they can be applied. If validation passes,
+    the tool will request approval before applying the edits.
 
     Args:
         document: Document model to edit
@@ -36,9 +37,9 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
             edit_count=len(edits),
             reasoning_length=len(reasoning),
         ):
-            # Create document editor service 
+            # Create document editor service
             editor_service = DocumentEditorService()
-            
+
             # Pre-validate edits can be applied
             edit_result = editor_service.apply_edits(document.content, edits)
             if not edit_result.success:
@@ -56,37 +57,23 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
                 # This will show the edits to the user for approval
                 raise ApprovalRequired()
 
-            # Apply edits and update document in database directly
-            final_result = editor_service.apply_edits(document.content, edits)
-            if not final_result.success:
-                error_msg = f"Failed to apply edits: {'; '.join(final_result.errors)}"
-                logfire.error(
-                    "Final edit application failed",
-                    document_type=document.document_type,
-                    document_id=document.id,
-                    errors=final_result.errors,
-                )
-                return error_msg
-
             # Update document content and hash using repository
-            document_repo.update_content(document, final_result.content)
-            
+            document_repo.update_content(document, edit_result.content)
+
             logfire.info(
                 "Document edits applied successfully",
                 document_type=document.document_type,
                 document_id=document.id,
-                new_length=len(final_result.content)
             )
 
             return f"Edits applied successfully to {document.document_type}."
 
+    return Tool(
+        function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True
+    )
 
-    return Tool(function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True)
 
-
-async def get_relevant_context(
-    ctx: RunContext[BaseDeps], resource_uri: str, query: str
-) -> str:
+async def get_relevant_context(ctx: RunContext[BaseDeps], resource_uri: str, query: str) -> str:
     """Get focused context from an ON_DEMAND resource.
 
     Use this tool when you need specific information from a resource that's
@@ -100,7 +87,7 @@ async def get_relevant_context(
         Focused context relevant to your query
     """
     with logfire.span(
-            "qa_agent.get_relevant_context", resource_uri=resource_uri, query_length=len(query)
+        "qa_agent.get_relevant_context", resource_uri=resource_uri, query_length=len(query)
     ):
         try:
             # Verify the resource is available

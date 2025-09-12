@@ -2,9 +2,15 @@
 
 import datetime
 from enum import StrEnum, auto
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    TextPart,
+    ToolCallPart,
+    UserPromptPart,
+)
 from pydantic_core import to_jsonable_python
 from sqlalchemy import JSON, Enum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -36,7 +42,10 @@ def _get_message_type(message: ModelMessage) -> MessageType:
     else:
         if any(isinstance(part, TextPart) for part in message.parts):
             return MessageType.TEXT_RESPONSE
-        elif isinstance(message.parts[-1], ToolCallPart) and message.parts[-1].tool_name == "final_result":
+        elif (
+            isinstance(message.parts[-1], ToolCallPart)
+            and message.parts[-1].tool_name == "final_result"
+        ):
             return MessageType.STRUCTURED_RESPONSE
         else:
             return MessageType.TOOL_CALL
@@ -58,20 +67,32 @@ class BaseConversationMessage(Base):
     message_type: Mapped[MessageType] = mapped_column(Enum(MessageType))
 
     # Full serialized PydanticAI message content (ModelRequest or ModelResponse)
-    pydantic_content: Mapped[dict[str, str]] = mapped_column(JSON)
+    pydantic_content: Mapped[dict[str, Any]] = mapped_column(JSON)
 
-    created_at: Mapped[datetime.datetime] = mapped_column(
+    timestamp: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC)
     )
 
     @classmethod
-    def from_pydantic_message(cls, entity_id: int, message: ModelMessage) -> "BaseConversationMessage":
+    def from_pydantic_message(
+        cls, entity_id: int, message: ModelMessage
+    ) -> "BaseConversationMessage":
         """Construct a message model from a Pydantic Request or Response message."""
         return cls(
             parent_id=entity_id,
             message_type=_get_message_type(message),
             pydantic_content=to_jsonable_python(message),
         )
+
+    @property
+    def text_content(self) -> str:
+        if self.message_type == MessageType.USER_PROMPT:
+            return self.pydantic_content["parts"][0]["content"]
+        elif self.message_type == MessageType.TEXT_RESPONSE:
+            return self.pydantic_content["parts"][0]["content"]
+        else:
+            raise ValueError(f"Cannot extract text content from message type: {self.message_type}")
+
 
 class TaskConversationMessage(BaseConversationMessage):
     """Represents a single message or tool call in the conversation with a Task Planning Agent."""

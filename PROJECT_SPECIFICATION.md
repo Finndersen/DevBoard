@@ -309,32 +309,38 @@ This section outlines the "happy path" for a user completing a task from start t
     * They connect their tools by adding credentials for Jira and Slack. They then link the project to a specific Jira board and the `#q3-features` Slack channel.
 
 2.  **Task Creation**:
-    * From the Project dashboard, the user clicks "Add Task" and pastes in a Jira ticket URL.
-    * DevBoard's Jira `ContextProvider` automatically fetches the ticket's title and description, populating the new task. The task appears in the "Pending" column of the project's Kanban board.
+    * From the Project dashboard, the user clicks "Add Task", and has two options for how to create a task:
+      * Can paste in an existing Jira ticket URL, and Jira integration automatically fetches the ticket's title and description, populating the new task. 
+      * Can manually enter task details.
+    * The new task appears in the Project's task list with status `Defining`.
 
-3.  **Planning Phase**:
-    * The user clicks on the new task, opening the "Task Detail View".
-    * They click the "**Generate Plan**" button. The UI shows a status indicator and a real-time log stream of agent activity in the chat window:
+3. **Defining Phase**:
+   * The user clicks on the new task, opening the "Task Detail View".
+   * The user can chat with the Task Agent and make manual edits to interactively build and refine the task specification document.
+
+4.  **Planning Phase**:
+    * User can click the "**Generate Implementation Plan**" button. The UI shows a status indicator and a real-time log stream of agent activity in the chat window:
         * `[Planner] Reading task description...`
         * `[Planner] Querying Jira for linked tickets...`
         * `[Planner] Searching Slack channel #q3-features for "API authentication"...`
         * `[Planner] Generating implementation steps...`
     * The task status changes to `Planning`.
 
-4.  **Approval Phase**:
+5.  **Approval Phase**:
     * Once complete, the generated `Implementation Plan` appears in the Markdown editor within the Task Detail View.
     * The user reviews the plan. They can either edit it directly or use a chat interface to ask the Planning Agent for revisions.
-    * Once satisfied, the user clicks "**Approve Plan**". The task status moves to `Awaiting Approval`.
 
-5.  **Implementation Phase**:
-    * The user clicks "**Start Implementation**". The `Task Implementation Agent` is triggered.
+6.  **Implementation Phase**:
+    * Once satisfied, the user clicks "**Start Implementation**". The `Task Implementation Agent` is triggered.
     * The UI now shows a live log of the agent's actions (e.g., `editing file: src/auth.py`, `running tests...`) in the agent chat window.
     * The task status moves to `Implementing`.
 
-6.  **Completion & Review**:
+7.  **Completion & Review**:
     * The agent finishes and reports success. A "**Create Pull Request**" button appears.
     * Clicking it triggers an agent workflow to create the PR on GitHub.
     * The task status moves to `In Review`. The user can then follow their standard code review process outside of DevBoard.
+    * Once the PR is merged, the user marks the task as `Complete`.
+
 
 ## Frontend Architecture & Implementation 🖥️
 

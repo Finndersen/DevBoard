@@ -3,7 +3,7 @@
 import datetime
 from enum import StrEnum
 
-from sqlalchemy import String, Text, Enum
+from sqlalchemy import Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -31,5 +31,5 @@ class Document(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC),
-        onupdate=lambda: datetime.datetime.now(datetime.UTC)
+        onupdate=lambda: datetime.datetime.now(datetime.UTC),
     )

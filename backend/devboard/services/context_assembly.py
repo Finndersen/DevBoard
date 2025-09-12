@@ -164,7 +164,7 @@ class ContextAssemblyService:
 
                 # Extract URIs from project description
                 with logfire.span("context_assembly.extract_uris"):
-                    detected_uris = self._extract_uris_from_text(project.details)
+                    detected_uris = self._extract_uris_from_text(project.specification)
 
                 # Categorize resources by strategy
                 on_demand_resources: list[OnDemandResourceInfo] = []

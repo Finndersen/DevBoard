@@ -3,7 +3,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from devboard.agents.task_planning_agent import task_planning_agent_service
+from devboard.agents.task_agent import (
+    TaskPlanningAgent,
+    TaskSpecificationAgent,
+)
+from devboard.api.routers.projects import ChatRequest
 from devboard.api.schemas import (
     DeleteResponse,
     ResourceResponse,
@@ -14,20 +18,23 @@ from devboard.api.schemas import (
     TaskUpdate,
 )
 from devboard.api.schemas.agent_conversation import (
-    ConversationResponse,
-    MessageRequest,
+    PromptResponse,
     ToolApprovalRequest,
 )
 from devboard.db.database import get_db
 from devboard.db.models import Task
-from devboard.db.models import TaskConversationMessage as TaskConversationMessageModel
+from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
+    DocumentRepository,
     ProjectRepository,
     TaskConversationMessageRepository,
     TaskRepository,
 )
-from devboard.services.resource_service import ResourceService, UnsupportedResourceUriError
-from devboard.services.task_conversation import task_conversation_service
+from devboard.services.agent_conversation import AgentConversationService
+from devboard.services.resource_service import (
+    ResourceService,
+    UnsupportedResourceUriError,
+)
 
 router = APIRouter()
 
@@ -132,7 +139,9 @@ async def create_task_resource(
     resource_service = ResourceService(db)
     try:
         created_resource = await resource_service.create_task_resource(
-            task_id=task_id, resource_uri=resource.resource_uri, description=resource.description
+            task_id=task_id,
+            resource_uri=resource.resource_uri,
+            description=resource.description,
         )
         db.commit()
         db.refresh(created_resource)
@@ -163,40 +172,55 @@ async def delete_task_resource(task_id: int, resource_id: int, db: Session = Dep
 
 
 # Task Planning Agent Endpoints
+@router.post("/{task_id}/agent/messages", response_model=PromptResponse)
+async def send_task_agent_message(
+    task_id: int, request: ChatRequest, db: Session = Depends(get_db)
+) -> PromptResponse:
+    """Chat with the project agent.
+
+    This endpoint allows users to ask questions about their project and get
+    AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
+
+    Args:
+        task_id: The project to query
+        request: The chat request with user query
+        db: Database session
+
+    Returns:
+        AI-generated response based on project context
+    """
+    try:
+        # Verify task exists
+        task_repo = TaskRepository(db)
+        task = task_repo.get_by_id(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        if task.status == TaskStatus.DEFINING:
+            agent_type = TaskSpecificationAgent
+        elif task.status == TaskStatus.PLANNING:
+            agent_type = TaskPlanningAgent
+        else:
+            raise ValueError(f"Task in state {task.status} cannot accept agent messages")
+
+        agent = agent_type(task=task, document_repository=DocumentRepository(db))
+
+        conversation_service = AgentConversationService(
+            agent, message_repository=TaskConversationMessageRepository(db)
+        )
+        # Process query with Q&A agent
+        response = await conversation_service.send_message(message=request.query, entity_id=task_id)
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
 
 
-@router.post("/{task_id}/conversation", response_model=ConversationResponse)
-async def send_task_message(task_id: int, request: MessageRequest, db: Session = Depends(get_db)):
-    """Send a message to the task planning agent."""
-    # Verify task exists
-    task_repo = TaskRepository(db)
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Create message model factory
-    def create_message_model(**kwargs):
-        return TaskConversationMessageModel(task_id=task_id, **kwargs)
-
-    # Process message with shared conversation service
-    return await task_conversation_service.send_message(
-        entity_id=task_id,
-        message_request=request,
-        agent_service=task_planning_agent_service,
-        message_repo=TaskConversationMessageRepository(db),
-        db=db,
-        create_message_model=create_message_model,
-        # Task-specific agent parameters
-        task_title=task.title,
-        task_description=task.description,
-        task_implementation_plan=task.implementation_plan,
-        task_state=task.status,
-        project_id=task.project_id,
-    )
-
-
-@router.post("/{task_id}/conversation/approve-tools", response_model=ConversationResponse)
-async def approve_task_tools(
+@router.post("/{task_id}/agent/approve-tools", response_model=PromptResponse)
+async def approve_task_agent_tools(
     task_id: int, request: ToolApprovalRequest, db: Session = Depends(get_db)
 ):
     """Approve or deny tool calls from the task planning agent."""
@@ -206,25 +230,24 @@ async def approve_task_tools(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Create message model factory
-    def create_message_model(**kwargs):
-        return TaskConversationMessageModel(task_id=task_id, **kwargs)
+    if task.status == TaskStatus.DEFINING:
+        agent_type = TaskSpecificationAgent
+    elif task.status == TaskStatus.PLANNING:
+        agent_type = TaskPlanningAgent
+    else:
+        raise ValueError(f"Task in state {task.status} cannot accept agent messages")
 
-    # Process tool approval with shared conversation service
-    return await task_conversation_service.process_tool_approval(
-        entity_id=task_id,
-        approval_request=request,
-        agent_service=task_planning_agent_service,
-        message_repo=TaskConversationMessageRepository(db),
-        db=db,
-        create_message_model=create_message_model,
-        # Task-specific agent parameters
-        task_title=task.title,
-        task_description=task.description,
-        task_implementation_plan=task.implementation_plan,
-        task_state=task.status,
-        project_id=task.project_id,
+    agent = agent_type(task=task, document_repository=DocumentRepository(db))
+
+    conversation_service = AgentConversationService(
+        agent, message_repository=TaskConversationMessageRepository(db)
     )
+    # Process query with Q&A agent
+    response = await conversation_service.process_tool_approvals(
+        approvals=request.approvals, entity_id=task_id
+    )
+
+    return response
 
 
 @router.post("/{task_id}/state-transition", response_model=TaskResponse)
@@ -238,9 +261,7 @@ async def transition_task_state(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Validate state transition
-    valid_states = ["Pending", "Designing", "Planning", "Implementing", "In Review", "Complete"]
-    if request.new_state not in valid_states:
+    if request.new_state not in TaskStatus:
         raise HTTPException(status_code=400, detail=f"Invalid state: {request.new_state}")
 
     # Update task status

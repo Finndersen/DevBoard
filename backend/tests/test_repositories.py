@@ -37,7 +37,7 @@ class TestProjectRepository:
         created = repo.create(sample_project)
         assert created.id is not None
         assert created.name == "Test Project"
-        assert created.details == "A test project"
+        assert created.specification == "A test project"
         assert created.current_status == "active"
 
     def test_get_by_id(self, repo: ProjectRepository, sample_project: Project):
@@ -72,11 +72,11 @@ class TestProjectRepository:
         """Test updating a project."""
         created = repo.create(sample_project)
         created.name = "Updated Project"
-        created.details = "Updated description"
+        created.specification = "Updated description"
 
         updated = repo.update(created)
         assert updated.name == "Updated Project"
-        assert updated.details == "Updated description"
+        assert updated.specification == "Updated description"
 
     def test_delete_by_id(self, repo: ProjectRepository, sample_project: Project):
         """Test deleting a project by ID."""
@@ -133,10 +133,14 @@ class TestCodebaseRepository:
     def test_get_all(self, repo: CodebaseRepository):
         """Test getting all codebases."""
         codebase1 = Codebase(
-            name="Repo 1", description="", repository_url="https://github.com/test/repo1"
+            name="Repo 1",
+            description="",
+            repository_url="https://github.com/test/repo1",
         )
         codebase2 = Codebase(
-            name="Repo 2", description="", repository_url="https://github.com/test/repo2"
+            name="Repo 2",
+            description="",
+            repository_url="https://github.com/test/repo2",
         )
 
         repo.create(codebase1)
@@ -190,7 +194,10 @@ class TestTaskRepository:
     @pytest.fixture
     def sample_task(self, project: Project) -> Task:
         return Task(
-            title="Test Task", description="A test task", status="pending", project_id=project.id
+            title="Test Task",
+            description="A test task",
+            status="pending",
+            project_id=project.id,
         )
 
     def test_create_task(self, repo: TaskRepository, sample_task: Task):
@@ -388,7 +395,9 @@ class TestContextProviderResourceRepository:
         )
 
     def test_create_resource(
-        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
+        self,
+        repo: ContextProviderResourceRepository,
+        sample_resource: ContextProviderResource,
     ):
         """Test creating a new context provider resource."""
         created = repo.create_resource(
@@ -401,7 +410,9 @@ class TestContextProviderResourceRepository:
         assert created.provider_name == "github"
 
     def test_get_by_id(
-        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
+        self,
+        repo: ContextProviderResourceRepository,
+        sample_resource: ContextProviderResource,
     ):
         """Test getting a resource by ID."""
         created = repo.create_resource(
@@ -457,7 +468,9 @@ class TestContextProviderResourceRepository:
         assert results2[0].resource_uri == "https://github.com/test/repo2"
 
     def test_update_resource(
-        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
+        self,
+        repo: ContextProviderResourceRepository,
+        sample_resource: ContextProviderResource,
     ):
         """Test updating a context provider resource."""
         created = repo.create_resource(
@@ -473,7 +486,9 @@ class TestContextProviderResourceRepository:
         assert updated.resource_uri == "https://example.com/updated"
 
     def test_delete_by_id(
-        self, repo: ContextProviderResourceRepository, sample_resource: ContextProviderResource
+        self,
+        repo: ContextProviderResourceRepository,
+        sample_resource: ContextProviderResource,
     ):
         """Test deleting a resource by ID."""
         created = repo.create_resource(
@@ -554,7 +569,9 @@ class TestProjectConversationMessageRepository:
         )
 
     def test_create_message(
-        self, repo: ProjectConversationMessageRepository, sample_message: ProjectConversationMessage
+        self,
+        repo: ProjectConversationMessageRepository,
+        sample_message: ProjectConversationMessage,
     ):
         """Test creating a new message."""
         created = repo.create(sample_message)
@@ -563,7 +580,9 @@ class TestProjectConversationMessageRepository:
         assert created.content == "Test message"
 
     def test_get_by_id(
-        self, repo: ProjectConversationMessageRepository, sample_message: ProjectConversationMessage
+        self,
+        repo: ProjectConversationMessageRepository,
+        sample_message: ProjectConversationMessage,
     ):
         """Test getting a message by ID."""
         created = repo.create(sample_message)
@@ -594,7 +613,7 @@ class TestProjectConversationMessageRepository:
         messages = repo.get_by_project(project.id)
         assert len(messages) == 2
         # Should be ordered by timestamp ascending
-        assert messages[0].created_at <= messages[1].created_at
+        assert messages[0].timestamp <= messages[1].timestamp
 
     def test_get_recent_by_project(
         self, repo: ProjectConversationMessageRepository, project: Project
@@ -619,7 +638,9 @@ class TestProjectConversationMessageRepository:
         # Just check that we got some recent messages without comparing timestamps due to timezone issues
 
     def test_update_message(
-        self, repo: ProjectConversationMessageRepository, sample_message: ProjectConversationMessage
+        self,
+        repo: ProjectConversationMessageRepository,
+        sample_message: ProjectConversationMessage,
     ):
         """Test updating a message."""
         created = repo.create(sample_message)
@@ -631,7 +652,9 @@ class TestProjectConversationMessageRepository:
         assert updated.role == "assistant"
 
     def test_delete_by_id(
-        self, repo: ProjectConversationMessageRepository, sample_message: ProjectConversationMessage
+        self,
+        repo: ProjectConversationMessageRepository,
+        sample_message: ProjectConversationMessage,
     ):
         """Test deleting a message by ID."""
         created = repo.create(sample_message)

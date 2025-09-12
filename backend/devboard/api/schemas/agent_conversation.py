@@ -1,55 +1,51 @@
 """Shared schemas for agent conversation endpoints with deferred tools support."""
 
 import datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
 
-from .task import DocumentEdit
+
+class MessageRole(StrEnum):
+    USER = "user"
+    AGENT = "agent"
 
 
-class ConversationMessageResponse(BaseModel):
-    """Simplified message response for frontend display."""
+class ConversationMessage(BaseModel):
+    """Model for an agent conversation message (only contains final response for agent)."""
 
     id: int
-    message_type: str  # 'request' or 'response'
-    text_content: str | None  # Extracted from pydantic_content for display
-    tool_calls: list["ToolCallInfo"] | None  # Extracted tool call information
-    created_at: datetime.datetime
-
-    model_config = {"from_attributes": True}
+    role: MessageRole
+    text_content: str
+    timestamp: datetime.datetime
 
 
-class ToolCallInfo(BaseModel):
-    """Information about a tool call for frontend display."""
-
-    tool_call_id: str
-    tool_name: str
-    status: str  # 'pending_approval', 'approved', 'denied'
-    arguments: dict[str, Any]  # Tool call arguments
-    preview: dict[str, Any] | None = None  # For document edits, include diff preview
-
-
-class PendingApproval(BaseModel):
+class ToolCallRequest(BaseModel):
     """Tool call requiring user approval."""
 
     tool_call_id: str
     tool_name: str
-    document_type: str | None = None
-    edits: list[DocumentEdit] | None = None
-    diff_preview: str | None = None  # Generated diff for UI display
-    reasoning: str | None = None
+    tool_args: str | dict[str, Any] | None = None
 
 
-class ConversationResponse(BaseModel):
-    """Response after processing a message or tool approval."""
-
-    messages: list[ConversationMessageResponse]
-    pending_approvals: list[PendingApproval] | None = None
-    conversation_complete: bool = True  # False if waiting for tool approvals
+class PromptResponseType(StrEnum):
+    MESSAGE = "message"
+    TOOL_REQUEST = "tool_request"
 
 
-class MessageRequest(BaseModel):
+class PromptResponse(BaseModel):
+    """
+    Response after processing a user message or tool approval(s).
+    Will contain either the agent final response, or pending tool request(s).
+    """
+
+    type: PromptResponseType
+    message: ConversationMessage | None = None
+    tool_requests: list[ToolCallRequest] | None = None
+
+
+class UserPrompt(BaseModel):
     """Request to send a message to an agent."""
 
     message: str

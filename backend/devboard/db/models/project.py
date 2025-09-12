@@ -6,17 +6,22 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, project_codebase_association, project_context_resource_association
+from .base import (
+    Base,
+    project_codebase_association,
+    project_context_resource_association,
+)
 
 if TYPE_CHECKING:
     from .codebase import Codebase
     from .configuration import ContextProviderResource
     from .document import Document
+    from .messages import ProjectConversationMessage
     from .task import Task
 
 
 class Project(Base):
-    """Represents a high-level project, acting as a container for tasks and codebases."""
+    """Represents a high-level project, which can have associated tasks and codebases."""
 
     __tablename__ = "projects"
 
@@ -25,7 +30,7 @@ class Project(Base):
     current_status: Mapped[str] = mapped_column(Text)
 
     # Document relationship
-    details_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
+    specification_document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC)
@@ -41,9 +46,7 @@ class Project(Base):
     messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
     # Document relationship with eager loading
-    details: Mapped["Document"] = relationship(
-        foreign_keys=[details_id],
-        lazy="joined"  # Always eager load
+    specification: Mapped["Document"] = relationship(
+        foreign_keys=[specification_document_id],
+        lazy="joined",  # Always eager load
     )
-
-

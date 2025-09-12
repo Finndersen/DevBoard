@@ -1,10 +1,11 @@
 """Task conversation message repository for message data access operations."""
+
 from typing import TypeVar
 
 from sqlalchemy import delete, select
 
 from devboard.db.models import ProjectConversationMessage, TaskConversationMessage
-from devboard.db.models.messages import BaseConversationMessage
+from devboard.db.models.messages import BaseConversationMessage, MessageType
 from devboard.db.repositories.base import BaseRepository
 
 MessageT = TypeVar("MessageT", bound=BaseConversationMessage)
@@ -14,15 +15,21 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
     """
     Abstract base repository for Project and Task conversation messages
     """
+
     MESSAGE_MODEL: type[MessageT]
 
-    def get_all_for_entity(self, entity_id: int) -> list[MessageT]:
+    def get_all_for_entity(
+        self, entity_id: int, exclude_tool_calls: bool = False
+    ) -> list[MessageT]:
         """Get all messages for an entity (task or project)."""
-        stmt = (
-            select(self.MESSAGE_MODEL)
-            .where(self.MESSAGE_MODEL.parent_id == entity_id)
-            .order_by(self.MESSAGE_MODEL.created_at.asc())
-        )
+        stmt = select(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
+        if exclude_tool_calls:
+            stmt = stmt.where(
+                self.MESSAGE_MODEL.message_type.not_in_(
+                    [MessageType.TOOL_CALL, MessageType.TOOL_RESULT]
+                )
+            )
+        stmt = stmt.order_by(self.MESSAGE_MODEL.created_at.asc())
         return list(self.db.execute(stmt).scalars().all())
 
     def get_by_id(self, message_id: int) -> MessageT | None:
@@ -91,10 +98,13 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
 
 class TaskConversationMessageRepository(BaseConversationMessageRepository[TaskConversationMessage]):
     """Repository for task conversation message data access operations."""
+
     MESSAGE_MODEL = TaskConversationMessage
 
 
-class ProjectConversationMessageRepository(BaseConversationMessageRepository[ProjectConversationMessage]):
+class ProjectConversationMessageRepository(
+    BaseConversationMessageRepository[ProjectConversationMessage]
+):
     """Repository for project conversation message data access operations."""
-    MESSAGE_MODEL = ProjectConversationMessage
 
+    MESSAGE_MODEL = ProjectConversationMessage

@@ -1,4 +1,5 @@
 """Agent configuration schemas."""
+
 from typing import ClassVar
 
 from devboard.agents.types import AgentType

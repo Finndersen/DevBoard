@@ -33,7 +33,7 @@ class ProjectResponse(ProjectBase):
 
     id: int
     created_at: datetime.datetime
-    
+
     # Document relationship - automatically loaded
     details: DocumentResponse
 

@@ -2,33 +2,35 @@
 
 import logging
 
-import logfire
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
-from devboard.agents.tools import get_relevant_context
+from devboard.agents.tools import create_document_edit_tool
 from devboard.agents.types import AgentType
+from devboard.db.models import Project
+from devboard.db.repositories import DocumentRepository
 from devboard.services.context_assembly import (
     EagerContextData,
     OnDemandResourceInfo,
-    ProjectContextData,
 )
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """
-You are a Project Q&A Assistant for DevBoard, an AI-powered developer command center.
+You are a Project Assistant for DevBoard, an AI-powered developer command center.
 
-You help developers by answering questions about their projects using context from multiple sources:
-- GitHub (PRs, issues, commits, repositories)
-- Jira (tickets, projects, comments)
-- Slack (messages, channels, conversations)
-- Codebase (files, directories, code analysis)
+Your role is to assist a developer working on a software project called: "{project_name}".
 
-IMPORTANT: You have access to EAGER context (pre-loaded small resources) and ON_DEMAND resources (descriptions only).
-When you need specific information from an ON_DEMAND resource, use the get_relevant_context tool.
+You will have access to the project specification document, which you are able to edit using the provided tool.
+
+You will also have access to various context sources related to the project, and should use the available tools to query these context sources to obtain the information required to answer the user's questions, or complete tasks
+
+EDITING GUIDELINES:
+- Make precise find-replace edits with exact text matching
+- Provide clear reasoning for your edits
+- Use context research to inform your edits when needed
 
 Your responses should be:
 - Accurate and based on the provided context
@@ -48,109 +50,42 @@ class ProjectDeps(BaseDeps):
     on_demand_resources: list[OnDemandResourceInfo]
 
 
-class ProjectAgent(BaseAgent):
-    """Service for project Q&A using AI with context assembly."""
+class ProjectAgent(BaseAgent[BaseDeps]):
+    """Agent for managing and answering queries about a Project."""
+
+    deps_type = BaseDeps
     agent_type = AgentType.PROJECT
+
+    def __init__(self, project: Project, document_repository: DocumentRepository, **kwargs):
+        super().__init__(**kwargs)
+        self.project = project
+        self.document_repository = document_repository
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for this agent."""
-        return SYSTEM_PROMPT
+        return SYSTEM_PROMPT.format(project_name=self.project.name)
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        return [get_relevant_context]
+        return [create_document_edit_tool(self.project.specification, self.document_repository)]
 
-    async def chat(self, project_id: int, user_query: str, message_history: list = None) -> str:
-        """Process a user query with project context.
+    async def _get_context_message_content(self, deps: BaseDeps) -> str:
+        """Construct the first user message that contains context information for the agent."""
+        # TODO: Something like this
+        # Build context summary
+        # context_data = await self.context_service.get_project_context(
+        #     project_id, user_message
+        # )
+        # context_summary = self._build_context_summary(context_data)
 
-        Args:
-            project_id: The project ID for context gathering
-            user_query: The user's question or query
-            message_history: Previous conversation messages
+        # Get document template if necesary
+        # template_service.get_template(TemplateType.IMPLEMENTATION_PLAN).replace(
+        #     "[Title]", task_title
+        # )
 
-        Returns:
-            AI-generated response based on project context
+        context_message = f"""
+        PROJECT SPECIFICATION DOCUMENT:
+        ```markdown
+        {self.project.specification.content}
+        ```
         """
-        with logfire.span("qa_agent.chat", project_id=project_id, query_length=len(user_query)):
-            try:
-                # Assemble project context
-                with logfire.span("qa_agent.context_assembly"):
-                    context_data = await self.context_service.get_project_context(
-                        project_id, user_query
-                    )
-
-                # Create agent context
-                project_context = ProjectDeps(
-                    project_id=project_id,
-                    eager_context=context_data.eager_context,
-                    on_demand_resources=context_data.on_demand_resources,
-                )
-
-                # Log context stats
-                logfire.info(
-                    "Context assembled",
-                    eager_resources=len(context_data.eager_context),
-                    on_demand_resources=len(context_data.on_demand_resources),
-                    provider_errors=len(context_data.provider_errors),
-                )
-
-                # Prepare initial context summary for the agent
-                context_summary = self._build_context_summary(context_data)
-
-                # Combine user query with context information
-                enhanced_prompt = f"""
-USER QUERY: {user_query}
-
-AVAILABLE CONTEXT:
-{context_summary}
-
-Please answer the user's query using the available context. If you need more specific information from any ON_DEMAND resource, use the get_relevant_context tool.
-"""
-
-                # Use message history if provided
-                if message_history is None:
-                    message_history = []
-
-                # Run the agent using base class method
-                result, _ = await self.process_message_with_history(
-                    enhanced_prompt, message_history, project_context
-                )
-
-                # Since QA agent doesn't use deferred tools, we just return the text response
-                logfire.info("QA agent response generated", response_length=len(result.data))
-                return result.data
-            except Exception as e:
-                logfire.error(
-                    "Error processing chat query", project_id=project_id, error=str(e), exc_info=e
-                )
-                return f"I encountered an error processing your query: {e}. Please try again or contact support if the issue persists."
-
-    def _build_context_summary(self, context_data: ProjectContextData) -> str:
-        """Build a summary of available context for the agent."""
-        summary_parts: list[str] = []
-
-        # EAGER context summary
-        if context_data.eager_context:
-            summary_parts.append("EAGER CONTEXT (pre-loaded):")
-            for context in context_data.eager_context:
-                description = context.description or "No description"
-                summary_parts.append(
-                    f"- [{context.provider_type.upper()}] {context.uri}: {description}"
-                )
-
-        # ON_DEMAND resources summary
-        if context_data.on_demand_resources:
-            summary_parts.append("\nON_DEMAND RESOURCES (use get_relevant_context tool):")
-            for resource in context_data.on_demand_resources:
-                summary_parts.append(
-                    f"- [{resource.provider_type.upper()}] {resource.uri}: {resource.description}"
-                )
-
-        if not summary_parts:
-            return "No context resources configured for this project."
-
-        return "\n".join(summary_parts)
-
-
-# Global Q&A agent service instance
-qa_agent_service = ProjectAgent()
-
+        return context_message

@@ -146,7 +146,9 @@ class TestDocumentEditorService:
         assert len(result.errors) == 3  # First succeeds, rest fail
         assert "'find' text cannot be empty" in result.errors[0]
         assert "Text not found: 'nonexistent'" in result.errors[1]
-        assert "Text not found: 'world'" in result.errors[2]  # 'world' not found after "Hi" replaces "Hello"
+        assert (
+            "Text not found: 'world'" in result.errors[2]
+        )  # 'world' not found after "Hi" replaces "Hello"
 
     def test_apply_edits_unique_text_success(self):
         """Test that edits with unique find text succeed."""

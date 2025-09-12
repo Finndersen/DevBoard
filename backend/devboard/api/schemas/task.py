@@ -4,6 +4,8 @@ import datetime
 
 from pydantic import BaseModel
 
+from devboard.db.models.task import TaskStatus
+
 from .document import DocumentResponse
 
 
@@ -51,7 +53,7 @@ class TaskResponse(TaskBase):
     id: int
     conversation_id: str | None = None
     created_at: datetime.datetime
-    
+
     # Document relationships - automatically loaded
     specification: DocumentResponse
     implementation_plan: DocumentResponse | None = None
@@ -107,4 +109,4 @@ class ApplyEditsRequest(BaseModel):
 class StateTransitionRequest(BaseModel):
     """Schema for manual state transitions."""
 
-    new_state: str  # 'Designing', 'Planning', 'Implementing'
+    new_state: TaskStatus  # 'Designing', 'Planning', 'Implementing'

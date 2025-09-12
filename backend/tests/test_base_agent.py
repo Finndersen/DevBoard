@@ -71,7 +71,9 @@ class TestBaseAgentServiceUnit:
 
         mock_record2 = MagicMock()
         mock_record2.message_type = "response"
-        mock_record2.pydantic_content = [{"kind": "response", "parts": [{"text": "Agent response"}]}]
+        mock_record2.pydantic_content = [
+            {"kind": "response", "parts": [{"text": "Agent response"}]}
+        ]
 
         records = [mock_record1, mock_record2]
 
@@ -97,7 +99,9 @@ class TestBaseAgentServiceUnit:
 
     @patch("devboard.agents.base_agent.document_editor_service")
     @pytest.mark.asyncio
-    async def test_document_edit_tool_validation_success(self, mock_editor_service, base_agent_service):
+    async def test_document_edit_tool_validation_success(
+        self, mock_editor_service, base_agent_service
+    ):
         """Test document edit tool with successful validation."""
         # Mock the document editor service
         mock_editor_service.validate_edits.return_value = []  # Empty list means success
@@ -114,9 +118,7 @@ class TestBaseAgentServiceUnit:
         mock_ctx.deps = MockBaseDeps()
 
         # Test edits
-        edits = [
-            DocumentEdit(find="old text", replace="new text")
-        ]
+        edits = [DocumentEdit(find="old text", replace="new text")]
 
         result = await tool_func(mock_ctx, edits, "Test edit reasoning")
 
@@ -125,7 +127,9 @@ class TestBaseAgentServiceUnit:
 
     @patch("devboard.agents.base_agent.document_editor_service")
     @pytest.mark.asyncio
-    async def test_document_edit_tool_validation_failure(self, mock_editor_service, base_agent_service):
+    async def test_document_edit_tool_validation_failure(
+        self, mock_editor_service, base_agent_service
+    ):
         """Test document edit tool with validation failure."""
         # Mock the document editor service
         mock_editor_service.validate_edits.return_value = ["Text not found"]  # Error list
@@ -142,9 +146,7 @@ class TestBaseAgentServiceUnit:
         mock_ctx.deps = MockBaseDeps()
 
         # Test edits
-        edits = [
-            DocumentEdit(find="nonexistent text", replace="new text")
-        ]
+        edits = [DocumentEdit(find="nonexistent text", replace="new text")]
 
         result = await tool_func(mock_ctx, edits, "Test edit reasoning")
 
@@ -158,9 +160,7 @@ class TestBaseAgentServiceUnit:
         mock_context = MockBaseDeps()
 
         with pytest.raises(NotImplementedError):
-            await base_agent_service.process_message_with_history(
-                "test message", [], mock_context
-            )
+            await base_agent_service.run("test message", [], mock_context)
 
     @pytest.mark.asyncio
     async def test_process_tool_approval_not_implemented(self, base_agent_service):

@@ -48,18 +48,13 @@ class ProjectRepository(BaseRepository[Project]):
             Created project with assigned ID and documents
         """
         # Create required details document
-        details_doc = self.document_repo.create(
-            DocumentType.PROJECT_DETAILS, ""
-        )
+        details_doc = self.document_repo.create(DocumentType.PROJECT_DETAILS, "")
 
         # Create project with document reference
         project = Project(
-            name=name,
-            current_status=current_status,
-            details_id=details_doc.id,
-            **kwargs
+            name=name, current_status=current_status, details_id=details_doc.id, **kwargs
         )
-        
+
         self.db.add(project)
         self.db.flush()  # Get the ID without committing
         return project
@@ -86,7 +81,7 @@ class ProjectRepository(BaseRepository[Project]):
         Returns:
             Updated project
         """
-        self.document_repo.update_content(project.details, content)
+        self.document_repo.update_content(project.specification, content)
         return project
 
     def delete_by_id(self, project_id: int) -> bool:

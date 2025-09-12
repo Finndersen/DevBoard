@@ -56,7 +56,11 @@ class DocumentEditorService:
                 ):
                     edit_result = self._apply_single_edit(current_content, edit)
                     if not edit_result.success:
-                        error_msg = f"Edit {i + 1}: {edit_result.errors[0]}" if edit_result.errors else f"Edit {i + 1}: Unknown error"
+                        error_msg = (
+                            f"Edit {i + 1}: {edit_result.errors[0]}"
+                            if edit_result.errors
+                            else f"Edit {i + 1}: Unknown error"
+                        )
                         errors.append(error_msg)
                     else:
                         current_content = edit_result.content
@@ -76,7 +80,6 @@ class DocumentEditorService:
             )
 
             return EditResult(success=True, content=current_content)
-
 
     def _apply_single_edit(self, content: str, edit: DocumentEdit) -> EditResult:
         """Apply a single find-replace edit.
@@ -114,13 +117,13 @@ class DocumentEditorService:
             return EditResult(
                 success=False,
                 content=content,
-                errors=[f"Ambiguous edit: text appears {occurrences} times. Please make the find text more specific to uniquely identify the location: '{display_text}'"],
+                errors=[
+                    f"Ambiguous edit: text appears {occurrences} times. Please make the find text more specific to uniquely identify the location: '{display_text}'"
+                ],
             )
 
         # Apply the replacement
-        new_content = content.replace(
-            edit.find, edit.replace, 1
-        )  # Replace only first occurrence
+        new_content = content.replace(edit.find, edit.replace, 1)  # Replace only first occurrence
 
         # Check if find and replace are identical (no-op edit)
         if edit.find == edit.replace:
@@ -136,9 +139,7 @@ class DocumentEditorService:
                 errors=["Edit did not change content - unexpected failure"],
             )
 
-        logfire.info(
-            "Edit applied", find_length=len(edit.find), replace_length=len(edit.replace)
-        )
+        logfire.info("Edit applied", find_length=len(edit.find), replace_length=len(edit.replace))
 
         return EditResult(success=True, content=new_content)
 

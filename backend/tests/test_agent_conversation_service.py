@@ -8,10 +8,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from devboard.api.schemas.agent_conversation import (
-    ConversationResponse,
-    MessageRequest,
+    PromptResponse,
     ToolApprovalDecision,
     ToolApprovalRequest,
+    UserPrompt,
 )
 from devboard.db.models.messages import BaseConversationMessage
 from devboard.services.agent_conversation import AgentConversationService
@@ -28,7 +28,7 @@ class MockMessageRepository:
 
     def create(self, message: BaseConversationMessage) -> BaseConversationMessage:
         message.id = len(self.messages) + 1
-        message.created_at = datetime.datetime.now()
+        message.timestamp = datetime.datetime.now()
         self.messages.append(message)
         return message
 
@@ -99,7 +99,7 @@ class TestAgentConversationService:
         # Mock the _process_with_agent method
         agent_conversation_service._process_with_agent = AsyncMock(return_value=("result", None))
 
-        message_request = MessageRequest(message="Test message")
+        message_request = UserPrompt(message="Test message")
 
         response = await agent_conversation_service.send_message(
             entity_id=123,
@@ -110,9 +110,9 @@ class TestAgentConversationService:
             create_message_model=create_message_model,
         )
 
-        assert isinstance(response, ConversationResponse)
-        assert len(response.messages) == 2  # User message + agent response
-        assert response.pending_approvals is None
+        assert isinstance(response, PromptResponse)
+        assert len(response.message) == 2  # User message + agent response
+        assert response.tool_requests is None
         assert response.conversation_complete is True
 
         # Verify database operations
@@ -133,9 +133,11 @@ class TestAgentConversationService:
         mock_deferred.approvals = []
 
         # Mock the _process_with_agent method
-        agent_conversation_service._process_with_agent = AsyncMock(return_value=("result", mock_deferred))
+        agent_conversation_service._process_with_agent = AsyncMock(
+            return_value=("result", mock_deferred)
+        )
 
-        message_request = MessageRequest(message="Test message requiring tools")
+        message_request = UserPrompt(message="Test message requiring tools")
 
         response = await agent_conversation_service.send_message(
             entity_id=123,
@@ -146,8 +148,8 @@ class TestAgentConversationService:
             create_message_model=create_message_model,
         )
 
-        assert isinstance(response, ConversationResponse)
-        assert response.pending_approvals is not None
+        assert isinstance(response, PromptResponse)
+        assert response.tool_requests is not None
         assert response.conversation_complete is False
 
     async def test_send_message_exception_handling(
@@ -160,9 +162,11 @@ class TestAgentConversationService:
     ):
         """Test send_message exception handling."""
         # Mock the _process_with_agent method to raise an exception
-        agent_conversation_service._process_with_agent = AsyncMock(side_effect=Exception("Test error"))
+        agent_conversation_service._process_with_agent = AsyncMock(
+            side_effect=Exception("Test error")
+        )
 
-        message_request = MessageRequest(message="Test message")
+        message_request = UserPrompt(message="Test message")
 
         with pytest.raises(HTTPException) as exc_info:
             await agent_conversation_service.send_message(
@@ -196,18 +200,18 @@ class TestAgentConversationService:
             approvals={"tool_1": ToolApprovalDecision(approved=True, feedback="Looks good")}
         )
 
-        response = await agent_conversation_service.process_tool_approval(
+        response = await agent_conversation_service.process_tool_approvals(
             entity_id=123,
-            approval_request=approval_request,
+            approvals=approval_request,
             agent_service=mock_agent_service,
             message_repo=mock_message_repo,
             db=mock_db_session,
             create_message_model=create_message_model,
         )
 
-        assert isinstance(response, ConversationResponse)
-        assert len(response.messages) == 1  # Agent continuation response
-        assert response.pending_approvals is None
+        assert isinstance(response, PromptResponse)
+        assert len(response.message) == 1  # Agent continuation response
+        assert response.tool_requests is None
         assert response.conversation_complete is True
 
     async def test_process_tool_approval_exception_handling(
@@ -229,9 +233,9 @@ class TestAgentConversationService:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            await agent_conversation_service.process_tool_approval(
+            await agent_conversation_service.process_tool_approvals(
                 entity_id=123,
-                approval_request=approval_request,
+                approvals=approval_request,
                 agent_service=mock_agent_service,
                 message_repo=mock_message_repo,
                 db=mock_db_session,
@@ -247,7 +251,9 @@ class TestAgentConversationService:
         with pytest.raises(NotImplementedError):
             await agent_conversation_service._process_with_agent(None, "test", [])
 
-    async def test_process_tool_approval_with_agent_not_implemented(self, agent_conversation_service):
+    async def test_process_tool_approval_with_agent_not_implemented(
+        self, agent_conversation_service
+    ):
         """Test that _process_tool_approval_with_agent raises NotImplementedError."""
         with pytest.raises(NotImplementedError):
             await agent_conversation_service._process_tool_approval_with_agent(None, None, [])
