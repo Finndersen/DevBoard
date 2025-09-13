@@ -34,6 +34,10 @@ def get_db():
         db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         with logfire.span("db.session.close"):
             db.close()

@@ -1,6 +1,7 @@
 """Task repository for task data access operations."""
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from devboard.db.models import Task
 from devboard.db.models.document import DocumentType
@@ -11,9 +12,9 @@ from devboard.db.repositories.document import DocumentRepository
 class TaskRepository(BaseRepository[Task]):
     """Repository for task data access operations with document management."""
 
-    def __init__(self, db):
-        super().__init__(db)
-        self.document_repo = DocumentRepository(db)
+    def __init__(self, db_session: Session):
+        super().__init__(db_session)
+        self.document_repo = DocumentRepository(db_session)
 
     def get_by_id(self, task_id: int) -> Task | None:
         """Get a task by its ID.

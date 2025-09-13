@@ -13,7 +13,7 @@ from github import (
 from github.Auth import Token
 
 from devboard.config.integration_configs import GitHubIntegrationConfig
-from devboard.services.config_service import config_service
+from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
@@ -43,7 +43,7 @@ class GitHubIntegration(BaseIntegration):
             raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
 
     @classmethod
-    def create(cls) -> "GitHubIntegration":
+    def create(cls, config_service: ConfigService) -> "GitHubIntegration":
         """Create GitHub integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)
@@ -172,7 +172,10 @@ class GitHubIntegration(BaseIntegration):
             issues = self.client.search_issues(search_query)
 
             # Convert to dict format similar to REST API response
-            return {"items": [issue.raw_data for issue in issues], "total_count": issues.totalCount}  # type: ignore[return-value]
+            return {
+                "items": [issue.raw_data for issue in issues],
+                "total_count": issues.totalCount,
+            }  # type: ignore[return-value]
         except BadCredentialsException as e:
             raise AuthenticationError(f"GitHub authentication failed: {e}") from e
         except RateLimitExceededException as e:
@@ -182,7 +185,13 @@ class GitHubIntegration(BaseIntegration):
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def create_pull_request(
-        self, owner: str, repo: str, title: str, body: str, head: str, base: str = "main"
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: str,
+        head: str,
+        base: str = "main",
     ) -> dict[str, Any]:
         """Create a new pull request."""
         try:

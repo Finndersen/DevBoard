@@ -1,7 +1,5 @@
 """Service layer for context provider resource operations."""
 
-from sqlalchemy.orm import Session
-
 from devboard.context_providers.registry import ContextProviderRegistry, context_provider_registry
 from devboard.db.models import ContextProviderResource, Project, Task
 from devboard.db.repositories import ContextProviderResourceRepository
@@ -19,10 +17,11 @@ class ResourceService:
     """Service layer for context provider resource operations with M2M support."""
 
     def __init__(
-        self, db: Session, context_provider_registry_instance: ContextProviderRegistry | None = None
+        self,
+        resource_repository: ContextProviderResourceRepository,
+        context_provider_registry_instance: ContextProviderRegistry | None = None,
     ):
-        self.db = db
-        self.repository = ContextProviderResourceRepository(db)
+        self.repository = resource_repository
         self.context_provider_registry = (
             context_provider_registry_instance or context_provider_registry
         )

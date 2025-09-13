@@ -1,6 +1,10 @@
 """Base repository class and patterns for data access layer."""
 
+from typing import TypeVar
+
 from sqlalchemy.orm import Session
+
+T = TypeVar("T")
 
 
 class BaseRepository[T]:
@@ -13,7 +17,3 @@ class BaseRepository[T]:
             db_session: SQLAlchemy session for database operations
         """
         self.db = db_session
-
-    def commit(self):
-        """Commit the current transaction."""
-        self.db.commit()

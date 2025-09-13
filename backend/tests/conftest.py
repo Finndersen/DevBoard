@@ -3,10 +3,19 @@ from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from unittest.mock import Mock
 
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base
+from devboard.db.repositories import (
+    ConfigurationRepository,
+    ProjectRepository,
+    TaskRepository,
+    ContextProviderResourceRepository,
+    DocumentRepository,
+)
+from devboard.services.config_service import ConfigService
 
 
 @fixture(scope="session")
@@ -77,3 +86,41 @@ def client(db_session):
         yield test_client
 
     app.dependency_overrides.clear()
+
+
+# Repository fixtures
+@fixture
+def configuration_repository(db_session):
+    """Configuration repository instance for testing."""
+    return ConfigurationRepository(db_session)
+
+
+@fixture
+def project_repository(db_session):
+    """Project repository instance for testing."""
+    return ProjectRepository(db_session)
+
+
+@fixture
+def task_repository(db_session):
+    """Task repository instance for testing."""
+    return TaskRepository(db_session)
+
+
+@fixture
+def context_provider_resource_repository(db_session):
+    """Context provider resource repository instance for testing."""
+    return ContextProviderResourceRepository(db_session)
+
+
+@fixture
+def document_repository(db_session):
+    """Document repository instance for testing."""
+    return DocumentRepository(db_session)
+
+
+# Service fixtures with real repositories (no mocking at service level)
+@fixture
+def config_service(configuration_repository):
+    """ConfigService instance with real repository for testing."""
+    return ConfigService(configuration_repository)

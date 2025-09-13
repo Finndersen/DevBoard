@@ -8,7 +8,7 @@ from devboard.agents.types import AgentType
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES, PROVIDER_MODELS
-from devboard.services.config_service import config_service
+from devboard.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,10 @@ class ModelInfo:
 class LLMService:
     """Service for LLM provider management and testing."""
 
+    def __init__(self, config_service: ConfigService):
+        """Initialize LLMService with configuration service."""
+        self.config_service = config_service
+
     def get_available_models(self) -> list[ModelInfo]:
         """Get all available models from configured providers.
 
@@ -40,7 +44,7 @@ class LLMService:
         working_providers: list[str] = []
         for provider_type in ["openai", "anthropic", "gemini"]:
             config_key = f"llm.{provider_type}.main"
-            config_result = config_service.validate_config_by_key(config_key)
+            config_result = self.config_service.validate_config_by_key(config_key)
             if config_result.success:
                 working_providers.append(provider_type)
 
@@ -70,7 +74,7 @@ class LLMService:
         config_key = f"agent.{agent_type.value}.default"
         config_result = cast(
             ConfigValidationResult[AgentConfig],
-            config_service.validate_config_by_key(config_key),
+            self.config_service.validate_config_by_key(config_key),
         )
 
         # Get available models
@@ -88,10 +92,4 @@ class LLMService:
             if model_id in available_model_ids:
                 return model_id
 
-        raise ValueError(
-            f"Could not find model configuration for agent type '{agent_type}'"
-        )
-
-
-# Global LLM service instance
-llm_service = LLMService()
+        raise ValueError(f"Could not find model configuration for agent type '{agent_type}'")

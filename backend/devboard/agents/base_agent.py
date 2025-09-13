@@ -24,13 +24,12 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.deps import BaseDeps
-from devboard.agents.llm_service import llm_service
+from devboard.agents.llm_service import LLMService
 from devboard.agents.types import AgentType
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     ProjectContextData,
-    context_assembly_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,8 +43,9 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
     agent_type: AgentType
     deps_type: type[TDeps]
 
-    def __init__(self, context_service: ContextAssemblyService | None = None):
-        self.context_service = context_service or context_assembly_service
+    def __init__(self, context_service: ContextAssemblyService, llm_service: LLMService):
+        self.context_service = context_service
+        self.llm_service = llm_service
         self.agent = self._create_agent()
 
     def _create_agent(self) -> Agent[TDeps]:
@@ -65,7 +65,7 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
 
     def _get_preferred_model(self) -> str:
         """Get preferred model for this agent type."""
-        return llm_service.get_preferred_model_for_agent(self.agent_type)
+        return self.llm_service.get_preferred_model_for_agent(self.agent_type)
 
     @abstractmethod
     def _get_system_prompt(self) -> str:

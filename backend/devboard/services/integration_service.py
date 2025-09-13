@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import logfire
 
 from devboard.core.registry import Registry
+from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.base import (
     AuthenticationError,
     BaseIntegration,
@@ -13,6 +14,7 @@ from devboard.integrations.base import (
     RateLimitError,
 )
 from devboard.integrations.registry import integration_registry
+from devboard.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,11 @@ class IntegrationService:
     """Service for handling integration operations and testing."""
 
     def __init__(
-        self, integration_registry_instance: Registry[type[BaseIntegration]] | None = None
+        self,
+        config_repository: ConfigurationRepository,
+        integration_registry_instance: Registry[type[BaseIntegration]] | None = None,
     ):
+        self.config_repo = config_repository
         self.integration_registry = integration_registry_instance or integration_registry
 
     async def test_integration_connection(self, integration_type: str) -> IntegrationTestResult:
@@ -41,7 +46,10 @@ class IntegrationService:
             try:
                 integration_class = self.integration_registry.get(integration_type)
                 if not integration_class:
-                    logfire.warn("Unsupported integration type", integration_type=integration_type)
+                    logfire.warn(
+                        "Unsupported integration type",
+                        integration_type=integration_type,
+                    )
                     return IntegrationTestResult(
                         integration_type=integration_type,
                         success=False,
@@ -51,7 +59,8 @@ class IntegrationService:
 
                 # Create integration instance
                 with logfire.span("integration_service.create_instance"):
-                    integration = integration_class.create()
+                    config_service = ConfigService(self.config_repo)
+                    integration = integration_class.create(config_service)
 
                 # Test connection
                 with logfire.span("integration_service.test_api_connection"):
@@ -65,7 +74,9 @@ class IntegrationService:
                 )
 
                 logfire.info(
-                    "Integration test complete", integration_type=integration_type, success=success
+                    "Integration test complete",
+                    integration_type=integration_type,
+                    success=success,
                 )
                 return result
 
@@ -126,7 +137,8 @@ class IntegrationService:
         """Test connections for all available integration types."""
         available_types = self.integration_registry.list_keys()
         with logfire.span(
-            "integration_service.test_all_integrations", total_integrations=len(available_types)
+            "integration_service.test_all_integrations",
+            total_integrations=len(available_types),
         ):
             results: dict[str, IntegrationTestResult] = {}
             for integration_type in available_types:

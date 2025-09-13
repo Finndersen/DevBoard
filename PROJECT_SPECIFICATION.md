@@ -733,6 +733,85 @@ The application uses modern SQLAlchemy 2.0 models with type annotations and a SQ
 - **Extensibility**: JSON fields and generic configuration system support future enhancements
 - **Migration Ready**: Clear upgrade path from SQLite to PostgreSQL for multi-user scenarios
 
+### Dependency Injection Architecture
+
+DevBoard implements a comprehensive dependency injection pattern using FastAPI's native dependency system to create clean separation of concerns and superior testability.
+
+**Dependency Chain Architecture:**
+```
+DB Session → Repositories → Services → Router Endpoints
+```
+
+**Core Components:**
+
+* **Repository Layer** (`devboard/db/repositories/`):
+  * All repositories inherit from `BaseRepository[T]` with generic type safety
+  * Repositories receive database sessions via dependency injection
+  * No transaction management at repository level - handled by request-scoped sessions
+  * Example: `ProjectRepository(db: Session)` provides data access operations
+
+* **Service Layer** (`devboard/services/`):
+  * Services receive repository dependencies rather than database sessions directly
+  * Enables clean business logic separation and superior testability
+  * Example: `ConfigService(configuration_repository: ConfigurationRepository)`
+  * No global singleton instances - all services created per request
+
+* **Dependency Modules** (`devboard/dependencies/`):
+  * **Repository Dependencies** (`repositories.py`): Factory functions for creating repository instances
+  * **Service Dependencies** (`services.py`): Factory functions for creating service instances with chained repository dependencies
+  * All dependencies follow FastAPI's `Depends()` pattern for request-scoped lifecycle
+
+**Request-Scoped Lifecycle:**
+```python
+# Automatic database session management
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()  # Automatic commit on success
+    except Exception:
+        db.rollback()  # Automatic rollback on exception
+        raise
+
+# Repository dependency injection
+def get_project_repository(db: Session = Depends(get_db)) -> ProjectRepository:
+    return ProjectRepository(db)
+
+# Service dependency injection with chained dependencies
+def get_project_service(
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+) -> ProjectService:
+    return ProjectService(project_repo, document_repo)
+```
+
+**Router Integration:**
+```python
+@router.get("/projects/{project_id}")
+async def get_project(
+    project_id: int,
+    project_service: ProjectService = Depends(get_project_service)
+):
+    return project_service.get_project_by_id(project_id)
+```
+
+**Benefits:**
+* **Clean Separation**: Clear boundaries between data access, business logic, and API layers
+* **Superior Testability**: Easy to override dependencies with mocks using FastAPI's dependency overrides
+* **Request-Scoped Lifecycle**: Automatic resource management and transaction handling
+* **Type Safety**: Full type checking throughout the dependency chain
+* **No Global State**: All services are created per request, eliminating global singleton issues
+
+**Testing Integration:**
+Tests use FastAPI's `app.dependency_overrides` system instead of traditional patching:
+```python
+# Old pattern (removed)
+@patch("devboard.api.routers.projects.project_service")
+
+# New pattern
+app.dependency_overrides[get_project_service] = lambda: mock_project_service
+```
+
 ## UI/UX Component Design 🎨
 
 This section breaks down the primary views of the application into their core components, detailing the current implementation and planned features.

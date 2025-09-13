@@ -1,9 +1,10 @@
 """Settings API endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.agents.llm_service import llm_service
+from devboard.agents.llm_service import LLMService
 from devboard.agents.types import AgentType
+from devboard.api.dependencies.services import get_integration_service, get_llm_service
 from devboard.api.schemas import AvailableModelsResponse, IntegrationTestResponse
 from devboard.services.integration_service import IntegrationService
 
@@ -11,7 +12,10 @@ router = APIRouter()
 
 
 @router.post("/integrations/{integration_type}/test", response_model=IntegrationTestResponse)
-async def test_integration_connection(integration_type: str) -> IntegrationTestResponse:
+async def test_integration_connection(
+    integration_type: str,
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> IntegrationTestResponse:
     """Test connection for a specific integration.
 
     Args:
@@ -20,7 +24,6 @@ async def test_integration_connection(integration_type: str) -> IntegrationTestR
     Returns:
         Connection test results with status and details
     """
-    integration_service = IntegrationService()
     result = await integration_service.test_integration_connection(integration_type)
 
     # Map to HTTP status codes for different error types
@@ -31,7 +34,9 @@ async def test_integration_connection(integration_type: str) -> IntegrationTestR
 
 
 @router.get("/agents/available-models", response_model=AvailableModelsResponse)
-async def get_available_models(agent_type: str = None) -> AvailableModelsResponse:
+async def get_available_models(
+    agent_type: str = None, llm_service: LLMService = Depends(get_llm_service)
+) -> AvailableModelsResponse:
     """Get available models for agents.
 
     Args:

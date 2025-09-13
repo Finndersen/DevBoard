@@ -3,6 +3,8 @@
 import logging
 from abc import ABC, abstractmethod
 
+from devboard.services.config_service import ConfigService
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +51,7 @@ class BaseIntegration(ABC):
 
     @classmethod
     @abstractmethod
-    def create(cls) -> "BaseIntegration":
+    def create(cls, config_service: ConfigService) -> "BaseIntegration":
         """Create integration instance with required configuration.
 
         Raises:

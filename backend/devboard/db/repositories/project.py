@@ -1,6 +1,7 @@
 """Project repository for project data access operations."""
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from devboard.db.models import Project
 from devboard.db.models.document import DocumentType
@@ -11,9 +12,9 @@ from devboard.db.repositories.document import DocumentRepository
 class ProjectRepository(BaseRepository[Project]):
     """Repository for project data access operations with document management."""
 
-    def __init__(self, db):
-        super().__init__(db)
-        self.document_repo = DocumentRepository(db)
+    def __init__(self, db_session: Session):
+        super().__init__(db_session)
+        self.document_repo = DocumentRepository(db_session)
 
     def get_by_id(self, project_id: int) -> Project | None:
         """Get a project by its ID.

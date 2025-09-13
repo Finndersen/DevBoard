@@ -4,9 +4,19 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
 from devboard.agents.project_agent import ProjectAgent
+from devboard.api.dependencies.repositories import (
+    get_document_repository,
+    get_project_conversation_message_repository,
+    get_project_repository,
+    get_task_repository,
+)
+from devboard.api.dependencies.services import (
+    get_agent_conversation_service,
+    get_context_assembly_service,
+    get_resource_service,
+)
 from devboard.api.schemas import (
     DeleteResponse,
     ProjectCreate,
@@ -24,18 +34,19 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalRequest,
 )
 from devboard.context_providers import ContextProviderUnavailable
-from devboard.db.database import get_db
 from devboard.db.models.messages import MessageType
 from devboard.db.repositories import (
     DocumentRepository,
-    ProjectConversationMessageRepository,
     ProjectRepository,
     TaskRepository,
 )
+from devboard.db.repositories.conversation_message import (
+    ProjectConversationMessageRepository,
+)
 from devboard.services.agent_conversation import AgentConversationService
 from devboard.services.context_assembly import (
+    ContextAssemblyService,
     NoProviderFound,
-    context_assembly_service,
 )
 from devboard.services.resource_service import (
     ResourceService,
@@ -47,29 +58,32 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[ProjectResponse])
-async def list_projects(db: Session = Depends(get_db)):
+async def list_projects(
+    project_repo: ProjectRepository = Depends(get_project_repository),
+):
     """List all projects."""
-    project_repo = ProjectRepository(db)
     projects = project_repo.get_all()
     return projects
 
 
 @router.post("/", response_model=ProjectResponse)
-async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
+async def create_project(
+    project: ProjectCreate,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+):
     """Create a new project."""
-    project_repo = ProjectRepository(db)
-    created_project = project_repo.create(
-        name=project.name, description=project.description
-    )
-    db.commit()
-    db.refresh(created_project)
+    created_project = project_repo.create(name=project.name, description=project.description)
+    project_repo.db.commit()
+    project_repo.db.refresh(created_project)
     return created_project
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: int, db: Session = Depends(get_db)):
+async def get_project(
+    project_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+):
     """Get a specific project."""
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -78,10 +92,11 @@ async def get_project(project_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
 async def update_project(
-    project_id: int, project_update: ProjectUpdate, db: Session = Depends(get_db)
+    project_id: int,
+    project_update: ProjectUpdate,
+    project_repo: ProjectRepository = Depends(get_project_repository),
 ):
     """Update a project."""
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -91,91 +106,99 @@ async def update_project(
         setattr(project, field, value)
 
     updated_project = project_repo.update(project)
-    db.commit()
-    db.refresh(updated_project)
+    project_repo.db.commit()
+    project_repo.db.refresh(updated_project)
     return updated_project
 
 
 @router.delete("/{project_id}", response_model=DeleteResponse)
-async def delete_project(project_id: int, db: Session = Depends(get_db)):
+async def delete_project(
+    project_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+):
     """Delete a project."""
-    project_repo = ProjectRepository(db)
     deleted = project_repo.delete_by_id(project_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    db.commit()
+    project_repo.db.commit()
     return {"message": "Project deleted successfully", "success": True}
 
 
 # Project Task Endpoints
 @router.get("/{project_id}/tasks", response_model=list[TaskResponse])
-async def list_project_tasks(project_id: int, db: Session = Depends(get_db)):
+async def list_project_tasks(
+    project_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    task_repo: TaskRepository = Depends(get_task_repository),
+):
     """List all tasks for a project."""
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    task_repo = TaskRepository(db)
     tasks = task_repo.get_for_project(project_id)
     return tasks
 
 
 # Project Resource Endpoints
 @router.get("/{project_id}/resources", response_model=list[ResourceResponse])
-async def list_project_resources(project_id: int, db: Session = Depends(get_db)):
+async def list_project_resources(
+    project_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    resource_service: ResourceService = Depends(get_resource_service),
+):
     """Get all context provider resources for a project."""
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    resource_service = ResourceService(db)
     resources = resource_service.get_resources_for_project(project_id)
     return resources
 
 
 @router.post("/{project_id}/resources", response_model=ResourceResponse)
 async def create_project_resource(
-    project_id: int, resource: ProjectResourceCreate, db: Session = Depends(get_db)
+    project_id: int,
+    resource: ProjectResourceCreate,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    resource_service: ResourceService = Depends(get_resource_service),
 ):
     """Add a context provider resource to a project."""
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    resource_service = ResourceService(db)
     try:
         created_resource = await resource_service.create_project_resource(
             project_id=project_id,
             resource_uri=resource.resource_uri,
             description=resource.description,
         )
-        db.commit()
-        db.refresh(created_resource)
+        resource_service.repository.db.commit()
+        resource_service.repository.db.refresh(created_resource)
         return created_resource
     except UnsupportedResourceUriError as e:
-        db.rollback()
+        resource_service.repository.db.rollback()
         raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.delete("/{project_id}/resources/{resource_id}", response_model=DeleteResponse)
 async def delete_project_resource(
-    project_id: int, resource_id: int, db: Session = Depends(get_db)
+    project_id: int,
+    resource_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    resource_service: ResourceService = Depends(get_resource_service),
 ):
     """Remove a context provider resource from a project."""
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    resource_service = ResourceService(db)
     deleted = resource_service.delete_project_resource(project_id, resource_id)
     if not deleted:
         raise HTTPException(
@@ -183,33 +206,34 @@ async def delete_project_resource(
             detail="Resource not found or does not belong to this project",
         )
 
-    db.commit()
+    resource_service.repository.db.commit()
     return {"message": "Resource deleted successfully", "success": True}
 
 
 @router.get("/{project_id}/agent/messages", response_model=list[ConversationMessage])
 def list_project_agent_messages(
-    project_id: int, db: Session = Depends(get_db)
+    project_id: int,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    message_repo: ProjectConversationMessageRepository = Depends(
+        get_project_conversation_message_repository
+    ),
 ) -> list[ConversationMessage]:
     """List all conversation messages for a project's agent.
 
     Args:
         project_id: The project to get messages for
-        db: Database session
+        project_repo: Project repository
+        message_repo: Message repository
 
     Returns:
         List of conversation messages
     """
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    message_repo = ProjectConversationMessageRepository(db)
-    messages = message_repo.get_all_for_entity(
-        entity_id=project_id, exclude_tool_calls=True
-    )
+    messages = message_repo.get_all_for_entity(entity_id=project_id, exclude_tool_calls=True)
 
     return [
         ConversationMessage(
@@ -226,7 +250,11 @@ def list_project_agent_messages(
 
 @router.post("/{project_id}/agent/messages", response_model=PromptResponse)
 async def send_project_agent_message(
-    project_id: int, request: ChatRequest, db: Session = Depends(get_db)
+    project_id: int,
+    request: ChatRequest,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+    conversation_service: AgentConversationService = Depends(get_agent_conversation_service),
 ) -> PromptResponse:
     """Chat with the project agent.
 
@@ -236,24 +264,22 @@ async def send_project_agent_message(
     Args:
         project_id: The project to query
         request: The chat request with user query
-        db: Database session
+        project_repo: Project repository
+        document_repo: Document repository
+        conversation_service: Agent conversation service
 
     Returns:
         AI-generated response based on project context
     """
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    agent = ProjectAgent(project, document_repository=DocumentRepository(db))
-    conversation_service = AgentConversationService(
-        agent, message_repository=ProjectConversationMessageRepository(db)
-    )
+    agent = ProjectAgent(project, document_repository=document_repo)
     # Process query with Q&A agent
     response = await conversation_service.send_message(
-        message=request.message, entity_id=project_id
+        agent=agent, message=request.message, entity_id=project_id
     )
 
     return response
@@ -261,34 +287,36 @@ async def send_project_agent_message(
 
 @router.post("/{project_id}/agent/approve-tools", response_model=PromptResponse)
 async def approve_project_agent_tools(
-    project_id: int, request: ToolApprovalRequest, db: Session = Depends(get_db)
+    project_id: int,
+    request: ToolApprovalRequest,
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+    conversation_service: AgentConversationService = Depends(get_agent_conversation_service),
 ) -> PromptResponse:
-    """Chat with the project agent.
+    """Approve or deny tools for the project agent.
 
-    This endpoint allows users to ask questions about their project and get
-    AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
+    This endpoint allows users to approve or deny tool calls from the project agent
+    and continue the conversation based on the approval decisions.
 
     Args:
         project_id: The project to query
-        request: The chat request with user query
-        db: Database session
+        request: The tool approval request
+        project_repo: Project repository
+        document_repo: Document repository
+        conversation_service: Agent conversation service
 
     Returns:
-        AI-generated response based on project context
+        AI-generated response based on tool approval decisions
     """
     # Verify project exists
-    project_repo = ProjectRepository(db)
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    agent = ProjectAgent(project, document_repository=DocumentRepository(db))
-    conversation_service = AgentConversationService(
-        agent, message_repository=ProjectConversationMessageRepository(db)
-    )
-    # Process query with Q&A agent
+    agent = ProjectAgent(project, document_repository=document_repo)
+    # Process tool approvals
     response = await conversation_service.process_tool_approvals(
-        approvals=request.approvals, entity_id=project_id
+        agent=agent, approvals=request.approvals, entity_id=project_id
     )
 
     return response
@@ -296,7 +324,10 @@ async def approve_project_agent_tools(
 
 @router.get("/{project_id}/context", response_model=dict[str, Any])
 async def get_project_context(
-    project_id: int, query: str = "general context", db: Session = Depends(get_db)
+    project_id: int,
+    query: str = "general context",
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    context_service: ContextAssemblyService = Depends(get_context_assembly_service),
 ) -> dict[str, Any]:
     """Get assembled context for a project.
 
@@ -306,22 +337,20 @@ async def get_project_context(
     Args:
         project_id: The project to get context for
         query: Sample query for context assembly (optional)
-        db: Database session
+        project_repo: Project repository
+        context_service: Context assembly service
 
     Returns:
         Assembled context data including EAGER and ON_DEMAND resources
     """
     try:
         # Verify project exists
-        project_repo = ProjectRepository(db)
         project = project_repo.get_by_id(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Get context assembly
-        context_data = await context_assembly_service.get_project_context(
-            project_id, query
-        )
+        context_data = await context_service.get_project_context(project_id, query)
 
         return {
             "project_id": project_id,
@@ -351,13 +380,14 @@ async def get_project_context(
         raise
     except Exception as e:
         logger.error(f"Error getting context for project {project_id}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Context assembly failed: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Context assembly failed: {e}") from e
 
 
 @router.post("/validate-resource", response_model=dict[str, Any])
-async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
+async def validate_resource_uri(
+    resource_uri: str,
+    context_service: ContextAssemblyService = Depends(get_context_assembly_service),
+) -> dict[str, Any]:
     """Validate a resource URI and get provider information.
 
     This endpoint helps users validate resource URIs before adding them
@@ -365,12 +395,13 @@ async def validate_resource_uri(resource_uri: str) -> dict[str, Any]:
 
     Args:
         resource_uri: The URI to validate
+        context_service: Context assembly service
 
     Returns:
         Validation results and provider information
     """
     try:
-        result = await context_assembly_service.get_resource_info(resource_uri)
+        result = await context_service.get_resource_info(resource_uri)
         return {
             "resource_uri": resource_uri,
             "valid": True,

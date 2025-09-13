@@ -18,10 +18,10 @@ from devboard.context_providers.registry import (
     ContextProviderRegistry,
     context_provider_registry,
 )
-from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,
+    TaskRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,10 +92,14 @@ class ContextAssemblyService:
 
     def __init__(
         self,
-        db_session_factory: SessionMakerType = SessionLocal,
+        project_repository: ProjectRepository,
+        task_repository: TaskRepository,
+        resource_repository: ContextProviderResourceRepository,
         context_provider_registry_instance: ContextProviderRegistry | None = None,
     ):
-        self.db_session_factory = db_session_factory
+        self.project_repo = project_repository
+        self.task_repo = task_repository
+        self.resource_repo = resource_repository
         self.context_provider_registry = (
             context_provider_registry_instance or context_provider_registry
         )
@@ -158,15 +162,11 @@ class ContextAssemblyService:
             try:
                 # Get project and its context provider resources
                 with logfire.span("context_assembly.db_queries"):
-                    with self.db_session_factory() as db:
-                        project_repo = ProjectRepository(db)
-                        resource_repo = ContextProviderResourceRepository(db)
+                    project = self.project_repo.get_by_id(project_id)
+                    if not project:
+                        raise ValueError(f"Project {project_id} not found")
 
-                        project = project_repo.get_by_id(project_id)
-                        if not project:
-                            raise ValueError(f"Project {project_id} not found")
-
-                        linked_resources = resource_repo.get_resources_for_project(project_id)
+                    linked_resources = self.resource_repo.get_resources_for_project(project_id)
 
                 # Extract URIs from project description
                 with logfire.span("context_assembly.extract_uris"):
@@ -345,4 +345,5 @@ class ContextAssemblyService:
 
 
 # Global context assembly service instance
-context_assembly_service = ContextAssemblyService()
+# Note: ContextAssemblyService should now be injected via dependency injection
+# Use get_context_assembly_service() from devboard.dependencies.services instead

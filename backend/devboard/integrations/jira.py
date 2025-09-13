@@ -7,7 +7,7 @@ from jira import JIRA as JiraClient
 from jira import JIRAError
 
 from devboard.config.integration_configs import JiraIntegrationConfig
-from devboard.services.config_service import config_service
+from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
@@ -40,7 +40,7 @@ class JiraIntegration(BaseIntegration):
             raise IntegrationConfigurationError(f"Failed to initialize Jira: {e}") from e
 
     @classmethod
-    def create(cls) -> "JiraIntegration":
+    def create(cls, config_service: ConfigService) -> "JiraIntegration":
         """Create Jira integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)

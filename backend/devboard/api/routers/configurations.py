@@ -2,26 +2,31 @@
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from devboard.api.dependencies.services import get_config_service
 from devboard.api.schemas import (
     ConfigurationDetailResponse,
     DeleteResponse,
 )
-from devboard.services.config_service import config_service
+from devboard.services.config_service import ConfigService
 
 router = APIRouter()
 
 
 # Configuration endpoints
 @router.get("/")
-async def list_configurations(prefix: str = None):
+async def list_configurations(
+    prefix: str = None, config_service: ConfigService = Depends(get_config_service)
+) -> list[str]:
     """List all configuration keys, optionally filtered by key prefix."""
     return config_service.list_configs(prefix=prefix)
 
 
 @router.get("/{config_key}/detail", response_model=ConfigurationDetailResponse)
-async def get_configuration_detail(config_key: str):
+async def get_configuration_detail(
+    config_key: str, config_service: ConfigService = Depends(get_config_service)
+):
     """Get detailed configuration with field-level source information."""
     result = config_service.get_config_details_by_key(config_key)
 
@@ -33,7 +38,11 @@ async def get_configuration_detail(config_key: str):
 
 
 @router.patch("/{config_key}", response_model=ConfigurationDetailResponse)
-async def update_configuration(config_key: str, config_data: dict[str, Any]):
+async def update_configuration(
+    config_key: str,
+    config_data: dict[str, Any],
+    config_service: ConfigService = Depends(get_config_service),
+):
     """Update configuration with complete structure. None values clear DB overrides."""
     try:
         result = config_service.update_configuration(config_key, config_data)
@@ -46,10 +55,12 @@ async def update_configuration(config_key: str, config_data: dict[str, Any]):
 
 
 @router.delete("/{config_key}", response_model=DeleteResponse)
-async def delete_configuration(config_key: str):
+async def delete_configuration(
+    config_key: str, config_service: ConfigService = Depends(get_config_service)
+):
     """Delete a configuration."""
     try:
         config_service.delete_config(config_key)
         return {"message": "Configuration deleted successfully", "success": True}
-    except Exception:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Configuration not found") from e

@@ -1,9 +1,11 @@
 """Tests for Q&A router endpoints."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from devboard.api.dependencies.services import get_context_assembly_service
+from devboard.api.main import app
 from devboard.context_providers import ContextStrategy
 from devboard.services.context_assembly import (
     EagerContextData,
@@ -51,20 +53,35 @@ def sample_context_data():
     )
 
 
+@pytest.fixture
+def mock_context_assembly_service():
+    """Mock context assembly service for testing."""
+    return AsyncMock()
+
+
+@pytest.fixture
+def client_with_mock_context_service(client, mock_context_assembly_service):
+    """Client with mocked context assembly service."""
+    app.dependency_overrides[get_context_assembly_service] = lambda: mock_context_assembly_service
+    yield client
+    # Clean up after test
+    if get_context_assembly_service in app.dependency_overrides:
+        del app.dependency_overrides[get_context_assembly_service]
+
+
 class TestContextEndpoint:
     """Test the project context endpoint."""
 
-    @patch("devboard.api.routers.projects.context_assembly_service")
     def test_get_project_context_success(
-        self, mock_context_service, client, db_session, sample_project, sample_context_data
+        self, client_with_mock_context_service, mock_context_assembly_service, db_session, sample_project, sample_context_data
     ):
         """Test successful context retrieval."""
         # Project is already created by repository and committed
 
         # Setup mock service
-        mock_context_service.get_project_context = AsyncMock(return_value=sample_context_data)
+        mock_context_assembly_service.get_project_context.return_value = sample_context_data
 
-        response = client.get("/api/projects/1/context?query=test")
+        response = client_with_mock_context_service.get("/api/projects/1/context?query=test")
 
         assert response.status_code == 200
         data = response.json()
@@ -90,7 +107,7 @@ class TestContextEndpoint:
         assert on_demand["has_user_description"] is True
 
         # Verify service was called correctly
-        mock_context_service.get_project_context.assert_called_once_with(1, "test")
+        mock_context_assembly_service.get_project_context.assert_called_once_with(1, "test")
 
     def test_get_project_context_nonexistent_project(self, client):
         """Test context endpoint with non-existent project."""
@@ -103,8 +120,7 @@ class TestContextEndpoint:
 class TestValidateResourceEndpoint:
     """Test the resource validation endpoint."""
 
-    @patch("devboard.api.routers.projects.context_assembly_service")
-    def test_validate_resource_success(self, mock_context_service, client):
+    def test_validate_resource_success(self, client_with_mock_context_service, mock_context_assembly_service):
         """Test successful resource validation."""
         uri = "https://github.com/owner/repo/pull/123"
         mock_result = ResourceInfo(
@@ -113,9 +129,9 @@ class TestValidateResourceEndpoint:
             description="Test PR description",
             uri=uri,
         )
-        mock_context_service.get_resource_info = AsyncMock(return_value=mock_result)
+        mock_context_assembly_service.get_resource_info.return_value = mock_result
 
-        response = client.post(
+        response = client_with_mock_context_service.post(
             "/api/projects/validate-resource",
             params={"resource_uri": uri},
         )
@@ -130,14 +146,11 @@ class TestValidateResourceEndpoint:
         assert data["description"] == "Test PR description"
         assert data["error"] is None
 
-    @patch("devboard.api.routers.projects.context_assembly_service")
-    def test_validate_resource_invalid(self, mock_context_service, client):
+    def test_validate_resource_invalid(self, client_with_mock_context_service, mock_context_assembly_service):
         """Test validation of invalid resource."""
 
-        mock_context_service.get_resource_info = AsyncMock(
-            side_effect=NoProviderFound("No provider found for this URI type")
-        )
-        response = client.post(
+        mock_context_assembly_service.get_resource_info.side_effect = NoProviderFound("No provider found for this URI type")
+        response = client_with_mock_context_service.post(
             "/api/projects/validate-resource",
             params={"resource_uri": "invalid://resource"},
         )

@@ -34,20 +34,20 @@ class AgentConversationService:
 
     def __init__(
         self,
-        agent: BaseAgent,
         message_repository: BaseConversationMessageRepository,
     ):
-        self.agent = agent
         self.message_repo = message_repository
 
     async def send_message(
         self,
+        agent: BaseAgent,
         message: str,
         entity_id: int,
     ) -> PromptResponse:
         """Process a message and return conversation response.
 
         Args:
+            agent: The agent to use for processing
             entity_id: ID of entity (task or project)
             message: User's message
         """
@@ -57,17 +57,19 @@ class AgentConversationService:
             message_length=len(message),
         ):
             return await self._handle_message_or_approval(
-                entity_id=entity_id, message_or_approvals=message
+                agent=agent, entity_id=entity_id, message_or_approvals=message
             )
 
     async def process_tool_approvals(
         self,
+        agent: BaseAgent,
         approvals: dict[str, ToolApprovalDecision],
         entity_id: int,
     ) -> PromptResponse:
         """Process tool approval/denial and continue agent execution.
 
         Args:
+            agent: The agent to use for processing
             entity_id: ID of entity (task or project)
             approvals: User's approval decisions
         """
@@ -78,14 +80,15 @@ class AgentConversationService:
         ):
             tool_approval_results = self._create_deferred_results(approvals)
             return await self._handle_message_or_approval(
-                entity_id=entity_id, message_or_approvals=tool_approval_results
+                agent=agent, entity_id=entity_id, message_or_approvals=tool_approval_results
             )
 
     async def _handle_message_or_approval(
-        self, entity_id: int, message_or_approvals: str | DeferredToolResults
+        self, agent: BaseAgent, entity_id: int, message_or_approvals: str | DeferredToolResults
     ) -> PromptResponse:
         """
         Handle either a new user message or tool approval result.
+        :param agent: The agent to use for processing
         :param entity_id: ID of entity (task or project)
         :param message_or_approvals: User message/prompt or tool approval results
         :return:
@@ -95,7 +98,7 @@ class AgentConversationService:
         message_history = self.convert_messages_to_pydantic(existing_messages)
 
         # Process with agent
-        result = await self.agent.run(
+        result = await agent.run(
             prompt_or_approvals=message_or_approvals,
             message_history=message_history,
             deps=BaseDeps(),

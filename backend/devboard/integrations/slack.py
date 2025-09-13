@@ -8,7 +8,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from devboard.config.integration_configs import SlackIntegrationConfig
-from devboard.services.config_service import config_service
+from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
@@ -38,7 +38,7 @@ class SlackIntegration(BaseIntegration):
             raise IntegrationConfigurationError(f"Failed to initialize Slack: {e}") from e
 
     @classmethod
-    def create(cls) -> "SlackIntegration":
+    def create(cls, config_service: ConfigService) -> "SlackIntegration":
         """Create Slack integration instance with configuration from database and environment."""
         try:
             # Get configuration from config service (includes database + environment)
@@ -58,7 +58,11 @@ class SlackIntegration(BaseIntegration):
             response = self.client.auth_test()
             return response.get("ok", False)
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             else:
                 logger.error(f"Slack connection test failed: {e}")
@@ -78,7 +82,11 @@ class SlackIntegration(BaseIntegration):
                 return response["messages"][0]  # type: ignore[return-value]
             return None
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "not_in_channel"]:
                 raise ResourceNotFoundError(f"Channel or message not found: {e}") from e
@@ -107,7 +115,11 @@ class SlackIntegration(BaseIntegration):
                 logger.error(f"Slack API error: {response.get('error')}")
                 return []
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "not_in_channel"]:
                 raise ResourceNotFoundError(f"Channel not found: {e}") from e
@@ -126,7 +138,11 @@ class SlackIntegration(BaseIntegration):
                 return response.get("messages", [])  # type: ignore[return-value]
             return []
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] in ["channel_not_found", "thread_not_found"]:
                 raise ResourceNotFoundError(f"Channel or thread not found: {e}") from e
@@ -147,7 +163,11 @@ class SlackIntegration(BaseIntegration):
                 logger.error(f"Slack search error: {response.get('error')}")
                 return {"messages": {"matches": []}}
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
@@ -164,7 +184,11 @@ class SlackIntegration(BaseIntegration):
                 return response.get("channel")  # type: ignore[return-value]
             return None
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "channel_not_found":
                 raise ResourceNotFoundError(f"Channel not found: {e}") from e
@@ -185,7 +209,11 @@ class SlackIntegration(BaseIntegration):
                 return response.get("channels", [])  # type: ignore[return-value]
             return []
         except SlackApiError as e:
-            if e.response["error"] in ["invalid_auth", "account_inactive", "token_revoked"]:
+            if e.response["error"] in [
+                "invalid_auth",
+                "account_inactive",
+                "token_revoked",
+            ]:
                 raise AuthenticationError(f"Slack authentication failed: {e}") from e
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e

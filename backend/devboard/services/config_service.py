@@ -15,7 +15,6 @@ from devboard.api.schemas.configuration import (
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import config_schema_registry
 from devboard.core.registry import Registry
-from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.models import Configuration
 from devboard.db.repositories.configuration import ConfigurationRepository
 
@@ -27,11 +26,11 @@ class ConfigService:
 
     def __init__(
         self,
-        db_session_factory: SessionMakerType = SessionLocal,
+        configuration_repository: ConfigurationRepository,
         config_registry: Registry[type[BaseConfig]] | None = None,
         env_vars: dict[str, str] | None = None,
     ):
-        self.db_session_factory = db_session_factory
+        self.config_repo = configuration_repository
         self.config_registry = config_registry or config_schema_registry
         self.env_vars = env_vars if env_vars is not None else dict(os.environ)
 
@@ -59,9 +58,7 @@ class ConfigService:
         """Type-safe validation - returns typed config validation result."""
         try:
             # Load DB data (empty dict if no entry exists)
-            with self.db_session_factory() as db:
-                repo = ConfigurationRepository(db)
-                db_data = self._load_db_data(repo, config_class.config_key) or {}
+            db_data = self._load_db_data(self.config_repo, config_class.config_key) or {}
 
             # Build env var data for this config's fields
             env_prefix = config_class.env_prefix
@@ -111,16 +108,13 @@ class ConfigService:
             # None values are intentionally not stored (clearing overrides)
 
         # Save to database
-        with self.db_session_factory() as db:
-            repo = ConfigurationRepository(db)
-            config = repo.get_by_key(key)
-            if config:
-                config.value_json = json.dumps(db_data)
-                repo.update(config)
-            else:
-                config = Configuration(key=key, value_json=json.dumps(db_data))
-                repo.create(config)
-            db.commit()
+        config = self.config_repo.get_by_key(key)
+        if config:
+            config.value_json = json.dumps(db_data)
+            self.config_repo.update(config)
+        else:
+            config = Configuration(key=key, value_json=json.dumps(db_data))
+            self.config_repo.create(config)
 
         # Return updated configuration details
         return self.get_config_details(schema_class)
@@ -136,11 +130,7 @@ class ConfigService:
 
     def delete_config(self, key: str) -> None:
         """Delete a configuration."""
-        with self.db_session_factory() as db:
-            repo = ConfigurationRepository(db)
-            deleted = repo.delete_by_key(key)
-            if deleted:
-                db.commit()
+        self.config_repo.delete_by_key(key)
 
     def get_config_details_by_key(self, key: str) -> ConfigurationDetailResponse:
         # 1. Get the schema class
@@ -154,14 +144,10 @@ class ConfigService:
             )
         return self.get_config_details(schema_class)
 
-    def get_config_details(
-        self, schema_class: type[BaseConfig]
-    ) -> ConfigurationDetailResponse:
+    def get_config_details(self, schema_class: type[BaseConfig]) -> ConfigurationDetailResponse:
         """Get configuration with field-level source information."""
         # 2. Load raw DB data
-        with self.db_session_factory() as db:
-            repo = ConfigurationRepository(db)
-            db_data = self._load_db_data(repo, schema_class.config_key) or {}
+        db_data = self._load_db_data(self.config_repo, schema_class.config_key) or {}
 
         # 3. Get validation result
         validation_result = self.validate_config(schema_class)
@@ -181,9 +167,7 @@ class ConfigService:
 
             db_value = db_data.get(field_name) if field_name in db_data else None
             default_value = (
-                field_info.default
-                if field_info.default is not PydanticUndefined
-                else None
+                field_info.default if field_info.default is not PydanticUndefined else None
             )
 
             fields.append(
@@ -250,15 +234,9 @@ class ConfigService:
         field_lower = field_name.lower()
         return any(keyword in field_lower for keyword in secret_keywords)
 
-    def _load_db_data(
-        self, repo: ConfigurationRepository, key: str
-    ) -> dict[str, Any] | None:
+    def _load_db_data(self, repo: ConfigurationRepository, key: str) -> dict[str, Any] | None:
         """Load configuration data from database using repository."""
         config = repo.get_by_key(key)
         if config:
             return json.loads(config.value_json)
         return None
-
-
-# Global config service instance
-config_service = ConfigService()

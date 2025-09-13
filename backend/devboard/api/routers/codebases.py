@@ -3,16 +3,20 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from devboard.api.schemas import CodebaseCreate, CodebaseResponse, CodebaseUpdate, DeleteResponse
+from devboard.api.dependencies.repositories import get_codebase_repository
+from devboard.api.schemas import (
+    CodebaseCreate,
+    CodebaseResponse,
+    CodebaseUpdate,
+    DeleteResponse,
+)
 from devboard.api.schemas.codebase import (
     ArchitectureDocumentResponse,
     ArchitectureGenerationResponse,
     ArchitectureUpdateRequest,
     ArchitectureUpdateResponse,
 )
-from devboard.db.database import get_db
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
 from devboard.integrations.filesystem import detect_git_remote_url
@@ -22,15 +26,19 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[CodebaseResponse])
-async def list_codebases(db: Session = Depends(get_db)):
+async def list_codebases(
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """List all codebases."""
-    codebase_repo = CodebaseRepository(db)
     codebases = codebase_repo.get_all()
     return codebases
 
 
 @router.post("/", response_model=CodebaseResponse)
-async def create_codebase(codebase: CodebaseCreate, db: Session = Depends(get_db)):
+async def create_codebase(
+    codebase: CodebaseCreate,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """Create a new codebase."""
     # Validate that the local path exists and is a directory
     path = Path(codebase.local_path).resolve()
@@ -41,7 +49,8 @@ async def create_codebase(codebase: CodebaseCreate, db: Session = Depends(get_db
 
     if not path.is_dir():
         raise HTTPException(
-            status_code=400, detail=f"Local path is not a directory: {codebase.local_path}"
+            status_code=400,
+            detail=f"Local path is not a directory: {codebase.local_path}",
         )
 
     # Auto-detect git remote URL if the directory is a git repository
@@ -51,18 +60,19 @@ async def create_codebase(codebase: CodebaseCreate, db: Session = Depends(get_db
     codebase_data = codebase.model_dump()
     codebase_data["repository_url"] = repository_url
 
-    codebase_repo = CodebaseRepository(db)
     db_codebase = Codebase(**codebase_data)
     created_codebase = codebase_repo.create(db_codebase)
-    db.commit()
-    db.refresh(created_codebase)
+    codebase_repo.db.commit()
+    codebase_repo.db.refresh(created_codebase)
     return created_codebase
 
 
 @router.get("/{codebase_id}", response_model=CodebaseResponse)
-async def get_codebase(codebase_id: int, db: Session = Depends(get_db)):
+async def get_codebase(
+    codebase_id: int,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """Get a specific codebase."""
-    codebase_repo = CodebaseRepository(db)
     codebase = codebase_repo.get_by_id(codebase_id)
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
@@ -71,10 +81,11 @@ async def get_codebase(codebase_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{codebase_id}", response_model=CodebaseResponse)
 async def update_codebase(
-    codebase_id: int, codebase_update: CodebaseUpdate, db: Session = Depends(get_db)
+    codebase_id: int,
+    codebase_update: CodebaseUpdate,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
 ):
     """Update a codebase."""
-    codebase_repo = CodebaseRepository(db)
     codebase = codebase_repo.get_by_id(codebase_id)
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
@@ -84,20 +95,22 @@ async def update_codebase(
         setattr(codebase, field, value)
 
     updated_codebase = codebase_repo.update(codebase)
-    db.commit()
-    db.refresh(updated_codebase)
+    codebase_repo.db.commit()
+    codebase_repo.db.refresh(updated_codebase)
     return updated_codebase
 
 
 @router.delete("/{codebase_id}", response_model=DeleteResponse)
-async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
+async def delete_codebase(
+    codebase_id: int,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """Delete a codebase."""
-    codebase_repo = CodebaseRepository(db)
     deleted = codebase_repo.delete_by_id(codebase_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Codebase not found")
 
-    db.commit()
+    codebase_repo.db.commit()
     return {"message": "Codebase deleted successfully", "success": True}
 
 
@@ -106,10 +119,12 @@ async def delete_codebase(codebase_id: int, db: Session = Depends(get_db)):
 
 # New combined endpoint
 @router.get("/{codebase_id}/architecture_document/", response_model=ArchitectureDocumentResponse)
-async def get_architecture_document(codebase_id: int, db: Session = Depends(get_db)):
+async def get_architecture_document(
+    codebase_id: int,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """Get complete architecture document information including content and hash."""
     # Get codebase from database
-    codebase_repo = CodebaseRepository(db)
     codebase = codebase_repo.get_by_id(codebase_id)
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
@@ -130,11 +145,12 @@ async def get_architecture_document(codebase_id: int, db: Session = Depends(get_
 # New update endpoint
 @router.put("/{codebase_id}/architecture_document/", response_model=ArchitectureUpdateResponse)
 async def update_architecture_document(
-    codebase_id: int, request: ArchitectureUpdateRequest, db: Session = Depends(get_db)
+    codebase_id: int,
+    request: ArchitectureUpdateRequest,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
 ):
     """Update architecture document with conflict detection."""
     # Get codebase from database
-    codebase_repo = CodebaseRepository(db)
     codebase = codebase_repo.get_by_id(codebase_id)
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
@@ -163,7 +179,11 @@ async def update_architecture_document(
     if not result.success:
         raise HTTPException(
             status_code=400,
-            detail={"success": False, "message": result.message, "error_type": result.error_type},
+            detail={
+                "success": False,
+                "message": result.message,
+                "error_type": result.error_type,
+            },
         )
 
     return ArchitectureUpdateResponse(
@@ -172,12 +192,15 @@ async def update_architecture_document(
 
 
 @router.post(
-    "/{codebase_id}/architecture_document/generate", response_model=ArchitectureGenerationResponse
+    "/{codebase_id}/architecture_document/generate",
+    response_model=ArchitectureGenerationResponse,
 )
-async def generate_architecture_document(codebase_id: int, db: Session = Depends(get_db)):
+async def generate_architecture_document(
+    codebase_id: int,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
     """Generate or update architecture document for a codebase using AI."""
     # Get codebase from database
-    codebase_repo = CodebaseRepository(db)
     codebase = codebase_repo.get_by_id(codebase_id)
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
