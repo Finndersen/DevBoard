@@ -1,8 +1,8 @@
 export interface Project {
   id: number
   name: string
-  details: string
-  current_status: string
+  specification: string
+  description: string
   created_at: string
 }
 
@@ -24,6 +24,54 @@ export interface DocumentEdit {
   replace: string
 }
 
+// New agent conversation interfaces matching backend schemas
+export type MessageRole = 'user' | 'agent'
+
+export interface ConversationMessage {
+  id: number
+  role: MessageRole
+  text_content: string
+  timestamp: string
+}
+
+export interface ToolCallRequest {
+  tool_call_id: string
+  tool_name: string
+  tool_args: string | Record<string, any> | null
+}
+
+export type PromptResponseType = 'message' | 'tool_request'
+
+export interface PromptResponse {
+  type: PromptResponseType
+  message: ConversationMessage | null
+  tool_requests: ToolCallRequest[] | null
+}
+
+export interface UserPrompt {
+  message: string
+}
+
+export interface ToolApprovalDecision {
+  approved: boolean
+  feedback?: string
+}
+
+export interface ToolApprovalRequest {
+  approvals: Record<string, ToolApprovalDecision>
+}
+
+// Updated PendingApproval interface for component compatibility
+export interface PendingApproval {
+  tool_call_id: string
+  tool_name: string
+  document_type: string | null
+  edits: DocumentEdit[] | null
+  diff_preview: string | null
+  reasoning: string | null
+}
+
+// Legacy task planning interfaces (keep for TaskPlanningChat component)
 export interface TaskPlanningResponse {
   message: string
   task_specification_edits?: DocumentEdit[]
@@ -46,15 +94,6 @@ export interface ToolCallInfo {
   preview: Record<string, any> | null
 }
 
-export interface PendingApproval {
-  tool_call_id: string
-  tool_name: string
-  document_type: string | null
-  edits: DocumentEdit[] | null
-  diff_preview: string | null
-  reasoning: string | null
-}
-
 export interface ConversationResponse {
   messages: ConversationMessageResponse[]
   pending_approvals: PendingApproval[] | null
@@ -63,15 +102,6 @@ export interface ConversationResponse {
 
 export interface MessageRequest {
   message: string
-}
-
-export interface ToolApprovalDecision {
-  approved: boolean
-  feedback?: string
-}
-
-export interface ToolApprovalRequest {
-  approvals: Record<string, ToolApprovalDecision>
 }
 
 export interface TaskPlanningRequest {
@@ -276,7 +306,26 @@ export class ApiClient {
     })
   }
 
-  // Project Q&A
+  // Project Agent Conversation - New API
+  async getProjectAgentMessages(projectId: number | string): Promise<ConversationMessage[]> {
+    return this.request<ConversationMessage[]>(`/api/projects/${projectId}/agent/messages`)
+  }
+
+  async sendProjectAgentMessage(projectId: number | string, request: UserPrompt): Promise<PromptResponse> {
+    return this.request<PromptResponse>(`/api/projects/${projectId}/agent/messages`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async approveProjectAgentTools(projectId: number | string, request: ToolApprovalRequest): Promise<PromptResponse> {
+    return this.request<PromptResponse>(`/api/projects/${projectId}/agent/approve-tools`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  // Project Q&A - Legacy API (keep for compatibility)
   async getProjectQAHistory(projectId: number | string): Promise<Message[]> {
     return this.request<Message[]>(`/api/projects/${projectId}/qa/history`)
   }

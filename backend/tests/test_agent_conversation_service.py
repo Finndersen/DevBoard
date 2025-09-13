@@ -1,374 +1,327 @@
 """Tests for AgentConversationService."""
 
 import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
-from devboard.api.schemas.agent_conversation import (
-    PromptResponse,
-    ToolApprovalDecision,
-    ToolApprovalRequest,
-    UserPrompt,
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    UserPromptPart,
 )
-from devboard.db.models.messages import BaseConversationMessage
+from pydantic_ai.run import AgentRunResult
+from pydantic_ai.tools import DeferredToolRequests, ToolApproved, ToolDenied
+
+from devboard.agents.base_agent import BaseAgent
+from devboard.agents.deps import BaseDeps
+from devboard.agents.types import AgentType
+from devboard.api.schemas.agent_conversation import (
+    MessageRole,
+    PromptResponseType,
+    ToolApprovalDecision,
+)
+from devboard.db.models.messages import BaseConversationMessage, MessageType
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+from devboard.db.repositories.conversation_message import (
+    BaseConversationMessageRepository,
+)
 from devboard.services.agent_conversation import AgentConversationService
 
 
-class MockMessageRepository:
+class MockConversationMessage(BaseConversationMessage):
+    """Mock concrete conversation message for testing."""
+    __tablename__ = "mock_conversation_messages"
+    
+    parent_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+
+
+class MockMessageRepository(BaseConversationMessageRepository):
     """Mock implementation of MessageRepository for testing."""
+
+    MESSAGE_MODEL = MockConversationMessage
 
     def __init__(self):
         self.messages = []
 
-    def get_by_entity_id(self, entity_id: int) -> list[BaseConversationMessage]:
-        return [msg for msg in self.messages if getattr(msg, "entity_id", None) == entity_id]
+    def get_all_for_entity(self, entity_id: int) -> list[MockConversationMessage]:
+        return [msg for msg in self.messages if msg.parent_id == entity_id]
 
-    def create(self, message: BaseConversationMessage) -> BaseConversationMessage:
+    def create(self, message: MockConversationMessage) -> MockConversationMessage:
         message.id = len(self.messages) + 1
-        message.timestamp = datetime.datetime.now()
+        message.timestamp = datetime.datetime.now(datetime.UTC)
         self.messages.append(message)
         return message
 
 
-class MockAgentService:
-    """Mock agent service for testing."""
+class MockAgent(BaseAgent):
+    """Mock agent for testing."""
 
-    def __init__(self):
-        self.extract_message_history_return = []
-        self.serialize_messages_return = {"data": "test response"}
+    agent_type = AgentType.PROJECT
+    deps_type = BaseDeps
 
-    def extract_message_history_from_records(self, records):
-        return self.extract_message_history_return
+    def _get_system_prompt(self) -> str:
+        return "Test system prompt"
 
-    def serialize_messages(self, result):
-        return self.serialize_messages_return
+    def _get_tools(self):
+        return []
+
+    async def _get_context_message_content(self, deps: BaseDeps) -> str:
+        return "Test context"
 
 
 class TestAgentConversationService:
     """Test AgentConversationService functionality."""
 
     @pytest.fixture
-    def agent_conversation_service(self):
-        """Create AgentConversationService instance."""
-        return AgentConversationService()
+    def mock_llm_service(self):
+        """Mock LLM service to avoid database dependencies."""
+        with patch("devboard.agents.base_agent.llm_service") as mock_service:
+            mock_service.get_preferred_model_for_agent.return_value = "test"
+            yield mock_service
 
     @pytest.fixture
-    def mock_db_session(self):
-        """Mock database session."""
-        mock_session = MagicMock(spec=Session)
-        mock_session.commit = MagicMock()
-        mock_session.rollback = MagicMock()
-        return mock_session
+    def mock_context_service(self):
+        """Mock context assembly service."""
+        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
+            yield mock_service
+
+    @pytest.fixture
+    def mock_agent(self, mock_llm_service, mock_context_service):
+        """Create mock agent."""
+        return MockAgent()
 
     @pytest.fixture
     def mock_message_repo(self):
-        """Mock message repository."""
+        """Create mock message repository."""
         return MockMessageRepository()
 
     @pytest.fixture
-    def mock_agent_service(self):
-        """Mock agent service."""
-        return MockAgentService()
-
-    @pytest.fixture
-    def create_message_model(self):
-        """Factory function to create message models."""
-
-        def _create(**kwargs):
-            mock_msg = MagicMock()
-            mock_msg.id = None
-            mock_msg.created_at = datetime.datetime.now()
-            for key, value in kwargs.items():
-                setattr(mock_msg, key, value)
-            return mock_msg
-
-        return _create
-
-    async def test_send_message_success_no_deferred(
-        self,
-        agent_conversation_service,
-        mock_db_session,
-        mock_message_repo,
-        mock_agent_service,
-        create_message_model,
-    ):
-        """Test send_message with successful processing and no deferred tools."""
-        # Mock the _process_with_agent method
-        agent_conversation_service._process_with_agent = AsyncMock(return_value=("result", None))
-
-        message_request = UserPrompt(message="Test message")
-
-        response = await agent_conversation_service.send_message(
-            entity_id=123,
-            message_request=message_request,
-            agent_service=mock_agent_service,
-            message_repo=mock_message_repo,
-            db=mock_db_session,
-            create_message_model=create_message_model,
+    def service(self, mock_agent, mock_message_repo):
+        """Create AgentConversationService instance."""
+        return AgentConversationService(
+            agent=mock_agent, message_repository=mock_message_repo
         )
 
-        assert isinstance(response, PromptResponse)
-        assert len(response.message) == 2  # User message + agent response
-        assert response.tool_requests is None
-        assert response.conversation_complete is True
-
-        # Verify database operations
-        mock_db_session.commit.assert_called()
-        assert len(mock_message_repo.messages) == 2
-
-    async def test_send_message_with_deferred_tools(
-        self,
-        agent_conversation_service,
-        mock_db_session,
-        mock_message_repo,
-        mock_agent_service,
-        create_message_model,
-    ):
-        """Test send_message with deferred tool requests."""
-        # Mock deferred requests
-        mock_deferred = MagicMock()
-        mock_deferred.approvals = []
-
-        # Mock the _process_with_agent method
-        agent_conversation_service._process_with_agent = AsyncMock(
-            return_value=("result", mock_deferred)
-        )
-
-        message_request = UserPrompt(message="Test message requiring tools")
-
-        response = await agent_conversation_service.send_message(
-            entity_id=123,
-            message_request=message_request,
-            agent_service=mock_agent_service,
-            message_repo=mock_message_repo,
-            db=mock_db_session,
-            create_message_model=create_message_model,
-        )
-
-        assert isinstance(response, PromptResponse)
-        assert response.tool_requests is not None
-        assert response.conversation_complete is False
-
-    async def test_send_message_exception_handling(
-        self,
-        agent_conversation_service,
-        mock_db_session,
-        mock_message_repo,
-        mock_agent_service,
-        create_message_model,
-    ):
-        """Test send_message exception handling."""
-        # Mock the _process_with_agent method to raise an exception
-        agent_conversation_service._process_with_agent = AsyncMock(
-            side_effect=Exception("Test error")
-        )
-
-        message_request = UserPrompt(message="Test message")
-
-        with pytest.raises(HTTPException) as exc_info:
-            await agent_conversation_service.send_message(
-                entity_id=123,
-                message_request=message_request,
-                agent_service=mock_agent_service,
-                message_repo=mock_message_repo,
-                db=mock_db_session,
-                create_message_model=create_message_model,
-            )
-
-        assert exc_info.value.status_code == 500
-        assert "Error processing message" in str(exc_info.value.detail)
-        mock_db_session.rollback.assert_called()
-
-    async def test_process_tool_approval_success(
-        self,
-        agent_conversation_service,
-        mock_db_session,
-        mock_message_repo,
-        mock_agent_service,
-        create_message_model,
-    ):
-        """Test process_tool_approval with successful approval."""
-        # Mock the _process_tool_approval_with_agent method
-        agent_conversation_service._process_tool_approval_with_agent = AsyncMock(
-            return_value="approval_result"
-        )
-
-        approval_request = ToolApprovalRequest(
-            approvals={"tool_1": ToolApprovalDecision(approved=True, feedback="Looks good")}
-        )
-
-        response = await agent_conversation_service.process_tool_approvals(
-            entity_id=123,
-            approvals=approval_request,
-            agent_service=mock_agent_service,
-            message_repo=mock_message_repo,
-            db=mock_db_session,
-            create_message_model=create_message_model,
-        )
-
-        assert isinstance(response, PromptResponse)
-        assert len(response.message) == 1  # Agent continuation response
-        assert response.tool_requests is None
-        assert response.conversation_complete is True
-
-    async def test_process_tool_approval_exception_handling(
-        self,
-        agent_conversation_service,
-        mock_db_session,
-        mock_message_repo,
-        mock_agent_service,
-        create_message_model,
-    ):
-        """Test process_tool_approval exception handling."""
-        # Mock the _process_tool_approval_with_agent method to raise an exception
-        agent_conversation_service._process_tool_approval_with_agent = AsyncMock(
-            side_effect=Exception("Approval error")
-        )
-
-        approval_request = ToolApprovalRequest(
-            approvals={"tool_1": ToolApprovalDecision(approved=True)}
-        )
-
-        with pytest.raises(HTTPException) as exc_info:
-            await agent_conversation_service.process_tool_approvals(
-                entity_id=123,
-                approvals=approval_request,
-                agent_service=mock_agent_service,
-                message_repo=mock_message_repo,
-                db=mock_db_session,
-                create_message_model=create_message_model,
-            )
-
-        assert exc_info.value.status_code == 500
-        assert "Error processing tool approval" in str(exc_info.value.detail)
-        mock_db_session.rollback.assert_called()
-
-    async def test_process_with_agent_not_implemented(self, agent_conversation_service):
-        """Test that _process_with_agent raises NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            await agent_conversation_service._process_with_agent(None, "test", [])
-
-    async def test_process_tool_approval_with_agent_not_implemented(
-        self, agent_conversation_service
-    ):
-        """Test that _process_tool_approval_with_agent raises NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            await agent_conversation_service._process_tool_approval_with_agent(None, None, [])
-
-    def test_convert_messages_to_response_request_message(self, agent_conversation_service):
-        """Test converting request messages to response format."""
-        mock_msg = MagicMock()
-        mock_msg.id = 1
-        mock_msg.message_type = "request"
-        mock_msg.pydantic_content = {"content": "Test user message"}
-        mock_msg.created_at = datetime.datetime.now()
-
-        result = agent_conversation_service._convert_messages_to_response([mock_msg])
-
-        assert len(result) == 1
-        assert result[0].message_type == "request"
-        assert result[0].text_content == "Test user message"
-
-    def test_convert_messages_to_response_response_message(self, agent_conversation_service):
-        """Test converting response messages to response format."""
-        mock_msg = MagicMock()
-        mock_msg.id = 1
-        mock_msg.message_type = "response"
-        mock_msg.pydantic_content = {"data": "Test agent response"}
-        mock_msg.created_at = datetime.datetime.now()
-
-        result = agent_conversation_service._convert_messages_to_response([mock_msg])
-
-        assert len(result) == 1
-        assert result[0].message_type == "response"
-        assert result[0].text_content == "Test agent response"
-
-    def test_extract_pending_approvals_empty(self, agent_conversation_service):
-        """Test _extract_pending_approvals with empty deferred requests."""
-        mock_deferred = MagicMock()
-        mock_deferred.approvals = []
-
-        result = agent_conversation_service._extract_pending_approvals(mock_deferred)
-
-        assert result == []
-
-    def test_extract_pending_approvals_document_edit(self, agent_conversation_service):
-        """Test _extract_pending_approvals with document edit tool."""
-        # Mock tool request
-        mock_tool_request = MagicMock()
-        mock_tool_request.tool_call_id = "tool_123"
-        mock_tool_request.tool_name = "edit_task_specification"
-        mock_tool_request.args = {
-            "edits": [{"find": "old text", "replace": "new text"}],
-            "reasoning": "Updating specification",
-        }
-
-        mock_deferred = MagicMock()
-        mock_deferred.approvals = [mock_tool_request]
-
-        result = agent_conversation_service._extract_pending_approvals(mock_deferred)
-
-        assert len(result) == 1
-        approval = result[0]
-        assert approval.tool_call_id == "tool_123"
-        assert approval.tool_name == "edit_task_specification"
-        assert approval.document_type == "task_specification"
-        assert approval.reasoning == "Updating specification"
-
-    def test_extract_pending_approvals_no_approvals_attribute(self, agent_conversation_service):
-        """Test _extract_pending_approvals with object missing approvals attribute."""
-        mock_deferred = MagicMock()
-        del mock_deferred.approvals  # Remove the attribute
-
-        result = agent_conversation_service._extract_pending_approvals(mock_deferred)
-
-        assert result == []
-
-    def test_create_deferred_results_success(self, agent_conversation_service):
-        """Test _create_deferred_results with successful creation."""
-        approval_request = ToolApprovalRequest(
-            approvals={
-                "tool_1": ToolApprovalDecision(approved=True, feedback="Good"),
-                "tool_2": ToolApprovalDecision(approved=False, feedback="Not good"),
-            }
-        )
-
-        # Since PydanticAI may not be available, this should return the approval request
-        result = agent_conversation_service._create_deferred_results(approval_request)
-
-        # The result should be either the approval request (fallback) or a proper DeferredToolResults
-        assert result is not None
-
-    def test_create_deferred_results_handles_approval_request(self, agent_conversation_service):
-        """Test _create_deferred_results handles approval request correctly."""
-        approval_request = ToolApprovalRequest(
-            approvals={"tool_1": ToolApprovalDecision(approved=True)}
-        )
-
-        result = agent_conversation_service._create_deferred_results(approval_request)
-
-        # Should return a result that's not None
-        assert result is not None
-
-    def test_create_basic_diff_preview_empty(self, agent_conversation_service):
-        """Test _create_basic_diff_preview with empty edits."""
-        result = agent_conversation_service._create_basic_diff_preview([])
-
-        assert result == "No edits specified"
-
-    def test_create_basic_diff_preview_with_edits(self, agent_conversation_service):
-        """Test _create_basic_diff_preview with document edits."""
-        edits = [
-            {"find": "old text", "replace": "new text"},
-            {"find": "another old", "replace": "another new"},
+    @pytest.mark.asyncio
+    async def test_send_message_text_response(self, service, mock_agent):
+        """Test sending a message that returns a text response."""
+        # Mock agent run to return a text response
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = "Test response"
+        mock_result.new_messages.return_value = [
+            ModelRequest(parts=[UserPromptPart(content="Test message")]),
+            ModelResponse(parts=[TextPart(content="Test response")]),
         ]
 
-        result = agent_conversation_service._create_basic_diff_preview(edits)
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
 
-        assert "Edit 1:" in result
-        assert "Edit 2:" in result
-        assert "- Find: old text" in result
-        assert "+ Replace: new text" in result
+            response = await service.send_message(message="Test message", entity_id=1)
+
+        assert response.type == PromptResponseType.MESSAGE
+        assert response.message is not None
+        assert response.message.text_content == "Test response"
+        assert response.message.role == MessageRole.AGENT
+        assert response.tool_requests is None
+
+    @pytest.mark.asyncio
+    async def test_send_message_tool_request(self, service, mock_agent):
+        """Test sending a message that returns tool requests."""
+        # Create mock deferred tool requests
+        mock_tool_request = MagicMock()
+        mock_tool_request.tool_call_id = "tool_123"
+        mock_tool_request.tool_name = "edit_document"
+        mock_tool_request.args = {"edits": [{"find": "old", "replace": "new"}]}
+
+        mock_deferred = DeferredToolRequests(approvals=[mock_tool_request])
+
+        # Mock agent run to return deferred tool requests
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = mock_deferred
+        mock_result.new_messages.return_value = [
+            ModelRequest(parts=[UserPromptPart(content="Edit this")]),
+            ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name="edit_document",
+                        tool_call_id="tool_123",
+                        args={"edits": [{"find": "old", "replace": "new"}]},
+                    )
+                ]
+            ),
+        ]
+
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+
+            response = await service.send_message(message="Edit this", entity_id=1)
+
+        assert response.type == PromptResponseType.TOOL_REQUEST
+        assert response.tool_requests is not None
+        assert len(response.tool_requests) == 1
+        assert response.tool_requests[0].tool_call_id == "tool_123"
+        assert response.tool_requests[0].tool_name == "edit_document"
+        assert response.message is None
+
+    @pytest.mark.asyncio
+    async def test_process_tool_approvals(self, service, mock_agent):
+        """Test processing tool approval decisions."""
+        # Set up approvals
+        approvals = {
+            "tool_123": ToolApprovalDecision(approved=True),
+            "tool_456": ToolApprovalDecision(approved=False, feedback="Not good"),
+        }
+
+        # Mock agent run with approval results
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = "Continued after approval"
+        mock_result.new_messages.return_value = [
+            ModelResponse(parts=[TextPart(content="Continued after approval")])
+        ]
+
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+
+            response = await service.process_tool_approvals(
+                approvals=approvals, entity_id=1
+            )
+
+        # Verify the agent was called with proper approval results
+        mock_run.assert_called_once()
+        args = mock_run.call_args[1]
+        approval_result = args["prompt_or_approvals"]
+
+        # Check the approval result structure
+        assert hasattr(approval_result, "approvals")
+        assert "tool_123" in approval_result.approvals
+        assert "tool_456" in approval_result.approvals
+
+        # Check response
+        assert response.type == PromptResponseType.MESSAGE
+        assert response.message.text_content == "Continued after approval"
+
+    def test_convert_messages_to_pydantic(self, service, mock_message_repo):
+        """Test converting database messages to PydanticAI format."""
+        # Create mock messages with proper PydanticAI message structure
+        msg1 = MockConversationMessage()
+        msg1.parent_id = 1
+        msg1.message_type = MessageType.USER_PROMPT
+        msg1.pydantic_content = {
+            "kind": "request",
+            "parts": [{"part_kind": "user-prompt", "content": "Hello"}]
+        }
+
+        msg2 = MockConversationMessage()
+        msg2.parent_id = 1
+        msg2.message_type = MessageType.TEXT_RESPONSE
+        msg2.pydantic_content = {
+            "kind": "response", 
+            "parts": [{"part_kind": "text", "content": "Hi there"}]
+        }
+
+        messages = service.convert_messages_to_pydantic([msg1, msg2])
+
+        assert len(messages) == 2
+        # Messages should be deserialized PydanticAI messages
+
+    def test_store_new_messages(self, service, mock_message_repo):
+        """Test storing new messages from agent result."""
+        # Create PydanticAI messages
+        messages = [
+            ModelRequest(parts=[UserPromptPart(content="Test")]),
+            ModelResponse(parts=[TextPart(content="Response")]),
+        ]
+
+        # Mock the MESSAGE_MODEL
+        mock_message_repo.MESSAGE_MODEL = Mock()
+        mock_message_repo.MESSAGE_MODEL.from_pydantic_message = Mock(
+            side_effect=lambda entity_id, msg: MockConversationMessage()
+        )
+
+        saved = service.store_new_messages(messages, entity_id=1)
+
+        assert len(saved) == 2
+        assert len(mock_message_repo.messages) == 2
+
+    def test_create_deferred_results_approved(self, service):
+        """Test creating deferred results for approved tools."""
+        approvals = {"tool_123": ToolApprovalDecision(approved=True)}
+
+        result = service._create_deferred_results(approvals)
+
+        assert hasattr(result, "approvals")
+        assert "tool_123" in result.approvals
+        assert isinstance(result.approvals["tool_123"], ToolApproved)
+
+    def test_create_deferred_results_denied(self, service):
+        """Test creating deferred results for denied tools."""
+        approvals = {
+            "tool_456": ToolApprovalDecision(approved=False, feedback="Not allowed")
+        }
+
+        result = service._create_deferred_results(approvals)
+
+        assert hasattr(result, "approvals")
+        assert "tool_456" in result.approvals
+        assert isinstance(result.approvals["tool_456"], ToolDenied)
+        assert result.approvals["tool_456"].message == "Not allowed"
+
+    def test_create_deferred_results_mixed(self, service):
+        """Test creating deferred results with mixed approvals."""
+        approvals = {
+            "tool_1": ToolApprovalDecision(approved=True),
+            "tool_2": ToolApprovalDecision(approved=False, feedback="Nope"),
+            "tool_3": ToolApprovalDecision(approved=True),
+        }
+
+        result = service._create_deferred_results(approvals)
+
+        assert len(result.approvals) == 3
+        assert isinstance(result.approvals["tool_1"], ToolApproved)
+        assert isinstance(result.approvals["tool_2"], ToolDenied)
+        assert isinstance(result.approvals["tool_3"], ToolApproved)
+
+    @pytest.mark.asyncio
+    async def test_handle_message_or_approval_with_message(self, service, mock_agent):
+        """Test handling a regular message."""
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = "Response text"
+        mock_result.new_messages.return_value = [
+            ModelResponse(parts=[TextPart(content="Response text")])
+        ]
+
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+
+            response = await service._handle_message_or_approval(
+                entity_id=1, message_or_approvals="User message"
+            )
+
+        assert response.type == PromptResponseType.MESSAGE
+        assert response.message.text_content == "Response text"
+
+    @pytest.mark.asyncio
+    async def test_handle_message_or_approval_with_approval(self, service, mock_agent):
+        """Test handling tool approval results."""
+        # Create approval result
+        approval_result = MagicMock()
+        approval_result.approvals = {"tool_1": ToolApproved()}
+
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = "Continued"
+        mock_result.new_messages.return_value = [
+            ModelResponse(parts=[TextPart(content="Continued")])
+        ]
+
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+
+            response = await service._handle_message_or_approval(
+                entity_id=1, message_or_approvals=approval_result
+            )
+
+        assert response.type == PromptResponseType.MESSAGE
+        assert response.message.text_content == "Continued"

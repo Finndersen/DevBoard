@@ -34,3 +34,10 @@ class DocumentUpdate(BaseModel):
     """Schema for updating document content."""
 
     content: str
+
+
+class DocumentEdit(BaseModel):
+    """Schema for a single document edit."""
+
+    find: str
+    replace: str

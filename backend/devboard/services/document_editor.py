@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 import logfire
 
-from ..api.schemas.task import DocumentEdit
+from ..api.schemas import DocumentEdit
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,9 @@ class DocumentEditorService:
             )
 
         # Apply the replacement
-        new_content = content.replace(edit.find, edit.replace, 1)  # Replace only first occurrence
+        new_content = content.replace(
+            edit.find, edit.replace, 1
+        )  # Replace only first occurrence
 
         # Check if find and replace are identical (no-op edit)
         if edit.find == edit.replace:
@@ -139,7 +141,9 @@ class DocumentEditorService:
                 errors=["Edit did not change content - unexpected failure"],
             )
 
-        logfire.info("Edit applied", find_length=len(edit.find), replace_length=len(edit.replace))
+        logfire.info(
+            "Edit applied", find_length=len(edit.find), replace_length=len(edit.replace)
+        )
 
         return EditResult(success=True, content=new_content)
 

@@ -9,7 +9,10 @@ from pydantic._internal._fields import PydanticUndefined
 from pydantic.fields import FieldInfo
 from sqlalchemy import select
 
-from devboard.api.schemas.configuration import ConfigurationDetailResponse, ConfigurationFieldInfo
+from devboard.api.schemas.configuration import (
+    ConfigurationDetailResponse,
+    ConfigurationFieldInfo,
+)
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import config_schema_registry
 from devboard.core.registry import Registry
@@ -96,7 +99,9 @@ class ConfigService:
             if config:
                 config.value_json = validated_data.model_dump_json()
             else:
-                config = Configuration(key=key, value_json=validated_data.model_dump_json())
+                config = Configuration(
+                    key=key, value_json=validated_data.model_dump_json()
+                )
                 db.add(config)
             db.commit()
 
@@ -160,17 +165,6 @@ class ConfigService:
             if config:
                 db.delete(config)
                 db.commit()
-
-    def get_provider_status(self, provider_type: str) -> dict[str, ConfigValidationResult]:
-        """Check all configs needed for a provider type."""
-        # Get all config keys that start with the provider type
-        integration_key = f"integration.{provider_type}.main"
-        context_provider_key = f"context_provider.{provider_type}.default"
-
-        return {
-            "integration": self.validate_config(integration_key),
-            "context_provider": self.validate_config(context_provider_key),
-        }
 
     def get_config_details(self, key: str) -> ConfigurationDetailResponse:
         """Get configuration with field-level source information."""

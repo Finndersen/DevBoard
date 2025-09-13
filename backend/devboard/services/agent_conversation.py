@@ -7,6 +7,7 @@ from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from pydantic_ai.tools import (
     DeferredToolApprovalResult,
     DeferredToolRequests,
+    DeferredToolResults,
     ToolApproved,
     ToolDenied,
 )
@@ -82,7 +83,7 @@ class AgentConversationService:
             )
 
     async def _handle_message_or_approval(
-        self, entity_id: int, message_or_approvals: str | DeferredToolApprovalResult
+        self, entity_id: int, message_or_approvals: str | DeferredToolResults
     ) -> PromptResponse:
         """
         Handle either a new user message or tool approval result.
@@ -107,19 +108,19 @@ class AgentConversationService:
         )
 
         output = result.output
-        if isinstance(result, DeferredToolRequests):
+        if isinstance(output, DeferredToolRequests):
             tool_requests = [
                 ToolCallRequest(
                     tool_call_id=tr.tool_call_id,
                     tool_name=tr.tool_name,
                     tool_args=tr.args,
                 )
-                for tr in result.approvals
+                for tr in output.approvals
             ]
             response = PromptResponse(
                 type=PromptResponseType.TOOL_REQUEST, tool_requests=tool_requests
             )
-        elif isinstance(result, str):
+        elif isinstance(output, str):
             agent_final_message = saved_messages[-1]
             response = PromptResponse(
                 type=PromptResponseType.MESSAGE,
@@ -137,7 +138,7 @@ class AgentConversationService:
 
     def _create_deferred_results(
         self, approvals: dict[str, ToolApprovalDecision]
-    ) -> DeferredToolApprovalResult:
+    ) -> DeferredToolResults:
         """Create deferred tool results from user approvals.
 
         Args:
@@ -146,20 +147,22 @@ class AgentConversationService:
         Returns:
             PydanticAI DeferredToolResults object to continue agent execution
         """
-        approvals = {}
+        converted_approvals = {}
         for tool_call_id, decision in approvals.items():
             if decision.approved:
                 # For approved tools, set approval to True
-                approvals[tool_call_id] = ToolApproved()
+                converted_approvals[tool_call_id] = ToolApproved()
                 logger.info(f"Tool {tool_call_id} approved")
             else:
                 # For denied tools, set approval to False or use ToolDenied
-                approvals[tool_call_id] = ToolDenied(
+                converted_approvals[tool_call_id] = ToolDenied(
                     message=decision.feedback or "The tool call was denied."
                 )
-                logger.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
+                logger.info(
+                    f"Tool {tool_call_id} denied with feedback: {decision.feedback}"
+                )
 
-        return DeferredToolApprovalResult(approvals=approvals)
+        return DeferredToolResults(approvals=converted_approvals)
 
     def convert_messages_to_pydantic(
         self, message_records: list[BaseConversationMessage]
@@ -182,6 +185,8 @@ class AgentConversationService:
         # Extract all messages from the agent result
         saved_messages = []
         for message in new_messages:
-            db_message = self.message_repo.MESSAGE_MODEL.from_pydantic_message(entity_id, message)
+            db_message = self.message_repo.MESSAGE_MODEL.from_pydantic_message(
+                entity_id, message
+            )
             saved_messages.append(self.message_repo.create(db_message))
         return saved_messages

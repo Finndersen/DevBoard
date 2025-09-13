@@ -37,7 +37,7 @@ describe('ProjectDashboard', () => {
 
   it('loads and displays projects when they exist', async () => {
     const mockProjects = [
-      createMockProject({ id: 1, name: 'Project 1', current_status: 'Active' }),
+      createMockProject({ id: 1, name: 'Project 1', description: 'Frontend React application with TypeScript and modern tooling' }),
     ]
 
     server.use(

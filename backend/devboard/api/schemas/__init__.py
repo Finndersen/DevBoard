@@ -18,6 +18,16 @@ from .configuration import (
     ConfigurationFieldInfo,
     ConfigurationResponse,
     ConfigurationUpdate,
+)
+from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
+from .integration import (
+    AgentModelInfo,
+    AvailableModelsResponse,
+    IntegrationTestResponse,
+    ModelInfo,
+)
+from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
+from .resource import (
     ContextProviderResourceBase,
     ContextProviderResourceCreate,
     ContextProviderResourceResponse,
@@ -26,24 +36,11 @@ from .configuration import (
     ResourceResponse,
     TaskResourceCreate,
 )
-from .document import DocumentCreate, DocumentResponse, DocumentUpdate
-from .integration import (
-    AgentModelInfo,
-    AvailableModelsResponse,
-    IntegrationTestResponse,
-    ModelInfo,
-)
-from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .task import (
-    ApplyEditsRequest,
-    DocumentEdit,
     StateTransitionRequest,
     TaskBase,
-    TaskConversationMessage,
     TaskCreate,
     TaskCreateNested,
-    TaskPlanningRequest,
-    TaskPlanningResponse,
     TaskResponse,
     TaskUpdate,
 )
@@ -89,15 +86,11 @@ __all__ = [
     "ProjectResponse",
     "ProjectUpdate",
     # Task
-    "ApplyEditsRequest",
     "DocumentEdit",
     "StateTransitionRequest",
     "TaskBase",
-    "TaskConversationMessage",
     "TaskCreate",
     "TaskCreateNested",
-    "TaskPlanningRequest",
-    "TaskPlanningResponse",
     "TaskResponse",
     "TaskUpdate",
 ]

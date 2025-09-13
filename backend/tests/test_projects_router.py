@@ -2,7 +2,6 @@
 
 import pytest
 
-from devboard.db.models import Project, Task
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,
@@ -13,7 +12,7 @@ from devboard.db.repositories import (
 @pytest.fixture
 def test_project_data():
     """Sample project data for testing."""
-    return {"name": "Test Project", "details": "Test project details", "current_status": "active"}
+    return {"name": "Test Project", "description": "A test project for development"}
 
 
 @pytest.fixture
@@ -31,7 +30,7 @@ def test_task_data():
     return {
         "title": "Test Task",
         "description": "Test task description",
-        "status": "Pending",
+        "status": "defining",
     }
 
 
@@ -48,8 +47,10 @@ class TestProjectsRouter:
         """Test listing projects with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.get("/api/projects/")
@@ -66,16 +67,17 @@ class TestProjectsRouter:
 
         project_data = response.json()
         assert project_data["name"] == test_project_data["name"]
-        assert project_data["details"] == test_project_data["details"]
-        assert project_data["current_status"] == test_project_data["current_status"]
+        assert project_data["description"] == test_project_data["description"]
         assert "id" in project_data
 
     def test_get_project_success(self, client, db_session, test_project_data):
         """Test getting a specific project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}")
@@ -95,8 +97,10 @@ class TestProjectsRouter:
         """Test updating a project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         update_data = {"name": "Updated Project Name"}
@@ -105,7 +109,7 @@ class TestProjectsRouter:
 
         updated_project = response.json()
         assert updated_project["name"] == "Updated Project Name"
-        assert updated_project["details"] == test_project_data["details"]  # Unchanged
+        assert updated_project["description"] == test_project_data["description"]  # Unchanged
 
     def test_update_project_not_found(self, client):
         """Test updating a non-existent project."""
@@ -118,8 +122,10 @@ class TestProjectsRouter:
         """Test deleting a project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.delete(f"/api/projects/{created_project.id}")
@@ -144,8 +150,10 @@ class TestProjectResourcesRouter:
         """Test listing project resources when none exist."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}/resources")
@@ -158,8 +166,10 @@ class TestProjectResourcesRouter:
         """Test listing project resources with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         # Create test resource
@@ -193,8 +203,10 @@ class TestProjectResourcesRouter:
         """Test creating a new project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.post(
@@ -219,8 +231,10 @@ class TestProjectResourcesRouter:
         """Test deleting a project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         # Create test resource
@@ -247,8 +261,10 @@ class TestProjectResourcesRouter:
         """Test deleting a non-existent project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.delete(f"/api/projects/{created_project.id}/resources/999")
@@ -263,8 +279,10 @@ class TestProjectTasksRouter:
         """Test listing project tasks when none exist."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}/tasks")
@@ -277,18 +295,24 @@ class TestProjectTasksRouter:
         """Test listing project tasks with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
-        project = Project(**test_project_data)
-        created_project = project_repo.create(project)
+        created_project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"]
+        )
         db_session.commit()
 
         # Create test tasks
         task_repo = TaskRepository(db_session)
-        task1_data = {**test_task_data, "project_id": created_project.id, "title": "Task 1"}
-        task2_data = {**test_task_data, "project_id": created_project.id, "title": "Task 2"}
-        task1 = Task(**task1_data)
-        task2 = Task(**task2_data)
-        task_repo.create(task1)
-        task_repo.create(task2)
+        task_repo.create(
+            project_id=created_project.id,
+            title="Task 1",
+            status=test_task_data["status"]
+        )
+        task_repo.create(
+            project_id=created_project.id,
+            title="Task 2",
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}/tasks")

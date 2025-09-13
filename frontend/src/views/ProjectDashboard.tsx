@@ -10,8 +10,8 @@ export default function ProjectDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({
     name: '',
-    details: '',
-    current_status: 'Active'
+    specification: '',
+    description: ''
   })
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function ProjectDashboard() {
       await apiClient.createProject(newProject)
       await fetchProjects()
       setShowCreateModal(false)
-      setNewProject({ name: '', details: '', current_status: 'Active' })
+      setNewProject({ name: '', specification: '', description: '' })
     } catch (error) {
       console.error('Failed to create project:', error)
     }
@@ -87,7 +87,7 @@ export default function ProjectDashboard() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
           {projects.map((project) => (
             <div
               key={project.id}
@@ -98,13 +98,15 @@ export default function ProjectDashboard() {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                     {project.name}
                   </h3>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                    {project.current_status}
-                  </span>
+                  <div className="flex-shrink-0">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                      Project
+                    </span>
+                  </div>
                 </div>
                 
                 <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-3">
-                  {project.details}
+                  {project.description}
                 </p>
                 
                 <div className="flex items-center justify-between">
@@ -156,11 +158,11 @@ export default function ProjectDashboard() {
                 </label>
                 <textarea
                   required
-                  value={newProject.details}
-                  onChange={(e) => setNewProject({ ...newProject, details: e.target.value })}
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter project description"
+                  placeholder="Describe your project, its goals, and key features..."
                 />
               </div>
               

@@ -36,23 +36,26 @@ class ProjectRepository(BaseRepository[Project]):
         stmt = select(Project)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, name: str, current_status: str = "", **kwargs) -> Project:
+    def create(self, name: str, description: str, **kwargs) -> Project:
         """Create a new project with required documents.
 
         Args:
             name: Project name
-            current_status: Current project status
+            description: Project description
             **kwargs: Additional project fields
 
         Returns:
             Created project with assigned ID and documents
         """
-        # Create required details document
-        details_doc = self.document_repo.create(DocumentType.PROJECT_DETAILS, "")
+        # Create required specification document
+        specification_doc = self.document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
 
         # Create project with document reference
         project = Project(
-            name=name, current_status=current_status, details_id=details_doc.id, **kwargs
+            name=name,
+            description=description,
+            specification_document_id=specification_doc.id,
+            **kwargs,
         )
 
         self.db.add(project)

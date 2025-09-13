@@ -1,6 +1,6 @@
 """Tests for the document editor service with simplified DocumentEdit schema."""
 
-from devboard.api.schemas.task import DocumentEdit
+from devboard.api.schemas import DocumentEdit
 from devboard.services.document_editor import DocumentEditorService
 
 
@@ -125,7 +125,9 @@ class TestDocumentEditorService:
         result = self.editor.apply_edits(content, edits)
 
         assert result.success is False  # Overall failure due to one failed edit
-        assert result.content == "Hello world!"  # Original content returned on any failure
+        assert (
+            result.content == "Hello world!"
+        )  # Original content returned on any failure
         assert len(result.errors) == 1
         assert "Text not found: 'nonexistent'" in result.errors[0]
 
@@ -136,7 +138,9 @@ class TestDocumentEditorService:
             DocumentEdit(find="Hello", replace="Hi"),  # Valid
             DocumentEdit(find="", replace="something"),  # Invalid: empty find
             DocumentEdit(find="nonexistent", replace="x"),  # Invalid: text not found
-            DocumentEdit(find="world", replace="universe"),  # Would be valid but after Hi
+            DocumentEdit(
+                find="universe", replace="cosmos"
+            ),  # Invalid: 'universe' not found in modified content
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -147,8 +151,8 @@ class TestDocumentEditorService:
         assert "'find' text cannot be empty" in result.errors[0]
         assert "Text not found: 'nonexistent'" in result.errors[1]
         assert (
-            "Text not found: 'world'" in result.errors[2]
-        )  # 'world' not found after "Hi" replaces "Hello"
+            "Text not found: 'universe'" in result.errors[2]
+        )  # 'universe' not found in modified content
 
     def test_apply_edits_unique_text_success(self):
         """Test that edits with unique find text succeed."""
@@ -198,10 +202,13 @@ Create a new authentication system.
     def test_large_content_edit(self):
         """Test editing large content blocks."""
         content = "Start\n" + "\n".join([f"Line {i}" for i in range(100)]) + "\nEnd"
-        large_replacement = "Replaced\n" + "\n".join([f"New line {i}" for i in range(50)])
+        large_replacement = "Replaced\n" + "\n".join(
+            [f"New line {i}" for i in range(50)]
+        )
 
         edit = DocumentEdit(
-            find="\n".join([f"Line {i}" for i in range(10, 20)]), replace=large_replacement
+            find="\n".join([f"Line {i}" for i in range(10, 20)]),
+            replace=large_replacement,
         )
 
         result = self.editor.apply_edits(content, [edit])

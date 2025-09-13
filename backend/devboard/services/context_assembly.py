@@ -14,9 +14,15 @@ from devboard.context_providers.base import (
     ContextProviderUnavailable,
     ContextStrategy,
 )
-from devboard.context_providers.registry import ContextProviderRegistry, context_provider_registry
+from devboard.context_providers.registry import (
+    ContextProviderRegistry,
+    context_provider_registry,
+)
 from devboard.db.database import SessionLocal, SessionMakerType
-from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository
+from devboard.db.repositories import (
+    ContextProviderResourceRepository,
+    ProjectRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +48,9 @@ class OnDemandResourceInfo:
     uri: str
     description: str  # Primary description (user-provided or auto-generated)
     provider_type: str
-    has_user_description: bool  # True if description was user-provided, False if auto-generated
+    has_user_description: (
+        bool  # True if description was user-provided, False if auto-generated
+    )
 
 
 @dataclass
@@ -106,7 +114,9 @@ class ContextAssemblyService:
             Tuple of (provider_instance, error_message). If provider_instance is None,
             error_message will contain the reason why.
         """
-        provider_class = self.context_provider_registry.get_provider_for_uri(resource_uri)
+        provider_class = self.context_provider_registry.get_provider_for_uri(
+            resource_uri
+        )
         if not provider_class:
             return None, "No provider found for this URI type"
 
@@ -138,7 +148,9 @@ class ContextAssemblyService:
 
         return valid_uris
 
-    async def get_project_context(self, project_id: int, query: str) -> ProjectContextData:
+    async def get_project_context(
+        self, project_id: int, query: str
+    ) -> ProjectContextData:
         """Assemble complete context for a project query.
 
         Args:
@@ -148,7 +160,9 @@ class ContextAssemblyService:
         Returns:
             ProjectContextData containing EAGER context data and ON_DEMAND resource descriptions
         """
-        with logfire.span("context_assembly.get_project_context", project_id=project_id):
+        with logfire.span(
+            "context_assembly.get_project_context", project_id=project_id
+        ):
             try:
                 # Get project and its context provider resources
                 with logfire.span("context_assembly.db_queries"):
@@ -160,11 +174,15 @@ class ContextAssemblyService:
                         if not project:
                             raise ValueError(f"Project {project_id} not found")
 
-                        linked_resources = resource_repo.get_resources_for_project(project_id)
+                        linked_resources = resource_repo.get_resources_for_project(
+                            project_id
+                        )
 
                 # Extract URIs from project description
                 with logfire.span("context_assembly.extract_uris"):
-                    detected_uris = self._extract_uris_from_text(project.specification)
+                    detected_uris = self._extract_uris_from_text(
+                        project.specification.content
+                    )
 
                 # Categorize resources by strategy
                 on_demand_resources: list[OnDemandResourceInfo] = []
@@ -177,7 +195,10 @@ class ContextAssemblyService:
                 all_resources: list[tuple[str, str | None]] = []
                 # Add explicit links
                 all_resources.extend(
-                    [(resource.resource_uri, resource.description) for resource in linked_resources]
+                    [
+                        (resource.resource_uri, resource.description)
+                        for resource in linked_resources
+                    ]
                 )
                 # Add detected URIs
                 all_resources.extend(
@@ -195,7 +216,9 @@ class ContextAssemblyService:
                 with logfire.span("context_assembly.categorize_resources"):
                     for resource_uri, description in all_resources:
                         try:
-                            resource_info = await self.get_resource_info(resource_uri, description)
+                            resource_info = await self.get_resource_info(
+                                resource_uri, description
+                            )
                         except (NoProviderFound, ContextProviderUnavailable) as e:
                             resource_errors.append(
                                 ResourceRetrievalError(
@@ -204,7 +227,10 @@ class ContextAssemblyService:
                             )
                             continue
 
-                        if resource_info.retrieval_strategy == ContextStrategy.ON_DEMAND:
+                        if (
+                            resource_info.retrieval_strategy
+                            == ContextStrategy.ON_DEMAND
+                        ):
                             on_demand_resources.append(
                                 OnDemandResourceInfo(
                                     uri=resource_info.uri,
@@ -214,11 +240,14 @@ class ContextAssemblyService:
                                 )
                             )
                         else:
-                            eager_resource_tasks.append(self._load_eager_context(resource_info))
+                            eager_resource_tasks.append(
+                                self._load_eager_context(resource_info)
+                            )
 
                 # Load EAGER context in parallel
                 with logfire.span(
-                    "context_assembly.load_eager_context", eager_tasks=len(eager_resource_tasks)
+                    "context_assembly.load_eager_context",
+                    eager_tasks=len(eager_resource_tasks),
                 ):
                     eager_results = await asyncio.gather(
                         *eager_resource_tasks, return_exceptions=True
@@ -227,7 +256,9 @@ class ContextAssemblyService:
                     for result in eager_results:
                         if isinstance(result, BaseException):
                             logfire.error(
-                                "Eager context loading failed", error=str(result), exc_info=result
+                                "Eager context loading failed",
+                                error=str(result),
+                                exc_info=result,
                             )
                         else:
                             eager_context.append(result)
@@ -249,7 +280,10 @@ class ContextAssemblyService:
 
             except Exception as e:
                 logfire.error(
-                    "Context assembly failed", project_id=project_id, error=str(e), exc_info=e
+                    "Context assembly failed",
+                    project_id=project_id,
+                    error=str(e),
+                    exc_info=e,
                 )
                 raise
 
@@ -287,11 +321,17 @@ class ContextAssemblyService:
                 provider, error = self._get_provider_instance(resource_uri)
                 if not provider:
                     logfire.warn(
-                        "No provider found for URI", resource_uri=resource_uri, error=error
+                        "No provider found for URI",
+                        resource_uri=resource_uri,
+                        error=error,
                     )
-                    raise ValueError(error or f"No provider found for URI: {resource_uri}")
+                    raise ValueError(
+                        error or f"No provider found for URI: {resource_uri}"
+                    )
 
-                logfire.info("Getting on-demand context", provider_type=provider.provider_type)
+                logfire.info(
+                    "Getting on-demand context", provider_type=provider.provider_type
+                )
                 result = await provider.get_relevant_context(resource_uri, query)
                 logfire.info("On-demand context retrieved", result_length=len(result))
                 return result
@@ -305,9 +345,13 @@ class ContextAssemblyService:
                 )
                 raise
 
-    async def get_resource_info(self, resource_uri: str, description: str | None) -> ResourceInfo:
+    async def get_resource_info(
+        self, resource_uri: str, description: str | None
+    ) -> ResourceInfo:
         # TODO: This can probably live somewhere else, and needs tests
-        provider_class = self.context_provider_registry.get_provider_for_uri(resource_uri)
+        provider_class = self.context_provider_registry.get_provider_for_uri(
+            resource_uri
+        )
         if not provider_class:
             raise NoProviderFound(f"No context provider found for URI: {resource_uri}")
 

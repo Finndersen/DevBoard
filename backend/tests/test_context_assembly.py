@@ -239,7 +239,14 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_no_links(self, service, mock_db_session):
         """Test context assembly with no links."""
-        project = Project(id=1, name="Test", details="No URLs here", current_status="active")
+        # Mock the specification document
+        from devboard.db.models.document import Document, DocumentType
+        spec_doc = Mock(spec=Document)
+        spec_doc.content = "No URLs here"
+        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        
+        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+        project.specification = spec_doc
 
         with (
             patch(
@@ -266,7 +273,14 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_with_explicit_links(self, service, mock_db_session):
         """Test context assembly with explicit provider resources."""
-        project = Project(id=1, name="Test", details="Project description", current_status="active")
+        # Mock the specification document
+        from devboard.db.models.document import Document, DocumentType
+        spec_doc = Mock(spec=Document)
+        spec_doc.content = "Project description"
+        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        
+        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://resource",
             description="User provided description",
@@ -299,12 +313,19 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_with_detected_uris(self, service, mock_db_session):
         """Test context assembly with auto-detected URIs from project description."""
+        # Mock the specification document
+        from devboard.db.models.document import Document, DocumentType
+        spec_doc = Mock(spec=Document)
+        spec_doc.content = "Working on https://github.com/owner/repo/pull/123"
+        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        
         project = Project(
             id=1,
             name="Test",
-            details="Working on https://github.com/owner/repo/pull/123",
-            current_status="active",
+            description="Working on https://github.com/owner/repo/pull/123",
+            specification_document_id=1,
         )
+        project.specification = spec_doc
 
         with (
             patch(
@@ -337,7 +358,14 @@ class TestContextAssemblyService:
         self, service, mock_db_session
     ):
         """Test ON_DEMAND resources prioritize user descriptions."""
-        project = Project(id=1, name="Test", details="Project description", current_status="active")
+        # Mock the specification document
+        from devboard.db.models.document import Document, DocumentType
+        spec_doc = Mock(spec=Document)
+        spec_doc.content = "Project description"
+        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        
+        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",
             description="User provided description",
@@ -373,7 +401,14 @@ class TestContextAssemblyService:
         self, service, mock_db_session
     ):
         """Test ON_DEMAND resources generate descriptions when user doesn't provide one."""
-        project = Project(id=1, name="Test", details="Project description", current_status="active")
+        # Mock the specification document
+        from devboard.db.models.document import Document, DocumentType
+        spec_doc = Mock(spec=Document)
+        spec_doc.content = "Project description"
+        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        
+        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",
             description=None,

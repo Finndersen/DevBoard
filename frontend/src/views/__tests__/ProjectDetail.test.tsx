@@ -21,7 +21,7 @@ describe('ProjectDetail', () => {
   const mockProject = createMockProject({
     id: 1,
     name: 'Test Project',
-    details: 'This is a test project for development',
+    specification: 'This is a test project for development',
   })
 
   const mockTasks = [
@@ -48,7 +48,7 @@ describe('ProjectDetail', () => {
     )
   })
 
-  it('renders project details', async () => {
+  it('renders project information', async () => {
     renderProjectDetail()
     
     await waitFor(() => {

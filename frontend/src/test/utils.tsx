@@ -1,5 +1,5 @@
-import React, { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
+import React, { type ReactElement } from 'react'
+import { render, type RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 
 // Custom render function with providers
@@ -26,8 +26,8 @@ export { customRender as render }
 export const createMockProject = (overrides = {}) => ({
   id: 1,
   name: 'Test Project',
-  details: 'Test project details',
-  current_status: 'Active',
+  specification: 'Test project specification',
+  description: 'A mock project for testing frontend components and API integrations',
   created_at: '2024-01-01T00:00:00Z',
   ...overrides,
 })
@@ -38,8 +38,11 @@ export const createMockTask = (overrides = {}) => ({
   title: 'Test Task',
   description: 'Test task description',
   status: 'Pending',
+  codebase_id: null,
+  remote_task_id: null,
+  conversation_id: null,
+  implementation_plan: null,
   created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z',
   ...overrides,
 })
 

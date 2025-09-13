@@ -59,8 +59,10 @@ async def list_projects(db: Session = Depends(get_db)):
 async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     """Create a new project."""
     project_repo = ProjectRepository(db)
-    db_project = Project(**project.model_dump())
-    created_project = project_repo.create(db_project)
+    created_project = project_repo.create(
+        name=project.name,
+        description=project.description
+    )
     db.commit()
     db.refresh(created_project)
     return created_project

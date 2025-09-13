@@ -9,7 +9,6 @@ from devboard.db.models import (
     ContextProviderResource,
     Project,
     ProjectConversationMessage,
-    Task,
 )
 from devboard.db.repositories import (
     CodebaseRepository,
@@ -29,20 +28,25 @@ class TestProjectRepository:
         return ProjectRepository(db_session)
 
     @pytest.fixture
-    def sample_project(self) -> Project:
-        return Project(name="Test Project", details="A test project", current_status="active")
+    def sample_project_data(self) -> dict:
+        return {"name": "Test Project", "description": "A test project"}
 
-    def test_create_project(self, repo: ProjectRepository, sample_project: Project):
+    def test_create_project(
+        self, repo: ProjectRepository, sample_project_data: dict, db_session
+    ):
         """Test creating a new project."""
-        created = repo.create(sample_project)
+        created = repo.create(**sample_project_data)
+        db_session.commit()
         assert created.id is not None
         assert created.name == "Test Project"
-        assert created.specification == "A test project"
-        assert created.current_status == "active"
+        assert created.description == "A test project"
 
-    def test_get_by_id(self, repo: ProjectRepository, sample_project: Project):
+    def test_get_by_id(
+        self, repo: ProjectRepository, sample_project_data: dict, db_session
+    ):
         """Test getting a project by ID."""
-        created = repo.create(sample_project)
+        created = repo.create(**sample_project_data)
+        db_session.commit()
         retrieved = repo.get_by_id(created.id)
 
         assert retrieved is not None
@@ -54,13 +58,11 @@ class TestProjectRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all(self, repo: ProjectRepository):
+    def test_get_all(self, repo: ProjectRepository, db_session):
         """Test getting all projects."""
-        project1 = Project(name="Project 1", details="", current_status="active")
-        project2 = Project(name="Project 2", details="", current_status="inactive")
-
-        repo.create(project1)
-        repo.create(project2)
+        repo.create(name="Project 1", description="")
+        repo.create(name="Project 2", description="")
+        db_session.commit()
 
         all_projects = repo.get_all()
         assert len(all_projects) == 2
@@ -68,20 +70,28 @@ class TestProjectRepository:
         assert "Project 1" in project_names
         assert "Project 2" in project_names
 
-    def test_update_project(self, repo: ProjectRepository, sample_project: Project):
+    def test_update_project(
+        self, repo: ProjectRepository, sample_project_data: dict, db_session
+    ):
         """Test updating a project."""
-        created = repo.create(sample_project)
+        created = repo.create(**sample_project_data)
+        db_session.commit()
         created.name = "Updated Project"
-        created.specification = "Updated description"
+        created.description = "Updated description"
 
         updated = repo.update(created)
+        db_session.commit()
         assert updated.name == "Updated Project"
-        assert updated.specification == "Updated description"
+        assert updated.description == "Updated description"
 
-    def test_delete_by_id(self, repo: ProjectRepository, sample_project: Project):
+    def test_delete_by_id(
+        self, repo: ProjectRepository, sample_project_data: dict, db_session
+    ):
         """Test deleting a project by ID."""
-        created = repo.create(sample_project)
+        created = repo.create(**sample_project_data)
+        db_session.commit()
         result = repo.delete_by_id(created.id)
+        db_session.commit()
 
         assert result is True
         assert repo.get_by_id(created.id) is None
@@ -136,11 +146,13 @@ class TestCodebaseRepository:
             name="Repo 1",
             description="",
             repository_url="https://github.com/test/repo1",
+            local_path="/path/to/repo1",
         )
         codebase2 = Codebase(
             name="Repo 2",
             description="",
             repository_url="https://github.com/test/repo2",
+            local_path="/path/to/repo2",
         )
 
         repo.create(codebase1)
@@ -186,31 +198,34 @@ class TestTaskRepository:
     @pytest.fixture
     def project(self, db_session: Session) -> Project:
         """Create a test project for task relationships."""
-        project = Project(name="Test Project", details="", current_status="active")
-        db_session.add(project)
+        from devboard.db.repositories.project import ProjectRepository
+
+        project_repo = ProjectRepository(db_session)
+        project = project_repo.create(name="Test Project", description="")
         db_session.flush()
         return project
 
     @pytest.fixture
-    def sample_task(self, project: Project) -> Task:
-        return Task(
-            title="Test Task",
-            description="A test task",
-            status="pending",
-            project_id=project.id,
-        )
+    def sample_task_data(self, project: Project) -> dict:
+        return {
+            "title": "Test Task",
+            "project_id": project.id,
+        }
 
-    def test_create_task(self, repo: TaskRepository, sample_task: Task):
+    def test_create_task(
+        self, repo: TaskRepository, sample_task_data: dict, db_session
+    ):
         """Test creating a new task."""
-        created = repo.create(sample_task)
+        created = repo.create(**sample_task_data)
+        db_session.commit()
         assert created.id is not None
         assert created.title == "Test Task"
-        assert created.description == "A test task"
-        assert created.status == "pending"
+        assert created.status.value == "defining"  # Default status
 
-    def test_get_by_id(self, repo: TaskRepository, sample_task: Task):
+    def test_get_by_id(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test getting a task by ID."""
-        created = repo.create(sample_task)
+        created = repo.create(**sample_task_data)
+        db_session.commit()
         retrieved = repo.get_by_id(created.id)
 
         assert retrieved is not None
@@ -222,13 +237,15 @@ class TestTaskRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all_without_filter(self, repo: TaskRepository, project: Project):
+    def test_get_all_without_filter(
+        self, repo: TaskRepository, project: Project, db_session
+    ):
         """Test getting all tasks without project filter."""
-        task1 = Task(title="Task 1", status="pending", project_id=project.id)
-        task2 = Task(title="Task 2", status="completed", project_id=project.id)
+        from devboard.db.models.task import TaskStatus
 
-        repo.create(task1)
-        repo.create(task2)
+        repo.create(project_id=project.id, title="Task 1")
+        repo.create(project_id=project.id, title="Task 2", status=TaskStatus.COMPLETE)
+        db_session.commit()
 
         all_tasks = repo.get_all()
         assert len(all_tasks) == 2
@@ -240,49 +257,59 @@ class TestTaskRepository:
         self, repo: TaskRepository, project: Project, db_session: Session
     ):
         """Test getting all tasks filtered by project."""
+        from devboard.db.repositories.project import ProjectRepository
+
         # Create another project
-        project2 = Project(name="Project 2", details="", current_status="active")
-        db_session.add(project2)
+        project_repo = ProjectRepository(db_session)
+        project2 = project_repo.create(name="Project 2", description="")
         db_session.flush()
 
-        task1 = Task(title="Task 1", status="pending", project_id=project.id)
-        task2 = Task(title="Task 2", status="pending", project_id=project2.id)
-
-        repo.create(task1)
-        repo.create(task2)
+        repo.create(project_id=project.id, title="Task 1")
+        repo.create(project_id=project2.id, title="Task 2")
+        db_session.commit()
 
         project_tasks = repo.get_for_project(project.id)
         assert len(project_tasks) == 1
         assert project_tasks[0].title == "Task 1"
         assert project_tasks[0].project_id == project.id
 
-    def test_get_by_project(self, repo: TaskRepository, project: Project):
+    def test_get_by_project(self, repo: TaskRepository, project: Project, db_session):
         """Test getting tasks by project."""
-        task1 = Task(title="Task 1", status="pending", project_id=project.id)
-        task2 = Task(title="Task 2", status="completed", project_id=project.id)
+        from devboard.db.models.task import TaskStatus
 
-        repo.create(task1)
-        repo.create(task2)
+        repo.create(project_id=project.id, title="Task 1")
+        repo.create(project_id=project.id, title="Task 2", status=TaskStatus.COMPLETE)
+        db_session.commit()
 
         project_tasks = repo.get_for_project(project.id)
         assert len(project_tasks) == 2
         for task in project_tasks:
             assert task.project_id == project.id
 
-    def test_update_task(self, repo: TaskRepository, sample_task: Task):
+    def test_update_task(
+        self, repo: TaskRepository, sample_task_data: dict, db_session
+    ):
         """Test updating a task."""
-        created = repo.create(sample_task)
+        from devboard.db.models.task import TaskStatus
+
+        created = repo.create(**sample_task_data)
+        db_session.commit()
         created.title = "Updated Task"
-        created.status = "completed"
+        created.status = TaskStatus.COMPLETE
 
         updated = repo.update(created)
+        db_session.commit()
         assert updated.title == "Updated Task"
-        assert updated.status == "completed"
+        assert updated.status == TaskStatus.COMPLETE
 
-    def test_delete_by_id(self, repo: TaskRepository, sample_task: Task):
+    def test_delete_by_id(
+        self, repo: TaskRepository, sample_task_data: dict, db_session
+    ):
         """Test deleting a task by ID."""
-        created = repo.create(sample_task)
+        created = repo.create(**sample_task_data)
+        db_session.commit()
         result = repo.delete_by_id(created.id)
+        db_session.commit()
 
         assert result is True
         assert repo.get_by_id(created.id) is None
@@ -312,7 +339,9 @@ class TestConfigurationRepository:
         assert created.key == "test.setting"
         assert created.value_json == "test_value"
 
-    def test_get_by_key(self, repo: ConfigurationRepository, sample_config: Configuration):
+    def test_get_by_key(
+        self, repo: ConfigurationRepository, sample_config: Configuration
+    ):
         """Test getting a configuration by key."""
         repo.create(sample_config)
         retrieved = repo.get_by_key("test.setting")
@@ -365,7 +394,9 @@ class TestConfigurationRepository:
         updated = repo.update(created)
         assert updated.value_json == "updated_value"
 
-    def test_delete_by_key(self, repo: ConfigurationRepository, sample_config: Configuration):
+    def test_delete_by_key(
+        self, repo: ConfigurationRepository, sample_config: Configuration
+    ):
         """Test deleting a configuration by key."""
         repo.create(sample_config)
         result = repo.delete_by_key("test.setting")
@@ -506,7 +537,9 @@ class TestContextProviderResourceRepository:
         result = repo.delete_resource(999)
         assert result is False
 
-    def test_delete_project_resource_with_cascade(self, repo: ContextProviderResourceRepository):
+    def test_delete_project_resource_with_cascade(
+        self, repo: ContextProviderResourceRepository
+    ):
         """Test deleting project resource with cascade deletion when orphaned."""
         # Create resources
         resource1 = repo.create_resource(
@@ -557,108 +590,119 @@ class TestProjectConversationMessageRepository:
     @pytest.fixture
     def project(self, db_session: Session) -> Project:
         """Create a test project for message relationships."""
-        project = Project(name="Test Project", details="", current_status="active")
-        db_session.add(project)
+        from devboard.db.repositories.project import ProjectRepository
+
+        project_repo = ProjectRepository(db_session)
+        project = project_repo.create(name="Test Project", description="")
         db_session.flush()
         return project
 
     @pytest.fixture
     def sample_message(self, project: Project) -> ProjectConversationMessage:
-        return ProjectConversationMessage(
-            project_id=project.id, role="user", content="Test message"
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        pydantic_message = ModelRequest(parts=[UserPromptPart(content="Test message")])
+        return ProjectConversationMessage.from_pydantic_message(
+            project.id, pydantic_message
         )
 
     def test_create_message(
         self,
         repo: ProjectConversationMessageRepository,
         sample_message: ProjectConversationMessage,
+        db_session,
     ):
         """Test creating a new message."""
         created = repo.create(sample_message)
+        db_session.commit()
         assert created.id is not None
-        assert created.role == "user"
-        assert created.content == "Test message"
+        assert created.text_content == "Test message"
 
     def test_get_by_id(
         self,
         repo: ProjectConversationMessageRepository,
         sample_message: ProjectConversationMessage,
+        db_session,
     ):
         """Test getting a message by ID."""
         created = repo.create(sample_message)
+        db_session.commit()
         retrieved = repo.get_by_id(created.id)
 
         assert retrieved is not None
         assert retrieved.id == created.id
-        assert retrieved.content == created.content
+        assert retrieved.text_content == created.text_content
 
     def test_get_by_id_not_found(self, repo: ProjectConversationMessageRepository):
         """Test getting a message by ID when it doesn't exist."""
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_by_project(self, repo: ProjectConversationMessageRepository, project: Project):
-        """Test getting messages by project, ordered by timestamp."""
-        message1 = ProjectConversationMessage(
-            project_id=project.id, role="user", content="First message"
+    def test_get_all_for_entity(
+        self, repo: ProjectConversationMessageRepository, project: Project, db_session
+    ):
+        """Test getting all messages for an entity, ordered by timestamp."""
+        from pydantic_ai.messages import (
+            ModelRequest,
+            ModelResponse,
+            TextPart,
+            UserPromptPart,
         )
-        message2 = ProjectConversationMessage(
-            project_id=project.id, role="assistant", content="Second message"
+
+        message1 = ProjectConversationMessage.from_pydantic_message(
+            project.id, ModelRequest(parts=[UserPromptPart(content="First message")])
+        )
+        message2 = ProjectConversationMessage.from_pydantic_message(
+            project.id, ModelResponse(parts=[TextPart(content="Second message")])
         )
 
         # Create in reverse order to test ordering
         repo.create(message2)
         repo.create(message1)
+        db_session.commit()
 
-        messages = repo.get_by_project(project.id)
+        messages = repo.get_all_for_entity(project.id)
         assert len(messages) == 2
         # Should be ordered by timestamp ascending
         assert messages[0].timestamp <= messages[1].timestamp
-
-    def test_get_recent_by_project(
-        self, repo: ProjectConversationMessageRepository, project: Project
-    ):
-        """Test getting recent messages by project with limit."""
-        # Create multiple messages
-        import time
-
-        for i in range(10):
-            message = ProjectConversationMessage(
-                project_id=project.id, role="user", content=f"Message {i}"
-            )
-            repo.create(message)
-            time.sleep(0.001)  # Small delay to ensure different timestamps
-
-        recent_messages = repo.get_recent_by_project(project.id, limit=5)
-        assert len(recent_messages) == 5
-        # Should be ordered by timestamp descending (most recent first)
-        # The last created message (Message 9) should be first
-        assert "Message 9" in recent_messages[0].content
-        # Verify we got the expected messages (last 5 created)
-        # Just check that we got some recent messages without comparing timestamps due to timezone issues
 
     def test_update_message(
         self,
         repo: ProjectConversationMessageRepository,
         sample_message: ProjectConversationMessage,
+        db_session,
     ):
         """Test updating a message."""
+        from pydantic_ai.messages import ModelResponse, TextPart
+        from pydantic_core import to_jsonable_python
+
+        from devboard.db.models.messages import _get_message_type
+
         created = repo.create(sample_message)
-        created.content = "Updated message content"
-        created.role = "assistant"
+        db_session.commit()
+
+        # Update to a response message
+        response_message = ModelResponse(
+            parts=[TextPart(content="Updated message content")]
+        )
+        created.pydantic_content = to_jsonable_python(response_message)
+        created.message_type = _get_message_type(response_message)
 
         updated = repo.update(created)
-        assert updated.content == "Updated message content"
-        assert updated.role == "assistant"
+        db_session.commit()
+        assert updated.text_content == "Updated message content"
 
     def test_delete_by_id(
         self,
         repo: ProjectConversationMessageRepository,
         sample_message: ProjectConversationMessage,
+        db_session,
     ):
         """Test deleting a message by ID."""
         created = repo.create(sample_message)
+        db_session.commit()
         result = repo.delete_by_id(created.id)
+        db_session.commit()
 
         assert result is True
         assert repo.get_by_id(created.id) is None
@@ -668,20 +712,31 @@ class TestProjectConversationMessageRepository:
         result = repo.delete_by_id(999)
         assert result is False
 
-    def test_delete_by_project(self, repo: ProjectConversationMessageRepository, project: Project):
-        """Test deleting all messages for a project."""
-        message1 = ProjectConversationMessage(
-            project_id=project.id, role="user", content="Message 1"
+    def test_delete_all_for_entity(
+        self, repo: ProjectConversationMessageRepository, project: Project, db_session
+    ):
+        """Test deleting all messages for an entity."""
+        from pydantic_ai.messages import (
+            ModelRequest,
+            ModelResponse,
+            TextPart,
+            UserPromptPart,
         )
-        message2 = ProjectConversationMessage(
-            project_id=project.id, role="assistant", content="Message 2"
+
+        message1 = ProjectConversationMessage.from_pydantic_message(
+            project.id, ModelRequest(parts=[UserPromptPart(content="Message 1")])
+        )
+        message2 = ProjectConversationMessage.from_pydantic_message(
+            project.id, ModelResponse(parts=[TextPart(content="Message 2")])
         )
 
         repo.create(message1)
         repo.create(message2)
+        db_session.commit()
 
-        count = repo.delete_by_project(project.id)
+        count = repo.delete_all_for_entity(project.id)
+        db_session.commit()
         assert count == 2
 
-        remaining_messages = repo.get_by_project(project.id)
+        remaining_messages = repo.get_all_for_entity(project.id)
         assert len(remaining_messages) == 0

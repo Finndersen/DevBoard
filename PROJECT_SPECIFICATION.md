@@ -164,23 +164,20 @@ Represents a software codebase relevant to a project or task.
 
 ## AI Agents & Orchestration 🤖
 
-### 1. Project Q&A Agent (Enhanced with Shared Architecture)
-* **Function**: Answers questions about a project's status and context through conversational interface
+### 1. Project Q&A Agent
+* **Function**: Answers questions about a project's status and context through conversational interface with document editing capabilities
 * **Context**:
-  * Project overview document.
-  * Full list of tasks and their statuses.
+  * Project overview document
+  * Full list of tasks and their statuses
   * List of available ON_DEMAND resources with URIs and descriptions
   * Full conversation history with the user (stored as PydanticAI message format)
 * **Tools/Capabilities**:
+  * **Document Editing**: Edit project specification document (see Document Editing Workflow section)
   * **Context Research**: `get_relevant_context(resource_uri, query)` - works with any resource type
   * **Resource Discovery**: Agent can see available resources and their descriptions to decide which to query
-  * **Read-Only**: Cannot perform write operations like updating tickets or creating PRs
-  * **Future Enhancement**: Could be extended with deferred document editing tools for project documentation
-* **Message Storage**: Full PydanticAI message history (ModelRequest/ModelResponse) stored in JSON format with minimal schema
-* **Model**: Configurable model selection via LLMService with agent type preferences (e.g., QA agent type)
-* **Implementation**:
-  * PydanticAI-based using shared base agent service infrastructure
-  * Shared API patterns with Task Planning Agent for consistency
+  * **Read-Only Operations**: Cannot perform write operations like updating tickets or creating PRs
+* **Model**: Configurable model selection via LLMService (PROJECT agent type)
+* **Implementation**: Inherits from `BaseAgent[BaseDeps]`, uses shared `AgentConversationService`
 
 ### 2. Context Provider Investigation Agent (Sub-Agent)
 * **Function**: Acts as a sub-agent to implement the `get_relevant_context()` API for a context provider.
@@ -208,29 +205,26 @@ Represents a software codebase relevant to a project or task.
 * **Implementation**:
   * Possibly wrapping a single-shot Gemini CLI agent run in a background task.
 
-### 4. Task Planning Agent (Enhanced with Deferred Tools)
-* **Function**: Interactive document crafting for task specifications and implementation plans through state-based conversational workflow with user approval for document changes
+### 4. Task Planning Agents (State-Based)
+* **Function**: Interactive document crafting for task specifications and implementation plans through state-based conversational workflow
+* **Architecture**: Two specialized agents for different task states:
+  * **TaskSpecificationAgent**: Active during `Designing` state - edits task specification only
+  * **TaskPlanningAgent**: Active during `Planning` state - edits both specification and implementation plan
 * **Context**:
   * Current task specification and implementation plan documents
   * Access to all configured context providers for research
-  * Full conversation history with the user (stored as PydanticAI message format)
-  * Task state awareness (Designing vs Planning phases)
+  * Full conversation history with the user
+  * Task state awareness determines which agent is active
 * **Tools/Capabilities**:
-  * **Document Editing Tools**: Deferred tools with `approval_required=True` for editing task specification and implementation plan documents
-    * `edit_task_specification(edits: list[DocumentEdit], reasoning: str)`
-    * `edit_implementation_plan(edits: list[DocumentEdit], reasoning: str)`
-    * Pre-validation ensures edits can be applied before presenting to user
-  * **Context Research**: Full access to project context, codebase information, and external resources via `get_relevant_context()` tool
-  * **Interactive Approval Workflow**: Agent execution pauses for user to approve/deny document changes with optional feedback
-  * **Conversational Refinement**: Agent can revise edits based on user feedback when edits are denied
-  * **State-Aware Prompting**: Different capabilities based on task state (Designing: spec only, Planning: both documents)
-* **Message Storage**: Full PydanticAI message history (ModelRequest/ModelResponse) stored in JSON format with minimal schema
-* **Model**: Configurable model selection via LLMService with agent type preferences (e.g., PLANNING agent type)
-* **Implementation**:
-  * PydanticAI-based with deferred tools for document editing
-  * State-based prompt templates for different workflow phases
-  * Shared base agent service for common functionality
-  * API endpoints for tool approval/denial workflow
+  * **Document Editing**: State-dependent document access (see Document Editing Workflow section)
+    * Designing state: Edit task specification only
+    * Planning state: Edit both specification and implementation plan
+  * **Context Research**: `get_relevant_context()` tool for querying resources (future implementation)
+  * **State-Aware Prompting**: Different system prompts based on task state
+* **Model**: Configurable model selection via LLMService:
+  * TaskSpecificationAgent: TASK_SPECIFICATION agent type
+  * TaskPlanningAgent: TASK_PLANNING agent type
+* **Implementation**: Both inherit from `BaseTaskAgent`, agent selection based on task status
 
 ### 5. Task Implementation Agent
 * **Function**: Executes the approved Implementation Plan.
@@ -259,14 +253,46 @@ Represents a software codebase relevant to a project or task.
 * **Implementation**:
   * Can run in app within API request using framework like PydanticAI or as a background task if it needs to do more extensive work.
 
-## Project Agent Conversation Management
+## Agent Conversation Management
 
-* **Challenge**: The Project Q&A agent's conversation history must feel continuous but cannot grow indefinitely, as this would exhaust the LLM's context window. The history must also account for tool calls made by the agent.
-* **Proposed Solution**: A hybrid strategy of an automatic sliding window for message history, combined with a manual reset option and structured storage for tool calls. The primary "memory" of the project will always be the persisted `Project Details` document, not the conversation history.
-* **Implementation**:
-    * **Automatic Sliding Window**: The system will automatically persist only the last **N** messages (e.g., 40) for any given project conversation. When a new message is added, the oldest message is deleted from the database. This keeps the immediate conversational context relevant.
-    * **Manual Reset**: The UI will provide a "Reset Conversation" button, allowing the user to clear the history for a project and start fresh.
-    * **Tool Call Tracking**: The conversation history will explicitly store tool calls and their results as distinct message types. This provides the agent with a clear, structured history of its actions and their outcomes, which is crucial for effective reasoning.
+* **Challenge**: Agent conversation history must feel continuous but cannot grow indefinitely, as this would exhaust the LLM's context window. The history must also account for tool calls and deferred tool approvals.
+* **Current Implementation**: Full message history storage using PydanticAI's native message format with structured categorization.
+* **Message Storage Architecture**:
+    * **Base Class**: `BaseConversationMessage` abstract class for all agent conversations
+    * **PydanticAI Integration**: Messages stored as serialized `ModelRequest` and `ModelResponse` objects
+    * **Message Categorization**: `MessageType` enum distinguishes between USER_PROMPT, TOOL_CALL, TEXT_RESPONSE, TOOL_RESULT, and STRUCTURED_RESPONSE
+    * **Concrete Implementations**: `ProjectConversationMessage` and `TaskConversationMessage` for different agent types
+* **Shared Conversation Service**:
+    * **AgentConversationService**: Handles message processing for all agent types
+    * **Message Conversion**: `convert_messages_to_pydantic()` deserializes stored messages for agent context
+    * **Tool Approval Flow**: `process_tool_approvals()` handles deferred tool approval/denial
+    * **Response Types**: Returns `PromptResponse` with either MESSAGE or TOOL_REQUEST type
+* **Future Enhancements**:
+    * **Sliding Window**: Could implement automatic truncation of old messages (e.g., keep last N messages)
+    * **Manual Reset**: UI button to clear conversation history and start fresh
+    * **Context Preservation**: Primary "memory" remains in persisted documents, not conversation history
+
+## Document Editing Workflow (Deferred Tools Pattern)
+
+* **Overview**: All document-editing agents use PydanticAI's deferred tools pattern for safe, user-approved document modifications.
+* **Tool Creation**:
+    * **Factory Function**: `create_document_edit_tool()` creates document-specific editing tools
+    * **Pre-validation**: `DocumentEditorService` validates edits can be applied before showing to user
+    * **Deferred Execution**: Tools marked with `requires_approval=True` pause agent execution
+* **Approval Workflow**:
+    1. **Agent Proposes Edits**: Agent calls tool with list of `DocumentEdit` objects (find/replace pairs)
+    2. **Validation**: System pre-validates edits using `DocumentEditorService.apply_edits()`
+    3. **User Review**: If valid, raises `ApprovalRequired` exception, returning tool requests to user
+    4. **User Decision**: User approves or denies with optional feedback via `/agent/approve-tools` endpoint
+    5. **Continuation**: Agent continues with `ToolApproved()` or `ToolDenied(feedback)` result
+* **Edit Application**:
+    * **Success Path**: Approved edits applied via `DocumentRepository.update_content()`
+    * **Failure Path**: Denied edits allow agent to revise approach using user feedback
+    * **Conflict Detection**: Document hash checking prevents concurrent modification conflicts
+* **API Integration**:
+    * **Tool Request Response**: `PromptResponse` with type=TOOL_REQUEST contains pending tool calls
+    * **Approval Endpoint**: POST to `/agent/approve-tools` with tool_call_id → approval decision mapping
+    * **Continuation Response**: Returns next `PromptResponse` (either MESSAGE or more TOOL_REQUESTs)
 
 ## Task Planning Agent Context Management
 
@@ -611,10 +637,13 @@ This section defines the core RESTful API contract between the frontend and the 
   * `PATCH /api/tasks/{task_id}` - Update a task's details.
 
 * **Task Planning Agent**
-  * `GET /api/tasks/{task_id}/messages` - Get task planning conversation history.
-  * `POST /api/tasks/{task_id}/messages` - Send message to task planning agent with structured response including explicit edit arrays.
-  * `POST /api/tasks/{task_id}/apply-edits` - Apply structured document edits with separate `task_specification_edits` and `task_implementation_plan_edits` fields.
+  * `POST /api/tasks/{task_id}/agent/messages` - Send message to task agent (returns either agent response or tool requests).
+  * `POST /api/tasks/{task_id}/agent/approve-tools` - Approve/deny deferred tool calls with optional feedback.
   * `POST /api/tasks/{task_id}/state-transition` - Progress task through design/planning states.
+  
+* **Project Q&A Agent**
+  * `POST /api/projects/{project_id}/agent/messages` - Send message to project agent (returns either agent response or tool requests).
+  * `POST /api/projects/{project_id}/agent/approve-tools` - Approve/deny deferred tool calls with optional feedback.
 
 * **Codebases**
   * `GET /api/codebases` - List all codebases.
@@ -656,15 +685,21 @@ The application uses modern SQLAlchemy 2.0 models with type annotations and a SQ
 **Project**: High-level container for related tasks and codebases
 - Contains project details (name, description, status), creation metadata
 - Has many-to-many relationships with Codebases and ContextProviderResources
+- References a Document record for project specification
 
 **Task**: Individual work items with lifecycle management
-- Links to Projects, stores task specifications and implementation plans
-- Manages state transitions (Designing → Planning → Ready → In Progress → Done)
-- Supports document versioning and conversation history
+- Links to Projects, stores references to Document records for specifications and implementation plans
+- Manages state transitions (Defining → Designing → Planning → Ready → In Progress → Done)
+- Supports conversation history via TaskConversationMessage records
 
 **Codebase**: Represents local software repositories
 - Stores path, metadata, and architecture document content with conflict detection
 - Maintains SHA256 content hashes for synchronization with file system
+
+**Document**: Generic document storage with conflict detection
+- Stores various document types (PROJECT_DETAILS, TASK_SPECIFICATION, TASK_IMPLEMENTATION_PLAN)
+- Content stored as text with MD5 hash for conflict detection
+- Timestamps for creation and last modification
 
 #### Configuration & Context
 
@@ -676,10 +711,19 @@ The application uses modern SQLAlchemy 2.0 models with type annotations and a SQ
 - Generic key-value system supporting nested configurations
 - JSON column for complex data structures with Pydantic validation
 
-**ProjectConversationMessage**: Q&A agent conversation history
-- Supports multiple message types: user, assistant, tool_call, tool_result
-- Stores both text content and structured JSON data for tool interactions
-- Implements sliding window pattern to manage conversation length
+**BaseConversationMessage**: Abstract base class for agent conversations
+- Stores PydanticAI ModelRequest and ModelResponse messages as JSON
+- `MessageType` enum categorizes messages (USER_PROMPT, TOOL_CALL, TEXT_RESPONSE, TOOL_RESULT, STRUCTURED_RESPONSE)
+- Minimal metadata: parent_id, message_type, pydantic_content, timestamp
+- Factory method `from_pydantic_message()` for creating from PydanticAI messages
+
+**ProjectConversationMessage**: Project Q&A agent conversation history
+- Inherits from BaseConversationMessage
+- Links to Project via foreign key relationship
+
+**TaskConversationMessage**: Task planning agent conversation history  
+- Inherits from BaseConversationMessage
+- Links to Task via foreign key relationship
 
 #### Database Design Principles
 

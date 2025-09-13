@@ -1,361 +1,290 @@
-"""Tests for the Task Planning Agent with restructured response and LLMService integration."""
+"""Tests for Task Planning Agents with deferred tools."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from pydantic_ai import ApprovalRequired
 
+from devboard.agents.deps import BaseDeps
 from devboard.agents.task_agent import (
-    DocumentType,
-    TaskDeps,
+    TaskPlanningAgent,
     TaskSpecificationAgent,
-    TaskState,
 )
-from devboard.api.schemas.task import DocumentEdit, TaskPlanningResponse
-from devboard.services.context_assembly import (
-    EagerContextData,
-    OnDemandResourceInfo,
-    ProjectContextData,
-)
+from devboard.api.schemas import DocumentEdit
+from devboard.db.models import Document, Task
+from devboard.db.models.document import DocumentType
+from devboard.db.models.task import TaskStatus
+from devboard.db.repositories import DocumentRepository
 
 
-class TestTaskPlanningResponse:
-    """Test the restructured TaskPlanningResponse schema."""
+class TestTaskSpecificationAgent:
+    """Test the TaskSpecificationAgent for the Designing state."""
 
-    def test_task_planning_response_creation(self):
-        """Test creating TaskPlanningResponse with new structure."""
-        response = TaskPlanningResponse(
-            message="Task specification updated successfully.",
-            task_specification_edits=[DocumentEdit(find="old text", replace="new text")],
-            task_implementation_plan_edits=[
-                DocumentEdit(find="TODO", replace="Implement feature X")
-            ],
-        )
+    @pytest.fixture
+    def mock_task(self):
+        """Create a mock task with specification document."""
+        task = Mock(spec=Task)
+        task.id = 1
+        task.name = "Test Task"
+        task.status = TaskStatus.DEFINING
+        
+        # Mock specification document
+        spec_doc = Mock(spec=Document)
+        spec_doc.id = 10
+        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
+        spec_doc.content = "# Task Specification\n\nInitial content"
+        task.specification = spec_doc
+        
+        # Mock implementation plan document
+        plan_doc = Mock(spec=Document)
+        plan_doc.id = 11
+        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
+        plan_doc.content = "# Implementation Plan\n\nEmpty"
+        task.implementation_plan = plan_doc
+        
+        return task
 
-        assert response.message == "Task specification updated successfully."
-        assert len(response.task_specification_edits) == 1
-        assert len(response.task_implementation_plan_edits) == 1
-        assert response.task_specification_edits[0].find == "old text"
-        assert response.task_implementation_plan_edits[0].replace == "Implement feature X"
+    @pytest.fixture
+    def mock_document_repo(self):
+        """Create a mock document repository."""
+        repo = Mock(spec=DocumentRepository)
+        repo.update_content = Mock()
+        return repo
 
-    def test_task_planning_response_optional_edits(self):
-        """Test TaskPlanningResponse with optional edit fields."""
-        response = TaskPlanningResponse(message="No changes needed at this time.")
+    @pytest.fixture
+    def agent(self, mock_task, mock_document_repo):
+        """Create TaskSpecificationAgent instance."""
+        with (
+            patch("devboard.agents.base_agent.llm_service") as mock_llm,
+            patch("devboard.agents.base_agent.context_assembly_service") as mock_context,
+        ):
+            mock_llm.get_preferred_model_for_agent.return_value = "test"
+            return TaskSpecificationAgent(
+                task=mock_task,
+                document_repository=mock_document_repo
+            )
 
-        assert response.message == "No changes needed at this time."
-        assert response.task_specification_edits is None
-        assert response.task_implementation_plan_edits is None
+    def test_agent_initialization(self, agent, mock_task):
+        """Test agent initializes with correct task and document."""
+        assert agent.task == mock_task
+        assert agent.agent_type.value == "task_specification"
 
-    def test_task_planning_response_empty_edits(self):
-        """Test TaskPlanningResponse with empty edit arrays."""
-        response = TaskPlanningResponse(
-            message="Review completed.",
-            task_specification_edits=[],
-            task_implementation_plan_edits=[],
-        )
+    def test_system_prompt(self, agent):
+        """Test agent has appropriate system prompt."""
+        prompt = agent._get_system_prompt()
+        assert "Task Specification Assistant" in prompt
+        assert "Designing" in prompt
+        assert "Edit the Task Specification document only" in prompt
 
-        assert response.message == "Review completed."
-        assert response.task_specification_edits == []
-        assert response.task_implementation_plan_edits == []
+    def test_get_tools(self, agent, mock_task):
+        """Test agent creates correct tools for Designing state."""
+        tools = agent._get_tools()
+        
+        # Should have one tool for editing specification
+        assert len(tools) == 1
+        tool = tools[0]
+        
+        # Tool should be for editing specification document
+        assert tool.name == f"edit_{DocumentType.TASK_SPECIFICATION}"
+
+    @pytest.mark.asyncio
+    async def test_context_message_content(self, agent, mock_task):
+        """Test context message includes specification content."""
+        deps = BaseDeps()
+        content = await agent._get_context_message_content(deps)
+        
+        assert "TASK SPECIFICATION DOCUMENT:" in content
+        assert mock_task.specification.content in content
+        assert "Implementation Plan" not in content  # Should not include plan in Designing state
+
+
+class TestTaskPlanningAgent:
+    """Test the TaskPlanningAgent for the Planning state."""
+
+    @pytest.fixture
+    def mock_task(self):
+        """Create a mock task with both documents."""
+        task = Mock(spec=Task)
+        task.id = 2
+        task.name = "Planning Task"
+        task.status = TaskStatus.PLANNING
+        
+        # Mock specification document
+        spec_doc = Mock(spec=Document)
+        spec_doc.id = 20
+        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
+        spec_doc.content = "# Task Specification\n\nDetailed spec"
+        task.specification = spec_doc
+        
+        # Mock implementation plan document
+        plan_doc = Mock(spec=Document)
+        plan_doc.id = 21
+        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
+        plan_doc.content = "# Implementation Plan\n\nPlan content"
+        task.implementation_plan = plan_doc
+        
+        return task
+
+    @pytest.fixture
+    def mock_document_repo(self):
+        """Create a mock document repository."""
+        repo = Mock(spec=DocumentRepository)
+        repo.update_content = Mock()
+        return repo
+
+    @pytest.fixture
+    def agent(self, mock_task, mock_document_repo):
+        """Create TaskPlanningAgent instance."""
+        with (
+            patch("devboard.agents.base_agent.llm_service") as mock_llm,
+            patch("devboard.agents.base_agent.context_assembly_service") as mock_context,
+        ):
+            mock_llm.get_preferred_model_for_agent.return_value = "test"
+            return TaskPlanningAgent(
+                task=mock_task,
+                document_repository=mock_document_repo
+            )
+
+    def test_agent_initialization(self, agent, mock_task):
+        """Test agent initializes with correct task."""
+        assert agent.task == mock_task
+        assert agent.agent_type.value == "task_planning"
+
+    def test_system_prompt(self, agent):
+        """Test agent has appropriate system prompt for Planning state."""
+        prompt = agent._get_system_prompt()
+        assert "Task Planning Assistant" in prompt
+        assert "Planning" in prompt
+        assert "Edit both Task Specification and Implementation Plan" in prompt
+
+    def test_get_tools(self, agent, mock_task):
+        """Test agent creates tools for both documents in Planning state."""
+        tools = agent._get_tools()
+        
+        # Should have two tools for editing both documents
+        assert len(tools) == 2
+        
+        tool_names = [tool.name for tool in tools]
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_context_message_content(self, agent, mock_task):
+        """Test context message includes both documents."""
+        deps = BaseDeps()
+        content = await agent._get_context_message_content(deps)
+        
+        assert "TASK SPECIFICATION DOCUMENT:" in content
+        assert mock_task.specification.content in content
+        assert "TASK IMPLEMENTATION PLAN DOCUMENT:" in content
+        assert mock_task.implementation_plan.content in content
+
+
+class TestDocumentEditTool:
+    """Test the document editing tool creation and behavior."""
+
+    @pytest.fixture
+    def mock_document(self):
+        """Create a mock document."""
+        doc = Mock(spec=Document)
+        doc.id = 100
+        doc.document_type = DocumentType.TASK_SPECIFICATION
+        doc.content = "Original content"
+        return doc
+
+    @pytest.fixture
+    def mock_document_repo(self):
+        """Create a mock document repository."""
+        repo = Mock(spec=DocumentRepository)
+        repo.update_content = Mock()
+        return repo
+
+    def test_tool_creation(self, mock_document, mock_document_repo):
+        """Test document edit tool is created correctly."""
+        from devboard.agents.tools import create_document_edit_tool
+        
+        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        
+        assert tool.name == f"edit_{mock_document.document_type}"
+        assert tool.requires_approval == True
+
+    def test_tool_pre_validation_success(self, mock_document, mock_document_repo):
+        """Test tool validates edits before approval."""
+        from devboard.agents.tools import create_document_edit_tool
+        
+        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        
+        # Create a mock context
+        ctx = MagicMock()
+        ctx.tool_call_approved = False  # Not approved yet
+        
+        edits = [DocumentEdit(find="Original", replace="Modified")]
+        
+        # Tool should raise ApprovalRequired for valid edits
+        with pytest.raises(ApprovalRequired):
+            tool.function(ctx, edits, "Test edit")
+
+    def test_tool_pre_validation_failure(self, mock_document, mock_document_repo):
+        """Test tool returns error for invalid edits."""
+        from devboard.agents.tools import create_document_edit_tool
+        
+        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        
+        # Create a mock context
+        ctx = MagicMock()
+        ctx.tool_call_approved = False
+        
+        # Invalid edit (text not found)
+        edits = [DocumentEdit(find="NonExistent", replace="Modified")]
+        
+        # Should return error message, not raise ApprovalRequired
+        result = tool.function(ctx, edits, "Test edit")
+        assert "Failed to apply edits" in result
+
+    def test_tool_applies_approved_edits(self, mock_document, mock_document_repo):
+        """Test tool applies edits when approved."""
+        from devboard.agents.tools import create_document_edit_tool
+        
+        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        
+        # Create a mock context with approval
+        ctx = MagicMock()
+        ctx.tool_call_approved = True  # Approved
+        
+        edits = [DocumentEdit(find="Original", replace="Modified")]
+        
+        # Should apply edits and update document
+        result = tool.function(ctx, edits, "Test edit")
+        
+        assert "successfully" in result
+        # Verify repository update was called
+        mock_document_repo.update_content.assert_called_once()
+        # Check the new content
+        args = mock_document_repo.update_content.call_args[0]
+        assert args[0] == mock_document
+        assert "Modified content" == args[1]
 
 
 class TestDocumentEdit:
-    """Test the simplified DocumentEdit schema."""
+    """Test the DocumentEdit schema."""
 
     def test_document_edit_creation(self):
-        """Test creating DocumentEdit with simplified schema."""
+        """Test creating DocumentEdit objects."""
         edit = DocumentEdit(find="old text", replace="new text")
-
+        
         assert edit.find == "old text"
         assert edit.replace == "new text"
 
-    def test_document_edit_validation(self):
-        """Test DocumentEdit validation."""
-        # Valid edit
-        edit = DocumentEdit(find="find", replace="replace")
-        assert edit.find == "find"
-        assert edit.replace == "replace"
-
-        # Empty strings should be allowed (for clearing content)
-        empty_replace = DocumentEdit(find="text", replace="")
-        assert empty_replace.replace == ""
-
     def test_document_edit_serialization(self):
-        """Test DocumentEdit serialization to dict."""
-        edit = DocumentEdit(find="old", replace="new")
-        edit_dict = edit.model_dump()
+        """Test DocumentEdit serialization."""
+        edit = DocumentEdit(find="find this", replace="replace with this")
+        
+        data = edit.model_dump()
+        assert data == {"find": "find this", "replace": "replace with this"}
 
-        expected = {"find": "old", "replace": "new"}
-        assert edit_dict == expected
-
-
-class TestTaskPlanningAgentService:
-    """Test the Task Planning Agent service with updated architecture."""
-
-    @pytest.fixture
-    def mock_context_service(self):
-        """Mock context assembly service."""
-        service = Mock()
-        service.get_project_context = AsyncMock()
-        return service
-
-    @pytest.fixture
-    def agent_service(self, mock_context_service):
-        """Create agent service with mocked dependencies."""
-        with patch("devboard.agents.task_planning_agent.llm_service") as mock_llm_service:
-            mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-            return TaskSpecificationAgent(context_service=mock_context_service)
-
-    @pytest.fixture
-    def sample_context_data(self):
-        """Sample project context data."""
-        return ProjectContextData(
-            eager_context=[
-                EagerContextData(
-                    provider_type="github",
-                    uri="https://github.com/org/repo",
-                    description="Main repository",
-                    data={"content": "Repository content..."},
-                )
-            ],
-            on_demand_resources=[
-                OnDemandResourceInfo(
-                    provider_type="jira",
-                    uri="https://jira.company.com/PROJECT-123",
-                    description="Related Jira ticket",
-                    has_user_description=True,
-                )
-            ],
-            provider_errors=[],
-        )
-
-    def test_task_state_enum(self):
-        """Test TaskState enum values."""
-        assert TaskState.DESIGNING == "Designing"
-        assert TaskState.PLANNING == "Planning"
-
-    def test_document_type_enum(self):
-        """Test DocumentType enum values."""
-        assert DocumentType.SPECIFICATION == "specification"
-        assert DocumentType.IMPLEMENTATION_PLAN == "implementation_plan"
-
-    def test_task_context_creation(self, sample_context_data):
-        """Test TaskContext creation."""
-        context = TaskDeps(
-            task_id=1,
-            task_title="Test Task",
-            task_description="Description",
-            task_implementation_plan="Plan",
-            task_state=TaskState.DESIGNING,
-            project_id=100,
-            eager_context=sample_context_data.eager_context,
-            on_demand_resources=sample_context_data.on_demand_resources,
-        )
-
-        assert context.task_id == 1
-        assert context.task_title == "Test Task"
-        assert context.task_state == TaskState.DESIGNING
-        assert len(context.eager_context) == 1
-        assert len(context.on_demand_resources) == 1
-
-    def test_agent_creation_with_llm_service(self, agent_service):
-        """Test that agents are created with LLMService model selection."""
-
-        # Access the agents to trigger creation
-        agents = agent_service.agents
-
-        # Verify agents were created for each task state
-        assert len(agents) == len(TaskState)
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    @pytest.mark.asyncio
-    async def test_process_message_with_template_initialization(
-        self, mock_llm_service, agent_service, mock_context_service, sample_context_data
-    ):
-        """Test message processing with template initialization."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-        mock_context_service.get_project_context.return_value = sample_context_data
-
-        # Mock the agent run result
-        mock_response = TaskPlanningResponse(
-            message="Template initialized with task details.",
-            task_specification_edits=[DocumentEdit(find="[Title]", replace="Test Task")],
-        )
-
-        # Mock the agent run method
-        with patch.object(
-            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
-        ) as mock_run:
-            mock_result = Mock()
-            mock_result.output = mock_response
-            mock_run.return_value = mock_result
-
-            result = await agent_service.process_message(
-                task_id=1,
-                task_title="Test Task",
-                task_description=None,  # Should trigger template initialization
-                task_implementation_plan=None,
-                task_state="Designing",
-                project_id=100,
-                user_message="Please help me create a task specification.",
-            )
-
-            assert result.message == "Template initialized with task details."
-            assert result.task_specification_edits is not None
-            assert len(result.task_specification_edits) == 1
-            mock_run.assert_called_once()
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    @pytest.mark.asyncio
-    async def test_process_message_different_states(
-        self, mock_llm_service, agent_service, mock_context_service, sample_context_data
-    ):
-        """Test that different task states use different agents."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-        mock_context_service.get_project_context.return_value = sample_context_data
-
-        mock_response = TaskPlanningResponse(message="State-specific response")
-        mock_result = Mock()
-        mock_result.output = mock_response
-
-        # Test Designing state
-        with patch.object(
-            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
-        ) as mock_designing_run:
-            mock_designing_run.return_value = mock_result
-
-            await agent_service.process_message(
-                task_id=1,
-                task_title="Test",
-                task_description="desc",
-                task_implementation_plan=None,
-                task_state="Designing",
-                project_id=100,
-                user_message="test",
-            )
-
-            mock_designing_run.assert_called_once()
-
-        # Test Planning state
-        with patch.object(
-            agent_service.agents[TaskState.PLANNING], "run", new_callable=AsyncMock
-        ) as mock_planning_run:
-            mock_planning_run.return_value = mock_result
-
-            await agent_service.process_message(
-                task_id=1,
-                task_title="Test",
-                task_description="desc",
-                task_implementation_plan="plan",
-                task_state="Planning",
-                project_id=100,
-                user_message="test",
-            )
-
-            mock_planning_run.assert_called_once()
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    def test_build_context_summary(self, mock_llm_service, agent_service, sample_context_data):
-        """Test context summary building."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-
-        summary = agent_service._build_context_summary(sample_context_data)
-
-        assert "EAGER CONTEXT (pre-loaded):" in summary
-        assert "ON_DEMAND RESOURCES (use get_relevant_context tool):" in summary
-        assert "github" in summary
-        assert "jira" in summary
-        assert "Main repository" in summary
-        assert "Related Jira ticket" in summary
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    def test_build_documents_info_designing_state(self, mock_llm_service, agent_service):
-        """Test document info building for Designing state."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-
-        info = agent_service._build_documents_info(
-            description="Current task description",
-            implementation_plan=None,
-            state=TaskState.DESIGNING,
-        )
-
-        assert "TASK SPECIFICATION (editable):" in info
-        assert "Current task description" in info
-        assert "IMPLEMENTATION PLAN" not in info
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    def test_build_documents_info_planning_state(self, mock_llm_service, agent_service):
-        """Test document info building for Planning state."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-
-        info = agent_service._build_documents_info(
-            description="Task description",
-            implementation_plan="Implementation plan",
-            state=TaskState.PLANNING,
-        )
-
-        assert "TASK SPECIFICATION (editable):" in info
-        assert "IMPLEMENTATION PLAN (editable):" in info
-        assert "Task description" in info
-        assert "Implementation plan" in info
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    @pytest.mark.asyncio
-    async def test_error_handling(self, mock_llm_service, agent_service, mock_context_service):
-        """Test error handling in message processing."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-        mock_context_service.get_project_context.side_effect = Exception("Context error")
-
-        result = await agent_service.process_message(
-            task_id=1,
-            task_title="Test",
-            task_description="desc",
-            task_implementation_plan=None,
-            task_state="Designing",
-            project_id=100,
-            user_message="test",
-        )
-
-        assert "I encountered an error processing your message" in result.message
-        assert "Context error" in result.message
-
-    @patch("devboard.agents.task_planning_agent.llm_service")
-    @patch("devboard.agents.task_planning_agent.template_service")
-    @pytest.mark.asyncio
-    async def test_template_service_integration(
-        self,
-        mock_template_service,
-        mock_llm_service,
-        agent_service,
-        mock_context_service,
-        sample_context_data,
-    ):
-        """Test integration with template service."""
-        mock_llm_service.get_preferred_model_for_agent.return_value = "openai:gpt-4o"
-        mock_context_service.get_project_context.return_value = sample_context_data
-        mock_template_service.get_template.return_value = (
-            "# Task Specification: [Title]\n\nTemplate content"
-        )
-
-        mock_response = TaskPlanningResponse(message="Template applied")
-        mock_result = Mock()
-        mock_result.output = mock_response
-
-        with patch.object(
-            agent_service.agents[TaskState.DESIGNING], "run", new_callable=AsyncMock
-        ) as mock_run:
-            mock_run.return_value = mock_result
-
-            await agent_service.process_message(
-                task_id=1,
-                task_title="Test Task",
-                task_description=None,  # Should trigger template
-                task_implementation_plan=None,
-                task_state="Designing",
-                project_id=100,
-                user_message="Initialize spec",
-            )
-
-            # Verify template service was called with correct TemplateType
-            from devboard.services.template_service import TemplateType
-
-            mock_template_service.get_template.assert_called_with(TemplateType.TASK_SPECIFICATION)
+    def test_document_edit_empty_replace(self):
+        """Test DocumentEdit allows empty replacement (deletion)."""
+        edit = DocumentEdit(find="remove this", replace="")
+        
+        assert edit.find == "remove this"
+        assert edit.replace == ""

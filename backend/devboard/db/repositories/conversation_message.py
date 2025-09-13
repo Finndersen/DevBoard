@@ -11,7 +11,9 @@ from devboard.db.repositories.base import BaseRepository
 MessageT = TypeVar("MessageT", bound=BaseConversationMessage)
 
 
-class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversationMessage]):
+class BaseConversationMessageRepository[MessageT](
+    BaseRepository[BaseConversationMessage]
+):
     """
     Abstract base repository for Project and Task conversation messages
     """
@@ -22,14 +24,16 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         self, entity_id: int, exclude_tool_calls: bool = False
     ) -> list[MessageT]:
         """Get all messages for an entity (task or project)."""
-        stmt = select(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
+        stmt = select(self.MESSAGE_MODEL).where(
+            self.MESSAGE_MODEL.parent_id == entity_id
+        )
         if exclude_tool_calls:
             stmt = stmt.where(
                 self.MESSAGE_MODEL.message_type.not_in_(
                     [MessageType.TOOL_CALL, MessageType.TOOL_RESULT]
                 )
             )
-        stmt = stmt.order_by(self.MESSAGE_MODEL.created_at.asc())
+        stmt = stmt.order_by(self.MESSAGE_MODEL.timestamp.asc())
         return list(self.db.execute(stmt).scalars().all())
 
     def get_by_id(self, message_id: int) -> MessageT | None:
@@ -91,12 +95,16 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         Returns:
             Number of messages deleted
         """
-        stmt = delete(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
+        stmt = delete(self.MESSAGE_MODEL).where(
+            self.MESSAGE_MODEL.parent_id == entity_id
+        )
         result = self.db.execute(stmt)
         return result.rowcount
 
 
-class TaskConversationMessageRepository(BaseConversationMessageRepository[TaskConversationMessage]):
+class TaskConversationMessageRepository(
+    BaseConversationMessageRepository[TaskConversationMessage]
+):
     """Repository for task conversation message data access operations."""
 
     MESSAGE_MODEL = TaskConversationMessage
@@ -108,3 +116,11 @@ class ProjectConversationMessageRepository(
     """Repository for project conversation message data access operations."""
 
     MESSAGE_MODEL = ProjectConversationMessage
+
+    def get_by_project(self, project_id: int) -> list[ProjectConversationMessage]:
+        """Get all messages for a project ordered by timestamp."""
+        return self.get_all_for_entity(project_id)
+
+    def delete_by_project(self, project_id: int) -> int:
+        """Delete all messages for a project."""
+        return self.delete_all_for_entity(project_id)

@@ -7,18 +7,31 @@ from pydantic import BaseModel
 
 
 class ConfigurationFieldInfo(BaseModel):
-    """Information about a single configuration field with source tracking."""
+    """Information about a single configuration field with explicit value sources."""
 
     name: str
     type: str  # "string", "boolean", "integer", "number"
     required: bool
     description: str | None = None
-    current_value: Any | None = None
-    value_source: str | None = None  # "environment", "database", "default"
+    env_value: Any | None = None      # Value from environment variable
+    db_value: Any | None = None       # Value from database (override)
+    default_value: Any | None = None  # Value from schema default
     is_secret: bool = False
     env_var_name: str | None = None
-    default_value: Any | None = None
-    env_value_present: bool = False
+
+    @property
+    def is_overridden(self) -> bool:
+        """True if there is a database override value."""
+        return self.db_value is not None
+
+    @property
+    def effective_value(self) -> Any:
+        """The effective value using priority hierarchy: db_value > env_value > default_value."""
+        if self.db_value is not None:
+            return self.db_value
+        if self.env_value is not None:
+            return self.env_value
+        return self.default_value
 
 
 class ConfigurationDetailResponse(BaseModel):
@@ -55,63 +68,5 @@ class ConfigurationResponse(ConfigurationBase):
     """Schema for configuration responses."""
 
     updated_at: datetime.datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ContextProviderResourceBase(BaseModel):
-    """Base context provider resource schema."""
-
-    provider_name: str
-    parent_id: int
-    parent_type: str
-    resource_uri: str
-    description: str | None = None
-    auto_generated_description: bool = True
-
-
-class ContextProviderResourceCreate(ContextProviderResourceBase):
-    """Schema for creating a new context provider resource."""
-
-    pass
-
-
-class ContextProviderResourceUpdate(BaseModel):
-    """Schema for updating a context provider resource."""
-
-    provider_name: str | None = None
-    resource_uri: str | None = None
-    description: str | None = None
-    auto_generated_description: bool | None = None
-
-
-class ContextProviderResourceResponse(ContextProviderResourceBase):
-    """Schema for context provider resource responses."""
-
-    id: int
-
-    model_config = {"from_attributes": True}
-
-
-class ProjectResourceCreate(BaseModel):
-    """Schema for creating a context provider resource for a project."""
-
-    resource_uri: str
-    description: str | None = None
-
-
-class TaskResourceCreate(BaseModel):
-    """Schema for creating a context provider resource for a task."""
-
-    resource_uri: str
-    description: str | None = None
-
-
-class ResourceResponse(BaseModel):
-    """Schema for context provider resource responses in domain-specific endpoints."""
-
-    id: int
-    resource_uri: str
-    description: str | None = None
 
     model_config = {"from_attributes": True}

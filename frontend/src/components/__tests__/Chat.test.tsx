@@ -15,20 +15,20 @@ describe('Chat', () => {
     // Mock scrollIntoView which is not available in jsdom
     Element.prototype.scrollIntoView = vi.fn()
     
-    // Setup default API responses
+    // Setup default API responses for new agent conversation API
     server.use(
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/1/agent/messages', () => {
         return HttpResponse.json([
           {
-            id: '1',
-            content: 'What is the status?',
+            id: 1,
+            text_content: 'What is the status?',
             role: 'user',
             timestamp: '2024-01-01T10:00:00Z',
           },
           {
-            id: '2',
-            content: 'The project is progressing well.',
-            role: 'assistant',
+            id: 2,
+            text_content: 'The project is progressing well.',
+            role: 'agent',
             timestamp: '2024-01-01T10:01:00Z',
           },
         ])
@@ -79,10 +79,17 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/qa/ask', async ({ request }) => {
+      http.post('*/api/projects/1/agent/messages', async ({ request }) => {
         const { message } = await request.json() as { message: string }
         return HttpResponse.json({
-          response: `AI response to: ${message}`,
+          type: 'message',
+          message: {
+            id: 3,
+            text_content: `AI response to: ${message}`,
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
         })
       })
     )
@@ -117,8 +124,17 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/qa/ask', () => {
-        return HttpResponse.json({ response: 'AI response' })
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: 3,
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
       })
     )
 
@@ -165,9 +181,18 @@ describe('Chat', () => {
     
     // Delay the API response to test loading state
     server.use(
-      http.post('*/api/projects/1/qa/ask', async () => {
+      http.post('*/api/projects/1/agent/messages', async () => {
         await new Promise(resolve => setTimeout(resolve, 200))
-        return HttpResponse.json({ response: 'AI response' })
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: 3,
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
       })
     )
 
@@ -196,7 +221,7 @@ describe('Chat', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/1/agent/messages', () => {
         return new HttpResponse(null, { status: 500 })
       })
     )
@@ -215,7 +240,7 @@ describe('Chat', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
-      http.post('*/api/projects/1/qa/ask', () => {
+      http.post('*/api/projects/1/agent/messages', () => {
         return new HttpResponse(null, { status: 500 })
       })
     )
@@ -243,11 +268,11 @@ describe('Chat', () => {
     const testDate = '2024-01-01T15:30:00Z'
     
     server.use(
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/1/agent/messages', () => {
         return HttpResponse.json([
           {
-            id: '1',
-            content: 'Test message',
+            id: 1,
+            text_content: 'Test message',
             role: 'user',
             timestamp: testDate,
           },
@@ -271,8 +296,17 @@ describe('Chat', () => {
     const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
     
     server.use(
-      http.post('*/api/projects/1/qa/ask', () => {
-        return HttpResponse.json({ response: 'AI response' })
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: 3,
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
       })
     )
 
@@ -300,27 +334,27 @@ describe('Chat', () => {
   it('displays messages in chronological order', async () => {
     const messages = [
       {
-        id: '1',
-        content: 'First message',
+        id: 1,
+        text_content: 'First message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:00:00Z',
       },
       {
-        id: '2',
-        content: 'Second message',
-        role: 'assistant' as const,
+        id: 2,
+        text_content: 'Second message',
+        role: 'agent' as const,
         timestamp: '2024-01-01T10:01:00Z',
       },
       {
-        id: '3',
-        content: 'Third message',
+        id: 3,
+        text_content: 'Third message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:02:00Z',
       },
     ]
 
     server.use(
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/1/agent/messages', () => {
         return HttpResponse.json(messages)
       })
     )
@@ -337,9 +371,125 @@ describe('Chat', () => {
     expect(messageElements[2]).toHaveTextContent('Third message')
   })
 
+  it('handles tool approval workflow for document editing', async () => {
+    const user = userEvent.setup()
+    
+    // Mock agent requesting tool approval
+    server.use(
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'tool_request',
+          message: null,
+          tool_requests: [{
+            tool_call_id: 'edit_123',
+            tool_name: 'edit_project_specification',
+            tool_args: {
+              edits: [
+                { find: 'old text', replace: 'new text' }
+              ],
+              reasoning: 'Updating project specification'
+            }
+          }]
+        })
+      }),
+      
+      // Mock approval endpoint
+      http.post('*/api/projects/1/agent/approve-tools', () => {
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: 4,
+            text_content: 'Successfully updated the project specification.',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
+      })
+    )
+
+    render(<Chat projectId={mockProjectId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    await user.type(input, 'Please update the project specification')
+    await user.click(sendButton)
+
+    // Should show pending approval
+    await waitFor(() => {
+      expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
+      expect(screen.getByText('Updating project specification')).toBeInTheDocument()
+      expect(screen.getByText('old text')).toBeInTheDocument()
+      expect(screen.getByText('new text')).toBeInTheDocument()
+    })
+
+    // Input should be disabled while approval is pending
+    expect(input).toBeDisabled()
+    expect(sendButton).toBeDisabled()
+
+    // Find and click approve button
+    const approveButton = screen.getByRole('button', { name: /approve/i })
+    await user.click(approveButton)
+
+    // Should show success response
+    await waitFor(() => {
+      expect(screen.getByText('Successfully updated the project specification.')).toBeInTheDocument()
+    })
+
+    // Input should be enabled again
+    expect(input).not.toBeDisabled()
+  })
+
+  it('prevents sending messages while tool approval is pending', async () => {
+    const user = userEvent.setup()
+    
+    server.use(
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'tool_request',
+          message: null,
+          tool_requests: [{
+            tool_call_id: 'edit_123',
+            tool_name: 'edit_project_specification',
+            tool_args: { edits: [], reasoning: 'Test' }
+          }]
+        })
+      })
+    )
+
+    render(<Chat projectId={mockProjectId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    await user.type(input, 'Test message')
+    await user.click(sendButton)
+
+    // Wait for approval to appear
+    await waitFor(() => {
+      expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
+    })
+
+    // Input should be disabled
+    expect(input).toBeDisabled()
+    expect(sendButton).toBeDisabled()
+    
+    // Should show helpful message
+    expect(screen.getByText(/Please review and approve.*pending tool requests/i)).toBeInTheDocument()
+  })
+
   it('handles empty chat history gracefully', async () => {
     server.use(
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/1/agent/messages', () => {
         return HttpResponse.json([])
       })
     )
@@ -358,8 +508,17 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/qa/ask', () => {
-        return HttpResponse.json({ response: 'AI response' })
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: 3,
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
       })
     )
 
@@ -387,8 +546,17 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/qa/ask', () => {
-        return HttpResponse.json({ response: 'AI response' })
+      http.post('*/api/projects/1/agent/messages', () => {
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            id: Date.now(),
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
       })
     )
 

@@ -1,189 +1,270 @@
-"""Tests for BaseAgentService."""
+"""Tests for BaseAgent abstract class."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.tools import DeferredToolApprovalResult
 
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
 from devboard.agents.types import AgentType
-from devboard.api.schemas.task import DocumentEdit
 
 
-class MockBaseDeps(BaseDeps):
-    """Mock context for BaseAgentService testing."""
-
+class MockDeps(BaseDeps):
+    """Mock dependencies for testing."""
+    
     test_field: str = "test_value"
 
 
-class MockBaseAgent(BaseAgent):
-    """Mock implementation of BaseAgentService."""
+class MockAgent(BaseAgent):
+    """Mock implementation of BaseAgent for testing."""
 
-    def __init__(self):
-        super().__init__(AgentType.PROJECT, None)
-
-    def _create_agent(self):
-        return MagicMock()
+    agent_type = AgentType.PROJECT
+    deps_type = MockDeps
 
     def _get_system_prompt(self) -> str:
         return "Test system prompt"
 
+    def _get_tools(self):
+        return []
 
-class TestBaseAgentServiceUnit:
-    """Test BaseAgentService functionality."""
+    async def _get_context_message_content(self, deps: MockDeps) -> str:
+        return "Test context"
+
+
+class TestBaseAgent:
+    """Test BaseAgent abstract class functionality."""
 
     @pytest.fixture
-    def base_agent_service(self):
-        """Create test BaseAgentService instance."""
-        return MockBaseAgent()
+    def mock_llm_service(self):
+        """Mock LLM service to avoid database dependencies."""
+        with patch("devboard.agents.base_agent.llm_service") as mock_service:
+            mock_service.get_preferred_model_for_agent.return_value = "test"
+            yield mock_service
 
     @pytest.fixture
-    def mock_agent_result(self):
-        """Mock agent result with messages."""
-        mock_result = MagicMock()
-        mock_result.all_messages.return_value = [
-            {"kind": "request", "parts": [{"text": "Test user message"}]},
-            {"kind": "response", "parts": [{"text": "Test agent response"}]},
-        ]
-        return mock_result
+    def mock_context_service(self):
+        """Mock context assembly service."""
+        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
+            yield mock_service
 
-    def test_serialize_messages(self, base_agent_service, mock_agent_result):
-        """Test message serialization."""
-        result = base_agent_service.serialize_messages(mock_agent_result)
+    @pytest.fixture
+    def mock_agent_instance(self, mock_llm_service, mock_context_service):
+        """Create mock agent instance with mocked dependencies."""
+        return MockAgent()
 
-        assert isinstance(result, list)
-        assert len(result) == 2
-        assert result[0]["kind"] == "request"
-        assert result[1]["kind"] == "response"
+    def test_agent_initialization(self, mock_agent_instance):
+        """Test agent initializes with correct properties."""
+        assert mock_agent_instance.agent_type == AgentType.PROJECT
+        assert mock_agent_instance.deps_type == MockDeps
 
-    def test_extract_message_history_from_records_empty(self, base_agent_service):
-        """Test extracting message history from empty records."""
-        result = base_agent_service.extract_message_history_from_records([])
+    def test_get_system_prompt(self, mock_agent_instance):
+        """Test system prompt is implemented."""
+        prompt = mock_agent_instance._get_system_prompt()
+        assert prompt == "Test system prompt"
 
-        assert result == []
+    def test_get_tools(self, mock_agent_instance):
+        """Test tools method returns list."""
+        tools = mock_agent_instance._get_tools()
+        assert isinstance(tools, list)
 
-    def test_extract_message_history_from_records_with_data(self, base_agent_service):
-        """Test extracting message history from database records."""
-        # Mock database records
-        mock_record1 = MagicMock()
-        mock_record1.message_type = "request"
-        mock_record1.pydantic_content = [{"kind": "request", "parts": [{"text": "User message"}]}]
+    @pytest.mark.asyncio
+    async def test_get_context_message_content(self, mock_agent_instance):
+        """Test context message content method."""
+        deps = MockDeps()
+        content = await mock_agent_instance._get_context_message_content(deps)
+        assert content == "Test context"
 
-        mock_record2 = MagicMock()
-        mock_record2.message_type = "response"
-        mock_record2.pydantic_content = [
-            {"kind": "response", "parts": [{"text": "Agent response"}]}
-        ]
-
-        records = [mock_record1, mock_record2]
-
-        result = base_agent_service.extract_message_history_from_records(records)
-
-        assert isinstance(result, list)
-        assert len(result) == 2
-
-    @patch("devboard.agents.base_agent.document_editor_service")
-    def test_create_document_edit_tool(self, mock_editor_service, base_agent_service):
-        """Test creating document edit tool."""
-        # Mock the document editor service
-        mock_editor_service.validate_edits.return_value = []
-
-        def get_current_content(ctx):
-            return "Current document content"
-
-        tool_func = base_agent_service.create_document_edit_tool(
-            "test_document", get_current_content
+    def test_get_preferred_model(self, mock_agent_instance, mock_llm_service):
+        """Test _get_preferred_model returns model from LLM service."""
+        # Reset the mock call count since it was called during initialization
+        mock_llm_service.get_preferred_model_for_agent.reset_mock()
+        mock_llm_service.get_preferred_model_for_agent.return_value = "test"
+        
+        model_name = mock_agent_instance._get_preferred_model()
+        assert model_name == "test"
+        mock_llm_service.get_preferred_model_for_agent.assert_called_once_with(
+            AgentType.PROJECT
         )
 
-        assert callable(tool_func)
+    def test_create_agent(self, mock_agent_instance):
+        """Test _create_agent creates PydanticAI Agent instance."""
+        agent = mock_agent_instance._create_agent()
+        
+        assert isinstance(agent, Agent)
+        # Verify agent has correct configuration
+        assert agent.deps_type == MockDeps
 
-    @patch("devboard.agents.base_agent.document_editor_service")
     @pytest.mark.asyncio
-    async def test_document_edit_tool_validation_success(
-        self, mock_editor_service, base_agent_service
-    ):
-        """Test document edit tool with successful validation."""
-        # Mock the document editor service
-        mock_editor_service.validate_edits.return_value = []  # Empty list means success
-
-        def get_current_content(ctx):
-            return "Current document content"
-
-        tool_func = base_agent_service.create_document_edit_tool(
-            "test_document", get_current_content
+    async def test_run_with_string_message(self, mock_agent_instance):
+        """Test run method with string message."""
+        # Mock the internal agent and result
+        mock_result = Mock()
+        mock_result.output = "Test response"
+        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        
+        # Mock deps
+        deps = MockDeps()
+        message_history: list[ModelMessage] = []
+        
+        result = await mock_agent_instance.run(
+            prompt_or_approvals="Test message",
+            message_history=message_history,
+            deps=deps
         )
+        
+        assert result == mock_result
+        mock_agent_instance.agent.run.assert_called_once()
+        
+        # Check that deps and message history were passed
+        call_args = mock_agent_instance.agent.run.call_args
+        assert call_args.kwargs['deps'] == deps
 
-        # Create mock context
-        mock_ctx = MagicMock()
-        mock_ctx.deps = MockBaseDeps()
-
-        # Test edits
-        edits = [DocumentEdit(find="old text", replace="new text")]
-
-        result = await tool_func(mock_ctx, edits, "Test edit reasoning")
-
-        assert "successfully validated" in result
-        mock_service_instance.validate_edits.assert_called_once()
-
-    @patch("devboard.agents.base_agent.document_editor_service")
     @pytest.mark.asyncio
-    async def test_document_edit_tool_validation_failure(
-        self, mock_editor_service, base_agent_service
-    ):
-        """Test document edit tool with validation failure."""
-        # Mock the document editor service
-        mock_editor_service.validate_edits.return_value = ["Text not found"]  # Error list
-
-        def get_current_content(ctx):
-            return "Current document content"
-
-        tool_func = base_agent_service.create_document_edit_tool(
-            "test_document", get_current_content
+    async def test_run_with_approval_results(self, mock_agent_instance):
+        """Test run method with approval results (deferred tool continuation)."""
+        # Mock approval results
+        mock_approvals = Mock(spec=DeferredToolApprovalResult)
+        
+        # Mock the internal agent and result
+        mock_result = Mock()
+        mock_result.output = "Continued response"
+        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        
+        # Mock deps
+        deps = MockDeps()
+        message_history: list[ModelMessage] = []
+        
+        result = await mock_agent_instance.run(
+            prompt_or_approvals=mock_approvals,
+            message_history=message_history,
+            deps=deps
         )
+        
+        assert result == mock_result
+        mock_agent_instance.agent.run.assert_called_once()
 
-        # Create mock context
-        mock_ctx = MagicMock()
-        mock_ctx.deps = MockBaseDeps()
+    @pytest.mark.asyncio 
+    async def test_run_with_message_history(self, mock_agent_instance):
+        """Test run method includes message history in agent context."""
+        # Mock message history
+        mock_messages: list[ModelMessage] = [Mock(spec=ModelMessage), Mock(spec=ModelMessage)]
+        
+        # Mock the internal agent and result
+        mock_result = Mock()
+        mock_result.output = "Response with history"
+        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        
+        # Mock deps
+        deps = MockDeps()
+        
+        result = await mock_agent_instance.run(
+            prompt_or_approvals="Test message",
+            message_history=mock_messages,
+            deps=deps
+        )
+        
+        assert result == mock_result
+        mock_agent_instance.agent.run.assert_called_once()
+        
+        # Verify message history was included (should be appended after initial context)
+        call_args = mock_agent_instance.agent.run.call_args
+        message_history_arg = call_args.kwargs.get('message_history', [])
+        # Should have initial context messages + our mock messages
+        assert len(message_history_arg) >= len(mock_messages)
 
-        # Test edits
-        edits = [DocumentEdit(find="nonexistent text", replace="new text")]
+    def test_agent_type_property(self, mock_agent_instance):
+        """Test agent_type property access."""
+        assert hasattr(mock_agent_instance, 'agent_type')
+        assert mock_agent_instance.agent_type == AgentType.PROJECT
 
-        result = await tool_func(mock_ctx, edits, "Test edit reasoning")
+    def test_deps_type_property(self, mock_agent_instance):
+        """Test deps_type property access."""
+        assert hasattr(mock_agent_instance, 'deps_type')
+        assert mock_agent_instance.deps_type == MockDeps
 
-        assert "validation failed" in result.lower()
-        assert "Text not found" in result
-        mock_service_instance.validate_edits.assert_called_once()
+    def test_abstract_methods_implemented(self, mock_agent_instance):
+        """Test that abstract methods are properly implemented."""
+        # All these should not raise NotImplementedError
+        prompt = mock_agent_instance._get_system_prompt()
+        assert isinstance(prompt, str)
+        
+        tools = mock_agent_instance._get_tools()
+        assert isinstance(tools, list)
 
     @pytest.mark.asyncio
-    async def test_process_message_with_history_not_implemented(self, base_agent_service):
-        """Test that process_message_with_history raises NotImplementedError."""
-        mock_context = MockBaseDeps()
-
-        with pytest.raises(NotImplementedError):
-            await base_agent_service.run("test message", [], mock_context)
+    async def test_abstract_context_method_implemented(self, mock_agent_instance):
+        """Test that abstract context method is implemented."""
+        deps = MockDeps()
+        content = await mock_agent_instance._get_context_message_content(deps)
+        assert isinstance(content, str)
 
     @pytest.mark.asyncio
-    async def test_process_tool_approval_not_implemented(self, base_agent_service):
-        """Test that process_tool_approval raises NotImplementedError."""
-        mock_context = MockBaseDeps()
+    async def test_build_system_and_context_messages(self, mock_agent_instance):
+        """Test building system and context messages."""
+        deps = MockDeps()
+        
+        result = await mock_agent_instance.build_system_and_context_messages(deps)
+        
+        # Should return a ModelRequest with system and user parts
+        assert hasattr(result, 'parts')
+        assert len(result.parts) >= 2  # At least system prompt and context message
 
-        with pytest.raises(NotImplementedError):
-            await base_agent_service.process_tool_approval([], [], mock_context)
 
-    def test_get_preferred_model_fallback(self, base_agent_service):
-        """Test _get_preferred_model returns fallback when no models available."""
-        with patch("devboard.agents.base_agent.llm_service") as mock_llm_service:
-            mock_llm_service.get_preferred_model_for_agent.return_value = None
+class ConcreteAgent(BaseAgent):
+    """Concrete implementation for testing abstract class requirements."""
+    
+    agent_type = AgentType.TASK_SPECIFICATION
+    deps_type = BaseDeps
+    
+    def _get_system_prompt(self) -> str:
+        return "Concrete system prompt"
+    
+    def _get_tools(self):
+        return []
+    
+    async def _get_context_message_content(self, deps: BaseDeps) -> str:
+        return "Concrete context"
 
-            result = base_agent_service._get_preferred_model()
 
-            assert result == "test"  # Fallback model
+class TestBaseAgentAbstract:
+    """Test that BaseAgent properly enforces abstract method implementation."""
+    
+    @pytest.fixture
+    def mock_llm_service_for_abstract(self):
+        """Mock LLM service for abstract tests."""
+        with patch("devboard.agents.base_agent.llm_service") as mock_service:
+            mock_service.get_preferred_model_for_agent.return_value = "test"
+            yield mock_service
 
-    def test_get_preferred_model_success(self, base_agent_service):
-        """Test _get_preferred_model returns preferred model when available."""
-        with patch("devboard.agents.base_agent.llm_service") as mock_llm_service:
-            mock_llm_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+    @pytest.fixture
+    def mock_context_service_for_abstract(self):
+        """Mock context assembly service for abstract tests."""
+        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
+            yield mock_service
+    
+    def test_concrete_implementation_works(self, mock_llm_service_for_abstract, mock_context_service_for_abstract):
+        """Test that concrete implementation can be instantiated."""
+        agent = ConcreteAgent()
+        assert agent.agent_type == AgentType.TASK_SPECIFICATION
+        assert agent.deps_type == BaseDeps
 
-            result = base_agent_service._get_preferred_model()
+    def test_abstract_enforcement(self):
+        """Test that BaseAgent cannot be instantiated directly."""
+        with pytest.raises(TypeError):
+            # This should fail because BaseAgent has abstract methods
+            BaseAgent()  # type: ignore
 
-            assert result == "openai/gpt-4"
+    def test_incomplete_implementation_fails(self):
+        """Test that incomplete implementations fail."""
+        
+        class IncompleteAgent(BaseAgent):
+            agent_type = AgentType.PROJECT
+            deps_type = BaseDeps
+            
+            # Missing _get_system_prompt, _get_tools, _get_context_message_content
+        
+        with pytest.raises(TypeError):
+            IncompleteAgent()  # type: ignore

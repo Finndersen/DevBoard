@@ -15,7 +15,7 @@ class TaskBase(BaseModel):
     title: str
     project_id: int
     codebase_id: int | None = None
-    status: str = "Pending"
+    status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
 
 
@@ -25,7 +25,7 @@ class TaskCreate(BaseModel):
     title: str
     project_id: int
     codebase_id: int | None = None
-    status: str = "Pending"
+    status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
 
 
@@ -34,7 +34,7 @@ class TaskCreateNested(BaseModel):
 
     title: str
     codebase_id: int | None = None
-    status: str = "Pending"
+    status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
 
 
@@ -42,7 +42,7 @@ class TaskUpdate(BaseModel):
     """Schema for updating a task."""
 
     title: str | None = None
-    status: str | None = None
+    status: TaskStatus | None = None
     remote_task_id: str | None = None
     conversation_id: str | None = None
 
@@ -59,51 +59,6 @@ class TaskResponse(TaskBase):
     implementation_plan: DocumentResponse | None = None
 
     model_config = {"from_attributes": True}
-
-
-# Task Planning Agent Schemas
-
-
-class DocumentEdit(BaseModel):
-    """Schema for a single document edit."""
-
-    find: str
-    replace: str
-
-
-class TaskPlanningResponse(BaseModel):
-    """Schema for Task Planning Agent structured response."""
-
-    message: str
-    task_specification_edits: list[DocumentEdit] | None = None
-    task_implementation_plan_edits: list[DocumentEdit] | None = None
-
-
-class TaskConversationMessage(BaseModel):
-    """Schema for task conversation message."""
-
-    id: int
-    task_id: int
-    role: str  # 'user', 'assistant', 'tool_call', 'tool_result'
-    content: str | None = None
-    tool_data: dict[str, str] | None = None
-    created_at: datetime.datetime
-
-    model_config = {"from_attributes": True}
-
-
-class TaskPlanningRequest(BaseModel):
-    """Schema for sending message to task planning agent."""
-
-    message: str
-
-
-class ApplyEditsRequest(BaseModel):
-    """Schema for applying document edits from agent."""
-
-    message_id: int
-    task_specification_edits: list[DocumentEdit] | None = None
-    task_implementation_plan_edits: list[DocumentEdit] | None = None
 
 
 class StateTransitionRequest(BaseModel):

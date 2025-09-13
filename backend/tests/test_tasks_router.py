@@ -1,8 +1,11 @@
 """Tests for tasks router."""
 
+import hashlib
 import pytest
 
-from devboard.db.models import Project, Task
+from devboard.db.models import Document, Project, Task
+from devboard.db.models.document import DocumentType
+from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,
@@ -15,8 +18,7 @@ def test_task_data():
     """Sample task data for testing."""
     return {
         "title": "Test Task",
-        "description": "Test task description",
-        "status": "todo",
+        "status": TaskStatus.DEFINING,
         "project_id": 1,
     }
 
@@ -41,19 +43,20 @@ class TestTasksRouter:
 
     def test_list_tasks_with_data(self, client, db_session, test_task_data):
         """Test listing tasks with existing data."""
-        # Create test project first
+        # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        project = Project(
-            name="Test Project", details="Test project details", current_status="active"
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
         )
-        created_project = project_repo.create(project)
-        db_session.commit()
-
-        # Create test task
-        test_task_data["project_id"] = created_project.id
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.get("/api/tasks/")
@@ -65,29 +68,34 @@ class TestTasksRouter:
 
     def test_list_tasks_filtered_by_project(self, client, db_session):
         """Test listing tasks filtered by project ID."""
-        # Create test projects first
+        # Create test projects using repository
         project_repo = ProjectRepository(db_session)
-        project1 = Project(name="Test Project 1", details="Test project 1", current_status="active")
-        project2 = Project(name="Test Project 2", details="Test project 2", current_status="active")
-        created_project1 = project_repo.create(project1)
-        created_project2 = project_repo.create(project2)
-        db_session.commit()
-
-        # Create tasks for different projects
+        created_project1 = project_repo.create(
+            name="Test Project 1",
+            description="A test project for development"
+        )
+        created_project2 = project_repo.create(
+            name="Test Project 2", 
+            description="A test project for development"
+        )
+        
+        # Create tasks for different projects using repository
         task_repo = TaskRepository(db_session)
-        task1 = Task(
-            title="Task 1", description="Task 1", status="todo", project_id=created_project1.id
+        task_repo.create(
+            project_id=created_project1.id,
+            title="Task 1",
+            status=TaskStatus.DEFINING
         )
-        task2 = Task(
-            title="Task 2", description="Task 2", status="todo", project_id=created_project2.id
+        task_repo.create(
+            project_id=created_project2.id,
+            title="Task 2",
+            status=TaskStatus.DEFINING
         )
-        task3 = Task(
-            title="Task 3", description="Task 3", status="todo", project_id=created_project1.id
+        task_repo.create(
+            project_id=created_project1.id,
+            title="Task 3",
+            status=TaskStatus.DEFINING
         )
-
-        task_repo.create(task1)
-        task_repo.create(task2)
-        task_repo.create(task3)
         db_session.commit()
 
         # Test filtering by project 1
@@ -106,34 +114,48 @@ class TestTasksRouter:
 
     def test_create_task(self, client, db_session, test_task_data):
         """Test creating a new task."""
-        # Create test project first
+        # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        project = Project(
-            name="Test Project", details="Test project details", current_status="active"
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
         )
-        created_project = project_repo.create(project)
         db_session.commit()
 
         # Update task data with actual project ID
         test_task_data["project_id"] = created_project.id
+        # Use the schema structure
+        api_task_data = {
+            "title": test_task_data["title"],
+            "status": test_task_data["status"].value,  # Convert enum to string
+            "project_id": test_task_data["project_id"]
+        }
 
-        response = client.post("/api/tasks/", json=test_task_data)
+        response = client.post("/api/tasks/", json=api_task_data)
         assert response.status_code == 200
 
         task_data = response.json()
         assert task_data["title"] == test_task_data["title"]
-        assert task_data["description"] == test_task_data["description"]
-        assert task_data["status"] == test_task_data["status"]
+        assert task_data["status"] == test_task_data["status"].value
         assert task_data["project_id"] == test_task_data["project_id"]
         assert "id" in task_data
 
     def test_get_task_success(self, client, db_session, test_task_data):
         """Test getting a specific task."""
-
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/tasks/{created_task.id}")
@@ -152,22 +174,30 @@ class TestTasksRouter:
 
     def test_update_task_success(self, client, db_session, test_task_data):
         """Test updating a task."""
-
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
-        update_data = {"title": "Updated Task Title", "status": "in_progress"}
+        update_data = {"title": "Updated Task Title", "status": TaskStatus.IMPLEMENTING.value}
         response = client.patch(f"/api/tasks/{created_task.id}", json=update_data)
         assert response.status_code == 200
 
         updated_task = response.json()
         assert updated_task["title"] == "Updated Task Title"
-        assert updated_task["status"] == "in_progress"
-        assert updated_task["description"] == test_task_data["description"]  # Unchanged
-        assert updated_task["project_id"] == test_task_data["project_id"]  # Unchanged
+        assert updated_task["status"] == TaskStatus.IMPLEMENTING.value
+        assert updated_task["project_id"] == created_project.id  # Unchanged
 
     def test_update_task_not_found(self, client):
         """Test updating a non-existent task."""
@@ -179,11 +209,20 @@ class TestTasksRouter:
 
     def test_delete_task_success(self, client, db_session, test_task_data):
         """Test deleting a task."""
-
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.delete(f"/api/tasks/{created_task.id}")
@@ -207,10 +246,20 @@ class TestTaskResourcesRouter:
 
     def test_list_task_resources_empty(self, client, db_session, test_task_data):
         """Test listing task resources when none exist."""
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.get(f"/api/tasks/{created_task.id}/resources")
@@ -221,10 +270,20 @@ class TestTaskResourcesRouter:
         self, client, db_session, test_task_data, test_resource_data
     ):
         """Test listing task resources with existing data."""
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         # Create test resource
@@ -254,10 +313,20 @@ class TestTaskResourcesRouter:
 
     def test_create_task_resource(self, client, db_session, test_task_data, test_resource_data):
         """Test creating a new task resource."""
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.post(f"/api/tasks/{created_task.id}/resources", json=test_resource_data)
@@ -278,10 +347,20 @@ class TestTaskResourcesRouter:
         self, client, db_session, test_task_data, test_resource_data
     ):
         """Test deleting a task resource."""
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         # Create test resource
@@ -306,10 +385,20 @@ class TestTaskResourcesRouter:
 
     def test_delete_task_resource_not_found(self, client, db_session, test_task_data):
         """Test deleting a non-existent task resource."""
-        # Create test task
+        # Create test project using repository
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
+        )
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(**test_task_data)
-        created_task = task_repo.create(task)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"]
+        )
         db_session.commit()
 
         response = client.delete(f"/api/tasks/{created_task.id}/resources/999")
@@ -323,22 +412,20 @@ class TestTaskPlanningAgentEndpoints:
     @pytest.fixture
     def test_task_with_project(self, db_session):
         """Create a test task with project for planning agent tests."""
-        # Create project
+        # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        project = Project(
-            name="Test Project", details="Test project details", current_status="active"
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development"
         )
-        created_project = project_repo.create(project)
-
-        # Create task
+        
+        # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task = Task(
-            title="Test Task",
-            description="Initial task description",
-            status="Designing",
+        created_task = task_repo.create(
             project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING
         )
-        created_task = task_repo.create(task)
         db_session.commit()
 
         return created_task
@@ -362,9 +449,9 @@ class TestTaskPlanningAgentEndpoints:
 
     def test_send_task_conversation_message_task_not_found(self, client):
         """Test sending message to non-existent task."""
-        message_request = {"message": "Test message"}
+        message_request = {"query": "Test message"}
 
-        response = client.post("/api/tasks/999/conversation", json=message_request)
+        response = client.post("/api/tasks/999/agent/messages", json=message_request)
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
@@ -395,22 +482,22 @@ class TestTaskPlanningAgentEndpoints:
         """Test tool approval for non-existent task."""
         approval_request = {"approvals": {"test_call_1": {"approved": True}}}
 
-        response = client.post("/api/tasks/999/conversation/approve-tools", json=approval_request)
+        response = client.post("/api/tasks/999/agent/approve-tools", json=approval_request)
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
     def test_transition_task_state_success(self, client, test_task_with_project):
         """Test successful task state transition."""
         task = test_task_with_project
-        assert task.status == "Designing"
+        assert task.status == TaskStatus.DEFINING
 
-        transition_request = {"new_state": "Planning"}
+        transition_request = {"new_state": TaskStatus.PLANNING.value}
 
         response = client.post(f"/api/tasks/{task.id}/state-transition", json=transition_request)
         assert response.status_code == 200
 
         updated_task = response.json()
-        assert updated_task["status"] == "Planning"
+        assert updated_task["status"] == TaskStatus.PLANNING.value
 
     def test_transition_task_state_invalid_state(self, client, test_task_with_project):
         """Test task state transition with invalid state."""
@@ -419,12 +506,12 @@ class TestTaskPlanningAgentEndpoints:
         transition_request = {"new_state": "InvalidState"}
 
         response = client.post(f"/api/tasks/{task.id}/state-transition", json=transition_request)
-        assert response.status_code == 400
-        assert "Invalid state" in response.json()["detail"]
+        assert response.status_code == 422  # Unprocessable Entity for validation errors
+        assert response.json()["detail"]  # Should have validation error details
 
     def test_transition_task_state_task_not_found(self, client):
         """Test state transition for non-existent task."""
-        transition_request = {"new_state": "Planning"}
+        transition_request = {"new_state": "planning"}  # Use correct enum value
 
         response = client.post("/api/tasks/999/state-transition", json=transition_request)
         assert response.status_code == 404

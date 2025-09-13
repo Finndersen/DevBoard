@@ -12,7 +12,7 @@ from .base import Base
 class DocumentType(StrEnum):
     """Types of documents in the system."""
 
-    PROJECT_DETAILS = "project_details"
+    PROJECT_SPECIFICATION = "project_specification"
     TASK_SPECIFICATION = "task_specification"
     TASK_IMPLEMENTATION_PLAN = "task_implementation_plan"
 
@@ -23,7 +23,9 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    document_type: Mapped[DocumentType] = mapped_column(Enum(DocumentType))  # Store enum as string
+    document_type: Mapped[DocumentType] = mapped_column(
+        Enum(DocumentType)
+    )  # Store enum as string
     content: Mapped[str] = mapped_column(Text, default="")
     content_hash: Mapped[str] = mapped_column(String(32))  # MD5 hash (32 hex chars)
     created_at: Mapped[datetime.datetime] = mapped_column(

@@ -47,7 +47,7 @@ class DocumentRepository(BaseRepository[Document]):
             Created document with assigned ID and hash
         """
         document = Document(
-            document_type=document_type.value,
+            document_type=document_type,
             content=content,
             content_hash=self.calculate_hash(content),
         )

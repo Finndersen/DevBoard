@@ -1,8 +1,8 @@
-"""Initial migration with document model
+"""Add all database models
 
-Revision ID: 600a189b5b74
+Revision ID: f3149f56d370
 Revises: 
-Create Date: 2025-09-10 23:39:16.005458
+Create Date: 2025-09-12 23:38:52.750684
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '600a189b5b74'
+revision: str = 'f3149f56d370'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -47,7 +47,7 @@ def upgrade() -> None:
     )
     op.create_table('documents',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('document_type', sa.String(length=50), nullable=False),
+    sa.Column('document_type', sa.Enum('PROJECT_SPECIFICATION', 'TASK_SPECIFICATION', 'TASK_IMPLEMENTATION_PLAN', name='documenttype'), nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
     sa.Column('content_hash', sa.String(length=32), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -58,9 +58,9 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('current_status', sa.Text(), nullable=False),
-    sa.Column('details_id', sa.Integer(), nullable=False),
+    sa.Column('specification_document_id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['details_id'], ['documents.id'], ),
+    sa.ForeignKeyConstraint(['specification_document_id'], ['documents.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('project_codebase_association',
@@ -83,7 +83,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('message_type', sa.Enum('USER_PROMPT', 'TOOL_RESULT', 'TOOL_CALL', 'TEXT_RESPONSE', 'STRUCTURED_RESPONSE', name='messagetype'), nullable=False),
     sa.Column('pydantic_content', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['parent_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -92,9 +92,8 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Integer(), nullable=False),
     sa.Column('codebase_id', sa.Integer(), nullable=True),
     sa.Column('title', sa.String(length=255), nullable=False),
-    sa.Column('status', sa.String(length=50), nullable=False),
+    sa.Column('status', sa.Enum('DEFINING', 'PLANNING', 'IMPLEMENTING', 'REVIEWING', 'COMPLETE', name='taskstatus'), nullable=False),
     sa.Column('remote_task_id', sa.String(length=100), nullable=True),
-    sa.Column('conversation_id', sa.String(length=100), nullable=True),
     sa.Column('specification_id', sa.Integer(), nullable=False),
     sa.Column('implementation_plan_id', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -117,7 +116,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('message_type', sa.Enum('USER_PROMPT', 'TOOL_RESULT', 'TOOL_CALL', 'TEXT_RESPONSE', 'STRUCTURED_RESPONSE', name='messagetype'), nullable=False),
     sa.Column('pydantic_content', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['parent_id'], ['tasks.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

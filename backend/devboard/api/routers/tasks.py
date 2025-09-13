@@ -59,10 +59,15 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Create task
+    # Create task using repository
     task_repo = TaskRepository(db)
-    db_task = Task(**task.model_dump())
-    created_task = task_repo.create(db_task)
+    created_task = task_repo.create(
+        project_id=task.project_id,
+        title=task.title,
+        status=task.status,
+        codebase_id=task.codebase_id,
+        remote_task_id=task.remote_task_id,
+    )
     db.commit()
     db.refresh(created_task)
     return created_task

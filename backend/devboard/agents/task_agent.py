@@ -37,9 +37,9 @@ class BaseTaskAgent(BaseAgent[BaseDeps], metaclass=ABCMeta):
     deps_type = BaseDeps
 
     def __init__(self, task: Task, document_repository: DocumentRepository, **kwargs):
-        super().__init__(**kwargs)
         self.task = task
         self.document_repository = document_repository
+        super().__init__(**kwargs)
 
 
 SPECIFICATION_SYSTEM_PROMPT = """

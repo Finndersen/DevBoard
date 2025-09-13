@@ -83,9 +83,9 @@ export default function Settings() {
 
       {/* Tab Content */}
       {activeTab === 'integrations' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Integration List */}
-          <div className="lg:col-span-1">
+          <div className="xl:col-span-1">
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">External Integrations</h3>
@@ -123,7 +123,7 @@ export default function Settings() {
           </div>
 
           {/* Configuration Form */}
-          <div className="lg:col-span-2">
+          <div className="xl:col-span-3">
             {selectedIntegration ? (
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                 <ConfigurationForm
@@ -149,9 +149,9 @@ export default function Settings() {
       )}
 
       {activeTab === 'agents' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* LLM Provider List */}
-          <div className="lg:col-span-1">
+          <div className="xl:col-span-1">
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">AI Providers</h3>
@@ -189,7 +189,7 @@ export default function Settings() {
           </div>
 
           {/* Configuration Form */}
-          <div className="lg:col-span-2">
+          <div className="xl:col-span-3">
             {selectedLLMProvider ? (
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                 <ConfigurationForm

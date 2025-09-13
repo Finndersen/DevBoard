@@ -17,13 +17,11 @@ def test_projects_data():
     return [
         {
             "name": "Auth Service",
-            "details": "Authentication microservice",
-            "current_status": "active",
+            "description": "Authentication microservice",
         },
         {
             "name": "Payment Service",
-            "details": "Payment processing service",
-            "current_status": "active",
+            "description": "Payment processing service",
         },
     ]
 
@@ -34,14 +32,12 @@ def test_tasks_data():
     return [
         {
             "title": "Implement OAuth",
-            "description": "OAuth integration",
-            "status": "todo",
+            "status": "DEFINING",
             "project_id": 1,
         },
         {
             "title": "Add JWT validation",
-            "description": "JWT token validation",
-            "status": "todo",
+            "status": "DEFINING",
             "project_id": 2,
         },
     ]
@@ -54,8 +50,8 @@ class TestResourceSharing:
         """Test that the same resource can be shared across multiple projects."""
         # Create two projects
         project_repo = ProjectRepository(db_session)
-        project1 = project_repo.create(Project(**test_projects_data[0]))
-        project2 = project_repo.create(Project(**test_projects_data[1]))
+        project1 = project_repo.create(**test_projects_data[0])
+        project2 = project_repo.create(**test_projects_data[1])
         db_session.commit()
 
         # Add the same GitHub repo to both projects
@@ -98,12 +94,12 @@ class TestResourceSharing:
         project_repo = ProjectRepository(db_session)
         task_repo = TaskRepository(db_session)
 
-        project = project_repo.create(Project(**test_projects_data[0]))
+        project = project_repo.create(**test_projects_data[0])
         db_session.flush()
 
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project.id
-        task = task_repo.create(Task(**task_data))
+        task = task_repo.create(**task_data)
         db_session.commit()
 
         # Add same resource to project and task
@@ -132,8 +128,8 @@ class TestResourceSharing:
         """Test cascade deletion: resource is deleted only when all links are removed."""
         # Create two projects
         project_repo = ProjectRepository(db_session)
-        project1 = project_repo.create(Project(**test_projects_data[0]))
-        project2 = project_repo.create(Project(**test_projects_data[1]))
+        project1 = project_repo.create(**test_projects_data[0])
+        project2 = project_repo.create(**test_projects_data[1])
         db_session.commit()
 
         # Add shared resource to both projects
@@ -203,13 +199,13 @@ class TestResourceSharing:
         project_repo = ProjectRepository(db_session)
         task_repo = TaskRepository(db_session)
 
-        project1 = project_repo.create(Project(**test_projects_data[0]))
-        project2 = project_repo.create(Project(**test_projects_data[1]))
+        project1 = project_repo.create(**test_projects_data[0])
+        project2 = project_repo.create(**test_projects_data[1])
         db_session.flush()
 
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project1.id
-        task = task_repo.create(Task(**task_data))
+        task = task_repo.create(**task_data)
         db_session.commit()
 
         # Add same resource to both projects and one task

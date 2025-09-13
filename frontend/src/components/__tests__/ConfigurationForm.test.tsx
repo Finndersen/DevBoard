@@ -156,7 +156,7 @@ describe('ConfigurationForm', () => {
 
     server.use(
       http.patch('*/api/configurations/integration.github.main/fields', async ({ request }) => {
-        const updates = await request.json()
+        await request.json() // Consume request body
         return HttpResponse.json({
           ...mockConfig,
           validation_status: 'valid' as const,

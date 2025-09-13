@@ -11,21 +11,21 @@ class ProjectBase(BaseModel):
     """Base project schema."""
 
     name: str
-    current_status: str
+    description: str
 
 
 class ProjectCreate(BaseModel):
     """Schema for creating a new project."""
 
     name: str
-    current_status: str = ""
+    description: str
 
 
 class ProjectUpdate(BaseModel):
     """Schema for updating a project."""
 
     name: str | None = None
-    current_status: str | None = None
+    description: str | None = None
 
 
 class ProjectResponse(ProjectBase):
@@ -35,6 +35,6 @@ class ProjectResponse(ProjectBase):
     created_at: datetime.datetime
 
     # Document relationship - automatically loaded
-    details: DocumentResponse
+    specification: DocumentResponse
 
     model_config = {"from_attributes": True}

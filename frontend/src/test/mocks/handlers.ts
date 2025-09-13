@@ -6,15 +6,15 @@ const mockProjects: Project[] = [
   {
     id: 1,
     name: 'Test Project',
-    details: 'This is a test project for development',
-    current_status: 'Active',
+    specification: 'This is a test project for development',
+    description: 'A comprehensive testing platform for automated QA workflows and continuous integration pipelines',
     created_at: '2024-01-01T00:00:00Z',
   },
   {
     id: 2,
     name: 'Another Project',
-    details: 'Another test project',
-    current_status: 'Planning',
+    specification: 'Another test project',
+    description: 'Enterprise dashboard for real-time analytics and business intelligence reporting',
     created_at: '2024-01-02T00:00:00Z',
   },
 ]
@@ -117,13 +117,12 @@ export const handlers = [
   }),
 
   http.post('*/api/projects/:projectId/tasks', async ({ params, request }) => {
-    const newTask = await request.json() as Omit<Task, 'id' | 'project_id' | 'created_at' | 'updated_at'>
+    const newTask = await request.json() as Omit<Task, 'id' | 'project_id' | 'created_at'>
     const task: Task = {
       ...newTask,
       id: Date.now(),
       project_id: Number(params.projectId),
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
     return HttpResponse.json(task)
   }),
@@ -147,7 +146,7 @@ export const handlers = [
   }),
 
   http.patch('*/api/configurations/:configKey/fields', async ({ params, request }) => {
-    const updates = await request.json() as Record<string, any>
+    await request.json() // Consume request body
     return HttpResponse.json({
       ...mockConfigurationResponse,
       key: params.configKey as string,
@@ -157,7 +156,7 @@ export const handlers = [
   }),
 
   // Integration test endpoint
-  http.post('*/api/settings/integrations/:integrationType/test', ({ params }) => {
+  http.post('*/api/settings/integrations/:integrationType/test', ({ params: _params }) => {
     const response: IntegrationTestResponse = {
       success: true,
     }

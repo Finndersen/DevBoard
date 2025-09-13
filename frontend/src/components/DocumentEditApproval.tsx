@@ -102,16 +102,16 @@ export default function DocumentEditApproval({
             {approval.edits.map((edit, index) => (
               <div key={index} className="border border-gray-200 dark:border-gray-700 rounded p-3 bg-white dark:bg-gray-800">
                 <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Edit {index + 1}</div>
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
                     <div className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">Remove:</div>
-                    <pre className="text-xs bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-2 rounded border-l-2 border-red-400 whitespace-pre-wrap">
+                    <pre className="text-xs bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-3 rounded border-l-2 border-red-400 whitespace-pre-wrap min-h-[4rem]">
                       {edit.find}
                     </pre>
                   </div>
                   <div>
                     <div className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">Replace with:</div>
-                    <pre className="text-xs bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 p-2 rounded border-l-2 border-green-400 whitespace-pre-wrap">
+                    <pre className="text-xs bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 p-3 rounded border-l-2 border-green-400 whitespace-pre-wrap min-h-[4rem]">
                       {edit.replace}
                     </pre>
                   </div>
