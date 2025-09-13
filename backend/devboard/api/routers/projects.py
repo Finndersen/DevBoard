@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from devboard.agents.project_agent import ProjectAgent
@@ -18,6 +17,7 @@ from devboard.api.schemas import (
     TaskResponse,
 )
 from devboard.api.schemas.agent_conversation import (
+    ChatRequest,
     ConversationMessage,
     MessageRole,
     PromptResponse,
@@ -25,7 +25,6 @@ from devboard.api.schemas.agent_conversation import (
 )
 from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.database import get_db
-from devboard.db.models import Project
 from devboard.db.models.messages import MessageType
 from devboard.db.repositories import (
     DocumentRepository,
@@ -60,8 +59,7 @@ async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     """Create a new project."""
     project_repo = ProjectRepository(db)
     created_project = project_repo.create(
-        name=project.name,
-        description=project.description
+        name=project.name, description=project.description
     )
     db.commit()
     db.refresh(created_project)
@@ -126,8 +124,6 @@ async def list_project_tasks(project_id: int, db: Session = Depends(get_db)):
 
 
 # Project Resource Endpoints
-
-
 @router.get("/{project_id}/resources", response_model=list[ResourceResponse])
 async def list_project_resources(project_id: int, db: Session = Depends(get_db)):
     """Get all context provider resources for a project."""
@@ -169,7 +165,9 @@ async def create_project_resource(
 
 
 @router.delete("/{project_id}/resources/{resource_id}", response_model=DeleteResponse)
-async def delete_project_resource(project_id: int, resource_id: int, db: Session = Depends(get_db)):
+async def delete_project_resource(
+    project_id: int, resource_id: int, db: Session = Depends(get_db)
+):
     """Remove a context provider resource from a project."""
     # Verify project exists
     project_repo = ProjectRepository(db)
@@ -187,12 +185,6 @@ async def delete_project_resource(project_id: int, resource_id: int, db: Session
 
     db.commit()
     return {"message": "Resource deleted successfully", "success": True}
-
-
-class ChatRequest(BaseModel):
-    """Request model for project chat."""
-
-    query: str
 
 
 @router.get("/{project_id}/agent/messages", response_model=list[ConversationMessage])
@@ -215,7 +207,9 @@ def list_project_agent_messages(
         raise HTTPException(status_code=404, detail="Project not found")
 
     message_repo = ProjectConversationMessageRepository(db)
-    messages = message_repo.get_all_for_entity(entity_id=project_id, exclude_tool_calls=True)
+    messages = message_repo.get_all_for_entity(
+        entity_id=project_id, exclude_tool_calls=True
+    )
 
     return [
         ConversationMessage(
@@ -247,29 +241,22 @@ async def send_project_agent_message(
     Returns:
         AI-generated response based on project context
     """
-    try:
-        # Verify project exists
-        project_repo = ProjectRepository(db)
-        project = project_repo.get_by_id(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        agent = ProjectAgent(project, document_repository=DocumentRepository(db))
-        conversation_service = AgentConversationService(
-            agent, message_repository=ProjectConversationMessageRepository(db)
-        )
-        # Process query with Q&A agent
-        response = await conversation_service.send_message(
-            message=request.query, entity_id=project_id
-        )
+    agent = ProjectAgent(project, document_repository=DocumentRepository(db))
+    conversation_service = AgentConversationService(
+        agent, message_repository=ProjectConversationMessageRepository(db)
+    )
+    # Process query with Q&A agent
+    response = await conversation_service.send_message(
+        message=request.message, entity_id=project_id
+    )
 
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in project chat for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+    return response
 
 
 @router.post("/{project_id}/agent/approve-tools", response_model=PromptResponse)
@@ -289,29 +276,22 @@ async def approve_project_agent_tools(
     Returns:
         AI-generated response based on project context
     """
-    try:
-        # Verify project exists
-        project_repo = ProjectRepository(db)
-        project = project_repo.get_by_id(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        agent = ProjectAgent(project, document_repository=DocumentRepository(db))
-        conversation_service = AgentConversationService(
-            agent, message_repository=ProjectConversationMessageRepository(db)
-        )
-        # Process query with Q&A agent
-        response = await conversation_service.process_tool_approvals(
-            approvals=request.approvals, entity_id=project_id
-        )
+    agent = ProjectAgent(project, document_repository=DocumentRepository(db))
+    conversation_service = AgentConversationService(
+        agent, message_repository=ProjectConversationMessageRepository(db)
+    )
+    # Process query with Q&A agent
+    response = await conversation_service.process_tool_approvals(
+        approvals=request.approvals, entity_id=project_id
+    )
 
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in project chat for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+    return response
 
 
 @router.get("/{project_id}/context", response_model=dict[str, Any])
@@ -339,7 +319,9 @@ async def get_project_context(
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Get context assembly
-        context_data = await context_assembly_service.get_project_context(project_id, query)
+        context_data = await context_assembly_service.get_project_context(
+            project_id, query
+        )
 
         return {
             "project_id": project_id,
@@ -369,7 +351,9 @@ async def get_project_context(
         raise
     except Exception as e:
         logger.error(f"Error getting context for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Context assembly failed: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Context assembly failed: {e}"
+        ) from e
 
 
 @router.post("/validate-resource", response_model=dict[str, Any])

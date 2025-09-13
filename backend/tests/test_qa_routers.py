@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from devboard.context_providers import ContextStrategy
-from devboard.db.models import Project
 from devboard.services.context_assembly import (
     EagerContextData,
     NoProviderFound,
@@ -20,7 +19,7 @@ def sample_project(db_session):
     """Sample project for testing."""
     # Use repository to create project properly
     from devboard.db.repositories import ProjectRepository
-    
+
     project_repo = ProjectRepository(db_session)
     return project_repo.create(
         name="Test Project",
@@ -63,9 +62,7 @@ class TestContextEndpoint:
         # Project is already created by repository and committed
 
         # Setup mock service
-        mock_context_service.get_project_context = AsyncMock(
-            return_value=sample_context_data
-        )
+        mock_context_service.get_project_context = AsyncMock(return_value=sample_context_data)
 
         response = client.get("/api/projects/1/context?query=test")
 
@@ -93,9 +90,7 @@ class TestContextEndpoint:
         assert on_demand["has_user_description"] is True
 
         # Verify service was called correctly
-        mock_context_service.get_project_context.assert_called_once_with(
-            1, "test"
-        )
+        mock_context_service.get_project_context.assert_called_once_with(1, "test")
 
     def test_get_project_context_nonexistent_project(self, client):
         """Test context endpoint with non-existent project."""
@@ -118,9 +113,7 @@ class TestValidateResourceEndpoint:
             description="Test PR description",
             uri=uri,
         )
-        mock_context_service.get_resource_info = AsyncMock(
-            return_value=mock_result
-        )
+        mock_context_service.get_resource_info = AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/api/projects/validate-resource",

@@ -12,12 +12,8 @@ from .codebase import (
 )
 from .common import DeleteResponse
 from .configuration import (
-    ConfigurationBase,
-    ConfigurationCreate,
     ConfigurationDetailResponse,
     ConfigurationFieldInfo,
-    ConfigurationResponse,
-    ConfigurationUpdate,
 )
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
@@ -62,12 +58,8 @@ __all__ = [
     "DocumentResponse",
     "DocumentUpdate",
     # Configuration
-    "ConfigurationBase",
-    "ConfigurationCreate",
     "ConfigurationDetailResponse",
     "ConfigurationFieldInfo",
-    "ConfigurationResponse",
-    "ConfigurationUpdate",
     "ContextProviderResourceBase",
     "ContextProviderResourceCreate",
     "ContextProviderResourceResponse",

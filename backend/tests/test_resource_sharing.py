@@ -2,7 +2,6 @@
 
 import pytest
 
-from devboard.db.models import Project, Task
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,

@@ -2,12 +2,11 @@
 
 import json
 import os
-from typing import Any, TypeVar, Union, cast, get_args, get_origin
+from typing import Any, TypeVar, Union, get_args, get_origin
 
 from pydantic import ValidationError
 from pydantic._internal._fields import PydanticUndefined
 from pydantic.fields import FieldInfo
-from sqlalchemy import select
 
 from devboard.api.schemas.configuration import (
     ConfigurationDetailResponse,
@@ -18,6 +17,7 @@ from devboard.config.registry import config_schema_registry
 from devboard.core.registry import Registry
 from devboard.db.database import SessionLocal, SessionMakerType
 from devboard.db.models import Configuration
+from devboard.db.repositories.configuration import ConfigurationRepository
 
 T = TypeVar("T", bound="BaseConfig")
 
@@ -29,9 +29,11 @@ class ConfigService:
         self,
         db_session_factory: SessionMakerType = SessionLocal,
         config_registry: Registry[type[BaseConfig]] | None = None,
+        env_vars: dict[str, str] | None = None,
     ):
         self.db_session_factory = db_session_factory
         self.config_registry = config_registry or config_schema_registry
+        self.env_vars = env_vars if env_vars is not None else dict(os.environ)
 
     def get_config_by_key(self, key: str) -> BaseConfig | None:
         """Simple getter - returns config if valid, None if not."""
@@ -45,14 +47,37 @@ class ConfigService:
             return ConfigValidationResult[BaseConfig](
                 False, errors=[f"No schema registered for key: {key}"]
             )
+        return self.validate_config(schema)
 
+    # Type-safe methods for known config types
+    def get_config(self, config_class: type[T]) -> T | None:
+        """Type-safe getter - returns config if valid, None if not."""
+        result = self.validate_config(config_class)
+        return result.config if result.success else None
+
+    def validate_config(self, config_class: type[T]) -> ConfigValidationResult[T]:
+        """Type-safe validation - returns typed config validation result."""
         try:
             # Load DB data (empty dict if no entry exists)
-            db_data = self._load_from_db(key) or {}
+            with self.db_session_factory() as db:
+                repo = ConfigurationRepository(db)
+                db_data = self._load_db_data(repo, config_class.config_key) or {}
 
-            # Attempt to instantiate with DB + env vars
-            config = schema.model_validate(db_data)
-            return ConfigValidationResult[BaseConfig](True, config=config)
+            # Build env var data for this config's fields
+            env_prefix = config_class.env_prefix
+            env_var_data = {}
+            if env_prefix:
+                for field_name in config_class.model_fields.keys():
+                    env_var_name = f"{env_prefix}{field_name.upper()}"
+                    if env_var_name in self.env_vars:
+                        env_var_data[field_name] = self.env_vars[env_var_name]
+
+            # Merge env var data with db data (db data takes priority)
+            merged_data = {**env_var_data, **db_data}
+
+            # Instantiate config with merged data
+            config = config_class(**merged_data)
+            return ConfigValidationResult[T](True, config=config)
 
         except ValidationError as e:
             # Parse errors to provide helpful feedback
@@ -66,108 +91,58 @@ class ConfigService:
                 else:
                     errors.append(f"Invalid value for '{field}': {error['msg']}")
 
-            return ConfigValidationResult[BaseConfig](False, errors=errors)
+            return ConfigValidationResult[T](False, errors=errors)
 
-    # Type-safe methods for known config types
-    def get_config(self, config_class: type[T]) -> T | None:
-        """Type-safe getter - returns config if valid, None if not."""
-        result = self.validate_config(config_class)
-        return result.config if result.success else None
-
-    def validate_config(self, config_class: type[T]) -> ConfigValidationResult[T]:
-        """Type-safe validation - returns typed config validation result."""
-        key = config_class.config_key
-        result = self.validate_config_by_key(key)
-        if result.success:
-            return ConfigValidationResult[T](True, config=cast(T, result.config))
-        return ConfigValidationResult[T](False, errors=result.errors)
-
-    def set_config(self, key: str, data: BaseConfig) -> None:
-        """Set configuration data."""
-        # Validate that the key has a registered schema
-        schema = self.config_registry.get(key)
-        if not schema:
-            raise ValueError(f"No schema registered for key: {key}")
-
-        # Validate the data against the schema
-        validated_data = schema.model_validate(data.model_dump())
-
-        # Save to database
-        with self.db_session_factory() as db:
-            stmt = select(Configuration).where(Configuration.key == key)
-            config = db.execute(stmt).scalar_one_or_none()
-            if config:
-                config.value_json = validated_data.model_dump_json()
-            else:
-                config = Configuration(
-                    key=key, value_json=validated_data.model_dump_json()
-                )
-                db.add(config)
-            db.commit()
-
-    def update_config_fields(
-        self, key: str, field_updates: dict[str, Any]
+    def update_configuration(
+        self, key: str, config_data: dict[str, Any]
     ) -> ConfigurationDetailResponse:
-        """Update only specific configuration fields, respecting environment variable precedence."""
+        """Update configuration with complete structure. None values clear DB overrides."""
         # Get the schema class
         schema_class = self.config_registry.get(key)
         if not schema_class:
             raise ValueError(f"No schema registered for key: {key}")
 
-        # Load existing DB data
-        db_data = self._load_from_db(key) or {}
-
-        # Allow updating all fields - users can override environment variables
-        # Convert empty strings to None and remove from database (reset to env/default)
-        for field_name, value in field_updates.items():
-            if isinstance(value, str) and value.strip() == "":
-                # Remove from database to reset to environment or default value
-                db_data.pop(field_name, None)
-            elif value is None:
-                # Explicit None means remove from database
-                db_data.pop(field_name, None)
-            else:
-                # Set the value in database
+        # Process the complete configuration structure
+        # Only store non-None values as database overrides
+        db_data = {}
+        for field_name, value in config_data.items():
+            if value is not None:
                 db_data[field_name] = value
+            # None values are intentionally not stored (clearing overrides)
 
-        # Save updated data to database
+        # Save to database
         with self.db_session_factory() as db:
-            stmt = select(Configuration).where(Configuration.key == key)
-            config = db.execute(stmt).scalar_one_or_none()
+            repo = ConfigurationRepository(db)
+            config = repo.get_by_key(key)
             if config:
                 config.value_json = json.dumps(db_data)
+                repo.update(config)
             else:
                 config = Configuration(key=key, value_json=json.dumps(db_data))
-                db.add(config)
+                repo.create(config)
             db.commit()
 
         # Return updated configuration details
-        return self.get_config_details(key)
+        return self.get_config_details(schema_class)
 
     def list_configs(self, prefix: str | None = None) -> list[str]:
         """List available configuration keys."""
-        with self.db_session_factory() as db:
-            stmt = select(Configuration.key)
-            if prefix:
-                stmt = stmt.where(Configuration.key.startswith(prefix))
-            db_keys = list(db.execute(stmt).scalars().all())
-
         # Combine with registered schema keys
-        schema_keys = self.config_registry.list_keys()
-        all_keys = sorted(set(db_keys + schema_keys))
-        return all_keys
+        all_keys = self.config_registry.list_keys()
+        if prefix:
+            return [k for k in all_keys if k.startswith(prefix)]
+        else:
+            return all_keys
 
     def delete_config(self, key: str) -> None:
         """Delete a configuration."""
         with self.db_session_factory() as db:
-            stmt = select(Configuration).where(Configuration.key == key)
-            config = db.execute(stmt).scalar_one_or_none()
-            if config:
-                db.delete(config)
+            repo = ConfigurationRepository(db)
+            deleted = repo.delete_by_key(key)
+            if deleted:
                 db.commit()
 
-    def get_config_details(self, key: str) -> ConfigurationDetailResponse:
-        """Get configuration with field-level source information."""
+    def get_config_details_by_key(self, key: str) -> ConfigurationDetailResponse:
         # 1. Get the schema class
         schema_class = self.config_registry.get(key)
         if not schema_class:
@@ -177,41 +152,39 @@ class ConfigService:
                 validation_status="unconfigured",
                 validation_errors=[f"No schema registered for key: {key}"],
             )
+        return self.get_config_details(schema_class)
 
+    def get_config_details(
+        self, schema_class: type[BaseConfig]
+    ) -> ConfigurationDetailResponse:
+        """Get configuration with field-level source information."""
         # 2. Load raw DB data
-        db_data = self._load_from_db(key) or {}
+        with self.db_session_factory() as db:
+            repo = ConfigurationRepository(db)
+            db_data = self._load_db_data(repo, schema_class.config_key) or {}
 
-        # 3. Get final merged config (or validation errors)
-        validation_result = self.validate_config(key)
-        final_config = validation_result.config
+        # 3. Get validation result
+        validation_result = self.validate_config(schema_class)
 
         # 4. Analyze each field
         fields = []
         for field_name, field_info in schema_class.model_fields.items():
-            value_source = None
-            current_value = None
+            # Calculate environment variable name
+            env_prefix = schema_class.env_prefix
+            if env_prefix:
+                env_var_name = f"{env_prefix}{field_name.upper()}"
+                # Get values from different sources
+                env_value = self.env_vars.get(env_var_name)
+            else:
+                env_var_name = None
+                env_value = None
 
-            # Calculate environment variable name for all fields
-            env_prefix = schema_class.model_config.get("env_prefix", "")
-            env_var_name = f"{env_prefix}{field_name.upper()}"
-            env_value_present = env_var_name in os.environ
-
-            # Only check env vars for string fields for value comparison
-            is_string_field = self._is_string_field(field_info)
-
-            if final_config:
-                current_value = getattr(final_config, field_name)
-
-                # Determine source - simplified logic
-                if field_name in db_data:
-                    # Database value takes precedence (could be overriding env var)
-                    value_source = "database"
-                elif is_string_field and env_value_present:
-                    # String field using environment variable
-                    value_source = "environment"
-                elif current_value == field_info.default:
-                    # Using default value
-                    value_source = "default"
+            db_value = db_data.get(field_name) if field_name in db_data else None
+            default_value = (
+                field_info.default
+                if field_info.default is not PydanticUndefined
+                else None
+            )
 
             fields.append(
                 ConfigurationFieldInfo(
@@ -219,19 +192,16 @@ class ConfigService:
                     type=self._get_field_type(field_info),
                     required=field_info.is_required(),
                     description=field_info.description,
-                    current_value=current_value,
-                    value_source=value_source,
+                    env_value=env_value,
+                    db_value=db_value,
+                    default_value=default_value,
                     is_secret=self._is_secret_field(field_name),
-                    env_var_name=env_var_name,  # Now set for all fields
-                    default_value=field_info.default
-                    if field_info.default is not PydanticUndefined
-                    else None,
-                    env_value_present=env_value_present,
+                    env_var_name=env_var_name,
                 )
             )
 
         return ConfigurationDetailResponse(
-            key=key,
+            key=schema_class.config_key,
             fields=fields,
             validation_status="valid" if validation_result.success else "invalid",
             validation_errors=validation_result.errors,
@@ -280,14 +250,14 @@ class ConfigService:
         field_lower = field_name.lower()
         return any(keyword in field_lower for keyword in secret_keywords)
 
-    def _load_from_db(self, key: str) -> dict[str, Any] | None:
-        """Load configuration data from database."""
-        with self.db_session_factory() as db:
-            stmt = select(Configuration).where(Configuration.key == key)
-            config = db.execute(stmt).scalar_one_or_none()
-            if config:
-                return json.loads(config.value_json)
-            return None
+    def _load_db_data(
+        self, repo: ConfigurationRepository, key: str
+    ) -> dict[str, Any] | None:
+        """Load configuration data from database using repository."""
+        config = repo.get_by_key(key)
+        if config:
+            return json.loads(config.value_json)
+        return None
 
 
 # Global config service instance

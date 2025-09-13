@@ -69,7 +69,8 @@ class LLMService:
         # Get agent configuration
         config_key = f"agent.{agent_type.value}.default"
         config_result = cast(
-            ConfigValidationResult[AgentConfig], config_service.validate_config_by_key(config_key)
+            ConfigValidationResult[AgentConfig],
+            config_service.validate_config_by_key(config_key),
         )
 
         # Get available models
@@ -82,12 +83,14 @@ class LLMService:
                 return config_result.config.selected_model
 
         # Fall back to hardcoded hierarchy
-        hierarchy = AGENT_MODEL_HIERARCHIES.get(agent_type.value, [])
+        hierarchy = AGENT_MODEL_HIERARCHIES.get(agent_type, [])
         for model_id in hierarchy:
             if model_id in available_model_ids:
                 return model_id
 
-        raise ValueError(f"Could not find model configuration for agent type '{agent_type}'")
+        raise ValueError(
+            f"Could not find model configuration for agent type '{agent_type}'"
+        )
 
 
 # Global LLM service instance

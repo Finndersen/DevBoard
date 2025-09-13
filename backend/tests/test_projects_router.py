@@ -48,8 +48,7 @@ class TestProjectsRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -75,8 +74,7 @@ class TestProjectsRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -98,8 +96,7 @@ class TestProjectsRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -123,8 +120,7 @@ class TestProjectsRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -151,8 +147,7 @@ class TestProjectResourcesRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -167,8 +162,7 @@ class TestProjectResourcesRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -204,8 +198,7 @@ class TestProjectResourcesRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -232,8 +225,7 @@ class TestProjectResourcesRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -262,8 +254,7 @@ class TestProjectResourcesRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -280,8 +271,7 @@ class TestProjectTasksRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
@@ -296,22 +286,17 @@ class TestProjectTasksRouter:
         # Create test project
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name=test_project_data["name"],
-            description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"]
         )
         db_session.commit()
 
         # Create test tasks
         task_repo = TaskRepository(db_session)
         task_repo.create(
-            project_id=created_project.id,
-            title="Task 1",
-            status=test_task_data["status"]
+            project_id=created_project.id, title="Task 1", status=test_task_data["status"]
         )
         task_repo.create(
-            project_id=created_project.id,
-            title="Task 2",
-            status=test_task_data["status"]
+            project_id=created_project.id, title="Task 2", status=test_task_data["status"]
         )
         db_session.commit()
 

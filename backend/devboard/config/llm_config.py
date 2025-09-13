@@ -1,5 +1,6 @@
 """LLM provider configuration schemas for PydanticAI integration."""
 
+from devboard.agents.types import AgentType
 from devboard.config.base import BaseConfig
 
 
@@ -7,43 +8,44 @@ class OpenAIProviderConfig(BaseConfig):
     """Configuration for OpenAI LLM provider."""
 
     config_key = "llm.openai.main"
+    env_prefix = "OPENAI_"
 
     api_key: str  # From OPENAI_API_KEY env var
     organization_id: str | None = None  # From OPENAI_ORG_ID env var
     base_url: str = "https://api.openai.com/v1"
-
-    model_config = BaseConfig.get_base_config("OPENAI_")
 
 
 class AnthropicProviderConfig(BaseConfig):
     """Configuration for Anthropic LLM provider."""
 
     config_key = "llm.anthropic.main"
+    env_prefix = "ANTHROPIC_"
 
     api_key: str  # From ANTHROPIC_API_KEY env var
     base_url: str = "https://api.anthropic.com"
-
-    model_config = BaseConfig.get_base_config("ANTHROPIC_")
 
 
 class GeminiProviderConfig(BaseConfig):
     """Configuration for Gemini LLM provider."""
 
     config_key = "llm.gemini.main"
+    env_prefix = "GEMINI_"
 
     api_key: str  # From GEMINI_API_KEY env var
     base_url: str = "https://generativelanguage.googleapis.com"
 
-    model_config = BaseConfig.get_base_config("GEMINI_")
-
 
 # Model hierarchies for different agent types (hardcoded per agent)
 AGENT_MODEL_HIERARCHIES = {
-    "project": ["gpt-4.1", "claude-sonnet-4", "gemini-2.5-pro"],
-    "task_specification": ["gpt-4.1", "claude-sonnet-4", "gemini-2.5-pro"],
-    "task_planning": ["gemini-2.5-pro", "gpt-4.1", "claude-3.7-sonnet"],
-    "task_implementation": ["claude-sonnet-4", "gpt-4.1", "gemini-2.5-flash"],
-    "investigation": ["gpt-4.1-mini", "claude-3.5-haiku-20241022", "gemini-2.5-flash-lite"],
+    AgentType.PROJECT: ["gemini-2.5-pro", "gpt-4.1", "claude-sonnet-4"],
+    AgentType.TASK_SPECIFICATION: ["gemini-2.5-pro", "gpt-4.1", "claude-sonnet-4"],
+    AgentType.TASK_PLANNING: ["gemini-2.5-pro", "gpt-4.1", "claude-3.7-sonnet"],
+    AgentType.TASK_IMPLEMENTATION: ["claude-sonnet-4", "gpt-4.1", "gemini-2.5-flash"],
+    AgentType.INVESTIGATION: [
+        "gpt-4.1-mini",
+        "claude-3.5-haiku-20241022",
+        "gemini-2.5-flash-lite",
+    ],
 }
 
 

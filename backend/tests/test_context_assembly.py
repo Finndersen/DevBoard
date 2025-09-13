@@ -241,11 +241,14 @@ class TestContextAssemblyService:
         """Test context assembly with no links."""
         # Mock the specification document
         from devboard.db.models.document import Document, DocumentType
+
         spec_doc = Mock(spec=Document)
         spec_doc.content = "No URLs here"
         spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-        
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+
+        project = Project(
+            id=1, name="Test", description="Project description", specification_document_id=1
+        )
         project.specification = spec_doc
 
         with (
@@ -275,11 +278,14 @@ class TestContextAssemblyService:
         """Test context assembly with explicit provider resources."""
         # Mock the specification document
         from devboard.db.models.document import Document, DocumentType
+
         spec_doc = Mock(spec=Document)
         spec_doc.content = "Project description"
         spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-        
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+
+        project = Project(
+            id=1, name="Test", description="Project description", specification_document_id=1
+        )
         project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://resource",
@@ -315,10 +321,11 @@ class TestContextAssemblyService:
         """Test context assembly with auto-detected URIs from project description."""
         # Mock the specification document
         from devboard.db.models.document import Document, DocumentType
+
         spec_doc = Mock(spec=Document)
         spec_doc.content = "Working on https://github.com/owner/repo/pull/123"
         spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-        
+
         project = Project(
             id=1,
             name="Test",
@@ -360,11 +367,14 @@ class TestContextAssemblyService:
         """Test ON_DEMAND resources prioritize user descriptions."""
         # Mock the specification document
         from devboard.db.models.document import Document, DocumentType
+
         spec_doc = Mock(spec=Document)
         spec_doc.content = "Project description"
         spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-        
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+
+        project = Project(
+            id=1, name="Test", description="Project description", specification_document_id=1
+        )
         project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",
@@ -403,11 +413,14 @@ class TestContextAssemblyService:
         """Test ON_DEMAND resources generate descriptions when user doesn't provide one."""
         # Mock the specification document
         from devboard.db.models.document import Document, DocumentType
+
         spec_doc = Mock(spec=Document)
         spec_doc.content = "Project description"
         spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-        
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
+
+        project = Project(
+            id=1, name="Test", description="Project description", specification_document_id=1
+        )
         project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",

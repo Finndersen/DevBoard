@@ -6,6 +6,8 @@ from sqlalchemy import pool
 
 from alembic import context
 
+from devboard.db.database import DATABASE_URL
+
 # Import our models for autogenerate support
 from devboard.db.models import Base
 
@@ -14,8 +16,7 @@ from devboard.db.models import Base
 config = context.config
 
 # Override sqlalchemy.url from environment if available
-database_url = os.getenv("DATABASE_URL", "sqlite:///./devboard.db")
-config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -70,9 +71,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

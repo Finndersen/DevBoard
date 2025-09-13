@@ -5,7 +5,6 @@ import logging
 import logfire
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from pydantic_ai.tools import (
-    DeferredToolApprovalResult,
     DeferredToolRequests,
     DeferredToolResults,
     ToolApproved,
@@ -158,9 +157,7 @@ class AgentConversationService:
                 converted_approvals[tool_call_id] = ToolDenied(
                     message=decision.feedback or "The tool call was denied."
                 )
-                logger.info(
-                    f"Tool {tool_call_id} denied with feedback: {decision.feedback}"
-                )
+                logger.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
 
         return DeferredToolResults(approvals=converted_approvals)
 
@@ -185,8 +182,6 @@ class AgentConversationService:
         # Extract all messages from the agent result
         saved_messages = []
         for message in new_messages:
-            db_message = self.message_repo.MESSAGE_MODEL.from_pydantic_message(
-                entity_id, message
-            )
+            db_message = self.message_repo.MESSAGE_MODEL.from_pydantic_message(entity_id, message)
             saved_messages.append(self.message_repo.create(db_message))
         return saved_messages

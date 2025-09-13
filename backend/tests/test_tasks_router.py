@@ -1,10 +1,7 @@
 """Tests for tasks router."""
 
-import hashlib
 import pytest
 
-from devboard.db.models import Document, Project, Task
-from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
@@ -46,16 +43,15 @@ class TestTasksRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -71,31 +67,17 @@ class TestTasksRouter:
         # Create test projects using repository
         project_repo = ProjectRepository(db_session)
         created_project1 = project_repo.create(
-            name="Test Project 1",
-            description="A test project for development"
+            name="Test Project 1", description="A test project for development"
         )
         created_project2 = project_repo.create(
-            name="Test Project 2", 
-            description="A test project for development"
+            name="Test Project 2", description="A test project for development"
         )
-        
+
         # Create tasks for different projects using repository
         task_repo = TaskRepository(db_session)
-        task_repo.create(
-            project_id=created_project1.id,
-            title="Task 1",
-            status=TaskStatus.DEFINING
-        )
-        task_repo.create(
-            project_id=created_project2.id,
-            title="Task 2",
-            status=TaskStatus.DEFINING
-        )
-        task_repo.create(
-            project_id=created_project1.id,
-            title="Task 3",
-            status=TaskStatus.DEFINING
-        )
+        task_repo.create(project_id=created_project1.id, title="Task 1", status=TaskStatus.DEFINING)
+        task_repo.create(project_id=created_project2.id, title="Task 2", status=TaskStatus.DEFINING)
+        task_repo.create(project_id=created_project1.id, title="Task 3", status=TaskStatus.DEFINING)
         db_session.commit()
 
         # Test filtering by project 1
@@ -117,8 +99,7 @@ class TestTasksRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
         db_session.commit()
 
@@ -128,7 +109,7 @@ class TestTasksRouter:
         api_task_data = {
             "title": test_task_data["title"],
             "status": test_task_data["status"].value,  # Convert enum to string
-            "project_id": test_task_data["project_id"]
+            "project_id": test_task_data["project_id"],
         }
 
         response = client.post("/api/tasks/", json=api_task_data)
@@ -145,16 +126,15 @@ class TestTasksRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -177,16 +157,15 @@ class TestTasksRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -212,16 +191,15 @@ class TestTasksRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -249,16 +227,15 @@ class TestTaskResourcesRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -273,16 +250,15 @@ class TestTaskResourcesRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -316,16 +292,15 @@ class TestTaskResourcesRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -350,16 +325,15 @@ class TestTaskResourcesRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -388,16 +362,15 @@ class TestTaskResourcesRouter:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
-            status=test_task_data["status"]
+            status=test_task_data["status"],
         )
         db_session.commit()
 
@@ -415,16 +388,13 @@ class TestTaskPlanningAgentEndpoints:
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(
-            name="Test Project",
-            description="A test project for development"
+            name="Test Project", description="A test project for development"
         )
-        
+
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         created_task = task_repo.create(
-            project_id=created_project.id,
-            title="Test Task",
-            status=TaskStatus.DEFINING
+            project_id=created_project.id, title="Test Task", status=TaskStatus.DEFINING
         )
         db_session.commit()
 

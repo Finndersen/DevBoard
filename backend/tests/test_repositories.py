@@ -31,9 +31,7 @@ class TestProjectRepository:
     def sample_project_data(self) -> dict:
         return {"name": "Test Project", "description": "A test project"}
 
-    def test_create_project(
-        self, repo: ProjectRepository, sample_project_data: dict, db_session
-    ):
+    def test_create_project(self, repo: ProjectRepository, sample_project_data: dict, db_session):
         """Test creating a new project."""
         created = repo.create(**sample_project_data)
         db_session.commit()
@@ -41,9 +39,7 @@ class TestProjectRepository:
         assert created.name == "Test Project"
         assert created.description == "A test project"
 
-    def test_get_by_id(
-        self, repo: ProjectRepository, sample_project_data: dict, db_session
-    ):
+    def test_get_by_id(self, repo: ProjectRepository, sample_project_data: dict, db_session):
         """Test getting a project by ID."""
         created = repo.create(**sample_project_data)
         db_session.commit()
@@ -70,9 +66,7 @@ class TestProjectRepository:
         assert "Project 1" in project_names
         assert "Project 2" in project_names
 
-    def test_update_project(
-        self, repo: ProjectRepository, sample_project_data: dict, db_session
-    ):
+    def test_update_project(self, repo: ProjectRepository, sample_project_data: dict, db_session):
         """Test updating a project."""
         created = repo.create(**sample_project_data)
         db_session.commit()
@@ -84,9 +78,7 @@ class TestProjectRepository:
         assert updated.name == "Updated Project"
         assert updated.description == "Updated description"
 
-    def test_delete_by_id(
-        self, repo: ProjectRepository, sample_project_data: dict, db_session
-    ):
+    def test_delete_by_id(self, repo: ProjectRepository, sample_project_data: dict, db_session):
         """Test deleting a project by ID."""
         created = repo.create(**sample_project_data)
         db_session.commit()
@@ -212,9 +204,7 @@ class TestTaskRepository:
             "project_id": project.id,
         }
 
-    def test_create_task(
-        self, repo: TaskRepository, sample_task_data: dict, db_session
-    ):
+    def test_create_task(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test creating a new task."""
         created = repo.create(**sample_task_data)
         db_session.commit()
@@ -237,9 +227,7 @@ class TestTaskRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all_without_filter(
-        self, repo: TaskRepository, project: Project, db_session
-    ):
+    def test_get_all_without_filter(self, repo: TaskRepository, project: Project, db_session):
         """Test getting all tasks without project filter."""
         from devboard.db.models.task import TaskStatus
 
@@ -286,9 +274,7 @@ class TestTaskRepository:
         for task in project_tasks:
             assert task.project_id == project.id
 
-    def test_update_task(
-        self, repo: TaskRepository, sample_task_data: dict, db_session
-    ):
+    def test_update_task(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test updating a task."""
         from devboard.db.models.task import TaskStatus
 
@@ -302,9 +288,7 @@ class TestTaskRepository:
         assert updated.title == "Updated Task"
         assert updated.status == TaskStatus.COMPLETE
 
-    def test_delete_by_id(
-        self, repo: TaskRepository, sample_task_data: dict, db_session
-    ):
+    def test_delete_by_id(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test deleting a task by ID."""
         created = repo.create(**sample_task_data)
         db_session.commit()
@@ -339,9 +323,7 @@ class TestConfigurationRepository:
         assert created.key == "test.setting"
         assert created.value_json == "test_value"
 
-    def test_get_by_key(
-        self, repo: ConfigurationRepository, sample_config: Configuration
-    ):
+    def test_get_by_key(self, repo: ConfigurationRepository, sample_config: Configuration):
         """Test getting a configuration by key."""
         repo.create(sample_config)
         retrieved = repo.get_by_key("test.setting")
@@ -394,9 +376,7 @@ class TestConfigurationRepository:
         updated = repo.update(created)
         assert updated.value_json == "updated_value"
 
-    def test_delete_by_key(
-        self, repo: ConfigurationRepository, sample_config: Configuration
-    ):
+    def test_delete_by_key(self, repo: ConfigurationRepository, sample_config: Configuration):
         """Test deleting a configuration by key."""
         repo.create(sample_config)
         result = repo.delete_by_key("test.setting")
@@ -537,9 +517,7 @@ class TestContextProviderResourceRepository:
         result = repo.delete_resource(999)
         assert result is False
 
-    def test_delete_project_resource_with_cascade(
-        self, repo: ContextProviderResourceRepository
-    ):
+    def test_delete_project_resource_with_cascade(self, repo: ContextProviderResourceRepository):
         """Test deleting project resource with cascade deletion when orphaned."""
         # Create resources
         resource1 = repo.create_resource(
@@ -602,9 +580,7 @@ class TestProjectConversationMessageRepository:
         from pydantic_ai.messages import ModelRequest, UserPromptPart
 
         pydantic_message = ModelRequest(parts=[UserPromptPart(content="Test message")])
-        return ProjectConversationMessage.from_pydantic_message(
-            project.id, pydantic_message
-        )
+        return ProjectConversationMessage.from_pydantic_message(project.id, pydantic_message)
 
     def test_create_message(
         self,
@@ -682,9 +658,7 @@ class TestProjectConversationMessageRepository:
         db_session.commit()
 
         # Update to a response message
-        response_message = ModelResponse(
-            parts=[TextPart(content="Updated message content")]
-        )
+        response_message = ModelResponse(parts=[TextPart(content="Updated message content")])
         created.pydantic_content = to_jsonable_python(response_message)
         created.message_type = _get_message_type(response_message)
 

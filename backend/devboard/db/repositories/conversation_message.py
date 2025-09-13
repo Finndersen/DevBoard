@@ -29,7 +29,7 @@ class BaseConversationMessageRepository[MessageT](
         )
         if exclude_tool_calls:
             stmt = stmt.where(
-                self.MESSAGE_MODEL.message_type.not_in_(
+                self.MESSAGE_MODEL.message_type.not_in(
                     [MessageType.TOOL_CALL, MessageType.TOOL_RESULT]
                 )
             )

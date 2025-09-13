@@ -1,6 +1,5 @@
 """Configuration Pydantic schemas."""
 
-import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -13,8 +12,8 @@ class ConfigurationFieldInfo(BaseModel):
     type: str  # "string", "boolean", "integer", "number"
     required: bool
     description: str | None = None
-    env_value: Any | None = None      # Value from environment variable
-    db_value: Any | None = None       # Value from database (override)
+    env_value: Any | None = None  # Value from environment variable
+    db_value: Any | None = None  # Value from database (override)
     default_value: Any | None = None  # Value from schema default
     is_secret: bool = False
     env_var_name: str | None = None
@@ -41,32 +40,3 @@ class ConfigurationDetailResponse(BaseModel):
     fields: list[ConfigurationFieldInfo]
     validation_status: str  # "valid", "invalid", "unconfigured"
     validation_errors: list[str] | None = None
-
-
-class ConfigurationBase(BaseModel):
-    """Base configuration schema."""
-
-    key: str
-    value_json: str
-    schema_version: str = "1.0"
-
-
-class ConfigurationCreate(ConfigurationBase):
-    """Schema for creating a new configuration."""
-
-    pass
-
-
-class ConfigurationUpdate(BaseModel):
-    """Schema for updating a configuration."""
-
-    value_json: str | None = None
-    schema_version: str | None = None
-
-
-class ConfigurationResponse(ConfigurationBase):
-    """Schema for configuration responses."""
-
-    updated_at: datetime.datetime
-
-    model_config = {"from_attributes": True}

@@ -27,10 +27,6 @@ class DocumentEditError(Exception):
 class DocumentEditorService:
     """Service for applying find-replace edits to documents."""
 
-    def __init__(self):
-        """Initialize the document editor service."""
-        pass
-
     def apply_edits(self, content: str, edits: list[DocumentEdit]) -> EditResult:
         """Apply a list of edits to document content.
 

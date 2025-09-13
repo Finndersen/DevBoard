@@ -62,3 +62,9 @@ class ToolApprovalRequest(BaseModel):
     """Request to approve or deny tool calls."""
 
     approvals: dict[str, ToolApprovalDecision]  # tool_call_id -> decision
+
+
+class ChatRequest(BaseModel):
+    """Request model for project or task chat."""
+
+    message: str

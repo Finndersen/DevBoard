@@ -7,7 +7,6 @@ from devboard.agents.task_agent import (
     TaskPlanningAgent,
     TaskSpecificationAgent,
 )
-from devboard.api.routers.projects import ChatRequest
 from devboard.api.schemas import (
     DeleteResponse,
     ResourceResponse,
@@ -18,11 +17,11 @@ from devboard.api.schemas import (
     TaskUpdate,
 )
 from devboard.api.schemas.agent_conversation import (
+    ChatRequest,
     PromptResponse,
     ToolApprovalRequest,
 )
 from devboard.db.database import get_db
-from devboard.db.models import Task
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     DocumentRepository,
@@ -84,7 +83,9 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
-async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get_db)):
+async def update_task(
+    task_id: int, task_update: TaskUpdate, db: Session = Depends(get_db)
+):
     """Update a task."""
     task_repo = TaskRepository(db)
     task = task_repo.get_by_id(task_id)
@@ -157,7 +158,9 @@ async def create_task_resource(
 
 
 @router.delete("/{task_id}/resources/{resource_id}", response_model=DeleteResponse)
-async def delete_task_resource(task_id: int, resource_id: int, db: Session = Depends(get_db)):
+async def delete_task_resource(
+    task_id: int, resource_id: int, db: Session = Depends(get_db)
+):
     """Remove a context provider resource from a task."""
     # Verify task exists
     task_repo = TaskRepository(db)
@@ -206,7 +209,9 @@ async def send_task_agent_message(
         elif task.status == TaskStatus.PLANNING:
             agent_type = TaskPlanningAgent
         else:
-            raise ValueError(f"Task in state {task.status} cannot accept agent messages")
+            raise ValueError(
+                f"Task in state {task.status} cannot accept agent messages"
+            )
 
         agent = agent_type(task=task, document_repository=DocumentRepository(db))
 
@@ -214,14 +219,18 @@ async def send_task_agent_message(
             agent, message_repository=TaskConversationMessageRepository(db)
         )
         # Process query with Q&A agent
-        response = await conversation_service.send_message(message=request.query, entity_id=task_id)
+        response = await conversation_service.send_message(
+            message=request.message, entity_id=task_id
+        )
 
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Chat processing failed: {e}"
+        ) from e
 
 
 @router.post("/{task_id}/agent/approve-tools", response_model=PromptResponse)
@@ -267,7 +276,9 @@ async def transition_task_state(
         raise HTTPException(status_code=404, detail="Task not found")
 
     if request.new_state not in TaskStatus:
-        raise HTTPException(status_code=400, detail=f"Invalid state: {request.new_state}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid state: {request.new_state}"
+        )
 
     # Update task status
     task.status = request.new_state

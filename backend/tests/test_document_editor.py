@@ -125,9 +125,7 @@ class TestDocumentEditorService:
         result = self.editor.apply_edits(content, edits)
 
         assert result.success is False  # Overall failure due to one failed edit
-        assert (
-            result.content == "Hello world!"
-        )  # Original content returned on any failure
+        assert result.content == "Hello world!"  # Original content returned on any failure
         assert len(result.errors) == 1
         assert "Text not found: 'nonexistent'" in result.errors[0]
 
@@ -202,9 +200,7 @@ Create a new authentication system.
     def test_large_content_edit(self):
         """Test editing large content blocks."""
         content = "Start\n" + "\n".join([f"Line {i}" for i in range(100)]) + "\nEnd"
-        large_replacement = "Replaced\n" + "\n".join(
-            [f"New line {i}" for i in range(50)]
-        )
+        large_replacement = "Replaced\n" + "\n".join([f"New line {i}" for i in range(50)])
 
         edit = DocumentEdit(
             find="\n".join([f"Line {i}" for i in range(10, 20)]),

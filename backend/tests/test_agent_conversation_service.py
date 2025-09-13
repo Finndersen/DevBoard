@@ -13,6 +13,8 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests, ToolApproved, ToolDenied
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
@@ -23,8 +25,6 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
 )
 from devboard.db.models.messages import BaseConversationMessage, MessageType
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
 from devboard.db.repositories.conversation_message import (
     BaseConversationMessageRepository,
 )
@@ -33,8 +33,9 @@ from devboard.services.agent_conversation import AgentConversationService
 
 class MockConversationMessage(BaseConversationMessage):
     """Mock concrete conversation message for testing."""
+
     __tablename__ = "mock_conversation_messages"
-    
+
     parent_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
 
 
@@ -101,9 +102,7 @@ class TestAgentConversationService:
     @pytest.fixture
     def service(self, mock_agent, mock_message_repo):
         """Create AgentConversationService instance."""
-        return AgentConversationService(
-            agent=mock_agent, message_repository=mock_message_repo
-        )
+        return AgentConversationService(agent=mock_agent, message_repository=mock_message_repo)
 
     @pytest.mark.asyncio
     async def test_send_message_text_response(self, service, mock_agent):
@@ -185,9 +184,7 @@ class TestAgentConversationService:
         with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = mock_result
 
-            response = await service.process_tool_approvals(
-                approvals=approvals, entity_id=1
-            )
+            response = await service.process_tool_approvals(approvals=approvals, entity_id=1)
 
         # Verify the agent was called with proper approval results
         mock_run.assert_called_once()
@@ -211,15 +208,15 @@ class TestAgentConversationService:
         msg1.message_type = MessageType.USER_PROMPT
         msg1.pydantic_content = {
             "kind": "request",
-            "parts": [{"part_kind": "user-prompt", "content": "Hello"}]
+            "parts": [{"part_kind": "user-prompt", "content": "Hello"}],
         }
 
         msg2 = MockConversationMessage()
         msg2.parent_id = 1
         msg2.message_type = MessageType.TEXT_RESPONSE
         msg2.pydantic_content = {
-            "kind": "response", 
-            "parts": [{"part_kind": "text", "content": "Hi there"}]
+            "kind": "response",
+            "parts": [{"part_kind": "text", "content": "Hi there"}],
         }
 
         messages = service.convert_messages_to_pydantic([msg1, msg2])
@@ -258,9 +255,7 @@ class TestAgentConversationService:
 
     def test_create_deferred_results_denied(self, service):
         """Test creating deferred results for denied tools."""
-        approvals = {
-            "tool_456": ToolApprovalDecision(approved=False, feedback="Not allowed")
-        }
+        approvals = {"tool_456": ToolApprovalDecision(approved=False, feedback="Not allowed")}
 
         result = service._create_deferred_results(approvals)
 

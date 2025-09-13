@@ -88,9 +88,7 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
         :param deps:
         :return:
         """
-        parts: list[ModelRequestPart] = [
-            SystemPromptPart(content=self._get_system_prompt())
-        ]
+        parts: list[ModelRequestPart] = [SystemPromptPart(content=self._get_system_prompt())]
 
         context_msg_content = await self._get_context_message_content(deps)
         parts.append(UserPromptPart(content=context_msg_content))
@@ -148,9 +146,7 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
 
         # ON_DEMAND resources summary
         if context_data.on_demand_resources:
-            summary_parts.append(
-                "\nON_DEMAND RESOURCES (use get_relevant_context tool):"
-            )
+            summary_parts.append("\nON_DEMAND RESOURCES (use get_relevant_context tool):")
             for resource in context_data.on_demand_resources:
                 summary_parts.append(
                     f"- [{resource.provider_type.upper()}] {resource.uri}: {resource.description}"
