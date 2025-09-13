@@ -74,9 +74,7 @@ class SlackIntegration(BaseIntegration):
     async def get_message(self, channel: str, timestamp: str) -> dict[str, Any] | None:
         """Get a specific message by channel and timestamp."""
         try:
-            response = self.client.conversations_history(
-                channel=channel, latest=timestamp, inclusive=True, limit=1
-            )
+            response = self.client.conversations_history(channel=channel, latest=timestamp, inclusive=True, limit=1)
 
             if response.get("ok") and response.get("messages"):
                 return response["messages"][0]  # type: ignore[return-value]
@@ -105,9 +103,7 @@ class SlackIntegration(BaseIntegration):
     ) -> list[dict[str, Any]]:
         """Get message history from a channel."""
         try:
-            response = self.client.conversations_history(
-                channel=channel, limit=limit, oldest=oldest, latest=latest
-            )
+            response = self.client.conversations_history(channel=channel, limit=limit, oldest=oldest, latest=latest)
 
             if response.get("ok"):
                 return response.get("messages", [])  # type: ignore[return-value]
@@ -201,9 +197,7 @@ class SlackIntegration(BaseIntegration):
     async def list_channels(self, limit: int = 100) -> list[dict[str, Any]]:
         """List public channels."""
         try:
-            response = self.client.conversations_list(
-                types="public_channel,private_channel", limit=limit
-            )
+            response = self.client.conversations_list(types="public_channel,private_channel", limit=limit)
 
             if response.get("ok"):
                 return response.get("channels", [])  # type: ignore[return-value]

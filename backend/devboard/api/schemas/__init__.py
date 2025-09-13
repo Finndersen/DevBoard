@@ -18,6 +18,7 @@ from .configuration import (
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
     AgentModelInfo,
+    AgentModelResponse,
     AvailableModelsResponse,
     IntegrationTestResponse,
     ModelInfo,
@@ -69,6 +70,7 @@ __all__ = [
     "TaskResourceCreate",
     # Integration
     "AgentModelInfo",
+    "AgentModelResponse",
     "AvailableModelsResponse",
     "IntegrationTestResponse",
     "ModelInfo",

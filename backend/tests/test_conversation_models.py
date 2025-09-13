@@ -45,9 +45,7 @@ class TestBaseConversationMessage:
         """Test MessageType detection for tool calls."""
         from pydantic_ai.messages import ModelResponse
 
-        message = ModelResponse(
-            parts=[ToolCallPart(tool_name="edit_document", tool_call_id="123", args={})]
-        )
+        message = ModelResponse(parts=[ToolCallPart(tool_name="edit_document", tool_call_id="123", args={})])
 
         detected_type = _get_message_type(message)
         assert detected_type == MessageType.TOOL_CALL
@@ -56,11 +54,7 @@ class TestBaseConversationMessage:
         """Test MessageType detection for tool results."""
 
         message = ModelRequest(
-            parts=[
-                ToolReturnPart(
-                    tool_name="test_tool", tool_call_id="123", content="Tool executed successfully"
-                )
-            ]
+            parts=[ToolReturnPart(tool_name="test_tool", tool_call_id="123", content="Tool executed successfully")]
         )
 
         detected_type = _get_message_type(message)
@@ -89,9 +83,7 @@ class TestBaseConversationMessage:
         from pydantic_ai.messages import ModelResponse
 
         # Create a response with a tool call that's not final_result
-        message = ModelResponse(
-            parts=[ToolCallPart(tool_name="unknown_tool", tool_call_id="123", args={})]
-        )
+        message = ModelResponse(parts=[ToolCallPart(tool_name="unknown_tool", tool_call_id="123", args={})])
 
         # Should default to TOOL_CALL for unknown response types
         detected_type = _get_message_type(message)
@@ -105,15 +97,11 @@ class TestProjectConversationMessage:
         """Test creating a ProjectConversationMessage from PydanticAI message."""
         # Create a project first
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         # Create PydanticAI-style message data
-        pydantic_message = ModelRequest(
-            parts=[UserPromptPart(content="What is the current status of this project?")]
-        )
+        pydantic_message = ModelRequest(parts=[UserPromptPart(content="What is the current status of this project?")])
 
         # Use the factory method to create message
         message = ProjectConversationMessage.from_pydantic_message(
@@ -135,15 +123,11 @@ class TestProjectConversationMessage:
         """Test ProjectConversationMessage from agent response."""
         # Create a project
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         # Create agent response message
-        pydantic_message = ModelResponse(
-            parts=[TextPart(content="The project is currently active and on track.")]
-        )
+        pydantic_message = ModelResponse(parts=[TextPart(content="The project is currently active and on track.")])
 
         message = ProjectConversationMessage.from_pydantic_message(
             entity_id=created_project.id, message=pydantic_message
@@ -162,9 +146,7 @@ class TestProjectConversationMessage:
         """Test the relationship between Project and ProjectConversationMessage."""
         # Create project
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         # Create multiple messages
@@ -199,15 +181,11 @@ class TestTaskConversationMessage:
         """Test creating a TaskConversationMessage from PydanticAI message."""
         # Create project and task
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(
-            project_id=created_project.id, title="Test Task", status="defining"
-        )
+        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status="defining")
         db_session.commit()
 
         # Create PydanticAI user message
@@ -215,9 +193,7 @@ class TestTaskConversationMessage:
             parts=[UserPromptPart(content="Please help me design this task specification.")]
         )
 
-        message = TaskConversationMessage.from_pydantic_message(
-            entity_id=created_task.id, message=pydantic_message
-        )
+        message = TaskConversationMessage.from_pydantic_message(entity_id=created_task.id, message=pydantic_message)
 
         db_session.add(message)
         db_session.commit()
@@ -234,15 +210,11 @@ class TestTaskConversationMessage:
         """Test the relationship between Task and TaskConversationMessage."""
         # Create task
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(
-            project_id=created_project.id, title="Test Task", status="defining"
-        )
+        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status="defining")
         db_session.commit()
 
         # Create conversation messages
@@ -253,9 +225,7 @@ class TestTaskConversationMessage:
         ]
 
         for pydantic_msg in conversation:
-            message = TaskConversationMessage.from_pydantic_message(
-                entity_id=created_task.id, message=pydantic_msg
-            )
+            message = TaskConversationMessage.from_pydantic_message(entity_id=created_task.id, message=pydantic_msg)
             db_session.add(message)
 
         db_session.commit()
@@ -273,15 +243,11 @@ class TestTaskConversationMessage:
         """Test that PydanticAI messages are properly serialized and deserialized."""
         # Create task
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(
-            project_id=created_project.id, title="Test Task", status="planning"
-        )
+        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status="planning")
         db_session.commit()
 
         # Create a complex message with multiple parts
@@ -293,9 +259,7 @@ class TestTaskConversationMessage:
         )
 
         # Store the message
-        message = TaskConversationMessage.from_pydantic_message(
-            entity_id=created_task.id, message=original_message
-        )
+        message = TaskConversationMessage.from_pydantic_message(entity_id=created_task.id, message=original_message)
         db_session.add(message)
         db_session.commit()
         db_session.refresh(message)
@@ -315,15 +279,11 @@ class TestTaskConversationMessage:
         """Test that timestamps are properly set and ordered."""
         # Create task
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development"
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
         db_session.commit()
 
         task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(
-            project_id=created_project.id, title="Test Task", status="defining"
-        )
+        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status="defining")
         db_session.commit()
 
         # Create messages with slight delay
@@ -358,9 +318,7 @@ class TestTaskConversationMessage:
         # Test with user request
         user_message = ModelRequest(parts=[UserPromptPart(content="Test user message")])
 
-        task_msg = TaskConversationMessage.from_pydantic_message(
-            entity_id=123, message=user_message
-        )
+        task_msg = TaskConversationMessage.from_pydantic_message(entity_id=123, message=user_message)
 
         assert task_msg.parent_id == 123
         assert task_msg.message_type == MessageType.USER_PROMPT
@@ -369,9 +327,7 @@ class TestTaskConversationMessage:
         # Test with agent response
         agent_message = ModelResponse(parts=[TextPart(content="Test agent response")])
 
-        project_msg = ProjectConversationMessage.from_pydantic_message(
-            entity_id=456, message=agent_message
-        )
+        project_msg = ProjectConversationMessage.from_pydantic_message(entity_id=456, message=agent_message)
 
         assert project_msg.parent_id == 456
         assert project_msg.message_type == MessageType.TEXT_RESPONSE

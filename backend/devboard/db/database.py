@@ -34,8 +34,10 @@ def get_db():
         db = SessionLocal()
     try:
         yield db
+        logfire.info("Committing DB transaction")
         db.commit()
     except Exception:
+        logfire.info("Rolling back DB transaction")
         db.rollback()
         raise
     finally:

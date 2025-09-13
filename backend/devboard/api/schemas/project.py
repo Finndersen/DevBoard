@@ -26,6 +26,7 @@ class ProjectUpdate(BaseModel):
 
     name: str | None = None
     description: str | None = None
+    specification: str | None = None
 
 
 class ProjectResponse(ProjectBase):

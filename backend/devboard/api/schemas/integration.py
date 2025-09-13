@@ -28,6 +28,12 @@ class AgentModelInfo(BaseModel):
     total_available: int
 
 
+class AgentModelResponse(BaseModel):
+    """Response schema for agent model endpoint."""
+
+    model_id: str
+
+
 class AvailableModelsResponse(BaseModel):
     """Response schema for available models endpoint."""
 

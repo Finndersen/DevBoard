@@ -95,9 +95,7 @@ class JiraIntegration(BaseIntegration):
                 logger.error(f"Jira error in get_project({project_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
-    async def search_issues(
-        self, jql: str, fields: list[str] | None = None, max_results: int = 50
-    ) -> dict[str, Any]:
+    async def search_issues(self, jql: str, fields: list[str] | None = None, max_results: int = 50) -> dict[str, Any]:
         """Search issues using JQL."""
         try:
             issues = self.client.search_issues(jql, maxResults=max_results, fields=fields)

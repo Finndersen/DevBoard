@@ -136,9 +136,7 @@ class TestDocumentEditorService:
             DocumentEdit(find="Hello", replace="Hi"),  # Valid
             DocumentEdit(find="", replace="something"),  # Invalid: empty find
             DocumentEdit(find="nonexistent", replace="x"),  # Invalid: text not found
-            DocumentEdit(
-                find="universe", replace="cosmos"
-            ),  # Invalid: 'universe' not found in modified content
+            DocumentEdit(find="universe", replace="cosmos"),  # Invalid: 'universe' not found in modified content
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -148,9 +146,7 @@ class TestDocumentEditorService:
         assert len(result.errors) == 3  # First succeeds, rest fail
         assert "'find' text cannot be empty" in result.errors[0]
         assert "Text not found: 'nonexistent'" in result.errors[1]
-        assert (
-            "Text not found: 'universe'" in result.errors[2]
-        )  # 'universe' not found in modified content
+        assert "Text not found: 'universe'" in result.errors[2]  # 'universe' not found in modified content
 
     def test_apply_edits_unique_text_success(self):
         """Test that edits with unique find text succeed."""

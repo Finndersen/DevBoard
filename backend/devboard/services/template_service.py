@@ -38,5 +38,4 @@ class TemplateService:
         return template_path.read_text(encoding="utf-8")
 
 
-# Global instance
-template_service = TemplateService()
+# Note: No global instance - use dependency injection

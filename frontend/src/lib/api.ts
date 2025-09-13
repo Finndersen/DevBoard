@@ -1,7 +1,7 @@
 export interface Project {
   id: number
   name: string
-  specification: string
+  specification: DocumentResponse
   description: string
   created_at: string
 }
@@ -22,6 +22,15 @@ export interface Task {
 export interface DocumentEdit {
   find: string
   replace: string
+}
+
+export interface DocumentResponse {
+  id: number
+  document_type: string
+  content: string
+  content_hash: string
+  created_at: string
+  updated_at: string
 }
 
 // New agent conversation interfaces matching backend schemas
@@ -188,12 +197,13 @@ export interface ConfigurationFieldInfo {
   type: 'string' | 'boolean' | 'integer' | 'number'
   required: boolean
   description?: string
-  current_value?: any
-  value_source?: 'environment' | 'database' | 'default'
+  env_value?: any
+  db_value?: any
+  default_value?: any
   is_secret: boolean
   env_var_name?: string
-  default_value?: any
-  env_value_present: boolean
+  is_overridden: boolean
+  effective_value: any
 }
 
 export interface ConfigurationDetailResponse {
@@ -208,6 +218,10 @@ export interface IntegrationTestResponse {
   error_type?: string
   error_message?: string
   details?: Record<string, any>
+}
+
+export interface AgentModelResponse {
+  model_id: string
 }
 
 export class ApiClient {
@@ -374,6 +388,10 @@ export class ApiClient {
     return this.request<IntegrationTestResponse>(`/api/settings/integrations/${integrationType}/test`, {
       method: 'POST',
     })
+  }
+
+  async getAgentModel(agentType: string): Promise<AgentModelResponse> {
+    return this.request<AgentModelResponse>(`/api/settings/agents/${agentType}/model`)
   }
 
   // Codebases

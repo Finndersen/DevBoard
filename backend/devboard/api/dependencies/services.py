@@ -4,11 +4,9 @@ from fastapi import Depends
 
 from devboard.agents.llm_service import LLMService
 from devboard.api.dependencies.repositories import (
-    get_base_conversation_message_repository,
     get_configuration_repository,
     get_context_provider_resource_repository,
     get_project_repository,
-    get_task_conversation_message_repository,
     get_task_repository,
 )
 from devboard.context_providers.registry import context_provider_registry
@@ -18,50 +16,25 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
-from devboard.db.repositories.conversation_message import (
-    BaseConversationMessageRepository,
-    TaskConversationMessageRepository,
-)
-from devboard.services.agent_conversation import AgentConversationService
+from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
 from devboard.services.context_assembly import ContextAssemblyService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.resource_service import ResourceService
-
-
-def get_agent_conversation_service(
-    conversation_repo: BaseConversationMessageRepository = Depends(
-        get_base_conversation_message_repository
-    ),
-) -> AgentConversationService:
-    """Get AgentConversationService instance."""
-    return AgentConversationService(conversation_repo)
-
-
-def get_task_agent_conversation_service(
-    conversation_repo: TaskConversationMessageRepository = Depends(
-        get_task_conversation_message_repository
-    ),
-) -> AgentConversationService:
-    """Get AgentConversationService instance for task conversations."""
-    return AgentConversationService(conversation_repo)
+from devboard.services.template_service import TemplateService
 
 
 def get_context_assembly_service(
     project_repo: ProjectRepository = Depends(get_project_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
-    resource_repo: ContextProviderResourceRepository = Depends(
-        get_context_provider_resource_repository
-    ),
+    resource_repo: ContextProviderResourceRepository = Depends(get_context_provider_resource_repository),
 ) -> ContextAssemblyService:
     """Get ContextAssemblyService instance."""
     return ContextAssemblyService(project_repo, task_repo, resource_repo)
 
 
 def get_resource_service(
-    resource_repo: ContextProviderResourceRepository = Depends(
-        get_context_provider_resource_repository
-    ),
+    resource_repo: ContextProviderResourceRepository = Depends(get_context_provider_resource_repository),
 ) -> ResourceService:
     """Get ResourceService instance."""
     return ResourceService(resource_repo, context_provider_registry)
@@ -86,3 +59,15 @@ def get_llm_service(
 ) -> LLMService:
     """Get LLMService instance."""
     return LLMService(config_service)
+
+
+def get_template_service() -> TemplateService:
+    """Get TemplateService instance."""
+    return TemplateService()
+
+
+def get_codebase_investigation_service(
+    template_service: TemplateService = Depends(get_template_service),
+) -> CodebaseInvestigationService:
+    """Get CodebaseInvestigationService instance."""
+    return CodebaseInvestigationService(template_service)

@@ -44,9 +44,7 @@ class Task(Base):
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
     implementation_plan_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
 
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        default=lambda: datetime.datetime.now(datetime.UTC)
-    )
+    created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
     codebase: Mapped["Codebase | None"] = relationship(back_populates="tasks")

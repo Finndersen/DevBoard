@@ -73,6 +73,8 @@ class ProjectRepository(BaseRepository[Project]):
             Updated project
         """
         self.db.merge(project)
+        self.db.flush()
+        self.db.refresh(project)
         return project
 
     def update_details_content(self, project: Project, content: str) -> Project:

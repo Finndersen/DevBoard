@@ -74,9 +74,7 @@ class GitHubIntegration(BaseIntegration):
             pr = repo_obj.get_pull(pr_number)
             return pr.raw_data  # type: ignore[return-value]
         except UnknownObjectException as e:
-            raise ResourceNotFoundError(
-                f"Pull request #{pr_number} not found in {owner}/{repo}"
-            ) from e
+            raise ResourceNotFoundError(f"Pull request #{pr_number} not found in {owner}/{repo}") from e
         except BadCredentialsException as e:
             raise AuthenticationError(f"GitHub authentication failed: {e}") from e
         except RateLimitExceededException as e:
@@ -85,9 +83,7 @@ class GitHubIntegration(BaseIntegration):
             logger.error(f"GitHub error in get_pull_request({owner}/{repo}#{pr_number}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
-    async def get_pull_request_comments(
-        self, owner: str, repo: str, pr_number: int
-    ) -> list[dict[str, Any]]:
+    async def get_pull_request_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
         """Get comments for a pull request."""
         try:
             repo_obj = self.client.get_repo(f"{owner}/{repo}")
@@ -99,9 +95,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(
-                f"GitHub error in get_pull_request_comments({owner}/{repo}#{pr_number}): {e}"
-            )
+            logger.error(f"GitHub error in get_pull_request_comments({owner}/{repo}#{pr_number}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def get_commit(self, owner: str, repo: str, sha: str) -> dict[str, Any]:
@@ -159,9 +153,7 @@ class GitHubIntegration(BaseIntegration):
             logger.error(f"GitHub error in list_branches({owner}/{repo}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
-    async def search_issues(
-        self, query: str, owner: str | None = None, repo: str | None = None
-    ) -> dict[str, Any]:
+    async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> dict[str, Any]:
         """Search issues across GitHub."""
         try:
             # Build search query

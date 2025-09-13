@@ -159,9 +159,7 @@ class FilesystemIntegration(BaseIntegration):
         base = Path(base_path or Path.cwd()).resolve()
         return self._run_git_command(args, str(base))
 
-    async def get_git_branches(
-        self, remote: bool = False, base_path: str | None = None
-    ) -> list[str]:
+    async def get_git_branches(self, remote: bool = False, base_path: str | None = None) -> list[str]:
         """Get list of git branches."""
         args = ["branch"]
         if remote:
@@ -304,9 +302,7 @@ def detect_git_remote_url(local_path: str) -> str | None:
             return result.stdout.strip()
 
         # If origin doesn't exist, try to get any remote
-        result = subprocess.run(
-            ["git", "remote"], cwd=str(local_path), capture_output=True, text=True, timeout=10
-        )
+        result = subprocess.run(["git", "remote"], cwd=str(local_path), capture_output=True, text=True, timeout=10)
 
         if result.returncode == 0 and result.stdout.strip():
             first_remote = result.stdout.strip().split("\n")[0]

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from devboard.agents.llm_service import LLMService
 from devboard.agents.types import AgentType
 from devboard.api.dependencies.services import get_integration_service, get_llm_service
-from devboard.api.schemas import AvailableModelsResponse, IntegrationTestResponse
+from devboard.api.schemas import AgentModelResponse, IntegrationTestResponse
 from devboard.services.integration_service import IntegrationService
 
 router = APIRouter()
@@ -33,58 +33,29 @@ async def test_integration_connection(
     return result
 
 
-@router.get("/agents/available-models", response_model=AvailableModelsResponse)
-async def get_available_models(
-    agent_type: str = None, llm_service: LLMService = Depends(get_llm_service)
-) -> AvailableModelsResponse:
-    """Get available models for agents.
+@router.get("/agents/{agent_type}/model", response_model=AgentModelResponse)
+async def get_model_for_agent(
+    agent_type: str, llm_service: LLMService = Depends(get_llm_service)
+) -> AgentModelResponse:
+    """Get the preferred model for a specific agent type.
 
     Args:
-        agent_type: Optional specific agent type to get models for
+        agent_type: The agent type to get the preferred model for
 
     Returns:
-        Available models and recommendations
+        The preferred model ID for the agent
     """
-    # Get all available models once
-    all_models = llm_service.get_available_models()
-    # Convert to list of ModelInfo for schema compatibility
-    models_list = [
-        {"id": model.id, "provider": model.provider, "name": model.name} for model in all_models
-    ]
+    # Validate agent type
+    try:
+        agent_enum = AgentType(agent_type)
+    except ValueError:
+        valid_types = [t.value for t in AgentType]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
+        ) from None
 
-    if agent_type:
-        # Validate agent type
-        try:
-            agent_enum = AgentType(agent_type)
-        except ValueError:
-            valid_types = [t.value for t in AgentType]
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
-            ) from None
+    # Get the preferred model for this agent type
+    model_id = llm_service.get_preferred_model_for_agent(agent_enum)
 
-        preferred_model = llm_service.get_preferred_model_for_agent(agent_enum)
-
-        return AvailableModelsResponse(
-            agent_type=agent_type,
-            available_models=models_list,
-            preferred_model=preferred_model,
-            total_available=len(models_list),
-        )
-
-    else:
-        # Return models for all agent types
-        result_data = {}
-        for agent_enum in AgentType:
-            preferred_model = llm_service.get_preferred_model_for_agent(agent_enum)
-            result_data[agent_enum.value] = {
-                "available_models": models_list,
-                "preferred_model": preferred_model,
-                "total_available": len(models_list),
-            }
-
-        return AvailableModelsResponse(
-            qa=result_data.get("qa"),
-            planning=result_data.get("planning"),
-            implementation=result_data.get("implementation"),
-        )
+    return AgentModelResponse(model_id=model_id)

@@ -87,11 +87,7 @@ class TaskSpecificationAgent(BaseTaskAgent):
         return SPECIFICATION_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        return [
-            create_document_edit_tool(
-                document=self.task.specification, document_repo=self.document_repository
-            )
-        ]
+        return [create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)]
 
 
 PLANNING_SYSTEM_PROMPT = """
@@ -146,10 +142,6 @@ class TaskPlanningAgent(BaseTaskAgent):
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
         return [
-            create_document_edit_tool(
-                document=self.task.specification, document_repo=self.document_repository
-            ),
-            create_document_edit_tool(
-                document=self.task.implementation_plan, document_repo=self.document_repository
-            ),
+            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
+            create_document_edit_tool(document=self.task.implementation_plan, document_repo=self.document_repository),
         ]

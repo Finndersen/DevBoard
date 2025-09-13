@@ -79,6 +79,7 @@ class LLMService:
 
         # Get available models
         available_models = self.get_available_models()
+        print(f"Available models: {available_models}")
         available_model_ids = {model.id for model in available_models}
 
         # If user has selected a specific model and it's available, use that

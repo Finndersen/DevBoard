@@ -42,9 +42,7 @@ def temp_git_dir():
         test_file = Path(temp_dir) / "README.md"
         test_file.write_text("# Test Repository")
         subprocess.run(["git", "add", "README.md"], cwd=temp_dir, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "Initial commit"], cwd=temp_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=temp_dir, check=True, capture_output=True)
 
         # Add a remote origin
         subprocess.run(
@@ -232,9 +230,7 @@ class TestCodebasesRouter:
         new_content = "# New Architecture\n\nThis is a new architecture document."
         update_data = {"content": new_content, "original_hash": None}
 
-        response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
-        )
+        response = client.put(f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -246,9 +242,7 @@ class TestCodebasesRouter:
         assert arch_file.exists()
         assert arch_file.read_text() == new_content
 
-    def test_update_architecture_document_existing_success(
-        self, client, db_session, test_codebase_data
-    ):
+    def test_update_architecture_document_existing_success(self, client, db_session, test_codebase_data):
         """Test updating existing architecture document with correct hash."""
         # Create test codebase with existing architecture document
         codebase_repo = CodebaseRepository(db_session)
@@ -268,9 +262,7 @@ class TestCodebasesRouter:
         new_content = "# Updated Architecture\n\nUpdated content."
         update_data = {"content": new_content, "original_hash": original_hash}
 
-        response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
-        )
+        response = client.put(f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -302,9 +294,7 @@ class TestCodebasesRouter:
         new_content = "# User Updated Architecture\n\nUser updated content."
         update_data = {"content": new_content, "original_hash": "wrong_hash"}
 
-        response = client.put(
-            f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data
-        )
+        response = client.put(f"/api/codebases/{created_codebase.id}/architecture_document/", json=update_data)
         assert response.status_code == 409
 
         data = response.json()
@@ -316,9 +306,7 @@ class TestCodebasesRouter:
         assert arch_file.read_text() == modified_content
 
     @patch("devboard.services.codebase_investigation.execute_gemini_prompt", new_callable=AsyncMock)
-    def test_generate_architecture_document(
-        self, mock_gemini_prompt, client, db_session, test_codebase_data
-    ):
+    def test_generate_architecture_document(self, mock_gemini_prompt, client, db_session, test_codebase_data):
         """Test generating architecture document via AI."""
         # Mock the Gemini CLI response
         mock_architecture_content = """# Architecture Overview: Test Codebase
@@ -344,9 +332,7 @@ A simple Python codebase with a main module and utility functions.
         (src_dir / "main.py").write_text("def main():\n    pass")
         (src_dir / "utils.py").write_text("def helper():\n    pass")
 
-        response = client.post(
-            f"/api/codebases/{created_codebase.id}/architecture_document/generate"
-        )
+        response = client.post(f"/api/codebases/{created_codebase.id}/architecture_document/generate")
 
         # This should work with mocked gemini response
         assert response.status_code == 200

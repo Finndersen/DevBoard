@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,17 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from devboard.api.routers import codebases, configurations, projects, settings, tasks
 from devboard.config.logfire_config import setup_logfire
 
+"""Load environment variables from .env files in current directory or home directory."""
+load_dotenv(Path.cwd() / ".env", override=False)
+load_dotenv(Path.home() / ".env", override=False)
 
-# Load environment variables from .env files
-# Priority: current directory -> home directory -> system environment
-def load_environment_variables():
-    """Load environment variables from .env files in current directory or home directory."""
-    load_dotenv(Path.cwd() / ".env", override=False)
-    load_dotenv(Path.home() / ".env", override=False)
-
-
-# Load .env files at startup
-load_environment_variables()
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="DevBoard API",
@@ -42,7 +37,9 @@ app.add_middleware(
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
-app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
+app.include_router(
+    configurations.router, prefix="/api/configurations", tags=["configurations"]
+)
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 

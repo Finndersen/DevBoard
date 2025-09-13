@@ -137,9 +137,7 @@ class GitHubContextProvider(BaseContextProvider):
                     file_data = await self.integration.get_file_content(owner, repo, resource_id)
                     return {"type": "file", "data": file_data, "uri": resource_uri}
                 else:
-                    raise ContextRetrievalError(
-                        f"Unsupported resource type for EAGER loading: {resource_type}"
-                    )
+                    raise ContextRetrievalError(f"Unsupported resource type for EAGER loading: {resource_type}")
 
             except Exception as e:
                 if isinstance(e, ResourceHandlingError | ContextRetrievalError):
@@ -149,9 +147,7 @@ class GitHubContextProvider(BaseContextProvider):
                         error=str(e),
                     )
                     raise
-                logfire.error(
-                    "Unexpected error retrieving GitHub resource", error=str(e), exc_info=e
-                )
+                logfire.error("Unexpected error retrieving GitHub resource", error=str(e), exc_info=e)
                 raise ContextRetrievalError(f"Failed to get GitHub resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
@@ -262,13 +258,9 @@ Based on this repository data, here is the relevant context for your query:
 
             except Exception as e:
                 if isinstance(e, ResourceHandlingError | ContextRetrievalError):
-                    logfire.warn(
-                        "GitHub context retrieval failed", error_type=type(e).__name__, error=str(e)
-                    )
+                    logfire.warn("GitHub context retrieval failed", error_type=type(e).__name__, error=str(e))
                     raise
-                logfire.error(
-                    "Unexpected error in GitHub context retrieval", error=str(e), exc_info=e
-                )
+                logfire.error("Unexpected error in GitHub context retrieval", error=str(e), exc_info=e)
                 raise ContextRetrievalError(f"Failed to get GitHub context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:
@@ -287,7 +279,9 @@ Based on this repository data, here is the relevant context for your query:
 
             if resource_type == "pull":
                 pr_data = await self.integration.get_pull_request(owner, repo, int(resource_id))
-                return f"GitHub PR #{resource_id}: {pr_data.get('title', 'No title')} ({pr_data.get('state', 'unknown')})"
+                return (
+                    f"GitHub PR #{resource_id}: {pr_data.get('title', 'No title')} ({pr_data.get('state', 'unknown')})"
+                )
 
             elif resource_type == "issues":
                 issue_data = await self.integration.get_issue(owner, repo, int(resource_id))

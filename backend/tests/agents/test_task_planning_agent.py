@@ -1,6 +1,6 @@
 """Tests for Task Planning Agents with deferred tools."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from pydantic_ai import ApprovalRequired
@@ -52,14 +52,26 @@ class TestTaskSpecificationAgent:
         return repo
 
     @pytest.fixture
-    def agent(self, mock_task, mock_document_repo):
+    def mock_llm_service(self):
+        """Mock LLM service."""
+        mock_service = Mock()
+        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+        return mock_service
+
+    @pytest.fixture
+    def mock_context_service(self):
+        """Mock context assembly service."""
+        return Mock()
+
+    @pytest.fixture
+    def agent(self, mock_task, mock_document_repo, mock_llm_service, mock_context_service):
         """Create TaskSpecificationAgent instance."""
-        with (
-            patch("devboard.agents.base_agent.llm_service") as mock_llm,
-            patch("devboard.agents.base_agent.context_assembly_service") as mock_context,
-        ):
-            mock_llm.get_preferred_model_for_agent.return_value = "test"
-            return TaskSpecificationAgent(task=mock_task, document_repository=mock_document_repo)
+        return TaskSpecificationAgent(
+            context_service=mock_context_service,
+            llm_service=mock_llm_service,
+            task=mock_task,
+            document_repository=mock_document_repo,
+        )
 
     def test_agent_initialization(self, agent, mock_task):
         """Test agent initializes with correct task and document."""
@@ -130,14 +142,26 @@ class TestTaskPlanningAgent:
         return repo
 
     @pytest.fixture
-    def agent(self, mock_task, mock_document_repo):
+    def mock_llm_service(self):
+        """Mock LLM service."""
+        mock_service = Mock()
+        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+        return mock_service
+
+    @pytest.fixture
+    def mock_context_service(self):
+        """Mock context assembly service."""
+        return Mock()
+
+    @pytest.fixture
+    def agent(self, mock_task, mock_document_repo, mock_llm_service, mock_context_service):
         """Create TaskPlanningAgent instance."""
-        with (
-            patch("devboard.agents.base_agent.llm_service") as mock_llm,
-            patch("devboard.agents.base_agent.context_assembly_service") as mock_context,
-        ):
-            mock_llm.get_preferred_model_for_agent.return_value = "test"
-            return TaskPlanningAgent(task=mock_task, document_repository=mock_document_repo)
+        return TaskPlanningAgent(
+            context_service=mock_context_service,
+            llm_service=mock_llm_service,
+            task=mock_task,
+            document_repository=mock_document_repo,
+        )
 
     def test_agent_initialization(self, agent, mock_task):
         """Test agent initializes with correct task."""

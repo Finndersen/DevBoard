@@ -11,7 +11,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'board' | 'specification' | 'chat' | 'settings'>('board')
+  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>('board')
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
   const [newTask, setNewTask] = useState({
     title: '',
@@ -24,17 +24,20 @@ export default function ProjectDetail() {
   })
   const [isEditingSpecification, setIsEditingSpecification] = useState(false)
   const [editedSpecification, setEditedSpecification] = useState('')
+  const [agentModel, setAgentModel] = useState<string | null>(null)
+  const [modelLoading, setModelLoading] = useState(true)
 
   useEffect(() => {
     fetchProject()
     fetchTasks()
+    fetchAgentModel()
   }, [id])
 
   const fetchProject = async () => {
     try {
       const data = await apiClient.getProject(id!)
       setProject(data)
-      setEditedSpecification(data.specification || '')
+      setEditedSpecification(data.specification?.content || '')
     } catch (error) {
       console.error('Failed to fetch project:', error)
     }
@@ -48,6 +51,17 @@ export default function ProjectDetail() {
       console.error('Failed to fetch tasks:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAgentModel = async () => {
+    try {
+      const data = await apiClient.getAgentModel('project')
+      setAgentModel(data.model_id)
+    } catch (error) {
+      console.error('Failed to fetch agent model:', error)
+    } finally {
+      setModelLoading(false)
     }
   }
 
@@ -82,7 +96,7 @@ export default function ProjectDetail() {
   }
 
   const handleCancelEdit = () => {
-    setEditedSpecification(project?.specification || '')
+    setEditedSpecification(project?.specification?.content || '')
     setIsEditingSpecification(false)
   }
 
@@ -169,8 +183,7 @@ export default function ProjectDetail() {
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'board' as const, name: 'Board', icon: null },
-            { id: 'specification' as const, name: 'Specification', icon: null },
-            { id: 'chat' as const, name: 'Q&A Agent', icon: ChatBubbleLeftIcon },
+            { id: 'editor' as const, name: 'Collaborative Editor', icon: ChatBubbleLeftIcon },
             { id: 'settings' as const, name: 'Settings', icon: null },
           ].map((tab) => (
             <button
@@ -229,64 +242,97 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'specification' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project Specification</h3>
-            {!isEditingSpecification ? (
-              <button
-                onClick={() => setIsEditingSpecification(true)}
-                className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <PencilIcon className="w-4 h-4 mr-2" />
-                Edit
-              </button>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleSaveSpecification}
-                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <CheckIcon className="w-4 h-4 mr-2" />
-                  Save
-                </button>
-                <button
-                  onClick={handleCancelEdit}
-                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Cancel
-                </button>
+      {activeTab === 'editor' && (
+        <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-6 h-[80vh]">
+          {/* Left Side - Project Details & Specification */}
+          <div className="flex flex-col space-y-6">
+            {/* Project Details Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Project Details</h3>
+              <div className="space-y-2">
+                <div>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white">{project.name}</span>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Description:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white">{project.description}</span>
+                </div>
               </div>
-            )}
-          </div>
-          
-          {isEditingSpecification ? (
-            <textarea
-              value={editedSpecification}
-              onChange={(e) => setEditedSpecification(e.target.value)}
-              className="w-full h-96 px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-              placeholder="Enter project specification in Markdown format..."
-            />
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-              {project.specification ? (
-                <ReactMarkdown>{project.specification}</ReactMarkdown>
-              ) : (
-                <p className="text-gray-500 dark:text-gray-400 italic">No project specification provided. Click Edit to add specification.</p>
-              )}
             </div>
-          )}
-        </div>
-      )}
 
-      {activeTab === 'chat' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center mb-4">
-            <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Q&A Agent</h3>
+            {/* Specification Document Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project Specification</h3>
+                {!isEditingSpecification ? (
+                  <button
+                    onClick={() => setIsEditingSpecification(true)}
+                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <PencilIcon className="w-4 h-4 mr-2" />
+                    Edit
+                  </button>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleSaveSpecification}
+                      className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <CheckIcon className="w-4 h-4 mr-2" />
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex-1 overflow-hidden">
+                {isEditingSpecification ? (
+                  <textarea
+                    value={editedSpecification}
+                    onChange={(e) => setEditedSpecification(e.target.value)}
+                    className="w-full h-full px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-none"
+                    placeholder="Enter project specification in Markdown format..."
+                  />
+                ) : (
+                  <div className="h-full overflow-y-auto prose prose-sm dark:prose-invert max-w-none text-left">
+                    {project.specification?.content ? (
+                      <ReactMarkdown>{project.specification.content}</ReactMarkdown>
+                    ) : (
+                      <p className="text-gray-500 dark:text-gray-400 italic">No project specification provided. Click Edit to add specification.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="h-[600px]">
-            <Chat projectId={parseInt(id!)} />
+
+          {/* Right Side - Chat */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Agent</h3>
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {modelLoading ? (
+                  <span>Loading...</span>
+                ) : agentModel ? (
+                  <span>Model: {agentModel}</span>
+                ) : (
+                  <span>Model: Unknown</span>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <Chat projectId={parseInt(id!)} />
+            </div>
           </div>
         </div>
       )}

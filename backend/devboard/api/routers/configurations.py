@@ -24,9 +24,7 @@ async def list_configurations(
 
 
 @router.get("/{config_key}/detail", response_model=ConfigurationDetailResponse)
-async def get_configuration_detail(
-    config_key: str, config_service: ConfigService = Depends(get_config_service)
-):
+async def get_configuration_detail(config_key: str, config_service: ConfigService = Depends(get_config_service)):
     """Get detailed configuration with field-level source information."""
     result = config_service.get_config_details_by_key(config_key)
 
@@ -55,9 +53,7 @@ async def update_configuration(
 
 
 @router.delete("/{config_key}", response_model=DeleteResponse)
-async def delete_configuration(
-    config_key: str, config_service: ConfigService = Depends(get_config_service)
-):
+async def delete_configuration(config_key: str, config_service: ConfigService = Depends(get_config_service)):
     """Delete a configuration."""
     try:
         config_service.delete_config(config_key)

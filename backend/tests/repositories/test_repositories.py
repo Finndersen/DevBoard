@@ -241,9 +241,7 @@ class TestTaskRepository:
         assert "Task 1" in task_titles
         assert "Task 2" in task_titles
 
-    def test_get_all_with_project_filter(
-        self, repo: TaskRepository, project: Project, db_session: Session
-    ):
+    def test_get_all_with_project_filter(self, repo: TaskRepository, project: Project, db_session: Session):
         """Test getting all tasks filtered by project."""
         from devboard.db.repositories.project import ProjectRepository
 
@@ -315,9 +313,7 @@ class TestConfigurationRepository:
     def sample_config(self) -> Configuration:
         return Configuration(key="test.setting", value_json="test_value")
 
-    def test_create_configuration(
-        self, repo: ConfigurationRepository, sample_config: Configuration
-    ):
+    def test_create_configuration(self, repo: ConfigurationRepository, sample_config: Configuration):
         """Test creating a new configuration."""
         created = repo.create(sample_config)
         assert created.key == "test.setting"
@@ -366,9 +362,7 @@ class TestConfigurationRepository:
         for config in app_configs:
             assert config.key.startswith("app.")
 
-    def test_update_configuration(
-        self, repo: ConfigurationRepository, sample_config: Configuration
-    ):
+    def test_update_configuration(self, repo: ConfigurationRepository, sample_config: Configuration):
         """Test updating a configuration."""
         created = repo.create(sample_config)
         created.value_json = "updated_value"
@@ -614,9 +608,7 @@ class TestProjectConversationMessageRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all_for_entity(
-        self, repo: ProjectConversationMessageRepository, project: Project, db_session
-    ):
+    def test_get_all_for_entity(self, repo: ProjectConversationMessageRepository, project: Project, db_session):
         """Test getting all messages for an entity, ordered by timestamp."""
         from pydantic_ai.messages import (
             ModelRequest,
@@ -686,9 +678,7 @@ class TestProjectConversationMessageRepository:
         result = repo.delete_by_id(999)
         assert result is False
 
-    def test_delete_all_for_entity(
-        self, repo: ProjectConversationMessageRepository, project: Project, db_session
-    ):
+    def test_delete_all_for_entity(self, repo: ProjectConversationMessageRepository, project: Project, db_session):
         """Test deleting all messages for an entity."""
         from pydantic_ai.messages import (
             ModelRequest,

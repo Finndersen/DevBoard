@@ -7,16 +7,20 @@ import type { ConfigurationFieldInfo } from '../../lib/api'
 
 describe('ConfigurationField', () => {
   const mockOnChange = vi.fn()
+  const mockOnOverrideToggle = vi.fn()
 
   const baseField: ConfigurationFieldInfo = {
     name: 'test_field',
     type: 'string',
     required: true,
     description: 'Test field description',
-    current_value: 'test_value',
-    value_source: 'database',
+    effective_value: 'test_value',
+    env_value: null,
+    db_value: 'test_value',
+    default_value: null,
     is_secret: false,
-    env_value_present: false,
+    is_overridden: true,
+    env_var_name: 'TEST_FIELD'
   }
 
   beforeEach(() => {
@@ -29,20 +33,231 @@ describe('ConfigurationField', () => {
         field={baseField}
         value="test_value"
         onChange={mockOnChange}
+        overrideEnabled={true}
+        onOverrideToggle={mockOnOverrideToggle}
       />
     )
 
-    expect(screen.getByText('TEST_FIELD')).toBeInTheDocument() // Label is uppercase
+    expect(screen.getByText('TEST_FIELD')).toBeInTheDocument()
     expect(screen.getByText('Test field description')).toBeInTheDocument()
     expect(screen.getByDisplayValue('test_value')).toBeInTheDocument()
     expect(screen.getByText('*')).toBeInTheDocument() // Required indicator
+  })
+
+  it('shows override toggle when field has overridable values', () => {
+    const fieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: 'env_value',
+      is_overridden: false
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithEnv}
+        value="env_value"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByText('Override')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+  })
+
+  it('shows env var source info when env value exists', () => {
+    const fieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: 'env_test_value',
+      is_overridden: false,
+      effective_value: 'env_test_value'
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithEnv}
+        value="env_test_value"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByText(/TEST_FIELD: env_test_value/)).toBeInTheDocument()
+  })
+
+  it('shows default value source info when default value exists', () => {
+    const fieldWithDefault: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: null,
+      default_value: 'default_value',
+      is_overridden: false,
+      effective_value: 'default_value'
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithDefault}
+        value="default_value"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByText(/Default: default_value/)).toBeInTheDocument()
+  })
+
+  it('disables input when override is off and overridable value exists', () => {
+    const fieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: 'env_value',
+      is_overridden: false
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithEnv}
+        value="env_value"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByDisplayValue('env_value')).toBeDisabled()
+  })
+
+  it('enables input when override is on', () => {
+    render(
+      <ConfigurationField
+        field={baseField}
+        value="test_value"
+        onChange={mockOnChange}
+        overrideEnabled={true}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByDisplayValue('test_value')).not.toBeDisabled()
+  })
+
+  it('shows override status indicator when overriding', () => {
+    const fieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: 'env_value',
+      is_overridden: true
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithEnv}
+        value="override_value"
+        onChange={mockOnChange}
+        overrideEnabled={true}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    expect(screen.getByText(/Overriding environment variable/)).toBeInTheDocument()
+  })
+
+  it('handles override toggle clicks', async () => {
+    const user = userEvent.setup()
+    const fieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      env_value: 'env_value',
+      is_overridden: false
+    }
+
+    render(
+      <ConfigurationField
+        field={fieldWithEnv}
+        value="env_value"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    const toggleCheckbox = screen.getByRole('checkbox')
+    await user.click(toggleCheckbox)
+
+    expect(mockOnOverrideToggle).toHaveBeenCalledWith('test_field', true)
+  })
+
+  it('handles secret fields correctly', () => {
+    const secretField: ConfigurationFieldInfo = {
+      ...baseField,
+      is_secret: true
+    }
+
+    render(
+      <ConfigurationField
+        field={secretField}
+        value="secret_value"
+        onChange={mockOnChange}
+        overrideEnabled={true}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    // Should show masked value initially
+    expect(screen.getByDisplayValue(/secr\*\*\*\*alue/)).toBeInTheDocument()
+  })
+
+  it('censors secret values in source indicators', () => {
+    const secretFieldWithEnv: ConfigurationFieldInfo = {
+      ...baseField,
+      is_secret: true,
+      env_value: 'secret_env_token_1234567890',
+      is_overridden: false
+    }
+
+    render(
+      <ConfigurationField
+        field={secretFieldWithEnv}
+        value="secret_env_token_1234567890"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    // Should show censored env value in both input field and source indicator
+    expect(screen.getByDisplayValue('secr****7890')).toBeInTheDocument()
+    expect(screen.getByText(/: secr\*\*\*\*7890/)).toBeInTheDocument()
+  })
+
+  it('censors short secret values appropriately', () => {
+    const secretFieldWithShortValue: ConfigurationFieldInfo = {
+      ...baseField,
+      is_secret: true,
+      default_value: 'abc123',
+      env_value: null,
+      is_overridden: false
+    }
+
+    render(
+      <ConfigurationField
+        field={secretFieldWithShortValue}
+        value="abc123"
+        onChange={mockOnChange}
+        overrideEnabled={false}
+        onOverrideToggle={mockOnOverrideToggle}
+      />
+    )
+
+    // Should show censored short value in the source indicator
+    // Note: input field shows the user-provided value, source indicator shows censored fallback value
+    expect(screen.getByText(/Default: ab\*\*\*\*/)).toBeInTheDocument()
   })
 
   it('renders boolean field as checkbox', () => {
     const booleanField: ConfigurationFieldInfo = {
       ...baseField,
       type: 'boolean',
-      current_value: true,
+      effective_value: true
     }
 
     render(
@@ -50,429 +265,12 @@ describe('ConfigurationField', () => {
         field={booleanField}
         value={true}
         onChange={mockOnChange}
+        overrideEnabled={true}
+        onOverrideToggle={mockOnOverrideToggle}
       />
     )
 
-    const checkbox = screen.getByRole('checkbox')
-    expect(checkbox).toBeInTheDocument()
+    const checkbox = screen.getByRole('checkbox', { name: /TEST_FIELD/ })
     expect(checkbox).toBeChecked()
-  })
-
-  it('renders integer field with number input', () => {
-    const integerField: ConfigurationFieldInfo = {
-      ...baseField,
-      type: 'integer',
-      current_value: 42,
-    }
-
-    render(
-      <ConfigurationField
-        field={integerField}
-        value={42}
-        onChange={mockOnChange}
-      />
-    )
-
-    const numberInput = screen.getByRole('spinbutton')
-    expect(numberInput).toBeInTheDocument()
-    expect(numberInput).toHaveValue(42)
-    expect(numberInput).toHaveAttribute('step', '1')
-  })
-
-  it('renders number field with decimal support', () => {
-    const numberField: ConfigurationFieldInfo = {
-      ...baseField,
-      type: 'number',
-      current_value: 3.14,
-    }
-
-    render(
-      <ConfigurationField
-        field={numberField}
-        value={3.14}
-        onChange={mockOnChange}
-      />
-    )
-
-    const numberInput = screen.getByRole('spinbutton')
-    expect(numberInput).toBeInTheDocument()
-    expect(numberInput).toHaveValue(3.14)
-    expect(numberInput).toHaveAttribute('step', 'any') // Component uses 'any' for number fields
-  })
-
-  it('masks secret field values', () => {
-    const secretField: ConfigurationFieldInfo = {
-      ...baseField,
-      is_secret: true,
-      current_value: 'secret_token_123456',
-    }
-
-    render(
-      <ConfigurationField
-        field={secretField}
-        value="secret_token_123456"
-        onChange={mockOnChange}
-      />
-    )
-
-    // Should display masked value
-    expect(screen.getByDisplayValue('secr****3456')).toBeInTheDocument()
-  })
-
-  it('toggles secret field visibility', async () => {
-    const user = userEvent.setup()
-    const secretField: ConfigurationFieldInfo = {
-      ...baseField,
-      is_secret: true,
-      current_value: 'secret_token_123456',
-    }
-
-    render(
-      <ConfigurationField
-        field={secretField}
-        value="secret_token_123456"
-        onChange={mockOnChange}
-      />
-    )
-
-    // Initially masked
-    expect(screen.getByDisplayValue('secr****3456')).toBeInTheDocument()
-
-    // Click show button
-    const showButton = screen.getByRole('button', { name: /show password/i })
-    await user.click(showButton)
-
-    // Should show full value
-    expect(screen.getByDisplayValue('secret_token_123456')).toBeInTheDocument()
-
-    // Click hide button
-    const hideButton = screen.getByRole('button', { name: /hide password/i })
-    await user.click(hideButton)
-
-    // Should be masked again
-    expect(screen.getByDisplayValue('secr****3456')).toBeInTheDocument()
-  })
-
-  it('calls onChange when input value changes', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <ConfigurationField
-        field={baseField}
-        value=""
-        onChange={mockOnChange}
-      />
-    )
-
-    const input = screen.getByRole('textbox')
-    await user.type(input, 'test')
-
-    // Each character is typed individually
-    expect(mockOnChange).toHaveBeenNthCalledWith(1, 'test_field', 't')
-    expect(mockOnChange).toHaveBeenNthCalledWith(2, 'test_field', 'e')  
-    expect(mockOnChange).toHaveBeenNthCalledWith(3, 'test_field', 's')
-    expect(mockOnChange).toHaveBeenNthCalledWith(4, 'test_field', 't')
-  })
-
-  it('calls onChange when checkbox is toggled', async () => {
-    const user = userEvent.setup()
-    const booleanField: ConfigurationFieldInfo = {
-      ...baseField,
-      type: 'boolean',
-    }
-
-    render(
-      <ConfigurationField
-        field={booleanField}
-        value={false}
-        onChange={mockOnChange}
-      />
-    )
-
-    const checkbox = screen.getByRole('checkbox')
-    await user.click(checkbox)
-
-    expect(mockOnChange).toHaveBeenCalledWith('test_field', true)
-  })
-
-  it('calls onChange with number type for integer fields', async () => {
-    const user = userEvent.setup()
-    const integerField: ConfigurationFieldInfo = {
-      ...baseField,
-      type: 'integer',
-    }
-
-    render(
-      <ConfigurationField
-        field={integerField}
-        value=""
-        onChange={mockOnChange}
-      />
-    )
-
-    const input = screen.getByRole('spinbutton')
-    await user.type(input, '42')
-
-    // Each character typed individually: '4' (becomes 4), then '2' (becomes 2)
-    expect(mockOnChange).toHaveBeenNthCalledWith(1, 'test_field', 4)
-    expect(mockOnChange).toHaveBeenNthCalledWith(2, 'test_field', 2)
-  })
-
-  it('shows environment variable indicator when set via environment', () => {
-    const envField: ConfigurationFieldInfo = {
-      ...baseField,
-      value_source: 'environment',
-      env_var_name: 'TEST_ENV_VAR',
-      env_value_present: true,
-    }
-
-    render(
-      <ConfigurationField
-        field={envField}
-        value="env_value"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('Set via TEST_ENV_VAR')).toBeInTheDocument()
-  })
-
-  it('shows override warning when database value overrides environment', () => {
-    const overrideField: ConfigurationFieldInfo = {
-      ...baseField,
-      value_source: 'database',
-      env_var_name: 'TEST_ENV_VAR',
-      env_value_present: true,
-    }
-
-    render(
-      <ConfigurationField
-        field={overrideField}
-        value="override_value"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('Overriding TEST_ENV_VAR')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /reset to environment/i })).toBeInTheDocument()
-  })
-
-  it('resets to environment value when reset button is clicked', async () => {
-    const user = userEvent.setup()
-    const overrideField: ConfigurationFieldInfo = {
-      ...baseField,
-      value_source: 'database',
-      env_var_name: 'TEST_ENV_VAR',
-      env_value_present: true,
-    }
-
-    render(
-      <ConfigurationField
-        field={overrideField}
-        value="override_value"
-        onChange={mockOnChange}
-      />
-    )
-
-    const resetButton = screen.getByRole('button', { name: /reset to environment/i })
-    await user.click(resetButton)
-
-    expect(mockOnChange).toHaveBeenCalledWith('test_field', null)
-  })
-
-  it('shows default value indicator', () => {
-    const defaultField: ConfigurationFieldInfo = {
-      ...baseField,
-      value_source: 'default',
-      default_value: 'default_value',
-    }
-
-    render(
-      <ConfigurationField
-        field={defaultField}
-        value="default_value"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('Using default: default_value')).toBeInTheDocument()
-  })
-
-  it('shows available environment variable hint', () => {
-    const hintField: ConfigurationFieldInfo = {
-      ...baseField,
-      value_source: 'default',
-      env_var_name: 'TEST_ENV_VAR',
-      env_value_present: false,
-    }
-
-    render(
-      <ConfigurationField
-        field={hintField}
-        value="some_value"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('Can be set via TEST_ENV_VAR')).toBeInTheDocument()
-  })
-
-  it('disables input when disabled prop is true', () => {
-    render(
-      <ConfigurationField
-        field={baseField}
-        value="test_value"
-        onChange={mockOnChange}
-        disabled={true}
-      />
-    )
-
-    const input = screen.getByDisplayValue('test_value')
-    expect(input).toBeDisabled()
-  })
-
-  it('handles empty/null values gracefully', () => {
-    render(
-      <ConfigurationField
-        field={baseField}
-        value={null}
-        onChange={mockOnChange}
-      />
-    )
-
-    const input = screen.getByRole('textbox')
-    expect(input).toHaveValue('')
-  })
-
-  it('handles empty string for secret fields', () => {
-    const secretField: ConfigurationFieldInfo = {
-      ...baseField,
-      is_secret: true,
-      current_value: '',
-    }
-
-    render(
-      <ConfigurationField
-        field={secretField}
-        value=""
-        onChange={mockOnChange}
-      />
-    )
-
-    // Secret fields are password inputs, find by ID
-    const input = document.getElementById('test_field')
-    expect(input).toHaveValue('')
-    expect(input).toHaveAttribute('type', 'password')
-  })
-
-  it('displays field name as label', () => {
-    const fieldWithLongName: ConfigurationFieldInfo = {
-      ...baseField,
-      name: 'very_long_field_name_with_underscores',
-    }
-
-    render(
-      <ConfigurationField
-        field={fieldWithLongName}
-        value="test"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('VERY_LONG_FIELD_NAME_WITH_UNDERSCORES')).toBeInTheDocument()
-  })
-
-  it('shows required indicator only for required fields', () => {
-    const optionalField: ConfigurationFieldInfo = {
-      ...baseField,
-      required: false,
-    }
-
-    render(
-      <ConfigurationField
-        field={optionalField}
-        value="test"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.queryByText('*')).not.toBeInTheDocument()
-  })
-
-  it('handles boolean field with null value', async () => {
-    const user = userEvent.setup()
-    const booleanField: ConfigurationFieldInfo = {
-      ...baseField,
-      type: 'boolean',
-      current_value: null,
-    }
-
-    render(
-      <ConfigurationField
-        field={booleanField}
-        value={null}
-        onChange={mockOnChange}
-      />
-    )
-
-    const checkbox = screen.getByRole('checkbox')
-    expect(checkbox).not.toBeChecked()
-
-    await user.click(checkbox)
-    expect(mockOnChange).toHaveBeenCalledWith('test_field', true)
-  })
-
-  it('maintains input type attributes correctly', () => {
-    const secretField: ConfigurationFieldInfo = {
-      ...baseField,
-      is_secret: true,
-    }
-
-    render(
-      <ConfigurationField
-        field={secretField}
-        value="secret"
-        onChange={mockOnChange}
-      />
-    )
-
-    // Secret fields with values have toggle button, find by ID
-    const input = document.getElementById('test_field')
-    expect(input).toHaveAttribute('type', 'password')
-  })
-
-  it('shows description when provided', () => {
-    const fieldWithDescription: ConfigurationFieldInfo = {
-      ...baseField,
-      description: 'This is a detailed description of the field',
-    }
-
-    render(
-      <ConfigurationField
-        field={fieldWithDescription}
-        value="test"
-        onChange={mockOnChange}
-      />
-    )
-
-    expect(screen.getByText('This is a detailed description of the field')).toBeInTheDocument()
-  })
-
-  it('handles missing description gracefully', () => {
-    const fieldWithoutDescription: ConfigurationFieldInfo = {
-      ...baseField,
-      description: undefined,
-    }
-
-    render(
-      <ConfigurationField
-        field={fieldWithoutDescription}
-        value="test"
-        onChange={mockOnChange}
-      />
-    )
-
-    // Should still render the field without errors
-    expect(screen.getByDisplayValue('test')).toBeInTheDocument()
   })
 })

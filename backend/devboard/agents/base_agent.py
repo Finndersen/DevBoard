@@ -54,7 +54,7 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
         preferred_model = self._get_preferred_model()
 
         agent = Agent[TDeps](
-            preferred_model,
+            preferred_model.split("/")[1],
             deps_type=self.deps_type,
             system_prompt=self._get_system_prompt(),
             tools=self._get_tools(),
@@ -114,11 +114,7 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
         # Build system prompt and context message dynamically each time
         initial_request = await self.build_system_and_context_messages(deps)
         dummy_response = ModelResponse(
-            parts=[
-                TextPart(
-                    content="Understood, I will use the provided context and tools to answer your query."
-                )
-            ]
+            parts=[TextPart(content="Understood, I will use the provided context and tools to answer your query.")]
         )
         # Run the agent with message history
         result = await self.agent.run(
@@ -140,17 +136,13 @@ class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
             summary_parts.append("EAGER CONTEXT (pre-loaded):")
             for context in context_data.eager_context:
                 description = context.description or "No description"
-                summary_parts.append(
-                    f"- [{context.provider_type.upper()}] {context.uri}: {description}"
-                )
+                summary_parts.append(f"- [{context.provider_type.upper()}] {context.uri}: {description}")
 
         # ON_DEMAND resources summary
         if context_data.on_demand_resources:
             summary_parts.append("\nON_DEMAND RESOURCES (use get_relevant_context tool):")
             for resource in context_data.on_demand_resources:
-                summary_parts.append(
-                    f"- [{resource.provider_type.upper()}] {resource.uri}: {resource.description}"
-                )
+                summary_parts.append(f"- [{resource.provider_type.upper()}] {resource.uri}: {resource.description}")
 
         if not summary_parts:
             return "No context resources configured for this project."

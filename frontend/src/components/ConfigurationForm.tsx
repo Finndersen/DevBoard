@@ -18,7 +18,8 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
   onTestConnection
 }) => {
   const [config, setConfig] = useState<ConfigurationDetailResponse | null>(null)
-  const [values, setValues] = useState<Record<string, any>>({})
+  const [values, setValues] = useState<Record<string, string | number | boolean | null>>({})
+  const [overrideStates, setOverrideStates] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -37,12 +38,15 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       const result = await apiClient.getConfigurationDetail(configKey)
       setConfig(result)
       
-      // Initialize form values with current values
-      const initialValues: Record<string, any> = {}
+      // Initialize form values with effective values and override states
+      const initialValues: Record<string, string | number | boolean | null> = {}
+      const initialOverrideStates: Record<string, boolean> = {}
       result.fields.forEach(field => {
-        initialValues[field.name] = field.current_value
+        initialValues[field.name] = field.effective_value
+        initialOverrideStates[field.name] = field.is_overridden
       })
       setValues(initialValues)
+      setOverrideStates(initialOverrideStates)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration')
     } finally {
@@ -50,8 +54,24 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
     }
   }
 
-  const handleFieldChange = (fieldName: string, value: any) => {
+  const handleFieldChange = (fieldName: string, value: string | number | boolean | null) => {
     setValues(prev => ({ ...prev, [fieldName]: value }))
+  }
+
+  const handleOverrideToggle = (fieldName: string, enabled: boolean) => {
+    setOverrideStates(prev => ({ ...prev, [fieldName]: enabled }))
+    
+    // If disabling override, reset value to the effective fallback value
+    if (!enabled && config) {
+      const field = config.fields.find(f => f.name === fieldName)
+      if (field) {
+        // Reset to env_value or default_value
+        const fallbackValue = field.env_value !== null && field.env_value !== undefined 
+          ? field.env_value 
+          : field.default_value
+        setValues(prev => ({ ...prev, [fieldName]: fallbackValue }))
+      }
+    }
   }
 
   const handleSave = async () => {
@@ -61,14 +81,20 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       setSaving(true)
       setError(null)
       
-      // Send all fields that have changed (allow overriding environment variables)
-      const updatableFields: Record<string, any> = {}
+      // Send only fields where override is enabled or override state has changed
+      const updatableFields: Record<string, string | number | boolean | null> = {}
       config.fields.forEach(field => {
-        const newValue = values[field.name]
-        if (newValue !== field.current_value) {
-          // Convert empty strings to null for proper validation
+        const isOverrideEnabled = overrideStates[field.name]
+        const wasOverridden = field.is_overridden
+        
+        if (isOverrideEnabled) {
+          // Override is enabled - send the current value
+          const newValue = values[field.name]
           const processedValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
           updatableFields[field.name] = processedValue
+        } else if (wasOverridden && !isOverrideEnabled) {
+          // Override was disabled - send null to clear the database override
+          updatableFields[field.name] = null
         }
       })
 
@@ -80,12 +106,15 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       const result = await apiClient.updateConfigurationFields(configKey, updatableFields)
       setConfig(result)
       
-      // Update form values with the result
-      const newValues: Record<string, any> = {}
+      // Update form values and override states with the result
+      const newValues: Record<string, string | number | boolean | null> = {}
+      const newOverrideStates: Record<string, boolean> = {}
       result.fields.forEach(field => {
-        newValues[field.name] = field.current_value
+        newValues[field.name] = field.effective_value
+        newOverrideStates[field.name] = field.is_overridden
       })
       setValues(newValues)
+      setOverrideStates(newOverrideStates)
       
       onSave?.(result)
     } catch (err) {
@@ -155,14 +184,27 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
   const hasChanges = () => {
     if (!config) return false
     return config.fields.some(field => {
-      const newValue = values[field.name]
-      const currentValue = field.current_value
+      const isOverrideEnabled = overrideStates[field.name]
+      const wasOverridden = field.is_overridden
       
-      // Convert empty strings to null for comparison
-      const processedNewValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
-      const processedCurrentValue = (typeof currentValue === 'string' && currentValue.trim() === '') ? null : currentValue
+      // Check if override state changed
+      if (isOverrideEnabled !== wasOverridden) {
+        return true
+      }
       
-      return processedNewValue !== processedCurrentValue
+      // Check if value changed for overridden fields
+      if (isOverrideEnabled) {
+        const newValue = values[field.name]
+        const dbValue = field.db_value
+        
+        // Convert empty strings to null for comparison
+        const processedNewValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
+        const processedDbValue = (typeof dbValue === 'string' && dbValue.trim() === '') ? null : dbValue
+        
+        return processedNewValue !== processedDbValue
+      }
+      
+      return false
     })
   }
 
@@ -270,6 +312,8 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
             field={field}
             value={values[field.name]}
             onChange={handleFieldChange}
+            overrideEnabled={overrideStates[field.name] || false}
+            onOverrideToggle={handleOverrideToggle}
           />
         ))}
 

@@ -3,19 +3,19 @@ from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
-from unittest.mock import Mock
 
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base
 from devboard.db.repositories import (
     ConfigurationRepository,
-    ProjectRepository,
-    TaskRepository,
     ContextProviderResourceRepository,
     DocumentRepository,
+    ProjectRepository,
+    TaskRepository,
 )
 from devboard.services.config_service import ConfigService
+from devboard.services.integration_service import IntegrationService
 
 
 @fixture(scope="session")
@@ -124,3 +124,9 @@ def document_repository(db_session):
 def config_service(configuration_repository):
     """ConfigService instance with real repository for testing."""
     return ConfigService(configuration_repository)
+
+
+@fixture
+def integration_service(configuration_repository):
+    """IntegrationService instance with real repository for testing."""
+    return IntegrationService(configuration_repository)

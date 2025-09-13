@@ -43,9 +43,7 @@ class ConfigService:
         """Returns detailed validation result with error information."""
         schema = self.config_registry.get(key)
         if not schema:
-            return ConfigValidationResult[BaseConfig](
-                False, errors=[f"No schema registered for key: {key}"]
-            )
+            return ConfigValidationResult[BaseConfig](False, errors=[f"No schema registered for key: {key}"])
         return self.validate_config(schema)
 
     # Type-safe methods for known config types
@@ -82,17 +80,13 @@ class ConfigService:
             for error in e.errors():
                 field = error["loc"][0] if error["loc"] else "unknown"
                 if "missing" in error["type"]:
-                    errors.append(
-                        f"Missing required field '{field}' - check environment variables or database configuration"
-                    )
+                    errors.append(f"Missing required field '{field}'")
                 else:
                     errors.append(f"Invalid value for '{field}': {error['msg']}")
 
             return ConfigValidationResult[T](False, errors=errors)
 
-    def update_configuration(
-        self, key: str, config_data: dict[str, Any]
-    ) -> ConfigurationDetailResponse:
+    def update_configuration(self, key: str, config_data: dict[str, Any]) -> ConfigurationDetailResponse:
         """Update configuration with complete structure. None values clear DB overrides."""
         # Get the schema class
         schema_class = self.config_registry.get(key)
@@ -166,9 +160,7 @@ class ConfigService:
                 env_value = None
 
             db_value = db_data.get(field_name) if field_name in db_data else None
-            default_value = (
-                field_info.default if field_info.default is not PydanticUndefined else None
-            )
+            default_value = field_info.default if field_info.default is not PydanticUndefined else None
 
             fields.append(
                 ConfigurationFieldInfo(

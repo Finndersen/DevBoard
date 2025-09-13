@@ -43,10 +43,14 @@ class Project(Base):
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=project_context_resource_association, back_populates="projects"
     )
-    messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
+    messages: Mapped[list["ProjectConversationMessage"]] = relationship(
+        back_populates="project"
+    )
 
     # Document relationship with eager loading
     specification: Mapped["Document"] = relationship(
         foreign_keys=[specification_document_id],
         lazy="joined",  # Always eager load
+        cascade="all, delete-orphan",
+        single_parent=True,
     )

@@ -65,9 +65,7 @@ class TestExecuteGeminiPrompt:
     async def test_invalid_operation_mode(self):
         """Test that invalid operation mode raises ValueError."""
         with pytest.raises(ValueError, match="Invalid operation_mode"):
-            await execute_gemini_prompt(
-                prompt="Test prompt", model="gemini-2.5-flash", operation_mode="invalid_mode"
-            )
+            await execute_gemini_prompt(prompt="Test prompt", model="gemini-2.5-flash", operation_mode="invalid_mode")
 
     @pytest.mark.asyncio
     async def test_command_failure(self):
@@ -97,9 +95,7 @@ class TestExecuteGeminiPrompt:
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
             with patch("asyncio.wait_for", side_effect=TimeoutError()):
                 with pytest.raises(GeminiCliTimeoutError, match="Gemini CLI timed out"):
-                    await execute_gemini_prompt(
-                        prompt="Test prompt", model="gemini-2.5-flash", timeout=1.0
-                    )
+                    await execute_gemini_prompt(prompt="Test prompt", model="gemini-2.5-flash", timeout=1.0)
 
                 # Verify process was killed and waited for
                 mock_process.kill.assert_called_once()
@@ -113,9 +109,7 @@ class TestExecuteGeminiPrompt:
         mock_process.communicate = AsyncMock(return_value=(b"Test response", b""))
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_subprocess:
-            await execute_gemini_prompt(
-                prompt="Test prompt", model="gemini-2.5-flash", working_dir="/private/tmp"
-            )
+            await execute_gemini_prompt(prompt="Test prompt", model="gemini-2.5-flash", working_dir="/private/tmp")
 
             # Verify working directory was set
             call_kwargs = mock_subprocess.call_args[1]

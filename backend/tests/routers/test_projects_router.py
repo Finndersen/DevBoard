@@ -115,6 +115,28 @@ class TestProjectsRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
+    def test_update_project_specification_content(self, client, db_session, test_project_data):
+        """Test updating project specification content."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"]
+        )
+        db_session.commit()
+        db_session.refresh(created_project)
+
+        # Update specification content
+        new_specification = "This is the updated project specification with detailed requirements."
+        update_data = {"specification": new_specification}
+        response = client.patch(f"/api/projects/{created_project.id}", json=update_data)
+        assert response.status_code == 200
+
+        # Verify the specification content was updated
+        updated_project = response.json()
+        assert updated_project["specification"]["content"] == new_specification
+        assert updated_project["name"] == test_project_data["name"]  # Other fields unchanged
+        assert updated_project["description"] == test_project_data["description"]
+
     def test_delete_project_success(self, client, db_session, test_project_data):
         """Test deleting a project."""
         # Create test project
@@ -155,9 +177,7 @@ class TestProjectResourcesRouter:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_list_project_resources_with_data(
-        self, client, db_session, test_project_data, test_resource_data
-    ):
+    def test_list_project_resources_with_data(self, client, db_session, test_project_data, test_resource_data):
         """Test listing project resources with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -191,9 +211,7 @@ class TestProjectResourcesRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
-    def test_create_project_resource(
-        self, client, db_session, test_project_data, test_resource_data
-    ):
+    def test_create_project_resource(self, client, db_session, test_project_data, test_resource_data):
         """Test creating a new project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -202,9 +220,7 @@ class TestProjectResourcesRouter:
         )
         db_session.commit()
 
-        response = client.post(
-            f"/api/projects/{created_project.id}/resources", json=test_resource_data
-        )
+        response = client.post(f"/api/projects/{created_project.id}/resources", json=test_resource_data)
         assert response.status_code == 200
 
         resource_data = response.json()
@@ -218,9 +234,7 @@ class TestProjectResourcesRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
-    def test_delete_project_resource_success(
-        self, client, db_session, test_project_data, test_resource_data
-    ):
+    def test_delete_project_resource_success(self, client, db_session, test_project_data, test_resource_data):
         """Test deleting a project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -279,9 +293,7 @@ class TestProjectTasksRouter:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_list_project_tasks_with_data(
-        self, client, db_session, test_project_data, test_task_data
-    ):
+    def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -292,12 +304,8 @@ class TestProjectTasksRouter:
 
         # Create test tasks
         task_repo = TaskRepository(db_session)
-        task_repo.create(
-            project_id=created_project.id, title="Task 1", status=test_task_data["status"]
-        )
-        task_repo.create(
-            project_id=created_project.id, title="Task 2", status=test_task_data["status"]
-        )
+        task_repo.create(project_id=created_project.id, title="Task 1", status=test_task_data["status"])
+        task_repo.create(project_id=created_project.id, title="Task 2", status=test_task_data["status"])
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}/tasks")

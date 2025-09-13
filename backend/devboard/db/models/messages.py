@@ -42,10 +42,7 @@ def _get_message_type(message: ModelMessage) -> MessageType:
     else:
         if any(isinstance(part, TextPart) for part in message.parts):
             return MessageType.TEXT_RESPONSE
-        elif (
-            isinstance(message.parts[-1], ToolCallPart)
-            and message.parts[-1].tool_name == "final_result"
-        ):
+        elif isinstance(message.parts[-1], ToolCallPart) and message.parts[-1].tool_name == "final_result":
             return MessageType.STRUCTURED_RESPONSE
         else:
             return MessageType.TOOL_CALL
@@ -69,14 +66,10 @@ class BaseConversationMessage(Base):
     # Full serialized PydanticAI message content (ModelRequest or ModelResponse)
     pydantic_content: Mapped[dict[str, Any]] = mapped_column(JSON)
 
-    timestamp: Mapped[datetime.datetime] = mapped_column(
-        default=lambda: datetime.datetime.now(datetime.UTC)
-    )
+    timestamp: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     @classmethod
-    def from_pydantic_message(
-        cls, entity_id: int, message: ModelMessage
-    ) -> "BaseConversationMessage":
+    def from_pydantic_message(cls, entity_id: int, message: ModelMessage) -> "BaseConversationMessage":
         """Construct a message model from a Pydantic Request or Response message."""
         return cls(
             parent_id=entity_id,

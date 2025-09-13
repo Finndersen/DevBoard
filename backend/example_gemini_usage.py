@@ -12,9 +12,7 @@ async def example_usage():
     # Example 1: Basic usage with required model parameter
     print("=== Example 1: Basic usage ===")
     try:
-        response = await execute_gemini_prompt(
-            prompt="What is the capital of France?", model="gemini-2.5-flash"
-        )
+        response = await execute_gemini_prompt(prompt="What is the capital of France?", model="gemini-2.5-flash")
         print(f"Response: {response}")
     except Exception as e:
         print(f"Error: {e}")
@@ -91,9 +89,7 @@ Save it to a file called 'factorial_util.py' in the current directory.
 
     for model, prompt in models_and_prompts:
         try:
-            response = await execute_gemini_prompt(
-                prompt=prompt, model=model, timeout=20.0, operation_mode="read_only"
-            )
+            response = await execute_gemini_prompt(prompt=prompt, model=model, timeout=20.0, operation_mode="read_only")
             print(f"Model {model}: {response[:100]}...")  # Truncate for readability
         except Exception as e:
             print(f"Error with {model}: {e}")

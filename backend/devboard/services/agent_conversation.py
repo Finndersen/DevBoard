@@ -34,13 +34,14 @@ class AgentConversationService:
 
     def __init__(
         self,
+        agent: BaseAgent,
         message_repository: BaseConversationMessageRepository,
     ):
+        self.agent = agent
         self.message_repo = message_repository
 
     async def send_message(
         self,
-        agent: BaseAgent,
         message: str,
         entity_id: int,
     ) -> PromptResponse:
@@ -56,13 +57,10 @@ class AgentConversationService:
             entity_id=entity_id,
             message_length=len(message),
         ):
-            return await self._handle_message_or_approval(
-                agent=agent, entity_id=entity_id, message_or_approvals=message
-            )
+            return await self._handle_message_or_approval(entity_id=entity_id, message_or_approvals=message)
 
     async def process_tool_approvals(
         self,
-        agent: BaseAgent,
         approvals: dict[str, ToolApprovalDecision],
         entity_id: int,
     ) -> PromptResponse:
@@ -80,11 +78,11 @@ class AgentConversationService:
         ):
             tool_approval_results = self._create_deferred_results(approvals)
             return await self._handle_message_or_approval(
-                agent=agent, entity_id=entity_id, message_or_approvals=tool_approval_results
+                entity_id=entity_id, message_or_approvals=tool_approval_results
             )
 
     async def _handle_message_or_approval(
-        self, agent: BaseAgent, entity_id: int, message_or_approvals: str | DeferredToolResults
+        self, entity_id: int, message_or_approvals: str | DeferredToolResults
     ) -> PromptResponse:
         """
         Handle either a new user message or tool approval result.
@@ -98,16 +96,14 @@ class AgentConversationService:
         message_history = self.convert_messages_to_pydantic(existing_messages)
 
         # Process with agent
-        result = await agent.run(
+        result = await self.agent.run(
             prompt_or_approvals=message_or_approvals,
             message_history=message_history,
             deps=BaseDeps(),
         )
 
         # Store and process results
-        saved_messages = self.store_new_messages(
-            new_messages=result.new_messages(), entity_id=entity_id
-        )
+        saved_messages = self.store_new_messages(new_messages=result.new_messages(), entity_id=entity_id)
 
         output = result.output
         if isinstance(output, DeferredToolRequests):
@@ -119,9 +115,7 @@ class AgentConversationService:
                 )
                 for tr in output.approvals
             ]
-            response = PromptResponse(
-                type=PromptResponseType.TOOL_REQUEST, tool_requests=tool_requests
-            )
+            response = PromptResponse(type=PromptResponseType.TOOL_REQUEST, tool_requests=tool_requests)
         elif isinstance(output, str):
             agent_final_message = saved_messages[-1]
             response = PromptResponse(
@@ -138,9 +132,7 @@ class AgentConversationService:
 
         return response
 
-    def _create_deferred_results(
-        self, approvals: dict[str, ToolApprovalDecision]
-    ) -> DeferredToolResults:
+    def _create_deferred_results(self, approvals: dict[str, ToolApprovalDecision]) -> DeferredToolResults:
         """Create deferred tool results from user approvals.
 
         Args:
@@ -157,16 +149,12 @@ class AgentConversationService:
                 logger.info(f"Tool {tool_call_id} approved")
             else:
                 # For denied tools, set approval to False or use ToolDenied
-                converted_approvals[tool_call_id] = ToolDenied(
-                    message=decision.feedback or "The tool call was denied."
-                )
+                converted_approvals[tool_call_id] = ToolDenied(message=decision.feedback or "The tool call was denied.")
                 logger.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
 
         return DeferredToolResults(approvals=converted_approvals)
 
-    def convert_messages_to_pydantic(
-        self, message_records: list[BaseConversationMessage]
-    ) -> list[ModelMessage]:
+    def convert_messages_to_pydantic(self, message_records: list[BaseConversationMessage]) -> list[ModelMessage]:
         """Extract PydanticAI message history from database records."""
         # Extract pydantic_content from each record
         serialized_messages = [record.pydantic_content for record in message_records]
@@ -178,9 +166,7 @@ class AgentConversationService:
         messages = ModelMessagesTypeAdapter.validate_python(serialized_messages)
         return messages
 
-    def store_new_messages(
-        self, new_messages: list[ModelMessage], entity_id: int
-    ) -> list[BaseConversationMessage]:
+    def store_new_messages(self, new_messages: list[ModelMessage], entity_id: int) -> list[BaseConversationMessage]:
         """Store new messages from agent result in DB."""
         # Extract all messages from the agent result
         saved_messages = []

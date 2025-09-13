@@ -85,9 +85,7 @@ class TestResourceSharing:
         assert len(proj2_resources) == 1
         assert proj1_resources[0]["id"] == proj2_resources[0]["id"]
 
-    def test_resource_sharing_across_projects_and_tasks(
-        self, client, db_session, test_projects_data, test_tasks_data
-    ):
+    def test_resource_sharing_across_projects_and_tasks(self, client, db_session, test_projects_data, test_tasks_data):
         """Test that resources can be shared between projects and tasks."""
         # Create projects and tasks
         project_repo = ProjectRepository(db_session)
@@ -174,12 +172,11 @@ class TestResourceSharing:
     @pytest.mark.asyncio
     async def test_resource_service_find_or_create(self, db_session):
         """Test ResourceService find-or-create functionality."""
-        resource_service = ResourceService(db_session)
+        resource_repository = ContextProviderResourceRepository(db_session)
+        resource_service = ResourceService(resource_repository)
 
         # Create first resource
-        resource1 = await resource_service.find_or_create_resource(
-            "https://github.com/owner/repo", "Test repository"
-        )
+        resource1 = await resource_service.find_or_create_resource("https://github.com/owner/repo", "Test repository")
         db_session.commit()
 
         # Try to create same URI again - should return existing
@@ -194,8 +191,9 @@ class TestResourceSharing:
 
     def test_resource_usage_count(self, client, db_session, test_projects_data, test_tasks_data):
         """Test getting usage count for a shared resource."""
-        # Create projects and task
+        # Create repositories
         project_repo = ProjectRepository(db_session)
+        resource_repo = ContextProviderResourceRepository(db_session)
         task_repo = TaskRepository(db_session)
 
         project1 = project_repo.create(**test_projects_data[0])
@@ -218,15 +216,13 @@ class TestResourceSharing:
         resource_id = response.json()["id"]
 
         # Add to project 2 (same resource)
-        client.post(
-            f"/api/projects/{project2.id}/resources", json={"resource_uri": shared_resource_uri}
-        )
+        client.post(f"/api/projects/{project2.id}/resources", json={"resource_uri": shared_resource_uri})
 
         # Add to task (same resource)
         client.post(f"/api/tasks/{task.id}/resources", json={"resource_uri": shared_resource_uri})
 
         # Test usage count via service
-        resource_service = ResourceService(db_session)
+        resource_service = ResourceService(resource_repo)
         usage_count = resource_service.get_resource_usage_count(resource_id)
         assert usage_count == 3  # 2 projects + 1 task
 

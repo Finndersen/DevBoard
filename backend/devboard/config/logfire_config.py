@@ -5,6 +5,8 @@ import os
 import logfire
 from fastapi import FastAPI
 
+from devboard.db.database import engine
+
 
 def setup_logfire(app: FastAPI) -> None:
     """Setup Logfire configuration. Call this once at application startup."""
@@ -16,16 +18,13 @@ def setup_logfire(app: FastAPI) -> None:
     # Configure Logfire with hardcoded sensible defaults
     logfire.configure(
         service_name="devboard",
-        service_version="0.1.0",
         environment=environment,
-        console={"verbose": environment == "development"}
-        if environment == "development"
-        else False,
+        console={"verbose": True} if environment == "development" else False,
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
         send_to_logfire=bool(token),
     )
 
     # Enable instrumentation that doesn't require parameters
-    logfire.instrument_sqlalchemy()
+    logfire.instrument_sqlalchemy(engine=engine)
     logfire.instrument_httpx()
     logfire.instrument_fastapi(app)

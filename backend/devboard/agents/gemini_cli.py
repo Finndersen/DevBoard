@@ -117,9 +117,7 @@ async def execute_gemini_prompt(
     """
     # Validate operation mode
     if operation_mode not in ["read_only", "read_write"]:
-        raise ValueError(
-            f"Invalid operation_mode: {operation_mode}. Must be 'read_only' or 'read_write'"
-        )
+        raise ValueError(f"Invalid operation_mode: {operation_mode}. Must be 'read_only' or 'read_write'")
 
     # Resolve working directory
     if working_dir:
@@ -127,9 +125,7 @@ async def execute_gemini_prompt(
     else:
         cwd = str(Path.cwd())
 
-    logger.debug(
-        f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s"
-    )
+    logger.debug(f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s")
 
     try:
         # Build command arguments
@@ -172,9 +168,7 @@ async def execute_gemini_prompt(
 
         # Check return code
         if process.returncode == 0:
-            logger.info(
-                f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})"
-            )
+            logger.info(f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})")
             return stdout_text
         else:
             error_msg = stderr_text or "Unknown error"

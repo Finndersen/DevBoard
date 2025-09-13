@@ -42,9 +42,7 @@ class CodebaseContextProvider(BaseContextProvider):
             current_dir = os.getcwd()
             return cls(integration, current_dir)
         except Exception as e:
-            raise ContextProviderUnavailable(
-                f"Failed to initialize Codebase integration: {e}"
-            ) from e
+            raise ContextProviderUnavailable(f"Failed to initialize Codebase integration: {e}") from e
 
     def __init__(self, integration: FilesystemIntegration, base_path: str | None = None):
         """Initialize with Filesystem integration and optional base path."""
@@ -89,9 +87,7 @@ class CodebaseContextProvider(BaseContextProvider):
             return self.integration.parse_file_url(file_path, str(self.base_path)) or file_path
         elif resource_uri.startswith("/"):
             # Absolute path - convert to relative
-            return (
-                self.integration.parse_file_url(resource_uri, str(self.base_path)) or resource_uri
-            )
+            return self.integration.parse_file_url(resource_uri, str(self.base_path)) or resource_uri
         else:
             # Assume relative path
             return resource_uri

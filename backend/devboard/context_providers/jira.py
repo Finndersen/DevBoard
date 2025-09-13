@@ -184,9 +184,7 @@ Based on this project data, here is the relevant context for your query:
 
             elif parsed["type"] == "project":
                 project_data = await self.integration.get_project(parsed["key"])
-                return (
-                    f"Jira Project {parsed['key']}: {project_data.get('name', 'Unknown Project')}"
-                )
+                return f"Jira Project {parsed['key']}: {project_data.get('name', 'Unknown Project')}"
             else:
                 return f"Jira Resource: {parsed['key']}"
 

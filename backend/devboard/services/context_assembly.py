@@ -100,13 +100,9 @@ class ContextAssemblyService:
         self.project_repo = project_repository
         self.task_repo = task_repository
         self.resource_repo = resource_repository
-        self.context_provider_registry = (
-            context_provider_registry_instance or context_provider_registry
-        )
+        self.context_provider_registry = context_provider_registry_instance or context_provider_registry
 
-    def _get_provider_instance(
-        self, resource_uri: str
-    ) -> tuple[BaseContextProvider | None, str | None]:
+    def _get_provider_instance(self, resource_uri: str) -> tuple[BaseContextProvider | None, str | None]:
         """Get provider instance for a resource URI.
 
         Args:
@@ -182,13 +178,9 @@ class ContextAssemblyService:
 
                 all_resources: list[tuple[str, str | None]] = []
                 # Add explicit links
-                all_resources.extend(
-                    [(resource.resource_uri, resource.description) for resource in linked_resources]
-                )
+                all_resources.extend([(resource.resource_uri, resource.description) for resource in linked_resources])
                 # Add detected URIs
-                all_resources.extend(
-                    [(uri, None) for uri in detected_uris if uri not in linked_uris]
-                )
+                all_resources.extend([(uri, None) for uri in detected_uris if uri not in linked_uris])
 
                 logfire.info(
                     "Resources discovered",
@@ -204,9 +196,7 @@ class ContextAssemblyService:
                             resource_info = await self.get_resource_info(resource_uri, description)
                         except (NoProviderFound, ContextProviderUnavailable) as e:
                             resource_errors.append(
-                                ResourceRetrievalError(
-                                    resource_uri=resource_uri, error_message=str(e)
-                                )
+                                ResourceRetrievalError(resource_uri=resource_uri, error_message=str(e))
                             )
                             continue
 
@@ -227,9 +217,7 @@ class ContextAssemblyService:
                     "context_assembly.load_eager_context",
                     eager_tasks=len(eager_resource_tasks),
                 ):
-                    eager_results = await asyncio.gather(
-                        *eager_resource_tasks, return_exceptions=True
-                    )
+                    eager_results = await asyncio.gather(*eager_resource_tasks, return_exceptions=True)
 
                     for result in eager_results:
                         if isinstance(result, BaseException):

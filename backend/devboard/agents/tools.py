@@ -18,9 +18,7 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
         document_repo: Repository for document operations
     """
 
-    def edit_document_tool(
-        ctx: RunContext[BaseDeps], edits: list[DocumentEdit], reasoning: str = ""
-    ) -> str:
+    def edit_document_tool(ctx: RunContext[BaseDeps], edits: list[DocumentEdit], reasoning: str = "") -> str:
         """Edit document with the provided edits.
 
         Args:
@@ -68,9 +66,7 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
 
             return f"Edits applied successfully to {document.document_type}."
 
-    return Tool(
-        function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True
-    )
+    return Tool(function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True)
 
 
 async def get_relevant_context(ctx: RunContext[BaseDeps], resource_uri: str, query: str) -> str:
@@ -86,9 +82,7 @@ async def get_relevant_context(ctx: RunContext[BaseDeps], resource_uri: str, que
     Returns:
         Focused context relevant to your query
     """
-    with logfire.span(
-        "qa_agent.get_relevant_context", resource_uri=resource_uri, query_length=len(query)
-    ):
+    with logfire.span("qa_agent.get_relevant_context", resource_uri=resource_uri, query_length=len(query)):
         try:
             # Verify the resource is available
             available_uris = [res.uri for res in ctx.deps.on_demand_resources]

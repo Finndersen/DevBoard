@@ -7,7 +7,7 @@ from pathlib import Path
 import logfire
 
 from devboard.agents.gemini_cli import GeminiCliError, execute_gemini_prompt
-from devboard.services.template_service import TemplateType, template_service
+from devboard.services.template_service import TemplateService, TemplateType
 from devboard.utils.hash import compute_content_hash
 
 logger = logging.getLogger(__name__)
@@ -60,25 +60,22 @@ class CodebaseInvestigationService:
 
     ARCHITECTURE_FILENAME = "ARCHITECTURE.md"
 
+    def __init__(self, template_service: TemplateService):
+        self.template_service = template_service
+
     def check_architecture_exists(self, codebase_path: str) -> ArchitectureStatus:
         """Check if architecture document exists for a codebase."""
-        with logfire.span(
-            "codebase_investigation.check_architecture_exists", codebase_path=codebase_path
-        ):
+        with logfire.span("codebase_investigation.check_architecture_exists", codebase_path=codebase_path):
             try:
                 codebase_dir = Path(codebase_path).resolve()
                 if not codebase_dir.exists() or not codebase_dir.is_dir():
-                    logfire.warn(
-                        "Codebase path does not exist or is not a directory", path=str(codebase_dir)
-                    )
+                    logfire.warn("Codebase path does not exist or is not a directory", path=str(codebase_dir))
                     return ArchitectureStatus(exists=False)
 
                 arch_file = codebase_dir / self.ARCHITECTURE_FILENAME
                 if arch_file.exists() and arch_file.is_file():
                     size = arch_file.stat().st_size
-                    logfire.info(
-                        "Architecture document found", path=str(arch_file), size_bytes=size
-                    )
+                    logfire.info("Architecture document found", path=str(arch_file), size_bytes=size)
                     return ArchitectureStatus(exists=True, file_path=arch_file, size_bytes=size)
                 else:
                     logfire.info("Architecture document not found", expected_path=str(arch_file))
@@ -90,9 +87,7 @@ class CodebaseInvestigationService:
 
     def read_architecture_content(self, codebase_path: str) -> str | None:
         """Read the content of the architecture document if it exists."""
-        with logfire.span(
-            "codebase_investigation.read_architecture_content", codebase_path=codebase_path
-        ):
+        with logfire.span("codebase_investigation.read_architecture_content", codebase_path=codebase_path):
             try:
                 status = self.check_architecture_exists(codebase_path)
                 if not status.exists or not status.file_path:
@@ -108,15 +103,11 @@ class CodebaseInvestigationService:
 
     def get_architecture_document(self, codebase_path: str) -> ArchitectureDocument:
         """Get complete architecture document information including content and hash."""
-        with logfire.span(
-            "codebase_investigation.get_architecture_document", codebase_path=codebase_path
-        ):
+        with logfire.span("codebase_investigation.get_architecture_document", codebase_path=codebase_path):
             try:
                 codebase_dir = Path(codebase_path).resolve()
                 if not codebase_dir.exists() or not codebase_dir.is_dir():
-                    logfire.warn(
-                        "Codebase path does not exist or is not a directory", path=str(codebase_dir)
-                    )
+                    logfire.warn("Codebase path does not exist or is not a directory", path=str(codebase_dir))
                     return ArchitectureDocument(exists=False)
 
                 arch_file = codebase_dir / self.ARCHITECTURE_FILENAME
@@ -159,13 +150,9 @@ class CodebaseInvestigationService:
             try:
                 codebase_dir = Path(codebase_path).resolve()
                 if not codebase_dir.exists() or not codebase_dir.is_dir():
-                    error_msg = (
-                        f"Codebase path does not exist or is not a directory: {codebase_path}"
-                    )
+                    error_msg = f"Codebase path does not exist or is not a directory: {codebase_path}"
                     logfire.error("Invalid codebase path", error=error_msg)
-                    return ArchitectureUpdateResult(
-                        success=False, message=error_msg, error_type="invalid_path"
-                    )
+                    return ArchitectureUpdateResult(success=False, message=error_msg, error_type="invalid_path")
 
                 arch_file = codebase_dir / self.ARCHITECTURE_FILENAME
 
@@ -226,9 +213,7 @@ class CodebaseInvestigationService:
             except Exception as e:
                 error_msg = f"Error updating architecture document: {e}"
                 logger.error(f"Error updating architecture document for {codebase_path}: {e}")
-                return ArchitectureUpdateResult(
-                    success=False, message=error_msg, error_type="unexpected_error"
-                )
+                return ArchitectureUpdateResult(success=False, message=error_msg, error_type="unexpected_error")
 
     async def generate_architecture_document(
         self,
@@ -244,9 +229,7 @@ class CodebaseInvestigationService:
             try:
                 codebase_dir = Path(codebase_path).resolve()
                 if not codebase_dir.exists() or not codebase_dir.is_dir():
-                    error_msg = (
-                        f"Codebase path does not exist or is not a directory: {codebase_path}"
-                    )
+                    error_msg = f"Codebase path does not exist or is not a directory: {codebase_path}"
                     logfire.error("Invalid codebase path", error=error_msg)
                     return ArchitectureGenerationResult(
                         success=False, error_message=error_msg, error_type="invalid_path"
@@ -280,9 +263,7 @@ class CodebaseInvestigationService:
                     content_length=len(ai_content),
                 )
 
-                return ArchitectureGenerationResult(
-                    success=True, file_path=arch_file, content=ai_content
-                )
+                return ArchitectureGenerationResult(success=True, file_path=arch_file, content=ai_content)
 
             except GeminiCliError as e:
                 error_msg = f"AI generation failed: {e}"
@@ -301,7 +282,7 @@ class CodebaseInvestigationService:
 
     def _build_architecture_prompt(self, codebase_name: str) -> str:
         """Build the prompt for architecture document generation."""
-        template_content = template_service.get_template(TemplateType.ARCHITECTURE_DOCUMENT)
+        template_content = self.template_service.get_template(TemplateType.ARCHITECTURE_DOCUMENT)
 
         prompt = f"""
 You are analyzing the codebase '{codebase_name}' to generate comprehensive architecture documentation.

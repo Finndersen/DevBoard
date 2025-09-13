@@ -2,18 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.agents.task_agent import (
-    TaskPlanningAgent,
-    TaskSpecificationAgent,
-)
+from devboard.api.dependencies.agents import get_task_agent_conversation_service
+from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
-    get_document_repository,
     get_project_repository,
     get_task_repository,
 )
 from devboard.api.dependencies.services import (
     get_resource_service,
-    get_task_agent_conversation_service,
 )
 from devboard.api.schemas import (
     DeleteResponse,
@@ -29,9 +25,8 @@ from devboard.api.schemas.agent_conversation import (
     PromptResponse,
     ToolApprovalRequest,
 )
-from devboard.db.models.task import TaskStatus
+from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
-    DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -83,11 +78,8 @@ async def create_task(
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: int, task_repo: TaskRepository = Depends(get_task_repository)):
+async def get_task(task_id: int, task: Task = Depends(get_verified_task)):
     """Get a specific task."""
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
     return task
 
 
@@ -95,12 +87,10 @@ async def get_task(task_id: int, task_repo: TaskRepository = Depends(get_task_re
 async def update_task(
     task_id: int,
     task_update: TaskUpdate,
+    task: Task = Depends(get_verified_task),
     task_repo: TaskRepository = Depends(get_task_repository),
 ):
     """Update a task."""
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
 
     update_data = task_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -113,7 +103,11 @@ async def update_task(
 
 
 @router.delete("/{task_id}", response_model=DeleteResponse)
-async def delete_task(task_id: int, task_repo: TaskRepository = Depends(get_task_repository)):
+async def delete_task(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    task_repo: TaskRepository = Depends(get_task_repository),
+):
     """Delete a task."""
     deleted = task_repo.delete_by_id(task_id)
     if not deleted:
@@ -129,14 +123,10 @@ async def delete_task(task_id: int, task_repo: TaskRepository = Depends(get_task
 @router.get("/{task_id}/resources", response_model=list[ResourceResponse])
 async def list_task_resources(
     task_id: int,
-    task_repo: TaskRepository = Depends(get_task_repository),
+    task: Task = Depends(get_verified_task),
     resource_service: ResourceService = Depends(get_resource_service),
 ):
     """Get all context provider resources for a task."""
-    # Verify task exists
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
 
     resources = resource_service.get_resources_for_task(task_id)
     return resources
@@ -146,14 +136,10 @@ async def list_task_resources(
 async def create_task_resource(
     task_id: int,
     resource: TaskResourceCreate,
-    task_repo: TaskRepository = Depends(get_task_repository),
+    task: Task = Depends(get_verified_task),
     resource_service: ResourceService = Depends(get_resource_service),
 ):
     """Add a context provider resource to a task."""
-    # Verify task exists
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
 
     try:
         created_resource = await resource_service.create_task_resource(
@@ -173,20 +159,14 @@ async def create_task_resource(
 async def delete_task_resource(
     task_id: int,
     resource_id: int,
-    task_repo: TaskRepository = Depends(get_task_repository),
+    task: Task = Depends(get_verified_task),
     resource_service: ResourceService = Depends(get_resource_service),
 ):
     """Remove a context provider resource from a task."""
-    # Verify task exists
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
 
     deleted = resource_service.delete_task_resource(task_id, resource_id)
     if not deleted:
-        raise HTTPException(
-            status_code=404, detail="Resource not found or does not belong to this task"
-        )
+        raise HTTPException(status_code=404, detail="Resource not found or does not belong to this task")
 
     resource_service.repository.db.commit()
     return {"message": "Resource deleted successfully", "success": True}
@@ -197,9 +177,7 @@ async def delete_task_resource(
 async def send_task_agent_message(
     task_id: int,
     request: ChatRequest,
-    task_repo: TaskRepository = Depends(get_task_repository),
-    document_repo: DocumentRepository = Depends(get_document_repository),
-    conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
+    task_conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
 ) -> PromptResponse:
     """Chat with the project agent.
 
@@ -209,68 +187,26 @@ async def send_task_agent_message(
     Args:
         task_id: The project to query
         request: The chat request with user query
-        task_repo: Task repository dependency
-        document_repo: Document repository dependency
-        conversation_service: Agent conversation service dependency
+        task_conversation_service: Agent conversation service dependency
 
     Returns:
         AI-generated response based on project context
     """
-    try:
-        # Verify task exists
-        task = task_repo.get_by_id(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Process query with Q&A agent
+    response = await task_conversation_service.send_message(message=request.message, entity_id=task_id)
 
-        if task.status == TaskStatus.DEFINING:
-            agent_type = TaskSpecificationAgent
-        elif task.status == TaskStatus.PLANNING:
-            agent_type = TaskPlanningAgent
-        else:
-            raise ValueError(f"Task in state {task.status} cannot accept agent messages")
-
-        agent = agent_type(task=task, document_repository=document_repo)
-
-        # Process query with Q&A agent
-        response = await conversation_service.send_message(
-            agent=agent, message=request.message, entity_id=task_id
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+    return response
 
 
 @router.post("/{task_id}/agent/approve-tools", response_model=PromptResponse)
 async def approve_task_agent_tools(
     task_id: int,
     request: ToolApprovalRequest,
-    task_repo: TaskRepository = Depends(get_task_repository),
-    document_repo: DocumentRepository = Depends(get_document_repository),
-    conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
+    task_conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
 ):
     """Approve or deny tool calls from the task planning agent."""
-    # Verify task exists
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    if task.status == TaskStatus.DEFINING:
-        agent_type = TaskSpecificationAgent
-    elif task.status == TaskStatus.PLANNING:
-        agent_type = TaskPlanningAgent
-    else:
-        raise ValueError(f"Task in state {task.status} cannot accept agent messages")
-
-    agent = agent_type(task=task, document_repository=document_repo)
-
     # Process query with Q&A agent
-    response = await conversation_service.process_tool_approvals(
-        agent=agent, approvals=request.approvals, entity_id=task_id
-    )
+    response = await task_conversation_service.process_tool_approvals(approvals=request.approvals, entity_id=task_id)
 
     return response
 
@@ -279,13 +215,10 @@ async def approve_task_agent_tools(
 async def transition_task_state(
     task_id: int,
     request: StateTransitionRequest,
+    task: Task = Depends(get_verified_task),
     task_repo: TaskRepository = Depends(get_task_repository),
 ):
     """Manually transition task to a new state."""
-    # Verify task exists
-    task = task_repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
 
     if request.new_state not in TaskStatus:
         raise HTTPException(status_code=400, detail=f"Invalid state: {request.new_state}")

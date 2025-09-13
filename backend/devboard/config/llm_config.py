@@ -37,14 +37,30 @@ class GeminiProviderConfig(BaseConfig):
 
 # Model hierarchies for different agent types (hardcoded per agent)
 AGENT_MODEL_HIERARCHIES = {
-    AgentType.PROJECT: ["gemini-2.5-pro", "gpt-4.1", "claude-sonnet-4"],
-    AgentType.TASK_SPECIFICATION: ["gemini-2.5-pro", "gpt-4.1", "claude-sonnet-4"],
-    AgentType.TASK_PLANNING: ["gemini-2.5-pro", "gpt-4.1", "claude-3.7-sonnet"],
-    AgentType.TASK_IMPLEMENTATION: ["claude-sonnet-4", "gpt-4.1", "gemini-2.5-flash"],
+    AgentType.PROJECT: [
+        "gemini/gemini-2.5-pro",
+        "openai/gpt-4.1",
+        "anthropic/claude-sonnet-4",
+    ],
+    AgentType.TASK_SPECIFICATION: [
+        "gemini/gemini-2.5-pro",
+        "openai/gpt-4.1",
+        "anthropic/claude-sonnet-4",
+    ],
+    AgentType.TASK_PLANNING: [
+        "gemini/gemini-2.5-pro",
+        "openai/gpt-4.1",
+        "anthropic/claude-3.7-sonnet",
+    ],
+    AgentType.TASK_IMPLEMENTATION: [
+        "anthropic/claude-sonnet-4",
+        "openai/gpt-4.1",
+        "gemini/gemini-2.5-flash",
+    ],
     AgentType.INVESTIGATION: [
-        "gpt-4.1-mini",
-        "claude-3.5-haiku-20241022",
-        "gemini-2.5-flash-lite",
+        "openai/gpt-4.1-mini",
+        "anthropic/claude-3.5-haiku-20241022",
+        "gemini/gemini-2.5-flash-lite",
     ],
 }
 

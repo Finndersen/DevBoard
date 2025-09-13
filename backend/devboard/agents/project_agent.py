@@ -57,9 +57,9 @@ class ProjectAgent(BaseAgent[BaseDeps]):
     agent_type = AgentType.PROJECT
 
     def __init__(self, project: Project, document_repository: DocumentRepository, **kwargs):
-        super().__init__(**kwargs)
         self.project = project
         self.document_repository = document_repository
+        super().__init__(**kwargs)
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for this agent."""

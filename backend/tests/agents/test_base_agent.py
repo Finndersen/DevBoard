@@ -1,6 +1,6 @@
 """Tests for BaseAgent abstract class."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic_ai import Agent
@@ -40,39 +40,28 @@ class TestBaseAgent:
     @pytest.fixture
     def mock_llm_service(self):
         """Mock LLM service to avoid database dependencies."""
-        with patch("devboard.agents.base_agent.llm_service") as mock_service:
-            mock_service.get_preferred_model_for_agent.return_value = "test"
-            yield mock_service
+        mock_service = Mock()
+        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+        return mock_service
 
     @pytest.fixture
     def mock_context_service(self):
         """Mock context assembly service."""
-        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
-            yield mock_service
+        return Mock()
 
     @pytest.fixture
     def mock_agent_instance(self, mock_llm_service, mock_context_service):
         """Create mock agent instance with mocked dependencies."""
-        return MockAgent()
+        return MockAgent(mock_context_service, mock_llm_service)
 
-    def test_agent_initialization(self, mock_agent_instance):
-        """Test agent initializes with correct properties."""
+    @pytest.mark.asyncio
+    async def test_agent_initialization_and_context(self, mock_agent_instance):
+        """Test agent initializes correctly and provides context."""
+        # Test initialization
         assert mock_agent_instance.agent_type == AgentType.PROJECT
         assert mock_agent_instance.deps_type == MockDeps
 
-    def test_get_system_prompt(self, mock_agent_instance):
-        """Test system prompt is implemented."""
-        prompt = mock_agent_instance._get_system_prompt()
-        assert prompt == "Test system prompt"
-
-    def test_get_tools(self, mock_agent_instance):
-        """Test tools method returns list."""
-        tools = mock_agent_instance._get_tools()
-        assert isinstance(tools, list)
-
-    @pytest.mark.asyncio
-    async def test_get_context_message_content(self, mock_agent_instance):
-        """Test context message content method."""
+        # Test context method
         deps = MockDeps()
         content = await mock_agent_instance._get_context_message_content(deps)
         assert content == "Test context"
@@ -167,31 +156,18 @@ class TestBaseAgent:
         # Should have initial context messages + our mock messages
         assert len(message_history_arg) >= len(mock_messages)
 
-    def test_agent_type_property(self, mock_agent_instance):
-        """Test agent_type property access."""
-        assert hasattr(mock_agent_instance, "agent_type")
+    def test_agent_properties_and_abstract_methods(self, mock_agent_instance):
+        """Test that agent has required properties and implements abstract methods."""
+        # Test properties
         assert mock_agent_instance.agent_type == AgentType.PROJECT
-
-    def test_deps_type_property(self, mock_agent_instance):
-        """Test deps_type property access."""
-        assert hasattr(mock_agent_instance, "deps_type")
         assert mock_agent_instance.deps_type == MockDeps
 
-    def test_abstract_methods_implemented(self, mock_agent_instance):
-        """Test that abstract methods are properly implemented."""
-        # All these should not raise NotImplementedError
+        # Test abstract method implementations return correct types
         prompt = mock_agent_instance._get_system_prompt()
-        assert isinstance(prompt, str)
+        assert isinstance(prompt, str) and prompt
 
         tools = mock_agent_instance._get_tools()
         assert isinstance(tools, list)
-
-    @pytest.mark.asyncio
-    async def test_abstract_context_method_implemented(self, mock_agent_instance):
-        """Test that abstract context method is implemented."""
-        deps = MockDeps()
-        content = await mock_agent_instance._get_context_message_content(deps)
-        assert isinstance(content, str)
 
     @pytest.mark.asyncio
     async def test_build_system_and_context_messages(self, mock_agent_instance):
@@ -227,21 +203,18 @@ class TestBaseAgentAbstract:
     @pytest.fixture
     def mock_llm_service_for_abstract(self):
         """Mock LLM service for abstract tests."""
-        with patch("devboard.agents.base_agent.llm_service") as mock_service:
-            mock_service.get_preferred_model_for_agent.return_value = "test"
-            yield mock_service
+        mock_service = Mock()
+        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+        return mock_service
 
     @pytest.fixture
     def mock_context_service_for_abstract(self):
         """Mock context assembly service for abstract tests."""
-        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
-            yield mock_service
+        return Mock()
 
-    def test_concrete_implementation_works(
-        self, mock_llm_service_for_abstract, mock_context_service_for_abstract
-    ):
+    def test_concrete_implementation_works(self, mock_llm_service_for_abstract, mock_context_service_for_abstract):
         """Test that concrete implementation can be instantiated."""
-        agent = ConcreteAgent()
+        agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service_for_abstract)
         assert agent.agent_type == AgentType.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 

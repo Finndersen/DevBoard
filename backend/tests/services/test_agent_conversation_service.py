@@ -79,20 +79,19 @@ class TestAgentConversationService:
     @pytest.fixture
     def mock_llm_service(self):
         """Mock LLM service to avoid database dependencies."""
-        with patch("devboard.agents.base_agent.llm_service") as mock_service:
-            mock_service.get_preferred_model_for_agent.return_value = "test"
-            yield mock_service
+        mock_service = Mock()
+        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
+        return mock_service
 
     @pytest.fixture
     def mock_context_service(self):
         """Mock context assembly service."""
-        with patch("devboard.agents.base_agent.context_assembly_service") as mock_service:
-            yield mock_service
+        return Mock()
 
     @pytest.fixture
     def mock_agent(self, mock_llm_service, mock_context_service):
         """Create mock agent."""
-        return MockAgent()
+        return MockAgent(mock_context_service, mock_llm_service)
 
     @pytest.fixture
     def mock_message_repo(self):
@@ -177,9 +176,7 @@ class TestAgentConversationService:
         # Mock agent run with approval results
         mock_result = MagicMock(spec=AgentRunResult)
         mock_result.output = "Continued after approval"
-        mock_result.new_messages.return_value = [
-            ModelResponse(parts=[TextPart(content="Continued after approval")])
-        ]
+        mock_result.new_messages.return_value = [ModelResponse(parts=[TextPart(content="Continued after approval")])]
 
         with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = mock_result
@@ -284,16 +281,12 @@ class TestAgentConversationService:
         """Test handling a regular message."""
         mock_result = MagicMock(spec=AgentRunResult)
         mock_result.output = "Response text"
-        mock_result.new_messages.return_value = [
-            ModelResponse(parts=[TextPart(content="Response text")])
-        ]
+        mock_result.new_messages.return_value = [ModelResponse(parts=[TextPart(content="Response text")])]
 
         with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = mock_result
 
-            response = await service._handle_message_or_approval(
-                entity_id=1, message_or_approvals="User message"
-            )
+            response = await service._handle_message_or_approval(entity_id=1, message_or_approvals="User message")
 
         assert response.type == PromptResponseType.MESSAGE
         assert response.message.text_content == "Response text"
@@ -307,16 +300,12 @@ class TestAgentConversationService:
 
         mock_result = MagicMock(spec=AgentRunResult)
         mock_result.output = "Continued"
-        mock_result.new_messages.return_value = [
-            ModelResponse(parts=[TextPart(content="Continued")])
-        ]
+        mock_result.new_messages.return_value = [ModelResponse(parts=[TextPart(content="Continued")])]
 
         with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = mock_result
 
-            response = await service._handle_message_or_approval(
-                entity_id=1, message_or_approvals=approval_result
-            )
+            response = await service._handle_message_or_approval(entity_id=1, message_or_approvals=approval_result)
 
         assert response.type == PromptResponseType.MESSAGE
         assert response.message.text_content == "Continued"

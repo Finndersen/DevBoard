@@ -41,9 +41,7 @@ class TestContextProviderRegistry:
         mock_provider2.provider_type = "test2"
 
         # Create test registry with both providers
-        test_registry = ContextProviderRegistry(
-            [mock_provider1, mock_provider2], key_attr="provider_type"
-        )
+        test_registry = ContextProviderRegistry([mock_provider1, mock_provider2], key_attr="provider_type")
 
         available = test_registry.list_keys()
         assert set(available) == {"test1", "test2"}
@@ -103,24 +101,12 @@ class TestGitHubContextProvider:
     def test_get_retrieval_strategy(self, provider):
         """Test strategy determination."""
         # Small-scope resources should be EAGER
-        assert (
-            provider.get_retrieval_strategy("https://github.com/owner/repo/pull/123")
-            == ContextStrategy.EAGER
-        )
-        assert (
-            provider.get_retrieval_strategy("https://github.com/owner/repo/issues/456")
-            == ContextStrategy.EAGER
-        )
-        assert (
-            provider.get_retrieval_strategy("https://github.com/owner/repo/commit/abc123")
-            == ContextStrategy.EAGER
-        )
+        assert provider.get_retrieval_strategy("https://github.com/owner/repo/pull/123") == ContextStrategy.EAGER
+        assert provider.get_retrieval_strategy("https://github.com/owner/repo/issues/456") == ContextStrategy.EAGER
+        assert provider.get_retrieval_strategy("https://github.com/owner/repo/commit/abc123") == ContextStrategy.EAGER
 
         # Large-scope resources should be ON_DEMAND
-        assert (
-            provider.get_retrieval_strategy("https://github.com/owner/repo")
-            == ContextStrategy.ON_DEMAND
-        )
+        assert provider.get_retrieval_strategy("https://github.com/owner/repo") == ContextStrategy.ON_DEMAND
 
     def test_get_retrieval_strategy_invalid_uri(self, provider):
         """Test strategy with invalid URI."""
@@ -153,9 +139,7 @@ class TestGitHubContextProvider:
             "body": "This PR fixes a critical auth issue",
         }
 
-        description = await provider.generate_resource_description(
-            "https://github.com/owner/repo/pull/123"
-        )
+        description = await provider.generate_resource_description("https://github.com/owner/repo/pull/123")
 
         assert "Fix authentication bug" in description
         assert "pr" in description.lower()
@@ -185,15 +169,11 @@ class TestJiraContextProvider:
     def test_get_retrieval_strategy(self, provider):
         """Test strategy determination."""
         # Single issues should be EAGER
-        assert (
-            provider.get_retrieval_strategy("https://company.atlassian.net/browse/PROJ-123")
-            == ContextStrategy.EAGER
-        )
+        assert provider.get_retrieval_strategy("https://company.atlassian.net/browse/PROJ-123") == ContextStrategy.EAGER
 
         # Projects should be ON_DEMAND
         assert (
-            provider.get_retrieval_strategy("https://company.atlassian.net/projects/PROJ")
-            == ContextStrategy.ON_DEMAND
+            provider.get_retrieval_strategy("https://company.atlassian.net/projects/PROJ") == ContextStrategy.ON_DEMAND
         )
 
 
@@ -222,15 +202,11 @@ class TestSlackContextProvider:
         """Test strategy determination."""
         # Single messages should be EAGER
         assert (
-            provider.get_retrieval_strategy("https://company.slack.com/archives/C123/p123456")
-            == ContextStrategy.EAGER
+            provider.get_retrieval_strategy("https://company.slack.com/archives/C123/p123456") == ContextStrategy.EAGER
         )
 
         # Channels should be ON_DEMAND
-        assert (
-            provider.get_retrieval_strategy("https://company.slack.com/archives/C123")
-            == ContextStrategy.ON_DEMAND
-        )
+        assert provider.get_retrieval_strategy("https://company.slack.com/archives/C123") == ContextStrategy.ON_DEMAND
 
 
 class TestCodebaseContextProvider:
@@ -320,9 +296,7 @@ class TestWebPageContextProvider:
         assert provider.can_handle_uri("https://example.com/page")
         assert provider.can_handle_uri("http://docs.python.org/guide")
         assert provider.can_handle_uri("https://blog.example.com/post/123")
-        assert provider.can_handle_uri(
-            "https://github.com/owner/repo"
-        )  # Registry priority handles this
+        assert provider.can_handle_uri("https://github.com/owner/repo")  # Registry priority handles this
         assert provider.can_handle_uri("https://company.atlassian.net/browse/PROJ-123")
 
         # Should not handle non-web protocols
@@ -334,9 +308,7 @@ class TestWebPageContextProvider:
         """Test strategy determination."""
         # All web pages should be EAGER
         assert provider.get_retrieval_strategy("https://example.com/page") == ContextStrategy.EAGER
-        assert (
-            provider.get_retrieval_strategy("http://docs.python.org/guide") == ContextStrategy.EAGER
-        )
+        assert provider.get_retrieval_strategy("http://docs.python.org/guide") == ContextStrategy.EAGER
 
     def test_get_retrieval_strategy_invalid_uri(self, provider):
         """Test strategy with invalid URI."""
@@ -368,9 +340,7 @@ class TestWebPageContextProvider:
             mock_response.text = html_content
             mock_response.raise_for_status = Mock()
 
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
 
             result = await provider.get_resource("https://example.com/test")
 
@@ -387,8 +357,8 @@ class TestWebPageContextProvider:
     async def test_get_resource_http_error(self, provider):
         """Test web page retrieval with HTTP error."""
         with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get.side_effect = (
-                httpx.HTTPStatusError("404 Not Found", request=Mock(), response=Mock())
+            mock_client.return_value.__aenter__.return_value.get.side_effect = httpx.HTTPStatusError(
+                "404 Not Found", request=Mock(), response=Mock()
             )
 
             with pytest.raises(ContextRetrievalError):
@@ -415,9 +385,7 @@ class TestWebPageContextProvider:
             mock_response.text = html_content
             mock_response.raise_for_status = Mock()
 
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
 
             description = await provider.generate_resource_description("https://example.com/docs")
 

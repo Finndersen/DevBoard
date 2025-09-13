@@ -4,8 +4,10 @@ import type { ConfigurationFieldInfo } from '../lib/api'
 
 interface ConfigurationFieldProps {
   field: ConfigurationFieldInfo
-  value: any
-  onChange: (fieldName: string, value: any) => void
+  value: string | number | boolean | null
+  onChange: (fieldName: string, value: string | number | boolean | null) => void
+  overrideEnabled: boolean
+  onOverrideToggle: (fieldName: string, enabled: boolean) => void
   disabled?: boolean
 }
 
@@ -13,17 +15,23 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
   field, 
   value, 
   onChange, 
+  overrideEnabled,
+  onOverrideToggle,
   disabled = false 
 }) => {
   const [showSecret, setShowSecret] = useState(false)
   
-  const isReadOnly = disabled  // Allow editing environment-sourced fields
-  const isOverridingEnv = field.value_source === 'database' && field.env_value_present
-  const isDefault = field.value_source === 'default'
+  // Determine if field has default or env values available for override
+  const hasDefaultValue = field.default_value !== null && field.default_value !== undefined
+  const hasEnvValue = field.env_value !== null && field.env_value !== undefined
+  const hasOverridableValue = hasDefaultValue || hasEnvValue
+  
+  // Input should be disabled when override is off and there's a value to fall back to
+  const isInputDisabled = disabled || (!overrideEnabled && hasOverridableValue)
   
   const displayValue = field.is_secret && !showSecret 
     ? value ? `${value.toString().substring(0, 4)}****${value.toString().slice(-4)}` : ''
-    : value || ''
+    : typeof value === 'boolean' ? String(value) : (value || '')
 
   const renderInput = () => {
     const baseClasses = `
@@ -40,9 +48,9 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
       id: field.name,
       name: field.name,
       required: field.required,
-      disabled: isReadOnly,
+      disabled: isInputDisabled,
       className: baseClasses,
-      placeholder: isDefault && field.default_value ? `Default: ${field.default_value}` : '',
+      placeholder: '',
       onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(field.name, e.target.value)
     }
 
@@ -64,7 +72,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
             {...inputProps}
             type="number"
             step={field.type === 'number' ? 'any' : '1'}
-            value={value || ''}
+            value={typeof value === 'boolean' ? String(value) : (value || '')}
             onChange={(e) => {
               const val = e.target.value
               if (val === '') {
@@ -104,80 +112,84 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
             </div>
           )
         }
-        return <input {...inputProps} type="text" value={value || ''} />
+        return <input {...inputProps} type="text" value={typeof value === 'boolean' ? String(value) : (value || '')} />
     }
   }
 
+  const formatValueForDisplay = (val: string | number | boolean | null | undefined, isSecret: boolean): string => {
+    if (val === null || val === undefined) {
+      return ''
+    }
+    
+    const strValue = String(val)
+    
+    if (isSecret && strValue.length > 8) {
+      // Show first 4 and last 4 characters with **** in between
+      return `${strValue.substring(0, 4)}****${strValue.slice(-4)}`
+    } else if (isSecret && strValue.length > 0) {
+      // For shorter secrets, show first few characters with ****
+      return `${strValue.substring(0, Math.min(2, strValue.length))}****`
+    }
+    
+    return strValue
+  }
+
   const renderValueSourceIndicator = () => {
-    // Show environment variable indicators based on field state
-    if (field.env_var_name) {
-      if (field.value_source === 'environment') {
-        // Currently using environment variable value
-        return (
-          <div className="flex items-center mt-1">
-            <span className="text-xs text-green-600 dark:text-green-400">
-              Set via {field.env_var_name}
-            </span>
+    if (!hasOverridableValue) {
+      return null
+    }
+
+    return (
+      <div className="mt-2 space-y-1">
+        {/* Show current fallback value */}
+        {hasEnvValue && (
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            {field.env_var_name}: {formatValueForDisplay(field.env_value, field.is_secret)}
           </div>
-        )
-      } else if (isOverridingEnv) {
-        // Database value overriding environment variable
-        return (
-          <div className="flex items-center mt-1">
+        )}
+        {hasDefaultValue && !hasEnvValue && (
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Default: {formatValueForDisplay(field.default_value, field.is_secret)}
+          </div>
+        )}
+        
+        {/* Override status indicator */}
+        {overrideEnabled && (
+          <div className="flex items-center">
             <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 dark:text-amber-400 mr-1" />
             <span className="text-xs text-amber-600 dark:text-amber-400">
-              Overriding {field.env_var_name}
-            </span>
-            <button
-              type="button"
-              className="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-              onClick={() => onChange(field.name, null)}
-            >
-              Reset to environment
-            </button>
-          </div>
-        )
-      } else if (field.env_value_present) {
-        // Environment variable exists but not being used (using default or other source)
-        return (
-          <div className="flex items-center mt-1">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Can be set via {field.env_var_name}
+              Overriding {hasEnvValue ? 'environment variable' : 'default value'}
             </span>
           </div>
-        )
-      } else {
-        // Show available environment variable name
-        return (
-          <div className="flex items-center mt-1">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Can be set via {field.env_var_name}
-            </span>
-          </div>
-        )
-      }
-    }
-
-    // Show default value indicator if no environment variable context
-    if (isDefault && field.default_value !== null && field.default_value !== undefined) {
-      return (
-        <div className="mt-1">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            Using default: {String(field.default_value)}
-          </span>
-        </div>
-      )
-    }
-
-    return null
+        )}
+      </div>
+    )
   }
 
   return (
     <div className="space-y-1">
-      <label htmlFor={field.name} className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">
-        {field.name.toUpperCase()}
-        {field.required && <span className="text-red-500 ml-1">*</span>}
-      </label>
+      <div className="flex items-center justify-between">
+        <label htmlFor={field.name} className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">
+          {field.name.toUpperCase()}
+          {field.required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+        
+        {/* Override toggle - only show if field has overridable values */}
+        {hasOverridableValue && !disabled && (
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-600 dark:text-gray-400">Override</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={overrideEnabled}
+                onChange={(e) => onOverrideToggle(field.name, e.target.checked)}
+              />
+              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-4 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        )}
+      </div>
       
       {field.description && (
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{field.description}</p>

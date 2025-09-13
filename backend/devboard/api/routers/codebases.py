@@ -4,7 +4,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from devboard.api.dependencies.entities import get_verified_codebase
 from devboard.api.dependencies.repositories import get_codebase_repository
+from devboard.api.dependencies.services import get_codebase_investigation_service
 from devboard.api.schemas import (
     CodebaseCreate,
     CodebaseResponse,
@@ -43,9 +45,7 @@ async def create_codebase(
     # Validate that the local path exists and is a directory
     path = Path(codebase.local_path).resolve()
     if not path.exists():
-        raise HTTPException(
-            status_code=400, detail=f"Local path does not exist: {codebase.local_path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Local path does not exist: {codebase.local_path}")
 
     if not path.is_dir():
         raise HTTPException(
@@ -70,12 +70,9 @@ async def create_codebase(
 @router.get("/{codebase_id}", response_model=CodebaseResponse)
 async def get_codebase(
     codebase_id: int,
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    codebase: Codebase = Depends(get_verified_codebase),
 ):
     """Get a specific codebase."""
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
     return codebase
 
 
@@ -83,12 +80,10 @@ async def get_codebase(
 async def update_codebase(
     codebase_id: int,
     codebase_update: CodebaseUpdate,
+    codebase: Codebase = Depends(get_verified_codebase),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
 ):
     """Update a codebase."""
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
 
     update_data = codebase_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -103,6 +98,7 @@ async def update_codebase(
 @router.delete("/{codebase_id}", response_model=DeleteResponse)
 async def delete_codebase(
     codebase_id: int,
+    codebase: Codebase = Depends(get_verified_codebase),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
 ):
     """Delete a codebase."""
@@ -121,16 +117,12 @@ async def delete_codebase(
 @router.get("/{codebase_id}/architecture_document/", response_model=ArchitectureDocumentResponse)
 async def get_architecture_document(
     codebase_id: int,
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    codebase: Codebase = Depends(get_verified_codebase),
+    investigation_service: CodebaseInvestigationService = Depends(get_codebase_investigation_service),
 ):
     """Get complete architecture document information including content and hash."""
-    # Get codebase from database
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
 
     # Get complete architecture document
-    investigation_service = CodebaseInvestigationService()
     document = investigation_service.get_architecture_document(codebase.local_path)
 
     return ArchitectureDocumentResponse(
@@ -147,16 +139,12 @@ async def get_architecture_document(
 async def update_architecture_document(
     codebase_id: int,
     request: ArchitectureUpdateRequest,
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    codebase: Codebase = Depends(get_verified_codebase),
+    investigation_service: CodebaseInvestigationService = Depends(get_codebase_investigation_service),
 ):
     """Update architecture document with conflict detection."""
-    # Get codebase from database
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
 
     # Update architecture document
-    investigation_service = CodebaseInvestigationService()
     result = investigation_service.update_architecture_content(
         codebase_path=codebase.local_path,
         new_content=request.content,
@@ -186,9 +174,7 @@ async def update_architecture_document(
             },
         )
 
-    return ArchitectureUpdateResponse(
-        success=result.success, content_hash=result.content_hash, message=result.message
-    )
+    return ArchitectureUpdateResponse(success=result.success, content_hash=result.content_hash, message=result.message)
 
 
 @router.post(
@@ -197,16 +183,12 @@ async def update_architecture_document(
 )
 async def generate_architecture_document(
     codebase_id: int,
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    codebase: Codebase = Depends(get_verified_codebase),
+    investigation_service: CodebaseInvestigationService = Depends(get_codebase_investigation_service),
 ):
     """Generate or update architecture document for a codebase using AI."""
-    # Get codebase from database
-    codebase = codebase_repo.get_by_id(codebase_id)
-    if not codebase:
-        raise HTTPException(status_code=404, detail="Codebase not found")
 
     # Generate architecture document
-    investigation_service = CodebaseInvestigationService()
     result = await investigation_service.generate_architecture_document(
         codebase_path=codebase.local_path,
         codebase_name=codebase.name,

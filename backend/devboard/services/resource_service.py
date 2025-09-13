@@ -22,9 +22,7 @@ class ResourceService:
         context_provider_registry_instance: ContextProviderRegistry | None = None,
     ):
         self.repository = resource_repository
-        self.context_provider_registry = (
-            context_provider_registry_instance or context_provider_registry
-        )
+        self.context_provider_registry = context_provider_registry_instance or context_provider_registry
 
     def determine_provider_name(self, resource_uri: str) -> str:
         """Determine the provider name for a given resource URI.

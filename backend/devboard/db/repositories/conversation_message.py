@@ -18,17 +18,11 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
 
     MESSAGE_MODEL: type[MessageT]
 
-    def get_all_for_entity(
-        self, entity_id: int, exclude_tool_calls: bool = False
-    ) -> list[MessageT]:
+    def get_all_for_entity(self, entity_id: int, exclude_tool_calls: bool = False) -> list[MessageT]:
         """Get all messages for an entity (task or project)."""
         stmt = select(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
         if exclude_tool_calls:
-            stmt = stmt.where(
-                self.MESSAGE_MODEL.message_type.not_in(
-                    [MessageType.TOOL_CALL, MessageType.TOOL_RESULT]
-                )
-            )
+            stmt = stmt.where(self.MESSAGE_MODEL.message_type.not_in([MessageType.TOOL_CALL, MessageType.TOOL_RESULT]))
         stmt = stmt.order_by(self.MESSAGE_MODEL.timestamp.asc())
         return list(self.db.execute(stmt).scalars().all())
 
@@ -102,9 +96,7 @@ class TaskConversationMessageRepository(BaseConversationMessageRepository[TaskCo
     MESSAGE_MODEL = TaskConversationMessage
 
 
-class ProjectConversationMessageRepository(
-    BaseConversationMessageRepository[ProjectConversationMessage]
-):
+class ProjectConversationMessageRepository(BaseConversationMessageRepository[ProjectConversationMessage]):
     """Repository for project conversation message data access operations."""
 
     MESSAGE_MODEL = ProjectConversationMessage

@@ -88,9 +88,7 @@ class DocumentEditorService:
             EditResult with success status and updated content
         """
         if not edit.find:
-            return EditResult(
-                success=False, content=content, errors=["'find' text cannot be empty"]
-            )
+            return EditResult(success=False, content=content, errors=["'find' text cannot be empty"])
 
         # Check if the find text exists
         if edit.find not in content:
@@ -123,9 +121,7 @@ class DocumentEditorService:
 
         # Check if find and replace are identical (no-op edit)
         if edit.find == edit.replace:
-            return EditResult(
-                success=False, content=content, errors=["Edit did not change content"]
-            )
+            return EditResult(success=False, content=content, errors=["Edit did not change content"])
 
         # Verify the edit was applied (should not happen with valid find/replace)
         if new_content == content:

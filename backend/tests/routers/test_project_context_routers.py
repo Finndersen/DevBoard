@@ -73,7 +73,12 @@ class TestContextEndpoint:
     """Test the project context endpoint."""
 
     def test_get_project_context_success(
-        self, client_with_mock_context_service, mock_context_assembly_service, db_session, sample_project, sample_context_data
+        self,
+        client_with_mock_context_service,
+        mock_context_assembly_service,
+        db_session,
+        sample_project,
+        sample_context_data,
     ):
         """Test successful context retrieval."""
         # Project is already created by repository and committed
@@ -149,7 +154,9 @@ class TestValidateResourceEndpoint:
     def test_validate_resource_invalid(self, client_with_mock_context_service, mock_context_assembly_service):
         """Test validation of invalid resource."""
 
-        mock_context_assembly_service.get_resource_info.side_effect = NoProviderFound("No provider found for this URI type")
+        mock_context_assembly_service.get_resource_info.side_effect = NoProviderFound(
+            "No provider found for this URI type"
+        )
         response = client_with_mock_context_service.post(
             "/api/projects/validate-resource",
             params={"resource_uri": "invalid://resource"},

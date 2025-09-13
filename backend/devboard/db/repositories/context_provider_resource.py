@@ -22,9 +22,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
         Returns:
             ContextProviderResource instance if found, None otherwise
         """
-        stmt = select(ContextProviderResource).where(
-            ContextProviderResource.resource_uri == resource_uri
-        )
+        stmt = select(ContextProviderResource).where(ContextProviderResource.resource_uri == resource_uri)
         return self.db.execute(stmt).scalar_one_or_none()
 
     def get_by_id(self, resource_id: int) -> ContextProviderResource | None:
@@ -39,9 +37,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
         stmt = select(ContextProviderResource).where(ContextProviderResource.id == resource_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def create_resource(
-        self, resource_uri: str, provider_name: str, description: str
-    ) -> ContextProviderResource:
+    def create_resource(self, resource_uri: str, provider_name: str, description: str) -> ContextProviderResource:
         """Create a new context provider resource.
 
         Args:
@@ -131,9 +127,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
         """
         from sqlalchemy.dialects.sqlite import insert
 
-        stmt = insert(project_context_resource_association).values(
-            resource_id=resource_id, project_id=project_id
-        )
+        stmt = insert(project_context_resource_association).values(resource_id=resource_id, project_id=project_id)
         stmt = stmt.on_conflict_do_nothing()
         self.db.execute(stmt)
 
@@ -146,9 +140,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
         """
         from sqlalchemy.dialects.sqlite import insert
 
-        stmt = insert(task_context_resource_association).values(
-            resource_id=resource_id, task_id=task_id
-        )
+        stmt = insert(task_context_resource_association).values(resource_id=resource_id, task_id=task_id)
         stmt = stmt.on_conflict_do_nothing()
         self.db.execute(stmt)
 

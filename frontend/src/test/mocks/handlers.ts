@@ -6,14 +6,28 @@ const mockProjects: Project[] = [
   {
     id: 1,
     name: 'Test Project',
-    specification: 'This is a test project for development',
+    specification: {
+      id: 1,
+      document_type: 'project_specification',
+      content: 'This is a test project for development',
+      content_hash: 'abc123',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
     description: 'A comprehensive testing platform for automated QA workflows and continuous integration pipelines',
     created_at: '2024-01-01T00:00:00Z',
   },
   {
     id: 2,
     name: 'Another Project',
-    specification: 'Another test project',
+    specification: {
+      id: 2,
+      document_type: 'project_specification',
+      content: 'Another test project',
+      content_hash: 'def456',
+      created_at: '2024-01-02T00:00:00Z',
+      updated_at: '2024-01-02T00:00:00Z',
+    },
     description: 'Enterprise dashboard for real-time analytics and business intelligence reporting',
     created_at: '2024-01-02T00:00:00Z',
   },
@@ -54,22 +68,26 @@ const mockConfigurationResponse: ConfigurationDetailResponse = {
       type: 'string',
       required: true,
       description: 'GitHub API token',
-      current_value: null,
-      value_source: 'environment',
+      effective_value: null,
+      env_value: null,
+      db_value: null,
+      default_value: null,
       is_secret: true,
       env_var_name: 'GITHUB_API_TOKEN',
-      env_value_present: false,
+      is_overridden: false,
     },
     {
       name: 'base_url',
       type: 'string',
       required: false,
       description: 'GitHub API base URL',
-      current_value: 'https://api.github.com',
-      value_source: 'default',
-      is_secret: false,
+      effective_value: 'https://api.github.com',
+      env_value: null,
+      db_value: null,
       default_value: 'https://api.github.com',
-      env_value_present: false,
+      is_secret: false,
+      env_var_name: 'GITHUB_BASE_URL',
+      is_overridden: false,
     },
   ],
   validation_status: 'unconfigured',
@@ -83,11 +101,21 @@ export const handlers = [
   }),
 
   http.post('*/api/projects', async ({ request }) => {
-    const newProject = await request.json() as Omit<Project, 'id' | 'created_at'>
+    const newProject = await request.json() as { name: string; description: string }
+    const now = new Date().toISOString()
     const project: Project = {
-      ...newProject,
       id: Date.now(),
-      created_at: new Date().toISOString(),
+      name: newProject.name,
+      description: newProject.description,
+      specification: {
+        id: Date.now() + 1,
+        document_type: 'project_specification',
+        content: '',
+        content_hash: '',
+        created_at: now,
+        updated_at: now,
+      },
+      created_at: now,
     }
     return HttpResponse.json(project)
   }),
@@ -185,6 +213,17 @@ export const handlers = [
     const { message } = await request.json() as { message: string }
     return HttpResponse.json({
       response: `This is a mock response to: ${message}`,
+    })
+  }),
+
+  // Agent conversation endpoints
+  http.get('*/api/projects/:projectId/agent/messages', () => {
+    return HttpResponse.json([])
+  }),
+
+  http.get('*/api/settings/agents/:agentType/model', () => {
+    return HttpResponse.json({
+      model_id: 'openai/gpt-4'
     })
   }),
 ]

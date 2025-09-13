@@ -83,10 +83,7 @@ class TestConfigService:
     def test_init_with_default_env_vars(self, mock_config_repository, mock_registry):
         """Test ConfigService initialization with default environment variables."""
         with patch.dict("os.environ", {"PATH": "/usr/bin", "HOME": "/home/user"}):
-            service = ConfigService(
-                configuration_repository=mock_config_repository, 
-                config_registry=mock_registry
-            )
+            service = ConfigService(configuration_repository=mock_config_repository, config_registry=mock_registry)
 
             assert "PATH" in service.env_vars
             assert service.env_vars["PATH"] == "/usr/bin"
@@ -122,9 +119,7 @@ class TestConfigService:
         custom_env = {"TEST_API_TOKEN": "env_token_value"}
 
         # Mock repository to return database data
-        mock_config = Configuration(
-            key="test.simple", value_json=json.dumps({"api_token": "db_override_value"})
-        )
+        mock_config = Configuration(key="test.simple", value_json=json.dumps({"api_token": "db_override_value"}))
         mock_config_repository.get_by_key.return_value = mock_config
 
         service = ConfigService(

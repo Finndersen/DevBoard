@@ -49,11 +49,7 @@ class SlackContextProvider(BaseContextProvider):
     def can_handle_uri(cls, resource_uri: str) -> bool:
         """Check if URI is a Slack resource."""
         parsed = urlparse(resource_uri)
-        return (
-            "slack.com" in parsed.netloc
-            or resource_uri.startswith("#")
-            or resource_uri.startswith("@")
-        )
+        return "slack.com" in parsed.netloc or resource_uri.startswith("#") or resource_uri.startswith("@")
 
     def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
         """Slack messages are EAGER, channels/workspaces are ON_DEMAND."""
@@ -103,9 +99,7 @@ class SlackContextProvider(BaseContextProvider):
                 # Get thread replies if this is a threaded message
                 thread_replies = []
                 if message_data.get("reply_count", 0) > 0:
-                    thread_replies = await self.integration.get_thread_replies(
-                        parsed["channel"], parsed["ts"]
-                    )
+                    thread_replies = await self.integration.get_thread_replies(parsed["channel"], parsed["ts"])
 
                 return {
                     "message": message_data,
@@ -138,9 +132,7 @@ class SlackContextProvider(BaseContextProvider):
 
                 thread_replies = []
                 if message_data.get("reply_count", 0) > 0:
-                    thread_replies = await self.integration.get_thread_replies(
-                        parsed["channel"], parsed["ts"]
-                    )
+                    thread_replies = await self.integration.get_thread_replies(parsed["channel"], parsed["ts"])
 
                 context = f"""
 Slack Message
@@ -165,9 +157,7 @@ Based on this Slack message and thread, here is the relevant context for your qu
                     raise ContextRetrievalError("Channel not found")
 
                 # Get recent messages for context
-                recent_messages = await self.integration.get_channel_history(
-                    parsed["channel"], limit=50
-                )
+                recent_messages = await self.integration.get_channel_history(parsed["channel"], limit=50)
 
                 context = f"""
 Slack Channel: {channel_info.get("name", "unknown")}
@@ -185,9 +175,7 @@ Based on this channel and recent messages, here is the relevant context for your
 """
                 return context
             else:
-                raise ResourceHandlingError(
-                    f"Unsupported Slack resource type: {parsed.get('type')}"
-                )
+                raise ResourceHandlingError(f"Unsupported Slack resource type: {parsed.get('type')}")
 
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):

@@ -131,9 +131,7 @@ class WebPageContextProvider(BaseContextProvider):
             return " ".join(description_parts)
 
         except Exception as e:
-            raise DescriptionGenerationError(
-                f"Failed to generate description for {resource_uri}: {e}"
-            ) from e
+            raise DescriptionGenerationError(f"Failed to generate description for {resource_uri}: {e}") from e
 
     def _process_html_content(self, html_content: str) -> dict[str, str]:
         """Process HTML content to extract clean text and metadata.
@@ -169,9 +167,7 @@ class WebPageContextProvider(BaseContextProvider):
             element.decompose()
 
         # Remove comments
-        for comment in soup.find_all(
-            string=lambda text: isinstance(text, type(soup.new_string("")))
-        ):
+        for comment in soup.find_all(string=lambda text: isinstance(text, type(soup.new_string("")))):
             if str(comment).strip().startswith("<!--"):
                 comment.extract()
 

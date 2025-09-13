@@ -13,7 +13,6 @@ from devboard.db.repositories import (
     TaskRepository,
 )
 from devboard.db.repositories.conversation_message import (
-    BaseConversationMessageRepository,
     ProjectConversationMessageRepository,
     TaskConversationMessageRepository,
 )
@@ -51,13 +50,6 @@ def get_project_repository(db: Session = Depends(get_db)) -> ProjectRepository:
 def get_task_repository(db: Session = Depends(get_db)) -> TaskRepository:
     """Get TaskRepository instance."""
     return TaskRepository(db)
-
-
-def get_base_conversation_message_repository(
-    db: Session = Depends(get_db),
-) -> BaseConversationMessageRepository:
-    """Get BaseConversationMessageRepository instance."""
-    return BaseConversationMessageRepository(db)
 
 
 def get_project_conversation_message_repository(

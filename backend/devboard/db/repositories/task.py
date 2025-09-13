@@ -64,9 +64,7 @@ class TaskRepository(BaseRepository[Task]):
         specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, "")
 
         # Create task with document references
-        task = Task(
-            project_id=project_id, title=title, specification_id=specification_doc.id, **kwargs
-        )
+        task = Task(project_id=project_id, title=title, specification_id=specification_doc.id, **kwargs)
 
         self.db.add(task)
         self.db.flush()  # Get the ID without committing
@@ -82,9 +80,7 @@ class TaskRepository(BaseRepository[Task]):
             Updated task with implementation plan
         """
         if task.implementation_plan_id is None:
-            implementation_plan_doc = self.document_repo.create(
-                DocumentType.TASK_IMPLEMENTATION_PLAN, ""
-            )
+            implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
             task.implementation_plan_id = implementation_plan_doc.id
             self.db.flush()
         return task
