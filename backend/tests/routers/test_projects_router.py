@@ -1,7 +1,14 @@
 """Tests for projects router."""
 
-import pytest
+from unittest.mock import AsyncMock, Mock
 
+import pytest
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.run import AgentRunResult
+from starlette.testclient import TestClient
+
+from devboard.api.dependencies.agents import get_project_agent
+from devboard.api.main import app
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,
@@ -318,5 +325,173 @@ class TestProjectTasksRouter:
     def test_list_project_tasks_project_not_found(self, client):
         """Test listing tasks for non-existent project."""
         response = client.get("/api/projects/999/tasks")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+
+class TestProjectAgentEndpoints:
+    """Test project agent API endpoints."""
+
+    @pytest.fixture
+    def mock_project_agent(self):
+        """Mock project agent."""
+        mock_agent = Mock()
+        mock_agent.run = AsyncMock()
+
+        # Create proper mock responses with new_messages() method
+        def create_mock_result(message_text):
+            mock_result = Mock(spec=AgentRunResult)
+            mock_result.output = message_text
+
+            # Mock the new_messages() method to return a list containing the response
+            mock_response = ModelResponse(parts=[TextPart(content=message_text)])
+            mock_result.new_messages = Mock(return_value=[mock_response])
+
+            return mock_result
+
+        mock_message_result = create_mock_result(
+            "I can help you analyze your project and answer questions about your codebase, GitHub repositories, and Jira issues."
+        )
+
+        mock_tool_approval_result = create_mock_result(
+            "Great! I've processed your tool approvals and retrieved the requested information."
+        )
+
+        # Set return value based on whether it's a string prompt or tool approvals
+        def run_side_effect(prompt_or_approvals, message_history, deps):
+            if isinstance(prompt_or_approvals, str):
+                return mock_message_result
+            else:  # DeferredToolApprovalResult
+                return mock_tool_approval_result
+
+        mock_agent.run.side_effect = run_side_effect
+
+        return mock_agent
+
+    @pytest.fixture
+    def client_with_mock_project_agent(self, mock_project_agent):
+        """Test client with mocked project agent."""
+        # Override the dependency
+        app.dependency_overrides[get_project_agent] = lambda: mock_project_agent
+
+        client = TestClient(app)
+        yield client
+
+        # Clean up override
+        if get_project_agent in app.dependency_overrides:
+            del app.dependency_overrides[get_project_agent]
+
+    @pytest.fixture
+    def test_project_with_data(self, db_session):
+        """Create a test project for agent tests."""
+        project_repo = ProjectRepository(db_session)
+        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        db_session.commit()
+        return created_project
+
+    def test_send_project_conversation_message(
+        self, client_with_mock_project_agent, test_project_with_data, mock_project_agent
+    ):
+        """Test sending a message to the project agent."""
+        project = test_project_with_data
+
+        message_request = {"message": "What GitHub repositories are connected to this project?"}
+
+        response = client_with_mock_project_agent.post(
+            f"/api/projects/{project.id}/agent/messages", json=message_request
+        )
+        assert response.status_code == 200
+
+        conversation_response = response.json()
+        assert "type" in conversation_response
+        assert conversation_response["type"] == "message"
+        assert "message" in conversation_response
+        assert conversation_response["message"]["role"] == "agent"
+        assert "project" in conversation_response["message"]["text_content"]
+
+        # Verify the mock agent was called correctly
+        mock_project_agent.run.assert_called_once()
+        args, kwargs = mock_project_agent.run.call_args
+        assert kwargs["prompt_or_approvals"] == "What GitHub repositories are connected to this project?"
+
+    def test_send_project_conversation_message_project_not_found(self, client):
+        """Test sending a message for non-existent project."""
+        message_request = {"message": "Test message"}
+        response = client.post("/api/projects/999/agent/messages", json=message_request)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Project not found"
+
+    def test_approve_project_tools(self, client_with_mock_project_agent, test_project_with_data, mock_project_agent):
+        """Test approving tool calls from the project agent."""
+        project = test_project_with_data
+
+        # First, send a message that would trigger a tool call to create conversation history
+        from pydantic_ai.tools import DeferredToolRequests, ToolRequest
+        from unittest.mock import Mock
+
+        # Mock the agent to return a tool request first, then tool approval result
+        def mock_run_side_effect(*args, **kwargs):
+            prompt_or_approvals = kwargs.get("prompt_or_approvals")
+            if isinstance(prompt_or_approvals, str):
+                # First call - return tool request
+                tool_request = Mock()
+                tool_request.tool_call_id = "test_call_1"
+                tool_request.tool_name = "fetch_github_issues"
+                tool_request.args = {}
+                
+                mock_result = Mock(spec=AgentRunResult)
+                mock_result.output = DeferredToolRequests(approvals=[tool_request])
+                mock_result.new_messages = Mock(return_value=[
+                    ModelRequest(parts=[UserPromptPart(content="Fetch GitHub issues")]),
+                    ModelResponse(parts=[ToolCallPart(tool_name="fetch_github_issues", tool_call_id="test_call_1", args={})])
+                ])
+                return mock_result
+            else:
+                # Second call - return approval result
+                mock_result = Mock(spec=AgentRunResult)
+                mock_result.output = "Great! I've processed your tool approvals and retrieved the requested information."
+                mock_result.new_messages = Mock(return_value=[
+                    ModelResponse(parts=[TextPart(content="Great! I've processed your tool approvals and retrieved the requested information.")])
+                ])
+                return mock_result
+        
+        mock_project_agent.run.side_effect = mock_run_side_effect
+
+        # Step 1: Send a message that triggers a tool call
+        message_request = {"message": "Can you fetch the GitHub issues for this project?"}
+        response1 = client_with_mock_project_agent.post(
+            f"/api/projects/{project.id}/agent/messages", json=message_request
+        )
+        assert response1.status_code == 200
+        assert response1.json()["type"] == "tool_request"
+
+        # Step 2: Now approve the tool call
+        approval_request = {
+            "approvals": {"test_call_1": {"approved": True, "feedback": "Go ahead and fetch the GitHub issues"}}
+        }
+
+        response = client_with_mock_project_agent.post(
+            f"/api/projects/{project.id}/agent/approve-tools", json=approval_request
+        )
+        assert response.status_code == 200
+
+        conversation_response = response.json()
+        assert "type" in conversation_response
+        assert conversation_response["type"] == "message"
+        assert "message" in conversation_response
+        assert conversation_response["message"]["role"] == "agent"
+        assert "tool approvals" in conversation_response["message"]["text_content"]
+
+        # Verify the mock agent was called twice (message + approval)
+        assert mock_project_agent.run.call_count == 2
+        
+        # Check the second call was with tool approvals
+        second_call_kwargs = mock_project_agent.run.call_args_list[1][1]
+        assert not isinstance(second_call_kwargs["prompt_or_approvals"], str)
+
+    def test_approve_project_tools_project_not_found(self, client):
+        """Test tool approval for non-existent project."""
+        approval_request = {"approvals": {"test_call_1": {"approved": True}}}
+        response = client.post("/api/projects/999/agent/approve-tools", json=approval_request)
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"

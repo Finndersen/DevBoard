@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 
-from devboard.agents.types import AgentType
 from devboard.db.models import Configuration
 from devboard.db.repositories import ConfigurationRepository
 
@@ -214,9 +213,9 @@ class TestSettingsRouter:
         assert "Unknown agent type" in data["detail"]
         assert "invalid" in data["detail"]
 
-        # Should list valid agent types
-        valid_types = [t.value for t in AgentType]
-        for agent_type in valid_types:
+        # Should list valid API agent types (API-friendly names)
+        expected_valid_types = ["qa", "planning", "implementation"]
+        for agent_type in expected_valid_types:
             assert agent_type in data["detail"]
 
     def test_get_available_models_all_agent_types(self, client):

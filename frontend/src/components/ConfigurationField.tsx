@@ -135,21 +135,47 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
   }
 
   const renderValueSourceIndicator = () => {
-    if (!hasOverridableValue) {
+    const hasAnyIndicators = hasOverridableValue || field.env_var_name
+    
+    if (!hasAnyIndicators) {
       return null
     }
 
     return (
       <div className="mt-2 space-y-1">
-        {/* Show current fallback value */}
+        {/* Show current fallback value with env var name on same line */}
         {hasEnvValue && (
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            {field.env_var_name}: {formatValueForDisplay(field.env_value, field.is_secret)}
+          <div className="flex justify-between items-center">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              {field.env_var_name}: {formatValueForDisplay(field.env_value, field.is_secret)}
+            </div>
+            {field.env_var_name && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                {field.env_var_name}
+              </div>
+            )}
           </div>
         )}
+        
         {hasDefaultValue && !hasEnvValue && (
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            Default: {formatValueForDisplay(field.default_value, field.is_secret)}
+          <div className="flex justify-between items-center">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Default: {formatValueForDisplay(field.default_value, field.is_secret)}
+            </div>
+            {field.env_var_name && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                {field.env_var_name}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* If field has env_var_name but no overridable value, show just the env var name */}
+        {!hasOverridableValue && field.env_var_name && (
+          <div className="flex justify-end">
+            <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+              {field.env_var_name}
+            </div>
           </div>
         )}
         
@@ -158,7 +184,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
           <div className="flex items-center">
             <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 dark:text-amber-400 mr-1" />
             <span className="text-xs text-amber-600 dark:text-amber-400">
-              Overriding {hasEnvValue ? 'environment variable' : 'default value'}
+              Overriding {hasEnvValue ? 'env var' : 'default value'}
             </span>
           </div>
         )}

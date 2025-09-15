@@ -61,15 +61,16 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
   const handleOverrideToggle = (fieldName: string, enabled: boolean) => {
     setOverrideStates(prev => ({ ...prev, [fieldName]: enabled }))
     
-    // If disabling override, reset value to the effective fallback value
-    if (!enabled && config) {
+    if (config) {
       const field = config.fields.find(f => f.name === fieldName)
       if (field) {
-        // Reset to env_value or default_value
-        const fallbackValue = field.env_value !== null && field.env_value !== undefined 
-          ? field.env_value 
-          : field.default_value
-        setValues(prev => ({ ...prev, [fieldName]: fallbackValue }))
+        if (enabled) {
+          // When enabling override, populate with effective value
+          setValues(prev => ({ ...prev, [fieldName]: field.effective_value }))
+        } else {
+          // When disabling override, reset to effective value (which is the fallback when not overridden)
+          setValues(prev => ({ ...prev, [fieldName]: field.effective_value }))
+        }
       }
     }
   }
@@ -154,30 +155,20 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
   const getStatusIndicator = () => {
     if (!config) return null
 
-    switch (config.validation_status) {
-      case 'valid':
-        return (
-          <div className="flex items-center text-green-600 dark:text-green-400">
-            <CheckCircleIcon className="h-5 w-5 mr-1" />
-            <span className="text-sm">Valid</span>
-          </div>
-        )
-      case 'invalid':
-        return (
-          <div className="flex items-center text-red-600 dark:text-red-400">
-            <XCircleIcon className="h-5 w-5 mr-1" />
-            <span className="text-sm">Invalid</span>
-          </div>
-        )
-      case 'unconfigured':
-        return (
-          <div className="flex items-center text-gray-600 dark:text-gray-400">
-            <ExclamationCircleIcon className="h-5 w-5 mr-1" />
-            <span className="text-sm">Unconfigured</span>
-          </div>
-        )
-      default:
-        return null
+    if (config.is_valid) {
+      return (
+        <div className="flex items-center text-green-600 dark:text-green-400">
+          <CheckCircleIcon className="h-5 w-5 mr-1" />
+          <span className="text-sm">Valid</span>
+        </div>
+      )
+    } else {
+      return (
+        <div className="flex items-center text-red-600 dark:text-red-400">
+          <XCircleIcon className="h-5 w-5 mr-1" />
+          <span className="text-sm">Invalid</span>
+        </div>
+      )
     }
   }
 
@@ -189,7 +180,10 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       
       // Check if override state changed
       if (isOverrideEnabled !== wasOverridden) {
-        return true
+        // Only consider it a change if:
+        // 1. Enabling override, OR
+        // 2. Disabling override but there was actually a db_value to clear
+        return isOverrideEnabled || (wasOverridden && field.db_value !== null && field.db_value !== undefined)
       }
       
       // Check if value changed for overridden fields

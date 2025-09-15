@@ -9,14 +9,14 @@ export interface Project {
 export interface Task {
   id: number
   title: string
-  description: string | null
   status: string
   project_id: number
   codebase_id: number | null
   remote_task_id: string | null
   conversation_id: string | null
-  implementation_plan: string | null
   created_at: string
+  specification: DocumentResponse
+  implementation_plan: DocumentResponse | null
 }
 
 export interface DocumentEdit {
@@ -41,6 +41,40 @@ export interface ConversationMessage {
   role: MessageRole
   text_content: string
   timestamp: string
+}
+
+// Task Planning Chat specific interfaces
+export interface ConversationMessageResponse {
+  id: number
+  message_type: 'request' | 'response'
+  text_content: string
+  created_at: string
+}
+
+export interface PendingApproval {
+  tool_call_id: string
+  tool_name: string
+  reasoning?: string
+  diff_preview?: string
+  edits?: Array<{ find: string; replace: string }>
+}
+
+export interface MessageRequest {
+  message: string
+}
+
+export interface ConversationResponse {
+  messages: ConversationMessageResponse[]
+  pending_approvals?: PendingApproval[]
+}
+
+export interface ToolApprovalDecision {
+  approved: boolean
+  feedback?: string
+}
+
+export interface ToolApprovalRequest {
+  approvals: Record<string, ToolApprovalDecision>
 }
 
 export interface ToolCallRequest {
@@ -209,7 +243,7 @@ export interface ConfigurationFieldInfo {
 export interface ConfigurationDetailResponse {
   key: string
   fields: ConfigurationFieldInfo[]
-  validation_status: 'valid' | 'invalid' | 'unconfigured'
+  is_valid: boolean
   validation_errors?: string[]
 }
 
@@ -222,6 +256,24 @@ export interface IntegrationTestResponse {
 
 export interface AgentModelResponse {
   model_id: string
+}
+
+export interface ModelInfo {
+  id: string
+  provider: string
+  name: string
+}
+
+export interface AvailableModelsForAgentResponse {
+  agent_type: string
+  available_models: ModelInfo[]
+  preferred_model: string | null
+  total_available: number
+  model_hierarchy?: string[]  // Default fallback hierarchy for this agent
+}
+
+export interface UpdateAgentModelRequest {
+  model_id: string | null  // null means use default hierarchy
 }
 
 export class ApiClient {
@@ -289,7 +341,7 @@ export class ApiClient {
 
   async updateTask(id: number | string, task: Partial<Task>): Promise<Task> {
     return this.request<Task>(`/api/tasks/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(task),
     })
   }
@@ -299,15 +351,15 @@ export class ApiClient {
   }
 
   // Task Planning Agent - New Deferred Tools API
-  async sendTaskConversationMessage(taskId: number | string, request: MessageRequest): Promise<ConversationResponse> {
-    return this.request<ConversationResponse>(`/api/tasks/${taskId}/conversation`, {
+  async sendTaskConversationMessage(taskId: number | string, request: MessageRequest): Promise<any> {
+    return this.request<any>(`/api/tasks/${taskId}/agent/messages`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
   }
 
-  async approveTaskTools(taskId: number | string, request: ToolApprovalRequest): Promise<ConversationResponse> {
-    return this.request<ConversationResponse>(`/api/tasks/${taskId}/conversation/approve-tools`, {
+  async approveTaskTools(taskId: number | string, request: ToolApprovalRequest): Promise<any> {
+    return this.request<any>(`/api/tasks/${taskId}/agent/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
@@ -391,7 +443,18 @@ export class ApiClient {
   }
 
   async getAgentModel(agentType: string): Promise<AgentModelResponse> {
-    return this.request<AgentModelResponse>(`/api/settings/agents/${agentType}/model`)
+    return this.request<AgentModelResponse>(`/api/agents/${agentType}/model`)
+  }
+
+  async getAvailableModelsForAgent(agentType: string): Promise<AvailableModelsForAgentResponse> {
+    return this.request<AvailableModelsForAgentResponse>(`/api/agents/${agentType}/available-models`)
+  }
+
+  async updateAgentModel(agentType: string, request: UpdateAgentModelRequest): Promise<AgentModelResponse> {
+    return this.request<AgentModelResponse>(`/api/agents/${agentType}/model`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    })
   }
 
   // Codebases

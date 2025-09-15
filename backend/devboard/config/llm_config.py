@@ -39,16 +39,19 @@ class GeminiProviderConfig(BaseConfig):
 AGENT_MODEL_HIERARCHIES = {
     AgentType.PROJECT: [
         "gemini/gemini-2.5-pro",
+        "openai/gpt-5",
         "openai/gpt-4.1",
         "anthropic/claude-sonnet-4",
     ],
     AgentType.TASK_SPECIFICATION: [
         "gemini/gemini-2.5-pro",
+        "openai/gpt-5",
         "openai/gpt-4.1",
         "anthropic/claude-sonnet-4",
     ],
     AgentType.TASK_PLANNING: [
         "gemini/gemini-2.5-pro",
+        "openai/gpt-5",
         "openai/gpt-4.1",
         "anthropic/claude-3.7-sonnet",
     ],
@@ -58,9 +61,10 @@ AGENT_MODEL_HIERARCHIES = {
         "gemini/gemini-2.5-flash",
     ],
     AgentType.INVESTIGATION: [
-        "openai/gpt-4.1-mini",
+        "gemini/gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "openai/gpt-5-mini",
         "anthropic/claude-3.5-haiku-20241022",
-        "gemini/gemini-2.5-flash-lite",
     ],
 }
 
@@ -68,23 +72,20 @@ AGENT_MODEL_HIERARCHIES = {
 # Available models per provider (latest 2024-2025 models)
 PROVIDER_MODELS = {
     "openai": [
+        "gpt-5",
         "gpt-4.1",
-        "gpt-4.1-mini",
-        "gpt-4.1-nano",
-        "gpt-4o",
-        "o4-mini",
+        "gpt-5-mini",
+        "gpt-5-nano",
     ],
     "anthropic": [
-        "claude-sonnet-4",
-        "claude-opus-4",
-        "claude-3.7-sonnet",
-        "claude-3.5-sonnet-20241022",
-        "claude-3.5-haiku-20241022",
+        "claude-sonnet-4-0",
+        "claude-opus-4-1",
+        "claude-3-7-sonnet-latest",
+        "claude-3-5-haiku-latest",
     ],
     "gemini": [
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
     ],
 }

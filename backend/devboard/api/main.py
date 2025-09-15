@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from devboard.api.routers import codebases, configurations, projects, settings, tasks
+from devboard.api.routers import agents, codebases, configurations, projects, settings, tasks
 from devboard.config.logfire_config import setup_logfire
 
 """Load environment variables from .env files in current directory or home directory."""
@@ -37,10 +37,9 @@ app.add_middleware(
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
-app.include_router(
-    configurations.router, prefix="/api/configurations", tags=["configurations"]
-)
+app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 
 
 @app.get("/")

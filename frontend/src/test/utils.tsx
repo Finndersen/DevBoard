@@ -60,7 +60,7 @@ export const createMockConfigurationResponse = (overrides = {}) => ({
       env_value_present: false,
     },
   ],
-  validation_status: 'valid' as const,
+  is_valid: true,
   validation_errors: [],
   ...overrides,
 })

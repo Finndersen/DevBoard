@@ -90,7 +90,7 @@ const mockConfigurationResponse: ConfigurationDetailResponse = {
       is_overridden: false,
     },
   ],
-  validation_status: 'unconfigured',
+  is_valid: false,
   validation_errors: ['Missing required field: api_token'],
 }
 
@@ -178,7 +178,7 @@ export const handlers = [
     return HttpResponse.json({
       ...mockConfigurationResponse,
       key: params.configKey as string,
-      validation_status: 'valid' as const,
+      is_valid: true,
       validation_errors: [],
     })
   }),

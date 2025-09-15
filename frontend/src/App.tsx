@@ -5,22 +5,25 @@ import ProjectDetail from './views/ProjectDetail'
 import TaskDetail from './views/TaskDetail'
 import Codebases from './views/Codebases'
 import Settings from './views/Settings'
+import { DarkModeProvider } from './contexts/DarkModeContext'
 import './App.css'
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<ProjectDashboard />} />
-          <Route path="/projects" element={<ProjectDashboard />} />
-          <Route path="/projects/:id" element={<ProjectDetail />} />
-          <Route path="/tasks/:id" element={<TaskDetail />} />
-          <Route path="/codebases" element={<Codebases />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <DarkModeProvider>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<ProjectDashboard />} />
+            <Route path="/projects" element={<ProjectDashboard />} />
+            <Route path="/projects/:id" element={<ProjectDetail />} />
+            <Route path="/tasks/:id" element={<TaskDetail />} />
+            <Route path="/codebases" element={<Codebases />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </DarkModeProvider>
   )
 }
 

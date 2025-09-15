@@ -21,7 +21,7 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
     ToolCallRequest,
 )
-from devboard.db.models.messages import BaseConversationMessage
+from devboard.db.models.messages import BaseConversationMessage, MessageType
 from devboard.db.repositories.conversation_message import (
     BaseConversationMessageRepository,
 )
@@ -93,6 +93,20 @@ class AgentConversationService:
         """
         # Load conversation history
         existing_messages = self.message_repo.get_all_for_entity(entity_id)
+        # Verify integrity of message history
+        if isinstance(message_or_approvals, DeferredToolResults):
+            if not existing_messages:
+                raise ValueError("No existing messages found for processing tool approvals.")
+            if existing_messages[-1].message_type != MessageType.TOOL_CALL:
+                raise ValueError("Last message is not a tool call; cannot process approvals.")
+        else:
+            if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
+                # If there was an issue processing tool approvals or they were never provided,
+                # need to clear the message history until previous message
+                delete_count = self.message_repo.delete_tool_approval_messages(entity_id)
+                existing_messages = existing_messages[:-delete_count]
+                logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
+
         message_history = self.convert_messages_to_pydantic(existing_messages)
 
         # Process with agent

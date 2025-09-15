@@ -37,10 +37,14 @@ class AgentModelResponse(BaseModel):
 class AvailableModelsResponse(BaseModel):
     """Response schema for available models endpoint."""
 
-    agent_type: str | None = None
-    qa: AgentModelInfo | None = None
-    planning: AgentModelInfo | None = None
-    implementation: AgentModelInfo | None = None
-    available_models: list[ModelInfo] | None = None
+    agent_type: str
+    available_models: list[ModelInfo]
     preferred_model: str | None = None
-    total_available: int | None = None
+    total_available: int
+    model_hierarchy: list[str] | None = None  # Default fallback hierarchy for this agent
+
+
+class UpdateAgentModelRequest(BaseModel):
+    """Request schema for updating agent model selection."""
+
+    model_id: str | None = None  # None means use default hierarchy

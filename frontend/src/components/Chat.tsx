@@ -145,7 +145,7 @@ export default function Chat({ projectId }: ChatProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 dark:text-gray-400 py-8">
             <p className="text-sm">Ask me anything about this project!</p>
@@ -202,7 +202,7 @@ export default function Chat({ projectId }: ChatProps) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-200 dark:border-gray-600 p-4">
+      <div className="border-t border-gray-200 dark:border-gray-600 p-4 flex-shrink-0">
         <form onSubmit={handleSendMessage} className="flex space-x-2">
           <input
             type="text"

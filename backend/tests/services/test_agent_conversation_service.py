@@ -12,7 +12,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.run import AgentRunResult
-from pydantic_ai.tools import DeferredToolRequests, ToolApproved, ToolDenied
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,6 +55,21 @@ class MockMessageRepository(BaseConversationMessageRepository):
         message.timestamp = datetime.datetime.now(datetime.UTC)
         self.messages.append(message)
         return message
+
+    def delete_tool_approval_messages(self, entity_id: int) -> int:
+        """Delete tool approval messages and return count of deleted messages."""
+        initial_count = len(self.messages)
+        # Filter out the last message if it's a tool call for this entity
+        entity_messages = [msg for msg in self.messages if msg.parent_id == entity_id]
+        if entity_messages and entity_messages[-1].message_type == MessageType.TOOL_CALL:
+            # Remove the last tool call message
+            self.messages = [
+                msg
+                for msg in self.messages
+                if not (msg.parent_id == entity_id and msg.message_type == MessageType.TOOL_CALL)
+            ]
+            return 1
+        return 0
 
 
 class MockAgent(BaseAgent):
@@ -165,8 +180,28 @@ class TestAgentConversationService:
         assert response.message is None
 
     @pytest.mark.asyncio
-    async def test_process_tool_approvals(self, service, mock_agent):
+    async def test_process_tool_approvals(self, service, mock_agent, mock_message_repo):
         """Test processing tool approval decisions."""
+        # Setup: Add existing messages including a tool call message
+        user_message = MockConversationMessage()
+        user_message.parent_id = 1
+        user_message.message_type = MessageType.USER_PROMPT
+        user_message.pydantic_content = {
+            "kind": "request",
+            "parts": [{"part_kind": "user-prompt", "content": "Edit this document"}],
+        }
+        
+        tool_call_message = MockConversationMessage()
+        tool_call_message.parent_id = 1
+        tool_call_message.message_type = MessageType.TOOL_CALL
+        tool_call_message.pydantic_content = {
+            "kind": "response",
+            "parts": [{"part_kind": "tool-call", "tool_name": "edit_document", "tool_call_id": "tool_123"}],
+        }
+        
+        mock_message_repo.create(user_message)
+        mock_message_repo.create(tool_call_message)
+        
         # Set up approvals
         approvals = {
             "tool_123": ToolApprovalDecision(approved=True),
@@ -309,3 +344,110 @@ class TestAgentConversationService:
 
         assert response.type == PromptResponseType.MESSAGE
         assert response.message.text_content == "Continued"
+
+    @pytest.mark.asyncio
+    async def test_send_message_when_expecting_tool_approval(self, service, mock_agent, mock_message_repo):
+        """Test sending a text message when the conversation is expecting DeferredToolResults.
+
+        This should trigger cleanup of the pending tool call message.
+        """
+        # Setup: Add a previous tool call message to simulate pending tool approval
+        tool_call_message = MockConversationMessage()
+        tool_call_message.parent_id = 1
+        tool_call_message.message_type = MessageType.TOOL_CALL
+        tool_call_message.pydantic_content = {
+            "kind": "response",
+            "parts": [{"part_kind": "tool-call", "tool_name": "edit_document", "tool_call_id": "tool_123"}],
+        }
+        mock_message_repo.create(tool_call_message)
+
+        # Mock agent run to return a text response
+        mock_result = MagicMock(spec=AgentRunResult)
+        mock_result.output = "I've processed your new request"
+        mock_result.new_messages.return_value = [
+            ModelRequest(parts=[UserPromptPart(content="New message")]),
+            ModelResponse(parts=[TextPart(content="I've processed your new request")]),
+        ]
+
+        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+
+            # Mock logfire.warning to verify it's called
+            with patch("devboard.services.agent_conversation.logfire.warning") as mock_warning:
+                response = await service.send_message(message="New message", entity_id=1)
+
+        # Verify the cleanup warning was logged
+        mock_warning.assert_called_once()
+        assert "Deleted 1 messages due to missing tool approvals" in str(mock_warning.call_args)
+
+        # Verify response is correct
+        assert response.type == PromptResponseType.MESSAGE
+        assert response.message is not None
+        assert response.message.text_content == "I've processed your new request"
+        assert response.message.role == MessageRole.AGENT
+        assert response.tool_requests is None
+
+        # Verify the agent was called with cleaned message history
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        assert kwargs["prompt_or_approvals"] == "New message"
+
+    @pytest.mark.asyncio
+    async def test_process_tool_approvals_with_no_existing_messages(self, service, mock_agent):
+        """Test processing tool approvals when there are no existing messages.
+
+        This should raise a ValueError.
+        """
+        approvals = {"tool_123": ToolApprovalDecision(approved=True)}
+
+        with pytest.raises(ValueError, match="No existing messages found for processing tool approvals"):
+            await service.process_tool_approvals(approvals=approvals, entity_id=1)
+
+    @pytest.mark.asyncio
+    async def test_process_tool_approvals_with_no_tool_call_message(self, service, mock_agent, mock_message_repo):
+        """Test processing tool approvals when the last message is not a tool call.
+
+        This should raise a ValueError.
+        """
+        # Setup: Add a regular text message (not a tool call)
+        text_message = MockConversationMessage()
+        text_message.parent_id = 1
+        text_message.message_type = MessageType.TEXT_RESPONSE
+        text_message.pydantic_content = {
+            "kind": "response",
+            "parts": [{"part_kind": "text", "content": "Regular response"}],
+        }
+        mock_message_repo.create(text_message)
+
+        approvals = {"tool_123": ToolApprovalDecision(approved=True)}
+
+        with pytest.raises(ValueError, match="Last message is not a tool call; cannot process approvals"):
+            await service.process_tool_approvals(approvals=approvals, entity_id=1)
+
+    @pytest.mark.asyncio
+    async def test_handle_message_or_approval_validation_no_messages_for_tool_approvals(self, service):
+        """Test that DeferredToolResults validation fails with no existing messages."""
+        # Create a DeferredToolResults object
+        tool_results = DeferredToolResults(approvals={"tool_1": ToolApproved()})
+
+        with pytest.raises(ValueError, match="No existing messages found for processing tool approvals"):
+            await service._handle_message_or_approval(entity_id=1, message_or_approvals=tool_results)
+
+    @pytest.mark.asyncio
+    async def test_handle_message_or_approval_validation_wrong_last_message_type(self, service, mock_message_repo):
+        """Test that DeferredToolResults validation fails when last message is not a tool call."""
+        # Setup: Add a regular text message
+        text_message = MockConversationMessage()
+        text_message.parent_id = 1
+        text_message.message_type = MessageType.TEXT_RESPONSE
+        text_message.pydantic_content = {
+            "kind": "response",
+            "parts": [{"part_kind": "text", "content": "Regular response"}],
+        }
+        mock_message_repo.create(text_message)
+
+        # Create a DeferredToolResults object
+        tool_results = DeferredToolResults(approvals={"tool_1": ToolApproved()})
+
+        with pytest.raises(ValueError, match="Last message is not a tool call; cannot process approvals"):
+            await service._handle_message_or_approval(entity_id=1, message_or_approvals=tool_results)

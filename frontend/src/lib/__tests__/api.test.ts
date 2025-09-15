@@ -393,7 +393,7 @@ describe('ApiClient', () => {
           env_value_present: false,
         },
       ],
-      validation_status: 'unconfigured' as const,
+      is_valid: false,
       validation_errors: ['Missing required field: api_token'],
     }
 
@@ -412,7 +412,7 @@ describe('ApiClient', () => {
       const fieldUpdates = { api_token: 'new_token_123' }
       const updatedConfig = {
         ...mockConfigDetail,
-        validation_status: 'valid' as const,
+        is_valid: true,
         validation_errors: [],
       }
 
@@ -611,7 +611,7 @@ describe('ApiClient', () => {
           return HttpResponse.json({
             key: 'test',
             fields: [],
-            validation_status: 'valid',
+            is_valid: true,
           })
         })
       )

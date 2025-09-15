@@ -24,6 +24,7 @@ from devboard.api.schemas import (
     ProjectResponse,
     ProjectUpdate,
     ResourceResponse,
+    TaskCreate,
     TaskResponse,
 )
 from devboard.api.schemas.agent_conversation import (
@@ -73,9 +74,7 @@ async def create_project(
     project_repo: ProjectRepository = Depends(get_project_repository),
 ):
     """Create a new project."""
-    created_project = project_repo.create(
-        name=project.name, description=project.description
-    )
+    created_project = project_repo.create(name=project.name, description=project.description)
     return created_project
 
 
@@ -138,6 +137,31 @@ async def list_project_tasks(
     return tasks
 
 
+@router.post("/{project_id}/tasks", response_model=TaskResponse)
+async def create_project_task(
+    project_id: int,
+    task: TaskCreate,
+    project: Project = Depends(get_verified_project),
+    task_repo: TaskRepository = Depends(get_task_repository),
+):
+    """Create a new task for a specific project."""
+    # Ensure the task is being created for the correct project
+    if task.project_id != project_id:
+        raise HTTPException(status_code=400, detail="Task project_id must match URL project_id")
+
+    # Create task using repository
+    created_task = task_repo.create(
+        project_id=task.project_id,
+        title=task.title,
+        status=task.status,
+        codebase_id=task.codebase_id,
+        remote_task_id=task.remote_task_id,
+    )
+    task_repo.db.commit()
+    task_repo.db.refresh(created_task)
+    return created_task
+
+
 # Project Resource Endpoints
 @router.get("/{project_id}/resources", response_model=list[ResourceResponse])
 async def list_project_resources(
@@ -197,9 +221,7 @@ async def delete_project_resource(
 def list_project_agent_messages(
     project_id: int,
     project: Project = Depends(get_verified_project),
-    message_repo: ProjectConversationMessageRepository = Depends(
-        get_project_conversation_message_repository
-    ),
+    message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
 ) -> list[ConversationMessage]:
     """List all conversation messages for a project's agent.
 
@@ -212,16 +234,12 @@ def list_project_agent_messages(
         List of conversation messages
     """
 
-    messages = message_repo.get_all_for_entity(
-        entity_id=project_id, exclude_tool_calls=True
-    )
+    messages = message_repo.get_all_for_entity(entity_id=project_id, exclude_tool_calls=True)
 
     return [
         ConversationMessage(
             id=msg.id,
-            role=MessageRole.USER
-            if msg.message_type == MessageType.USER_PROMPT
-            else MessageRole.AGENT,
+            role=MessageRole.USER if msg.message_type == MessageType.USER_PROMPT else MessageRole.AGENT,
             text_content=msg.text_content,
             timestamp=msg.timestamp,
         )
@@ -234,9 +252,7 @@ async def send_project_agent_message(
     project_id: int,
     request: ChatRequest,
     project: Project = Depends(get_verified_project),
-    project_conversation_service: AgentConversationService = Depends(
-        get_project_agent_conversation_service
-    ),
+    project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
 ) -> PromptResponse:
     """Chat with the project agent.
 
@@ -254,9 +270,7 @@ async def send_project_agent_message(
     """
 
     # Process query with Q&A agent
-    response = await project_conversation_service.send_message(
-        message=request.message, entity_id=project_id
-    )
+    response = await project_conversation_service.send_message(message=request.message, entity_id=project_id)
 
     return response
 
@@ -266,9 +280,7 @@ async def approve_project_agent_tools(
     project_id: int,
     request: ToolApprovalRequest,
     project: Project = Depends(get_verified_project),
-    project_conversation_service: AgentConversationService = Depends(
-        get_project_agent_conversation_service
-    ),
+    project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
 ) -> PromptResponse:
     """Approve or deny tools for the project agent.
 
@@ -345,9 +357,7 @@ async def get_project_context(
         raise
     except Exception as e:
         logger.error(f"Error getting context for project {project_id}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Context assembly failed: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Context assembly failed: {e}") from e
 
 
 @router.post("/validate-resource", response_model=dict[str, Any])

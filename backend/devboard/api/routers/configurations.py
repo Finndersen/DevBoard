@@ -17,10 +17,18 @@ router = APIRouter()
 # Configuration endpoints
 @router.get("/")
 async def list_configurations(
-    prefix: str = None, config_service: ConfigService = Depends(get_config_service)
-) -> list[str]:
-    """List all configuration keys, optionally filtered by key prefix."""
-    return config_service.list_configs(prefix=prefix)
+    prefix: str, config_service: ConfigService = Depends(get_config_service)
+) -> list[ConfigurationDetailResponse]:
+    """List configuration details, filtered by key prefix."""
+    keys = config_service.list_configs(prefix=prefix)
+    results = []
+
+    for key in keys:
+        config_detail = config_service.get_config_details_by_key(key)
+        if config_detail is not None:
+            results.append(config_detail)
+
+    return results
 
 
 @router.get("/{config_key}/detail", response_model=ConfigurationDetailResponse)
@@ -29,7 +37,7 @@ async def get_configuration_detail(config_key: str, config_service: ConfigServic
     result = config_service.get_config_details_by_key(config_key)
 
     # If the configuration schema doesn't exist, return 404
-    if result.validation_status == "unconfigured" and not result.fields:
+    if result is None:
         raise HTTPException(status_code=404, detail="Configuration schema not found")
 
     return result

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import Chat from '../components/Chat'
@@ -8,30 +8,60 @@ import type { Project, Task } from '../lib/api'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>('board')
+  
+  // Get tab from URL query params, default to 'home'
+  const getTabFromUrl = () => {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab') as 'home' | 'board' | 'settings'
+    return ['home', 'board', 'settings'].includes(tab) ? tab : 'home'
+  }
+  
+  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>(getTabFromUrl() === 'home' ? 'editor' : getTabFromUrl())
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
   const [newTask, setNewTask] = useState({
     title: '',
-    description: '',
-    status: 'Pending',
+    status: 'defining',
     codebase_id: null,
-    remote_task_id: null,
-    conversation_id: null,
-    implementation_plan: null
+    remote_task_id: null
   })
   const [isEditingSpecification, setIsEditingSpecification] = useState(false)
   const [editedSpecification, setEditedSpecification] = useState('')
   const [agentModel, setAgentModel] = useState<string | null>(null)
   const [modelLoading, setModelLoading] = useState(true)
 
+  // Update URL when tab changes
+  const handleTabChange = (tab: 'board' | 'editor' | 'settings') => {
+    setActiveTab(tab)
+    const urlTab = tab === 'editor' ? 'home' : tab
+    const params = new URLSearchParams(location.search)
+    params.set('tab', urlTab)
+    navigate(`/projects/${id}?${params.toString()}`, { replace: true })
+  }
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    const urlTab = getTabFromUrl()
+    const internalTab = urlTab === 'home' ? 'editor' : urlTab
+    setActiveTab(internalTab)
+  }, [location.search])
+
   useEffect(() => {
     fetchProject()
     fetchTasks()
     fetchAgentModel()
   }, [id])
+
+  // Update editedSpecification when project loads or editing mode changes
+  useEffect(() => {
+    if (project && isEditingSpecification) {
+      setEditedSpecification(project.specification?.content || '')
+    }
+  }, [project, isEditingSpecification])
 
   const fetchProject = async () => {
     try {
@@ -68,17 +98,18 @@ export default function ProjectDetail() {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await apiClient.createTask(id!, newTask)
+      const taskData = {
+        ...newTask,
+        project_id: parseInt(id!)
+      }
+      await apiClient.createTask(id!, taskData)
       await fetchTasks()
       setShowCreateTaskModal(false)
       setNewTask({ 
         title: '', 
-        description: '', 
-        status: 'Pending',
+        status: 'defining',
         codebase_id: null,
-        remote_task_id: null,
-        conversation_id: null,
-        implementation_plan: null
+        remote_task_id: null
       })
     } catch (error) {
       console.error('Failed to create task:', error)
@@ -88,7 +119,13 @@ export default function ProjectDetail() {
   const handleSaveSpecification = async () => {
     try {
       await apiClient.updateProject(id!, { specification: editedSpecification })
-      setProject(prev => prev ? { ...prev, specification: editedSpecification } : null)
+      setProject(prev => prev ? { 
+        ...prev, 
+        specification: { 
+          ...prev.specification, 
+          content: editedSpecification 
+        } 
+      } : null)
       setIsEditingSpecification(false)
     } catch (error) {
       console.error('Failed to update project specification:', error)
@@ -102,13 +139,13 @@ export default function ProjectDetail() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending':
+      case 'defining':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
       case 'planning':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
       case 'implementing':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
-      case 'in review':
+      case 'reviewing':
         return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
       case 'complete':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
@@ -149,7 +186,7 @@ export default function ProjectDetail() {
   }
 
   const taskGroups = groupTasksByStatus(tasks)
-  const statusColumns = ['Pending', 'Planning', 'Awaiting Approval', 'Implementing', 'In Review', 'Complete']
+  const statusColumns = ['defining', 'planning', 'implementing', 'reviewing', 'complete']
 
   return (
     <div>
@@ -165,7 +202,6 @@ export default function ProjectDetail() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
-            <p className="text-gray-600 dark:text-gray-400">{project.description}</p>
           </div>
         </div>
         
@@ -182,13 +218,13 @@ export default function ProjectDetail() {
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
         <nav className="-mb-px flex space-x-8">
           {[
+            { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
             { id: 'board' as const, name: 'Board', icon: null },
-            { id: 'editor' as const, name: 'Collaborative Editor', icon: ChatBubbleLeftIcon },
             { id: 'settings' as const, name: 'Settings', icon: null },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -243,11 +279,11 @@ export default function ProjectDetail() {
       )}
 
       {activeTab === 'editor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-6 h-[80vh]">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 h-[calc(100vh-280px)] overflow-hidden">
           {/* Left Side - Project Details & Specification */}
-          <div className="flex flex-col space-y-6">
+          <div className="flex flex-col space-y-6 overflow-hidden">
             {/* Project Details Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-shrink-0">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Project Details</h3>
               <div className="space-y-2">
                 <div>
@@ -262,12 +298,15 @@ export default function ProjectDetail() {
             </div>
 
             {/* Specification Document Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project Specification</h3>
                 {!isEditingSpecification ? (
                   <button
-                    onClick={() => setIsEditingSpecification(true)}
+                    onClick={() => {
+                      setEditedSpecification(project?.specification?.content || '')
+                      setIsEditingSpecification(true)
+                    }}
                     className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
                     <PencilIcon className="w-4 h-4 mr-2" />
@@ -314,8 +353,8 @@ export default function ProjectDetail() {
           </div>
 
           {/* Right Side - Chat */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div className="flex items-center">
                 <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Agent</h3>
@@ -375,19 +414,6 @@ export default function ProjectDetail() {
                 />
               </div>
               
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Description
-                </label>
-                <textarea
-                  required
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter task description"
-                />
-              </div>
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -398,12 +424,11 @@ export default function ProjectDetail() {
                   onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 >
-                  <option value="Pending">Pending</option>
-                  <option value="Planning">Planning</option>
-                  <option value="Awaiting Approval">Awaiting Approval</option>
-                  <option value="Implementing">Implementing</option>
-                  <option value="In Review">In Review</option>
-                  <option value="Complete">Complete</option>
+                  <option value="defining" className="text-gray-900 dark:text-white">Defining</option>
+                  <option value="planning" className="text-gray-900 dark:text-white">Planning</option>
+                  <option value="implementing" className="text-gray-900 dark:text-white">Implementing</option>
+                  <option value="reviewing" className="text-gray-900 dark:text-white">Reviewing</option>
+                  <option value="complete" className="text-gray-900 dark:text-white">Complete</option>
                 </select>
               </div>
               

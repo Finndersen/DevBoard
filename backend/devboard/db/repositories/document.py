@@ -70,9 +70,7 @@ class DocumentRepository(BaseRepository[Document]):
         document.updated_at = datetime.now(UTC)
         return document
 
-    def update_content_if_changed(
-        self, document: Document, new_content: str
-    ) -> tuple[Document, bool]:
+    def update_content_if_changed(self, document: Document, new_content: str) -> tuple[Document, bool]:
         """Update document content only if it has changed.
 
         Args:

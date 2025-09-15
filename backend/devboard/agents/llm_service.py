@@ -1,28 +1,16 @@
 """Service for managing LLM providers and model availability."""
 
 import logging
-from dataclasses import dataclass
 from typing import cast
 
 from devboard.agents.types import AgentType
+from devboard.api.schemas import ModelInfo
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES, PROVIDER_MODELS
 from devboard.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ModelInfo:
-    """Information about an available LLM model."""
-
-    provider: str  # Provider name (e.g., "openai")
-    name: str  # Model name (e.g., "gpt-4.1")
-
-    @property
-    def id(self) -> str:
-        return f"{self.provider}/{self.name}"
 
 
 class LLMService:
@@ -54,6 +42,7 @@ class LLMService:
             for model_name in provider_models:
                 available_models.append(
                     ModelInfo(
+                        id=f"{provider_type}/{model_name}",
                         provider=provider_type,
                         name=model_name,
                     )

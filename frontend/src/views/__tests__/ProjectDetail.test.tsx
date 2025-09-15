@@ -136,9 +136,11 @@ describe('ProjectDetail', () => {
     await user.click(editButton)
     
     // Should show textarea for editing
-    const textarea = screen.getByPlaceholderText('Enter project specification in Markdown format...')
-    expect(textarea).toBeInTheDocument()
-    expect(textarea).toHaveValue('This is a test project for development')
+    await waitFor(() => {
+      const textarea = screen.getByPlaceholderText('Enter project specification in Markdown format...')
+      expect(textarea).toBeInTheDocument()
+      expect(textarea).toHaveValue('This is a test project for development')
+    })
     
     // Should show save and cancel buttons
     expect(screen.getByText('Save')).toBeInTheDocument()

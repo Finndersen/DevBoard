@@ -32,9 +32,7 @@ class Project(Base):
     # Document relationship
     specification_document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
 
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        default=lambda: datetime.datetime.now(datetime.UTC)
-    )
+    created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
     codebases: Mapped[list["Codebase"]] = relationship(
@@ -43,9 +41,7 @@ class Project(Base):
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=project_context_resource_association, back_populates="projects"
     )
-    messages: Mapped[list["ProjectConversationMessage"]] = relationship(
-        back_populates="project"
-    )
+    messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
     # Document relationship with eager loading
     specification: Mapped["Document"] = relationship(

@@ -22,6 +22,7 @@ from .integration import (
     AvailableModelsResponse,
     IntegrationTestResponse,
     ModelInfo,
+    UpdateAgentModelRequest,
 )
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .resource import (
@@ -74,6 +75,7 @@ __all__ = [
     "AvailableModelsResponse",
     "IntegrationTestResponse",
     "ModelInfo",
+    "UpdateAgentModelRequest",
     # Project
     "ProjectBase",
     "ProjectCreate",

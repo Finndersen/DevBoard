@@ -10,7 +10,6 @@ export default function ProjectDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({
     name: '',
-    specification: '',
     description: ''
   })
 
@@ -35,7 +34,7 @@ export default function ProjectDashboard() {
       await apiClient.createProject(newProject)
       await fetchProjects()
       setShowCreateModal(false)
-      setNewProject({ name: '', specification: '', description: '' })
+      setNewProject({ name: '', description: '' })
     } catch (error) {
       console.error('Failed to create project:', error)
     }

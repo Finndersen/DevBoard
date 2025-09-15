@@ -1,10 +1,24 @@
-import { useState } from 'react'
-import { CogIcon, LinkIcon, CloudIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { CogIcon, LinkIcon, CloudIcon, CpuChipIcon } from '@heroicons/react/24/outline'
 import { ConfigurationForm } from '../components/ConfigurationForm'
+import { AgentModelSelector } from '../components/AgentModelSelector'
+import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'general'>('integrations')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { isDarkMode, toggleDarkMode } = useDarkMode()
+  
+  // Get tab from URL query params, default to 'integrations'
+  const getTabFromUrl = () => {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab') as 'integrations' | 'agents' | 'providers' | 'general'
+    return ['integrations', 'agents', 'providers', 'general'].includes(tab) ? tab : 'integrations'
+  }
+  
+  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'providers' | 'general'>(getTabFromUrl())
   
   const integrationConfigs = [
     { key: 'integration.github.main', title: 'GitHub Integration', type: 'github' },
@@ -16,6 +30,14 @@ export default function Settings() {
     { key: 'llm.openai.main', title: 'OpenAI Provider', type: 'openai' },
     { key: 'llm.anthropic.main', title: 'Anthropic Provider', type: 'anthropic' },
     { key: 'llm.gemini.main', title: 'Gemini Provider', type: 'gemini' },
+  ]
+
+  const agentTypes = [
+    { key: 'project', name: 'Project Q&A Agent', description: 'Answers questions about projects and helps with specifications' },
+    { key: 'task_specification', name: 'Task Specification Agent', description: 'Helps define and refine task requirements' },
+    { key: 'task_planning', name: 'Task Planning Agent', description: 'Creates implementation plans for tasks' },
+    { key: 'task_implementation', name: 'Task Implementation Agent', description: 'Provides implementation guidance and code suggestions' },
+    { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
   ]
   
   const [selectedIntegration, setSelectedIntegration] = useState<string | null>(integrationConfigs[0]?.key || null)
@@ -31,14 +53,18 @@ export default function Settings() {
     // Could show a toast notification here
   }
 
-  const handleTabChange = (newTab: 'integrations' | 'agents' | 'general') => {
+  // Update URL when tab changes
+  const handleTabChange = (newTab: 'integrations' | 'agents' | 'providers' | 'general') => {
     setActiveTab(newTab)
+    const params = new URLSearchParams(location.search)
+    params.set('tab', newTab)
+    navigate(`/settings?${params.toString()}`, { replace: true })
     
     // Auto-select first item when switching tabs
     if (newTab === 'integrations') {
       setSelectedIntegration(integrationConfigs[0]?.key || null)
       setSelectedLLMProvider(null)
-    } else if (newTab === 'agents') {
+    } else if (newTab === 'providers') {
       setSelectedLLMProvider(llmConfigs[0]?.key || null)
       setSelectedIntegration(null)
     } else {
@@ -46,6 +72,12 @@ export default function Settings() {
       setSelectedLLMProvider(null)
     }
   }
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    const urlTab = getTabFromUrl()
+    setActiveTab(urlTab)
+  }, [location.search])
 
   return (
     <div>
@@ -62,7 +94,8 @@ export default function Settings() {
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
-            { id: 'agents' as const, name: 'AI Providers', icon: CloudIcon },
+            { id: 'agents' as const, name: 'Agents', icon: CpuChipIcon },
+            { id: 'providers' as const, name: 'AI Providers', icon: CloudIcon },
             { id: 'general' as const, name: 'General', icon: CogIcon },
           ].map((tab) => (
             <button
@@ -149,6 +182,32 @@ export default function Settings() {
       )}
 
       {activeTab === 'agents' && (
+        <div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {agentTypes.map((agent) => (
+                <div
+                  key={agent.key}
+                  className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
+                >
+                  <AgentModelSelector
+                    agentType={agent.key}
+                    agentName={agent.name}
+                    onModelChange={(agentType, modelId) => {
+                      console.log(`Agent ${agentType} model changed to:`, modelId)
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {agent.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'providers' && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* LLM Provider List */}
           <div className="xl:col-span-1">
@@ -231,7 +290,8 @@ export default function Settings() {
                   <input
                     type="checkbox"
                     className="sr-only peer"
-                    defaultChecked={window.matchMedia('(prefers-color-scheme: dark)').matches}
+                    checked={isDarkMode}
+                    onChange={toggleDarkMode}
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                 </label>

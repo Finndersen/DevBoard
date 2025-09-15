@@ -10,7 +10,7 @@ from devboard.context_providers.base import (
     ContextStrategy,
 )
 from devboard.context_providers.registry import ContextProviderRegistry
-from devboard.db.models import ContextProviderResource, Project
+from devboard.db.models import ContextProviderResource
 from devboard.db.repositories import ContextProviderResourceRepository, ProjectRepository, TaskRepository
 from devboard.services.context_assembly import (
     ContextAssemblyService,
@@ -257,18 +257,19 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_no_links(self, service, mock_project_repo, mock_resource_repo):
         """Test context assembly with no links."""
-        # Mock the specification document
-        from devboard.db.models.document import Document, DocumentType
+        # Create mock project with specification already set
+        mock_project = Mock()
+        mock_project.id = 1
+        mock_project.name = "Test"
+        mock_project.description = "Project description"
 
-        spec_doc = Mock(spec=Document)
-        spec_doc.content = "No URLs here"
-        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
-        project.specification = spec_doc
+        # Mock specification with content
+        mock_specification = Mock()
+        mock_specification.content = "No URLs here"
+        mock_project.specification = mock_specification
 
         # Configure the already-injected mock repositories
-        mock_project_repo.get_by_id.return_value = project
+        mock_project_repo.get_by_id.return_value = mock_project
         mock_resource_repo.get_resources_for_project.return_value = []
 
         result = await service.get_project_context(1, "test query")
@@ -280,15 +281,17 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_with_explicit_links(self, service, mock_project_repo, mock_resource_repo):
         """Test context assembly with explicit provider resources."""
-        # Mock the specification document
-        from devboard.db.models.document import Document, DocumentType
+        # Create mock project with specification already set
+        mock_project = Mock()
+        mock_project.id = 1
+        mock_project.name = "Test"
+        mock_project.description = "Project description"
 
-        spec_doc = Mock(spec=Document)
-        spec_doc.content = "Project description"
-        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        # Mock specification with content
+        mock_specification = Mock()
+        mock_specification.content = "Project description"
+        mock_project.specification = mock_specification
 
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
-        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://resource",
             description="User provided description",
@@ -296,7 +299,7 @@ class TestContextAssemblyService:
         )
 
         # Configure the already-injected mock repositories
-        mock_project_repo.get_by_id.return_value = project
+        mock_project_repo.get_by_id.return_value = mock_project
         mock_resource_repo.get_resources_for_project.return_value = [link]
 
         result = await service.get_project_context(1, "test query")
@@ -309,23 +312,19 @@ class TestContextAssemblyService:
     @pytest.mark.asyncio
     async def test_get_project_context_with_detected_uris(self, service, mock_project_repo, mock_resource_repo):
         """Test context assembly with auto-detected URIs from project description."""
-        # Mock the specification document
-        from devboard.db.models.document import Document, DocumentType
+        # Create mock project with specification already set
+        mock_project = Mock()
+        mock_project.id = 1
+        mock_project.name = "Test"
+        mock_project.description = "Working on https://github.com/owner/repo/pull/123"
 
-        spec_doc = Mock(spec=Document)
-        spec_doc.content = "Working on https://github.com/owner/repo/pull/123"
-        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
-
-        project = Project(
-            id=1,
-            name="Test",
-            description="Working on https://github.com/owner/repo/pull/123",
-            specification_document_id=1,
-        )
-        project.specification = spec_doc
+        # Mock specification with content
+        mock_specification = Mock()
+        mock_specification.content = "Working on https://github.com/owner/repo/pull/123"
+        mock_project.specification = mock_specification
 
         # Configure the already-injected mock repositories
-        mock_project_repo.get_by_id.return_value = project
+        mock_project_repo.get_by_id.return_value = mock_project
         mock_resource_repo.get_resources_for_project.return_value = []
 
         result = await service.get_project_context(1, "test query")
@@ -343,15 +342,17 @@ class TestContextAssemblyService:
         self, service, mock_project_repo, mock_resource_repo
     ):
         """Test ON_DEMAND resources prioritize user descriptions."""
-        # Mock the specification document
-        from devboard.db.models.document import Document, DocumentType
+        # Create mock project with specification already set
+        mock_project = Mock()
+        mock_project.id = 1
+        mock_project.name = "Test"
+        mock_project.description = "Project description"
 
-        spec_doc = Mock(spec=Document)
-        spec_doc.content = "Project description"
-        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        # Mock specification with content
+        mock_specification = Mock()
+        mock_specification.content = "Project description"
+        mock_project.specification = mock_specification
 
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
-        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",
             description="User provided description",
@@ -359,7 +360,7 @@ class TestContextAssemblyService:
         )
 
         # Configure the already-injected mock repositories
-        mock_project_repo.get_by_id.return_value = project
+        mock_project_repo.get_by_id.return_value = mock_project
         mock_resource_repo.get_resources_for_project.return_value = [link]
 
         result = await service.get_project_context(1, "test query")
@@ -375,15 +376,17 @@ class TestContextAssemblyService:
         self, service, mock_project_repo, mock_resource_repo
     ):
         """Test ON_DEMAND resources generate descriptions when user doesn't provide one."""
-        # Mock the specification document
-        from devboard.db.models.document import Document, DocumentType
+        # Create mock project with specification already set
+        mock_project = Mock()
+        mock_project.id = 1
+        mock_project.name = "Test"
+        mock_project.description = "Project description"
 
-        spec_doc = Mock(spec=Document)
-        spec_doc.content = "Project description"
-        spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+        # Mock specification with content
+        mock_specification = Mock()
+        mock_specification.content = "Project description"
+        mock_project.specification = mock_specification
 
-        project = Project(id=1, name="Test", description="Project description", specification_document_id=1)
-        project.specification = spec_doc
         link = ContextProviderResource(
             resource_uri="test://large-resource",
             description=None,
@@ -391,7 +394,7 @@ class TestContextAssemblyService:
         )
 
         # Configure the already-injected mock repositories
-        mock_project_repo.get_by_id.return_value = project
+        mock_project_repo.get_by_id.return_value = mock_project
         mock_resource_repo.get_resources_for_project.return_value = [link]
 
         result = await service.get_project_context(1, "test query")

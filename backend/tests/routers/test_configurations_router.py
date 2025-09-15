@@ -44,80 +44,85 @@ def invalid_config_data():
 class TestConfigurationsRouter:
     """Test configurations router endpoints."""
 
-    def test_list_configurations_returns_all_schemas(self, client_with_mock_config_service, mock_config_service):
-        """Test listing configurations returns all registered schemas."""
-        # Setup mock response
-        mock_config_service.list_configs.return_value = [
-            "llm.openai.main",
-            "llm.anthropic.main",
-            "integration.github.main",
-        ]
-
+    def test_list_configurations_requires_prefix(self, client_with_mock_config_service, mock_config_service):
+        """Test that listing configurations requires a prefix parameter."""
+        # Test without prefix - should fail
         response = client_with_mock_config_service.get("/api/configurations/")
-        assert response.status_code == 200
-        configs = response.json()
+        assert response.status_code == 422  # Validation error for missing required parameter
 
-        # Should return all registered config schemas
-        assert len(configs) == 3
-        # Check for expected schemas
-        assert "llm.openai.main" in configs
-        assert "llm.anthropic.main" in configs
-        assert "integration.github.main" in configs
-
-        # Verify service was called correctly
-        mock_config_service.list_configs.assert_called_once_with(prefix=None)
-
-    def test_list_configurations_includes_all_schemas_regardless_of_db_data(
+    def test_list_configurations_with_prefix_returns_detail_responses(
         self, client_with_mock_config_service, mock_config_service
     ):
-        """Test that listing configurations always includes all schemas, regardless of database data."""
-        # Setup mock response with all schemas
+        """Test that listing configurations returns ConfigurationDetailResponse objects."""
+        # Setup mock response with schemas
         mock_config_service.list_configs.return_value = [
             "llm.openai.main",
             "llm.anthropic.main",
-            "integration.github.main",
-            "llm.gemini.main",
         ]
 
-        response = client_with_mock_config_service.get("/api/configurations/")
-        assert response.status_code == 200
-        configs = response.json()
-
-        # Should still return all registered schemas, not just ones with DB data
-        assert len(configs) == 4
-        assert "llm.openai.main" in configs
-        assert "llm.anthropic.main" in configs
-        # Should also include schemas without DB data
-        assert "integration.github.main" in configs
-
-    def test_list_configurations_with_prefix_filter(self, client_with_mock_config_service, mock_config_service):
-        """Test listing configurations with prefix filter."""
-        # Setup mock response for filtered results
-        mock_config_service.list_configs.return_value = ["llm.openai.main", "llm.anthropic.main", "llm.gemini.main"]
+        # Mock the get_config_details_by_key calls
+        mock_config_service.get_config_details_by_key.side_effect = [
+            ConfigurationDetailResponse(
+                key="llm.openai.main",
+                is_valid=True,
+                validation_errors=[],
+                fields=[ConfigurationFieldInfo(name="api_key", type="str", required=True)],
+            ),
+            ConfigurationDetailResponse(
+                key="llm.anthropic.main",
+                is_valid=False,
+                validation_errors=["Missing API key"],
+                fields=[ConfigurationFieldInfo(name="api_key", type="str", required=True)],
+            ),
+        ]
 
         response = client_with_mock_config_service.get("/api/configurations/?prefix=llm")
         assert response.status_code == 200
         configs = response.json()
 
-        # Should include all LLM config schemas
-        assert len(configs) == 3
-        assert "llm.openai.main" in configs
-        assert "llm.anthropic.main" in configs
-        assert "llm.gemini.main" in configs
-
-        # Should not include non-LLM schemas
-        for config in configs:
-            assert config.startswith("llm.")
+        # Should return ConfigurationDetailResponse objects
+        assert len(configs) == 2
+        assert configs[0]["key"] == "llm.openai.main"
+        assert configs[0]["is_valid"] is True
+        assert configs[1]["key"] == "llm.anthropic.main"
+        assert configs[1]["is_valid"] is False
 
         # Verify service was called with prefix
         mock_config_service.list_configs.assert_called_once_with(prefix="llm")
+
+    def test_list_configurations_filters_none_responses(self, client_with_mock_config_service, mock_config_service):
+        """Test that listing configurations filters out None responses from get_config_details_by_key."""
+        # Setup mock response with schemas
+        mock_config_service.list_configs.return_value = [
+            "llm.openai.main",
+            "invalid.key",
+            "llm.anthropic.main",
+        ]
+
+        # Mock get_config_details_by_key to return None for invalid key
+        mock_config_service.get_config_details_by_key.side_effect = [
+            ConfigurationDetailResponse(key="llm.openai.main", is_valid=True, validation_errors=[], fields=[]),
+            None,  # This should be filtered out
+            ConfigurationDetailResponse(
+                key="llm.anthropic.main", is_valid=False, validation_errors=["Missing API key"], fields=[]
+            ),
+        ]
+
+        response = client_with_mock_config_service.get("/api/configurations/?prefix=llm")
+        assert response.status_code == 200
+        configs = response.json()
+
+        # Should only return non-None responses
+        assert len(configs) == 2
+        assert configs[0]["key"] == "llm.openai.main"
+        assert configs[1]["key"] == "llm.anthropic.main"
 
     def test_get_configuration_detail_success(self, client_with_mock_config_service, mock_config_service):
         """Test getting detailed configuration information for valid config."""
         # Setup mock response
         mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -148,7 +153,7 @@ class TestConfigurationsRouter:
 
         config_data = response.json()
         assert config_data["key"] == "llm.openai.main"
-        assert config_data["validation_status"] == "valid"
+        assert config_data["is_valid"] is True
         assert config_data["validation_errors"] == []
         assert len(config_data["fields"]) == 2
 
@@ -167,7 +172,7 @@ class TestConfigurationsRouter:
         # Setup mock response with validation errors
         mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="invalid",
+            is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
             fields=[
                 ConfigurationFieldInfo(
@@ -198,7 +203,7 @@ class TestConfigurationsRouter:
 
         config_data = response.json()
         assert config_data["key"] == "llm.openai.main"
-        assert config_data["validation_status"] == "invalid"
+        assert config_data["is_valid"] is False
         assert len(config_data["validation_errors"]) > 0
         # Should mention missing api_key
         assert any("api_key" in error for error in config_data["validation_errors"])
@@ -208,10 +213,8 @@ class TestConfigurationsRouter:
 
     def test_get_configuration_detail_not_found(self, client_with_mock_config_service, mock_config_service):
         """Test getting details for non-existent configuration schema."""
-        # Setup mock to return empty result indicating no schema
-        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
-            key="nonexistent.key", validation_status="unconfigured", validation_errors=[], fields=[]
-        )
+        # Setup mock to return None indicating no schema exists
+        mock_config_service.get_config_details_by_key.return_value = None
 
         response = client_with_mock_config_service.get("/api/configurations/nonexistent.key/detail")
         assert response.status_code == 404
@@ -224,7 +227,7 @@ class TestConfigurationsRouter:
         # Setup mock response for unconfigured but valid schema
         mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="invalid",
+            is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
             fields=[
                 ConfigurationFieldInfo(
@@ -256,7 +259,7 @@ class TestConfigurationsRouter:
         config_data = response.json()
         assert config_data["key"] == "llm.openai.main"
         # Without api_key (required field), it should be invalid
-        assert config_data["validation_status"] == "invalid"
+        assert config_data["is_valid"] is False
         assert len(config_data["validation_errors"]) > 0
 
         # Verify service was called correctly
@@ -269,7 +272,7 @@ class TestConfigurationsRouter:
         # Setup mock response for successful update
         mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -300,7 +303,7 @@ class TestConfigurationsRouter:
 
         config_data = response.json()
         assert config_data["key"] == "llm.openai.main"
-        assert config_data["validation_status"] == "valid"
+        assert config_data["is_valid"] is True
         assert config_data["validation_errors"] == []
 
         # Verify the values were updated
@@ -318,7 +321,7 @@ class TestConfigurationsRouter:
         # Setup mock response for partial update
         mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -348,7 +351,7 @@ class TestConfigurationsRouter:
         assert response.status_code == 200
 
         config_data = response.json()
-        assert config_data["validation_status"] == "valid"
+        assert config_data["is_valid"] is True
 
         # Verify api_key was updated but base_url remains
         api_key_field = next(field for field in config_data["fields"] if field["name"] == "api_key")
@@ -367,7 +370,7 @@ class TestConfigurationsRouter:
         # Setup mock response for field clearing
         mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
             key="llm.openai.main",
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -468,7 +471,7 @@ class TestConfigurationsRouter:
         # 1. Initially invalid configuration
         invalid_response = ConfigurationDetailResponse(
             key=config_key,
-            validation_status="invalid",
+            is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
             fields=[
                 ConfigurationFieldInfo(
@@ -487,7 +490,7 @@ class TestConfigurationsRouter:
         # 2. Valid configuration after update
         valid_response = ConfigurationDetailResponse(
             key=config_key,
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -506,7 +509,7 @@ class TestConfigurationsRouter:
         # 3. Updated configuration
         updated_response = ConfigurationDetailResponse(
             key=config_key,
-            validation_status="valid",
+            is_valid=True,
             validation_errors=[],
             fields=[
                 ConfigurationFieldInfo(
@@ -534,10 +537,12 @@ class TestConfigurationsRouter:
 
         # Configure mock responses in sequence
         mock_config_service.get_config_details_by_key.side_effect = [
-            invalid_response,  # Step 1
+            invalid_response,  # Step 1 (initial detail get)
+            valid_response,  # Step 3 (list endpoint detail call)
             valid_response,  # Step 4 (read back)
             updated_response,  # Step 6 (verify update)
             invalid_response,  # Step 8 (after delete)
+            invalid_response,  # Step 9 (list endpoint detail call after delete)
         ]
         mock_config_service.update_configuration.side_effect = [valid_response, updated_response]
         mock_config_service.list_configs.side_effect = [[config_key], [config_key]]  # Steps 3 and 9
@@ -545,23 +550,26 @@ class TestConfigurationsRouter:
         # 1. Initially should show invalid due to missing required field
         response = client_with_mock_config_service.get(f"/api/configurations/{config_key}/detail")
         assert response.status_code == 200
-        assert response.json()["validation_status"] == "invalid"
+        assert response.json()["is_valid"] is False
 
         # 2. Update with valid configuration
         config_data = {"api_key": "test-anthropic-key"}
         response = client_with_mock_config_service.patch(f"/api/configurations/{config_key}", json=config_data)
         assert response.status_code == 200
-        assert response.json()["validation_status"] == "valid"
+        assert response.json()["is_valid"] is True
 
         # 3. Verify it appears in the list
-        response = client_with_mock_config_service.get("/api/configurations/")
-        assert config_key in response.json()
+        response = client_with_mock_config_service.get("/api/configurations/?prefix=llm")
+        assert response.status_code == 200
+        configs = response.json()
+        assert len(configs) == 1
+        assert configs[0]["key"] == config_key
 
         # 4. Verify we can read it back
         response = client_with_mock_config_service.get(f"/api/configurations/{config_key}/detail")
         assert response.status_code == 200
         config_detail = response.json()
-        assert config_detail["validation_status"] == "valid"
+        assert config_detail["is_valid"] is True
         api_key_field = next(field for field in config_detail["fields"] if field["name"] == "api_key")
         assert api_key_field["db_value"] == "test-anthropic-key"
 
@@ -585,8 +593,11 @@ class TestConfigurationsRouter:
         # 8. Verify it's deleted but schema still exists (should be invalid now)
         response = client_with_mock_config_service.get(f"/api/configurations/{config_key}/detail")
         assert response.status_code == 200
-        assert response.json()["validation_status"] == "invalid"
+        assert response.json()["is_valid"] is False
 
         # 9. Should still appear in list (since it's a registered schema)
-        response = client_with_mock_config_service.get("/api/configurations/")
-        assert config_key in response.json()  # Schema still registered, just no DB data
+        response = client_with_mock_config_service.get("/api/configurations/?prefix=llm")
+        assert response.status_code == 200
+        configs = response.json()
+        assert len(configs) == 1
+        assert configs[0]["key"] == config_key

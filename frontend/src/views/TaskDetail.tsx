@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeftIcon, ChatBubbleLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ChatBubbleLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Task, Project } from '../lib/api'
@@ -14,8 +14,10 @@ export default function TaskDetail() {
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'conversation'>('specification')
   const [isEditingSpec, setIsEditingSpec] = useState(false)
   const [isEditingPlan, setIsEditingPlan] = useState(false)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedDescription, setEditedDescription] = useState('')
   const [editedPlan, setEditedPlan] = useState('')
+  const [editedTitle, setEditedTitle] = useState('')
 
   useEffect(() => {
     fetchTask()
@@ -25,8 +27,9 @@ export default function TaskDetail() {
     try {
       const data = await apiClient.getTask(id!)
       setTask(data)
-      setEditedDescription(data.description || '')
-      setEditedPlan(data.implementation_plan || '')
+      setEditedDescription(data.specification?.content || '')
+      setEditedPlan(data.implementation_plan?.content || '')
+      setEditedTitle(data.title || '')
       // Fetch project details
       fetchProject(data.project_id)
     } catch (error) {
@@ -47,8 +50,14 @@ export default function TaskDetail() {
 
   const handleSaveSpecification = async () => {
     try {
-      await apiClient.updateTask(id!, { description: editedDescription })
-      setTask(prev => prev ? { ...prev, description: editedDescription } : null)
+      await apiClient.updateTask(id!, { specification: editedDescription })
+      setTask(prev => prev ? { 
+        ...prev, 
+        specification: { 
+          ...prev.specification, 
+          content: editedDescription 
+        } 
+      } : null)
       setIsEditingSpec(false)
     } catch (error) {
       console.error('Failed to update task specification:', error)
@@ -58,7 +67,20 @@ export default function TaskDetail() {
   const handleSavePlan = async () => {
     try {
       await apiClient.updateTask(id!, { implementation_plan: editedPlan })
-      setTask(prev => prev ? { ...prev, implementation_plan: editedPlan } : null)
+      setTask(prev => prev ? { 
+        ...prev, 
+        implementation_plan: prev.implementation_plan ? {
+          ...prev.implementation_plan, 
+          content: editedPlan 
+        } : {
+          id: 0,
+          document_type: 'task_implementation_plan',
+          content: editedPlan,
+          content_hash: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      } : null)
       setIsEditingPlan(false)
     } catch (error) {
       console.error('Failed to update implementation plan:', error)
@@ -66,13 +88,28 @@ export default function TaskDetail() {
   }
 
   const handleCancelSpecEdit = () => {
-    setEditedDescription(task?.description || '')
+    setEditedDescription(task?.specification?.content || '')
     setIsEditingSpec(false)
   }
 
   const handleCancelPlanEdit = () => {
-    setEditedPlan(task?.implementation_plan || '')
+    setEditedPlan(task?.implementation_plan?.content || '')
     setIsEditingPlan(false)
+  }
+
+  const handleSaveTitle = async () => {
+    try {
+      await apiClient.updateTask(id!, { title: editedTitle })
+      await fetchTask()
+      setIsEditingTitle(false)
+    } catch (error) {
+      console.error('Failed to update task title:', error)
+    }
+  }
+
+  const handleCancelTitleEdit = () => {
+    setEditedTitle(task?.title || '')
+    setIsEditingTitle(false)
   }
 
   const handleStateTransition = async (newState: string) => {
@@ -184,15 +221,63 @@ export default function TaskDetail() {
             <ArrowLeftIcon className="w-5 h-5 mr-2" />
             {project ? project.name : 'Projects'}
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{task.title}</h1>
-            <div className="flex items-center space-x-2 mt-1">
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                {task.status}
-              </span>
-              <span className="text-gray-500 dark:text-gray-400 text-sm">
-                Created {new Date(task.created_at).toLocaleDateString()}
-              </span>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                {isEditingTitle ? (
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="text"
+                      value={editedTitle}
+                      onChange={(e) => setEditedTitle(e.target.value)}
+                      className="text-xl font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-white shadow-sm transition-all duration-200 min-w-0 max-w-full"
+                      style={{
+                        width: `${Math.max(20, editedTitle.length * 0.65 + 4)}ch`
+                      }}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveTitle()
+                        if (e.key === 'Escape') handleCancelTitleEdit()
+                      }}
+                    />
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={handleSaveTitle}
+                        className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-md transition-all duration-200"
+                        title="Save (Enter)"
+                      >
+                        <CheckIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleCancelTitleEdit}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-all duration-200"
+                        title="Cancel (Escape)"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 group">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{task.title}</h1>
+                    <button
+                      onClick={() => setIsEditingTitle(true)}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-400 dark:hover:bg-gray-700 rounded-md transition-all duration-200"
+                      title="Edit title"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center space-x-3">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                  {task.status}
+                </span>
+                <span className="text-gray-500 dark:text-gray-400 text-sm">
+                  Created {new Date(task.created_at).toLocaleDateString()}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -269,8 +354,8 @@ export default function TaskDetail() {
               />
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                {task.description ? (
-                  <ReactMarkdown>{task.description}</ReactMarkdown>
+                {task.specification?.content ? (
+                  <ReactMarkdown>{task.specification.content}</ReactMarkdown>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 italic">No task specification provided. Click Edit to add specification.</p>
                 )}
@@ -321,8 +406,8 @@ export default function TaskDetail() {
               />
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                {task.implementation_plan ? (
-                  <ReactMarkdown>{task.implementation_plan}</ReactMarkdown>
+                {task.implementation_plan?.content ? (
+                  <ReactMarkdown>{task.implementation_plan.content}</ReactMarkdown>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 italic">No implementation plan provided. Click Edit to add plan.</p>
                 )}

@@ -126,16 +126,11 @@ class ConfigService:
         """Delete a configuration."""
         self.config_repo.delete_by_key(key)
 
-    def get_config_details_by_key(self, key: str) -> ConfigurationDetailResponse:
+    def get_config_details_by_key(self, key: str) -> ConfigurationDetailResponse | None:
         # 1. Get the schema class
         schema_class = self.config_registry.get(key)
         if not schema_class:
-            return ConfigurationDetailResponse(
-                key=key,
-                fields=[],
-                validation_status="unconfigured",
-                validation_errors=[f"No schema registered for key: {key}"],
-            )
+            return None
         return self.get_config_details(schema_class)
 
     def get_config_details(self, schema_class: type[BaseConfig]) -> ConfigurationDetailResponse:
@@ -179,7 +174,7 @@ class ConfigService:
         return ConfigurationDetailResponse(
             key=schema_class.config_key,
             fields=fields,
-            validation_status="valid" if validation_result.success else "invalid",
+            is_valid=validation_result.success,
             validation_errors=validation_result.errors,
         )
 

@@ -89,6 +89,29 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         result = self.db.execute(stmt)
         return result.rowcount
 
+    def delete_tool_approval_messages(self, entity_id: int) -> int:
+        """
+        Delete all messages associated with an incomplete tool approval cycle (including previous user message).
+
+        :param entity_id:
+        :return:
+        """
+        stmt = delete(self.MESSAGE_MODEL).where(
+            self.MESSAGE_MODEL.id
+            >= (
+                select(self.MESSAGE_MODEL.id)
+                .where(
+                    self.MESSAGE_MODEL.message_type == MessageType.USER_PROMPT,
+                    self.MESSAGE_MODEL.parent_id == entity_id,
+                )
+                .order_by(self.MESSAGE_MODEL.id.desc())
+                .limit(1)
+                .scalar_subquery()
+            )
+        )
+
+        return self.db.execute(stmt).rowcount
+
 
 class TaskConversationMessageRepository(BaseConversationMessageRepository[TaskConversationMessage]):
     """Repository for task conversation message data access operations."""

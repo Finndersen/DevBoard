@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from devboard.api.dependencies.agents import get_task_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
+    get_document_repository,
     get_project_repository,
     get_task_repository,
 )
@@ -27,6 +28,7 @@ from devboard.api.schemas.agent_conversation import (
 )
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
+    DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -89,10 +91,25 @@ async def update_task(
     task_update: TaskUpdate,
     task: Task = Depends(get_verified_task),
     task_repo: TaskRepository = Depends(get_task_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
 ):
-    """Update a task."""
+    """Update a task and its document content."""
 
     update_data = task_update.model_dump(exclude_unset=True)
+
+    # Handle specification content update separately
+    specification = update_data.pop("specification", None)
+    if specification is not None:
+        # Update the specification document content
+        document_repo.update_content(task.specification, specification)
+
+    # Handle implementation plan content update separately
+    implementation_plan = update_data.pop("implementation_plan", None)
+    if implementation_plan is not None:
+        # Create or update implementation plan document
+        task_repo.set_task_implementation_plan(task, implementation_plan)
+
+    # Update other task fields
     for field, value in update_data.items():
         setattr(task, field, value)
 

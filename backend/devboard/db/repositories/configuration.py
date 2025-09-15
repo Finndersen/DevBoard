@@ -1,5 +1,6 @@
 """Configuration repository for configuration data access operations."""
 
+import logfire
 from sqlalchemy import select
 
 from devboard.db.models import Configuration
@@ -18,6 +19,7 @@ class ConfigurationRepository(BaseRepository[Configuration]):
         Returns:
             Configuration instance if found, None otherwise
         """
+        logfire.info(f"Fetching configuration with key:{key}")
         stmt = select(Configuration).where(Configuration.key == key)
         return self.db.execute(stmt).scalar_one_or_none()
 

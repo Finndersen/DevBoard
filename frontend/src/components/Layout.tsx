@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
+import { useDarkMode } from '../contexts/DarkModeContext'
 
 interface LayoutProps {
   children: ReactNode
@@ -7,6 +9,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const { isDarkMode, toggleDarkMode } = useDarkMode()
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path)
@@ -29,7 +32,7 @@ export default function Layout({ children }: LayoutProps) {
             </div>
 
             {/* Navigation Links */}
-            <div className="flex space-x-8">
+            <div className="flex items-center space-x-8">
               <Link
                 to="/projects"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -60,6 +63,19 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Settings
               </Link>
+              
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Toggle dark mode"
+              >
+                {isDarkMode ? (
+                  <SunIcon className="w-5 h-5" />
+                ) : (
+                  <MoonIcon className="w-5 h-5" />
+                )}
+              </button>
             </div>
           </div>
         </div>

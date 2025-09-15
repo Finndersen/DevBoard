@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { PaperAirplaneIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { 
-  ConversationMessageResponse, 
-  PendingApproval, 
   MessageRequest,
   ToolApprovalRequest,
   ToolApprovalDecision
@@ -14,10 +12,10 @@ interface TaskPlanningChatProps {
 }
 
 export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
-  const [messages, setMessages] = useState<ConversationMessageResponse[]>([])
+  const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
   const [approvalFeedback, setApprovalFeedback] = useState<Record<string, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -37,17 +35,42 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
       message: newMessage.trim()
     }
 
+    // Add user message immediately
+    const userMessage = {
+      id: Date.now(), // Temporary ID
+      message_type: 'request' as const,
+      text_content: newMessage.trim(),
+      created_at: new Date().toISOString()
+    }
+    setMessages(prev => [...prev, userMessage])
+
     setNewMessage('')
     setLoading(true)
 
     try {
       const response = await apiClient.sendTaskConversationMessage(taskId, messageRequest)
       
-      // Update messages
-      setMessages(response.messages)
-      
-      // Update pending approvals
-      setPendingApprovals(response.pending_approvals || [])
+      // Handle the PromptResponse format from backend
+      if (response.type === 'message' && response.message) {
+        // Add the agent's response message
+        setMessages(prev => [...prev, {
+          id: response.message.id,
+          message_type: 'response',
+          text_content: response.message.text_content,
+          created_at: response.message.timestamp
+        }])
+        setPendingApprovals([])
+      } else if (response.type === 'tool_request' && response.tool_requests) {
+        // Convert tool_requests to pending approvals format
+        const approvals = response.tool_requests.map(req => ({
+          tool_call_id: req.tool_call_id,
+          tool_name: req.tool_name,
+          reasoning: req.tool_args?.reasoning || '',
+          diff_preview: req.tool_args?.diff_preview || '',
+          edits: req.tool_args?.edits || []
+        }))
+        setPendingApprovals(approvals)
+      }
       
       // Clear approval feedback
       setApprovalFeedback({})
@@ -78,8 +101,16 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
     try {
       const response = await apiClient.approveTaskTools(taskId, approvalRequest)
       
-      // Update messages with continuation
-      setMessages(prev => [...prev, ...response.messages])
+      // Handle the PromptResponse format from backend
+      if (response.type === 'message' && response.message) {
+        // Add the agent's response message
+        setMessages(prev => [...prev, {
+          id: response.message.id,
+          message_type: 'response',
+          text_content: response.message.text_content,
+          created_at: response.message.timestamp
+        }])
+      }
       
       // Clear pending approvals (should be empty after approval)
       setPendingApprovals([])

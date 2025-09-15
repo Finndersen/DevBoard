@@ -22,25 +22,29 @@ describe('ConfigurationForm', () => {
         type: 'string',
         required: true,
         description: 'GitHub API token',
-        current_value: null,
-        value_source: 'environment',
+        env_value: null,
+        db_value: null,
+        default_value: null,
         is_secret: true,
         env_var_name: 'GITHUB_API_TOKEN',
-        env_value_present: false,
+        is_overridden: false,
+        effective_value: null,
       },
       {
         name: 'base_url',
         type: 'string',
         required: false,
         description: 'GitHub API base URL',
-        current_value: 'https://api.github.com',
-        value_source: 'default',
-        is_secret: false,
+        env_value: null,
+        db_value: null,
         default_value: 'https://api.github.com',
-        env_value_present: false,
+        is_secret: false,
+        env_var_name: 'GITHUB_BASE_URL',
+        is_overridden: false,
+        effective_value: 'https://api.github.com',
       },
     ],
-    validation_status: 'unconfigured',
+    is_valid: false,
     validation_errors: ['Missing required field: api_token'],
   })
 
@@ -62,7 +66,7 @@ describe('ConfigurationForm', () => {
       expect(screen.getByText('GitHub Integration')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Unconfigured')).toBeInTheDocument()
+    expect(screen.getByText('Invalid')).toBeInTheDocument()
   })
 
   it('loads configuration data on mount', async () => {
@@ -94,7 +98,7 @@ describe('ConfigurationForm', () => {
   it('displays different status indicators correctly', async () => {
     const validConfig = {
       ...mockConfig,
-      validation_status: 'valid' as const,
+      is_valid: true,
       validation_errors: [],
     }
 
@@ -141,7 +145,16 @@ describe('ConfigurationForm', () => {
     // Save button should be disabled initially (no changes)
     expect(saveButton).toBeDisabled()
 
-    // Make a change to a field
+    // First enable override for base_url field
+    const allCheckboxes = screen.getAllByRole('checkbox')
+    // Find the override toggle for base_url (it should be the second checkbox after any other checkboxes)
+    const baseUrlOverrideToggle = allCheckboxes.find(checkbox => {
+      const container = checkbox.closest('.space-y-1')
+      return container?.querySelector('label[for="base_url"]')
+    })
+    await user.click(baseUrlOverrideToggle!)
+    
+    // Now make a change to the field
     const baseUrlInput = screen.getByDisplayValue('https://api.github.com')
     await user.clear(baseUrlInput)
     await user.type(baseUrlInput, 'https://api.github.com/v3')
@@ -159,7 +172,7 @@ describe('ConfigurationForm', () => {
         await request.json() // Consume request body
         return HttpResponse.json({
           ...mockConfig,
-          validation_status: 'valid' as const,
+          is_valid: true,
           validation_errors: [],
         })
       })
@@ -170,6 +183,14 @@ describe('ConfigurationForm', () => {
     await waitFor(() => {
       expect(screen.getByText('GitHub Integration')).toBeInTheDocument()
     })
+
+    // First enable override for base_url field  
+    const allCheckboxes = screen.getAllByRole('checkbox')
+    const baseUrlOverrideToggle = allCheckboxes.find(checkbox => {
+      const container = checkbox.closest('.space-y-1')
+      return container?.querySelector('label[for="base_url"]')
+    })
+    await user.click(baseUrlOverrideToggle!)
 
     // Make a change
     const baseUrlInput = screen.getByDisplayValue('https://api.github.com')
@@ -250,6 +271,14 @@ describe('ConfigurationForm', () => {
       expect(screen.getByText('GitHub Integration')).toBeInTheDocument()
     })
 
+    // First enable override for base_url field  
+    const allCheckboxes = screen.getAllByRole('checkbox')
+    const baseUrlOverrideToggle = allCheckboxes.find(checkbox => {
+      const container = checkbox.closest('.space-y-1')
+      return container?.querySelector('label[for="base_url"]')
+    })
+    await user.click(baseUrlOverrideToggle!)
+
     // Make a change
     const baseUrlInput = screen.getByDisplayValue('https://api.github.com')
     await user.clear(baseUrlInput)
@@ -286,7 +315,7 @@ describe('ConfigurationForm', () => {
 
     const updatedConfig = {
       ...mockConfig,
-      validation_status: 'valid' as const,
+      is_valid: true,
     }
 
     server.use(
@@ -300,6 +329,14 @@ describe('ConfigurationForm', () => {
     await waitFor(() => {
       expect(screen.getByText('GitHub Integration')).toBeInTheDocument()
     })
+
+    // First enable override for base_url field  
+    const allCheckboxes = screen.getAllByRole('checkbox')
+    const baseUrlOverrideToggle = allCheckboxes.find(checkbox => {
+      const container = checkbox.closest('.space-y-1')
+      return container?.querySelector('label[for="base_url"]')
+    })
+    await user.click(baseUrlOverrideToggle!)
 
     // Make a change and save
     const baseUrlInput = screen.getByDisplayValue('https://api.github.com')

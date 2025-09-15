@@ -38,5 +38,5 @@ class ConfigurationDetailResponse(BaseModel):
 
     key: str
     fields: list[ConfigurationFieldInfo]
-    validation_status: str  # "valid", "invalid", "unconfigured"
+    is_valid: bool
     validation_errors: list[str] | None = None
