@@ -63,7 +63,7 @@ export default function DocumentEditApproval({
             <DocumentTextIcon className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             <div>
               <h4 className="font-medium text-orange-800 dark:text-orange-200">
-                Edit {getDocumentTypeDisplay(approval.document_type)}
+                Edit {getDocumentTypeDisplay(approval.document_type || null)}
               </h4>
               <p className="text-xs text-orange-600 dark:text-orange-400">
                 {getChangeSummary()}

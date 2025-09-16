@@ -304,6 +304,31 @@ async def approve_project_agent_tools(
     return response
 
 
+@router.delete("/{project_id}/agent/messages", response_model=DeleteResponse)
+async def clear_project_agent_messages(
+    project_id: int,
+    project: Project = Depends(get_verified_project),
+    message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
+) -> DeleteResponse:
+    """Clear all conversation messages for a project's agent.
+
+    This endpoint deletes all conversation history between the user and the project agent,
+    effectively resetting the conversation to a clean state.
+
+    Args:
+        project_id: The project to clear messages for
+        project: Project instance (verified to exist)
+        message_repo: Project conversation message repository
+
+    Returns:
+        Success response with count of deleted messages
+    """
+    deleted_count = message_repo.delete_by_project(project_id)
+    message_repo.db.commit()
+
+    return {"message": f"Cleared {deleted_count} conversation messages", "success": True}
+
+
 @router.get("/{project_id}/context", response_model=dict[str, Any])
 async def get_project_context(
     project_id: int,

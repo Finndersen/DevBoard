@@ -52,13 +52,6 @@ class TestTaskSpecificationAgent:
         return repo
 
     @pytest.fixture
-    def mock_llm_service(self):
-        """Mock LLM service."""
-        mock_service = Mock()
-        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
-        return mock_service
-
-    @pytest.fixture
     def mock_context_service(self):
         """Mock context assembly service."""
         return Mock()
@@ -140,13 +133,6 @@ class TestTaskPlanningAgent:
         repo = Mock(spec=DocumentRepository)
         repo.update_content = Mock()
         return repo
-
-    @pytest.fixture
-    def mock_llm_service(self):
-        """Mock LLM service."""
-        mock_service = Mock()
-        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
-        return mock_service
 
     @pytest.fixture
     def mock_context_service(self):

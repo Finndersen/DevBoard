@@ -1,4 +1,4 @@
-import { diffWordsWithSpace, diffChars, diffLines, type Change } from 'diff'
+import { diffWordsWithSpace, diffChars, diffLines } from 'diff'
 import type { DocumentEdit } from '../lib/api'
 
 export interface HighlightedChange {

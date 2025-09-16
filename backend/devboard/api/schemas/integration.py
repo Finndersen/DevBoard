@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from devboard.agents.language_models import ModelType
+
 
 class IntegrationTestResponse(BaseModel):
     """Response schema for integration connection test."""
@@ -18,6 +20,7 @@ class ModelInfo(BaseModel):
     id: str
     provider: str
     name: str
+    model_type: ModelType
 
 
 class AgentModelInfo(BaseModel):
@@ -41,7 +44,6 @@ class AvailableModelsResponse(BaseModel):
     available_models: list[ModelInfo]
     preferred_model: str | None = None
     total_available: int
-    model_hierarchy: list[str] | None = None  # Default fallback hierarchy for this agent
 
 
 class UpdateAgentModelRequest(BaseModel):

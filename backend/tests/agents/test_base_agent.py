@@ -38,13 +38,6 @@ class TestBaseAgent:
     """Test BaseAgent abstract class functionality."""
 
     @pytest.fixture
-    def mock_llm_service(self):
-        """Mock LLM service to avoid database dependencies."""
-        mock_service = Mock()
-        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
-        return mock_service
-
-    @pytest.fixture
     def mock_context_service(self):
         """Mock context assembly service."""
         return Mock()
@@ -70,10 +63,10 @@ class TestBaseAgent:
         """Test _get_preferred_model returns model from LLM service."""
         # Reset the mock call count since it was called during initialization
         mock_llm_service.get_preferred_model_for_agent.reset_mock()
-        mock_llm_service.get_preferred_model_for_agent.return_value = "test"
-
+        # The mock_llm_service fixture already returns a proper LanguageModel instance
         model_name = mock_agent_instance._get_preferred_model()
-        assert model_name == "test"
+        # The method should return the pydanticai_id property of the LanguageModel
+        assert model_name == "openai:gpt-4"  # This matches the mock fixture
         mock_llm_service.get_preferred_model_for_agent.assert_called_once_with(AgentType.PROJECT)
 
     def test_create_agent(self, mock_agent_instance):
@@ -97,7 +90,9 @@ class TestBaseAgent:
         message_history: list[ModelMessage] = []
 
         result = await mock_agent_instance.run(
-            prompt_or_approvals="Test message", message_history=message_history, deps=deps
+            prompt_or_approvals="Test message",
+            message_history=message_history,
+            deps=deps,
         )
 
         assert result == mock_result
@@ -123,7 +118,9 @@ class TestBaseAgent:
         message_history: list[ModelMessage] = []
 
         result = await mock_agent_instance.run(
-            prompt_or_approvals=mock_approvals, message_history=message_history, deps=deps
+            prompt_or_approvals=mock_approvals,
+            message_history=message_history,
+            deps=deps,
         )
 
         assert result == mock_result
@@ -133,7 +130,10 @@ class TestBaseAgent:
     async def test_run_with_message_history(self, mock_agent_instance):
         """Test run method includes message history in agent context."""
         # Mock message history
-        mock_messages: list[ModelMessage] = [Mock(spec=ModelMessage), Mock(spec=ModelMessage)]
+        mock_messages: list[ModelMessage] = [
+            Mock(spec=ModelMessage),
+            Mock(spec=ModelMessage),
+        ]
 
         # Mock the internal agent and result
         mock_result = Mock()
@@ -201,20 +201,13 @@ class TestBaseAgentAbstract:
     """Test that BaseAgent properly enforces abstract method implementation."""
 
     @pytest.fixture
-    def mock_llm_service_for_abstract(self):
-        """Mock LLM service for abstract tests."""
-        mock_service = Mock()
-        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
-        return mock_service
-
-    @pytest.fixture
     def mock_context_service_for_abstract(self):
         """Mock context assembly service for abstract tests."""
         return Mock()
 
-    def test_concrete_implementation_works(self, mock_llm_service_for_abstract, mock_context_service_for_abstract):
+    def test_concrete_implementation_works(self, mock_llm_service, mock_context_service_for_abstract):
         """Test that concrete implementation can be instantiated."""
-        agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service_for_abstract)
+        agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service)
         assert agent.agent_type == AgentType.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 

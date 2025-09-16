@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import type { AvailableModelsForAgentResponse, ModelInfo, UpdateAgentModelRequest } from '../lib/api'
-import { ApiClient } from '../lib/api'
+import { apiClient } from '../lib/api'
 
 interface AgentModelSelectorProps {
   agentType: string
@@ -18,7 +18,6 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const apiClient = new ApiClient()
 
   useEffect(() => {
     loadData()
@@ -44,6 +43,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
     try {
       setLoading(true)
       setError(null)
+      
       const response = await apiClient.getAvailableModelsForAgent(agentType)
       setData(response)
       setSelectedModel(response.preferred_model)
@@ -62,13 +62,18 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
       const request: UpdateAgentModelRequest = { model_id: modelId }
       const response = await apiClient.updateAgentModel(agentType, request)
       
+      // Update local state directly - no need to refetch data
       setSelectedModel(response.model_id)
+      if (data) {
+        setData({
+          ...data,
+          preferred_model: response.model_id
+        })
+      }
+      
       if (onModelChange) {
         onModelChange(agentType, response.model_id)
       }
-      
-      // Reload data to get updated preferred model info
-      await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update agent model')
     } finally {
@@ -104,7 +109,6 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
   }
 
   const selectedModelInfo = getSelectedModelInfo()
-  const isUsingDefault = selectedModel === data.preferred_model
   
   return (
     <div className="space-y-3">

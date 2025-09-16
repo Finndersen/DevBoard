@@ -37,9 +37,9 @@ async def get_model_for_agent(
         ) from None
 
     # Get the preferred model for this agent type
-    model_id = llm_service.get_preferred_model_for_agent(agent_enum)
+    model = llm_service.get_preferred_model_for_agent(agent_enum)
 
-    return AgentModelResponse(model_id=model_id)
+    return AgentModelResponse(model_id=model.id)
 
 
 @router.get("/{agent_type}/available-models", response_model=AvailableModelsResponse)
@@ -70,17 +70,11 @@ async def get_available_models(
     available_models = llm_service.get_available_models()
     preferred_model = llm_service.get_preferred_model_for_agent(agent_enum)
 
-    # Import model hierarchies to include in response
-    from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES
-
-    model_hierarchy = AGENT_MODEL_HIERARCHIES.get(agent_enum, [])
-
     return AvailableModelsResponse(
         agent_type=agent_type,
         available_models=available_models,
-        preferred_model=preferred_model,
+        preferred_model=preferred_model.id,
         total_available=len(available_models),
-        model_hierarchy=model_hierarchy,
     )
 
 
@@ -110,12 +104,6 @@ async def update_agent_model(
             detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
         ) from None
 
-    config_key = f"agent.{agent_enum.value}.default"
-
-    # Update the agent configuration
-    config_data = {"selected_model": request.model_id}
-    llm_service.config_service.update_configuration(config_key, config_data)
-
-    # Return the updated preferred model
-    updated_model_id = llm_service.get_preferred_model_for_agent(agent_enum)
+    # Update the agent model using the service method
+    updated_model_id = llm_service.set_agent_model(agent_enum, request.model_id)
     return AgentModelResponse(model_id=updated_model_id)

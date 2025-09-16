@@ -109,12 +109,22 @@ backend/
 ```
 
 ### Frontend Implementation (`/frontend`)  
-Modern React application with TypeScript and comprehensive testing:
+Modern React application with TypeScript, comprehensive testing, and reusable component system:
 
 ```
 frontend/
 ├── src/
 │   ├── components/            # Reusable UI components
+│   │   ├── ui/               # Standardized UI component library
+│   │   │   ├── Button.tsx    # Standardized button with variants/sizes/states
+│   │   │   ├── Card.tsx      # Consistent card component with theming
+│   │   │   ├── Input.tsx     # Theme-aware input with labels/errors
+│   │   │   ├── Textarea.tsx  # Standardized textarea component
+│   │   │   ├── Modal.tsx     # Reusable modal with proper theming
+│   │   │   ├── StatusBadge.tsx # Status indicators with color variants
+│   │   │   ├── ErrorBoundary.tsx # React error boundary handling
+│   │   │   ├── ErrorMessage.tsx # Standardized error display
+│   │   │   └── index.ts      # Component library exports
 │   │   ├── __tests__/        # Component unit tests
 │   │   ├── Layout.tsx        # Navigation shell + routing
 │   │   ├── Chat.tsx          # Real-time agent conversation UI
@@ -122,14 +132,29 @@ frontend/
 │   │   └── ConfigurationField.tsx # Individual field components
 │   ├── views/                # Page-level components
 │   │   ├── __tests__/        # View integration tests
-│   │   ├── ProjectDashboard.tsx # Project listing + creation
+│   │   ├── ProjectDashboard.tsx # Project listing + creation (refactored)
 │   │   ├── ProjectDetail.tsx    # Project details + Q&A chat
-│   │   ├── TaskDetail.tsx       # Task planning + specification
+│   │   ├── TaskDetail.tsx       # Task planning + specification (refactored)
 │   │   ├── Codebases.tsx        # Codebase + architecture management
 │   │   └── Settings.tsx         # System configuration UI
+│   ├── hooks/                # Custom React hooks for data fetching
+│   │   ├── useApi.ts         # Generic API hook with loading/error states
+│   │   ├── useProjects.ts    # Project CRUD operations hooks
+│   │   ├── useTasks.ts       # Task management hooks
+│   │   ├── useCodebases.ts   # Codebase operations hooks
+│   │   └── index.ts          # Hook exports
+│   ├── styles/               # Design system and styling utilities
+│   │   ├── designSystem.ts   # Color palette, layouts, typography
+│   │   └── inputStyles.ts    # Standardized input styling system
+│   ├── utils/                # Utility functions
+│   │   ├── approvalKeys.ts   # Approval context key helpers
+│   │   └── diffUtils.ts      # Document diff utilities
 │   ├── lib/                  # Core utilities + services
 │   │   ├── __tests__/        # Utility tests
 │   │   └── api.ts            # Typed API client + interfaces
+│   ├── contexts/             # React context providers
+│   │   ├── DarkModeContext.tsx # Theme switching context
+│   │   └── ApprovalsContext.tsx # Agent approval state management
 │   ├── test/                 # Test configuration
 │   │   ├── setup.ts          # Test environment setup
 │   │   ├── utils.tsx         # Test helper functions
@@ -201,9 +226,16 @@ frontend/
 
 **State Management & Data Flow**:
 - **API-Driven State**: Centralized `ApiClient` with TypeScript interfaces
+- **Custom Hooks**: Reusable data fetching hooks with loading/error states
 - **React Hooks**: Modern state management with `useState`/`useEffect` patterns
 - **WebSocket Integration**: Real-time updates for agent conversations
 - **Props-Down/Events-Up**: Clean data flow architecture
+
+**Design System & Components**:
+- **Reusable UI Library**: Standardized component library in `src/components/ui/`
+- **Design System**: Centralized color palette, typography, and layout utilities
+- **Theme Support**: Comprehensive dark/light mode with Tailwind CSS classes
+- **Form Components**: Consistent input styling with error handling and validation
 
 ### Database & Persistence Implementation
 
@@ -278,9 +310,12 @@ npm run type-check      # TypeScript compilation check
 -   **Integrations (`devboard/integrations`)**: Handle the direct communication and interaction with external APIs (e.g., GitHub, Jira, Slack).
 
 ### Frontend
--   **Components (`frontend/src/components`)**: Reusable UI elements such as buttons, forms, navigation elements, and display widgets.
--   **Views (`frontend/src/views`)**: Top-level components that represent distinct pages or sections of the application (e.g., `ProjectDashboard`, `Codebases`, `Settings`). They orchestrate data fetching and component rendering for a specific view.
--   **API Client (`frontend/src/lib/api.ts`)**: A module responsible for making HTTP requests to the backend API, abstracting the details of API calls from the UI components.
+-   **UI Component Library (`frontend/src/components/ui`)**: Standardized, reusable UI components with consistent theming, variants, and error handling. Includes Button, Card, Input, Modal, StatusBadge, and form components.
+-   **Custom Hooks (`frontend/src/hooks`)**: Type-safe data fetching hooks that encapsulate API calls with loading states, error handling, and refetch capabilities. Includes generic `useApi` and domain-specific hooks like `useProjects`, `useTasks`.
+-   **Design System (`frontend/src/styles`)**: Centralized design tokens including color palette, typography scales, layout utilities, and standardized input styling for consistent theming across all components.
+-   **Components (`frontend/src/components`)**: Reusable UI elements and complex components such as Chat, ConfigurationForm, and Layout components that use the standardized UI library.
+-   **Views (`frontend/src/views`)**: Top-level components representing distinct pages (ProjectDashboard, TaskDetail, Codebases, Settings). Refactored to use standardized UI components and custom hooks for consistent UX.
+-   **API Client (`frontend/src/lib/api.ts`)**: Typed HTTP client with comprehensive TypeScript interfaces, abstracting API calls from UI components with proper error handling and response typing.
 
 ## API Endpoints
 
@@ -385,14 +420,23 @@ Relationships between entities (e.g., Projects having Tasks, Projects having Res
 
 ## Development Patterns
 
--   **Code Organization**: The backend follows a modular structure, separating concerns into `api`, `db`, `services`, `context_providers`, and `integrations` directories. The frontend organizes components into `components` and `views`.
+### Backend Patterns
+-   **Code Organization**: The backend follows a modular structure, separating concerns into `api`, `db`, `services`, `context_providers`, and `integrations` directories.
 -   **API Design**: RESTful API principles are applied, with clear resource-based URLs and standard HTTP methods.
 -   **Dependency Injection**: FastAPI's dependency injection system is used extensively, particularly for database sessions (`Depends(get_db)`) and service instances.
 -   **Pydantic for Data Validation**: Pydantic models are used for strict data validation and serialization for all API inputs and outputs, ensuring data integrity.
 -   **SQLAlchemy ORM**: The backend uses SQLAlchemy for object-relational mapping, abstracting database interactions and promoting a Pythonic way of working with data.
--   **Type Hinting**: Python type hints are used throughout the backend for improved code readability, maintainability, and static analysis. TypeScript is used in the frontend for similar benefits.
+-   **Type Hinting**: Python type hints are used throughout the backend for improved code readability, maintainability, and static analysis.
 -   **Error Handling**: Custom `HTTPException` instances are raised in API endpoints to return appropriate HTTP status codes and error messages to the client.
--   **Frontend Component Structure**: React components are organized into reusable `components` and page-specific `views`, promoting modularity and reusability.
+
+### Frontend Patterns
+-   **Component Architecture**: React components are organized into a three-tier structure: reusable UI components (`components/ui/`), complex feature components (`components/`), and page-level views (`views/`).
+-   **Custom Hooks Pattern**: Data fetching logic is encapsulated in custom hooks that provide consistent loading states, error handling, and refetch capabilities across all components.
+-   **Design System Approach**: Centralized design tokens and utility classes ensure consistent styling and theming across all UI components.
+-   **Type-Safe API Integration**: TypeScript interfaces and custom hooks provide end-to-end type safety from API responses to UI components.
+-   **Theme-Aware Components**: All UI components support light/dark mode switching with Tailwind CSS classes and proper contrast ratios.
+-   **Error Boundary Strategy**: React error boundaries and standardized error components provide graceful error handling and user feedback.
+-   **Consistent Form Patterns**: Standardized form components with labels, validation, and error states provide consistent user experience across all forms.
 
 ## Testing Strategy
 
@@ -737,3 +781,128 @@ Global exception handling with structured error responses for HTTP exceptions an
 
 **Request Context and Logging**:
 HTTP middleware adding request context including unique request IDs, timing information, and structured logging. Tracks request lifecycle from start to completion with duration metrics and response status codes. Adds request ID headers to responses for distributed tracing and debugging support.
+
+## Frontend Component System Implementation
+
+### UI Component Library Architecture
+
+The DevBoard frontend implements a **comprehensive design system** with reusable, theme-aware components that provide consistent user experience across all views.
+
+#### Core UI Components (`frontend/src/components/ui/`)
+
+**Button Component (`Button.tsx`)**:
+Standardized button component with multiple variants (primary, secondary, outline, ghost), sizes (sm, md, lg), and loading states. Supports icon integration and disabled states with proper accessibility attributes. Implements consistent focus states and transition animations for improved user experience.
+
+**Card Component (`Card.tsx`)**:
+Flexible container component with configurable padding options (none, sm, md, lg) and optional hover effects. Provides consistent border radius, shadow, and background theming across light and dark modes. Used as the foundation for content sections throughout the application.
+
+**Input Component (`Input.tsx`)**:
+Form input component with integrated labels, error states, help text, and icon support (left/right icons). Implements standardized focus states, error styling, and proper accessibility attributes. Supports all standard HTML input props while maintaining consistent theming.
+
+**Textarea Component (`Textarea.tsx`)**:
+Multi-line text input with the same theming and functionality as the Input component. Includes proper resize handling and maintains font family consistency for code editing use cases.
+
+**Modal Component (`Modal.tsx`)**:
+Reusable modal with proper focus management, backdrop handling, and responsive sizing (sm, md, lg, xl). Implements escape key handling, click-outside-to-close, and accessibility best practices with ARIA attributes.
+
+**StatusBadge Component (`StatusBadge.tsx`)**:
+Status indicator component with semantic color variants (default, success, warning, error, info) and sizes. Provides consistent status visualization across different data types and states throughout the application.
+
+**Error Handling Components**:
+- **ErrorBoundary (`ErrorBoundary.tsx`)**: React class component for catching JavaScript errors with graceful fallback UI and reload functionality
+- **ErrorMessage (`ErrorMessage.tsx`)**: Standardized error display with retry actions and consistent error messaging patterns
+
+#### Design System Implementation (`frontend/src/styles/`)
+
+**Design System Utilities (`designSystem.ts`)**:
+Centralized design tokens including color palette definitions, text color utilities, border color patterns, focus states, transition classes, and common layout patterns. Provides consistent design language across all components with Tailwind CSS class abstractions.
+
+**Input Styling System (`inputStyles.ts`)**:
+Comprehensive styling system for form elements with standardized classes for different input types (base inputs, chat inputs, textareas, feedback inputs). Includes disabled states and theme-aware styling for consistent form experiences.
+
+### Custom Hooks Architecture (`frontend/src/hooks/`)
+
+#### Generic API Hook Pattern
+
+**useApi Hook (`useApi.ts`)**:
+Generic data fetching hook providing consistent patterns for loading states, error handling, and data refetching. Implements TypeScript generics for type-safe API responses and supports both immediate and deferred loading patterns.
+
+**useMutation Hook (`useMutation.ts`)**:
+Handles mutation operations (POST, PUT, PATCH, DELETE) with loading states and error handling. Provides promise-based return values for operation chaining and supports TypeScript generics for type-safe parameter passing.
+
+#### Domain-Specific Hooks
+
+**useProjects Hook (`useProjects.ts`)**:
+Project management operations including fetching project lists, individual projects, creating, updating, and deleting projects. Encapsulates all project-related API calls with consistent loading and error states.
+
+**useTasks Hook (`useTasks.ts`)**:
+Task management operations for project tasks, individual task details, and task lifecycle management. Provides type-safe interfaces for task creation, updates, and status transitions.
+
+**useCodebases Hook (`useCodebases.ts`)**:
+Codebase management operations including codebase CRUD operations, architecture document management, and codebase analysis workflows.
+
+### Component Refactoring Implementation
+
+#### ProjectDashboard Refactoring
+
+**Before**: 189-line monolithic component with inline styling, manual state management, and direct API calls
+**After**: 175-line component using standardized UI components, custom hooks, and design system utilities
+
+**Key Improvements**:
+- Replaced direct `apiClient` calls with `useProjects()` and `useCreateProject()` hooks
+- Eliminated inline modal implementation in favor of reusable `Modal` component
+- Replaced manual form elements with `Input`, `Textarea`, and `Button` components
+- Added comprehensive error handling with `ErrorMessage` component
+- Implemented design system utilities for consistent spacing and colors
+
+#### TaskDetail Refactoring
+
+**Before**: Large component with complex state management and inconsistent styling
+**After**: Refactored to use standardized UI components and custom hooks for data operations
+
+**Key Improvements**:
+- Integrated `useTask()` and `useUpdateTask()` hooks for API operations
+- Replaced task status display with `StatusBadge` component
+- Standardized all buttons with `Button` component variants
+- Implemented consistent error handling and loading states
+- Used `Card` components for content sections
+
+### Theme System Implementation
+
+#### Dark Mode Support
+
+**DarkModeContext (`contexts/DarkModeContext.tsx`)**:
+React context providing theme state management with localStorage persistence and system preference detection. Integrates with Tailwind CSS dark mode classes for seamless theme switching across all components.
+
+**Theme-Aware Component Design**:
+All UI components implement comprehensive dark mode support using Tailwind's `dark:` prefixes. Ensures proper contrast ratios and accessibility compliance across light and dark themes.
+
+### Performance Optimizations
+
+#### Efficient Data Fetching
+
+**Custom Hooks with Caching**:
+Data fetching hooks implement intelligent caching patterns to minimize API calls and improve user experience. Includes refetch capabilities for manual data refresh and automatic error retry mechanisms.
+
+**Component Optimization**:
+Strategic use of React patterns to minimize re-renders and optimize component performance. Proper dependency arrays in useEffect hooks and intelligent state management reduce unnecessary computations.
+
+### Testing Integration
+
+#### Component Testing
+
+**UI Component Tests**:
+Comprehensive test coverage for all UI components using React Testing Library with proper accessibility testing and interaction verification. Tests focus on user behavior rather than implementation details.
+
+**Hook Testing**:
+Custom hooks are tested with proper mocking of API calls using MSW (Mock Service Worker) for realistic testing scenarios. Tests cover loading states, error conditions, and success scenarios.
+
+### Development Experience
+
+#### Developer Tools
+
+**TypeScript Integration**:
+Full TypeScript support across all components and hooks with strict type checking. Provides excellent developer experience with autocomplete and compile-time error detection.
+
+**Component Library**:
+Barrel exports (`index.ts`) provide clean import patterns and improved developer experience. Consistent prop interfaces and documentation improve development velocity.

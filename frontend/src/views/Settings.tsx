@@ -5,6 +5,8 @@ import { ConfigurationForm } from '../components/ConfigurationForm'
 import { AgentModelSelector } from '../components/AgentModelSelector'
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
+import { Card } from '../components/ui'
+import { textColors } from '../styles/designSystem'
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -83,8 +85,8 @@ export default function Settings() {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
+        <h1 className={`text-3xl font-bold ${textColors.primary}`}>Settings</h1>
+        <p className={`${textColors.secondary} mt-2`}>
           Configure integrations, AI providers, and system preferences
         </p>
       </div>
@@ -119,10 +121,10 @@ export default function Settings() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Integration List */}
           <div className="xl:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <Card padding="none">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">External Integrations</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>External Integrations</h3>
+                <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Select an integration to configure
                 </p>
               </div>
@@ -152,22 +154,22 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
 
           {/* Configuration Form */}
           <div className="xl:col-span-3">
             {selectedIntegration ? (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <Card padding="none">
                 <ConfigurationForm
                   configKey={selectedIntegration}
                   title={integrationConfigs.find(i => i.key === selectedIntegration)?.title || ''}
                   onSave={handleConfigurationSave}
                   onTestConnection={handleTestConnection}
                 />
-              </div>
+              </Card>
             ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+              <Card className="p-8 text-center">
                 <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
                   Select an integration
@@ -175,7 +177,7 @@ export default function Settings() {
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                   Choose an integration from the list to configure its settings
                 </p>
-              </div>
+              </Card>
             )}
           </div>
         </div>
@@ -183,7 +185,7 @@ export default function Settings() {
 
       {activeTab === 'agents' && (
         <div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <Card className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {agentTypes.map((agent) => (
                 <div
@@ -203,7 +205,7 @@ export default function Settings() {
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -211,10 +213,10 @@ export default function Settings() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* LLM Provider List */}
           <div className="xl:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <Card padding="none">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">AI Providers</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>AI Providers</h3>
+                <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Select a provider to configure
                 </p>
               </div>
@@ -244,21 +246,21 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
 
           {/* Configuration Form */}
           <div className="xl:col-span-3">
             {selectedLLMProvider ? (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <Card padding="none">
                 <ConfigurationForm
                   configKey={selectedLLMProvider}
                   title={llmConfigs.find(p => p.key === selectedLLMProvider)?.title || ''}
                   onSave={handleConfigurationSave}
                 />
-              </div>
+              </Card>
             ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+              <Card className="p-8 text-center">
                 <CloudIcon className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
                   Select an AI provider
@@ -266,7 +268,7 @@ export default function Settings() {
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                   Choose a provider from the list to configure its API settings
                 </p>
-              </div>
+              </Card>
             )}
           </div>
         </div>
@@ -274,10 +276,10 @@ export default function Settings() {
 
       {activeTab === 'general' && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <Card className="p-6">
             <div className="flex items-center space-x-2 mb-4">
               <CogIcon className="w-5 h-5 text-gray-400" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">General Settings</h3>
+              <h3 className={`text-lg font-medium ${textColors.primary}`}>General Settings</h3>
             </div>
             
             <div className="space-y-6">
@@ -331,7 +333,7 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>

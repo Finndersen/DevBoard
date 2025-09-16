@@ -26,5 +26,3 @@ We are working to develop an application as described in @PROJECT_SPECIFICATION.
 
 - Types must be imported using type-only imports (e.g. `import type { XYZ } from '...'`)
 - use `npm run test *` to run tests, DO NOT use `timeout XXX npm run test *` 
-
-@ARCHITECTURE.md

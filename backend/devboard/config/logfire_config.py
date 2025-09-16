@@ -28,3 +28,4 @@ def setup_logfire(app: FastAPI) -> None:
     logfire.instrument_sqlalchemy(engine=engine)
     logfire.instrument_httpx()
     logfire.instrument_fastapi(app)
+    logfire.instrument_pydantic_ai()

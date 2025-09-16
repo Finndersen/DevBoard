@@ -3,6 +3,10 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import Chat from '../components/Chat'
+import Button from '../components/ui/Button'
+import Textarea from '../components/ui/Textarea'
+import Card from '../components/ui/Card'
+import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
 
@@ -167,8 +171,8 @@ export default function ProjectDetail() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className={`${layouts.flexCenter} h-64`}>
+        <div className={loadingSpinner}></div>
       </div>
     )
   }
@@ -176,7 +180,7 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="text-center py-12">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project not found</h3>
+        <h3 className={`text-lg font-medium ${textColors.primary}`}>Project not found</h3>
         <Link to="/projects" className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-500">
           <ArrowLeftIcon className="w-4 h-4 mr-2" />
           Back to Projects
@@ -191,27 +195,24 @@ export default function ProjectDetail() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className={`${layouts.flexBetween} mb-6`}>
         <div className="flex items-center space-x-4">
           <Link
             to="/projects"
-            className="inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+            className={`inline-flex items-center ${textColors.secondary} hover:text-gray-700 dark:hover:text-gray-300`}
           >
             <ArrowLeftIcon className="w-5 h-5 mr-2" />
             Projects
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
+            <h1 className={`text-2xl font-bold ${textColors.primary}`}>{project.name}</h1>
           </div>
         </div>
         
-        <button
-          onClick={() => setShowCreateTaskModal(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
+        <Button onClick={() => setShowCreateTaskModal(true)}>
           <PlusIcon className="w-4 h-4 mr-2" />
           New Task
-        </button>
+        </Button>
       </div>
 
       {/* Navigation Tabs */}
@@ -242,8 +243,8 @@ export default function ProjectDetail() {
       {activeTab === 'board' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {statusColumns.map((status) => (
-            <div key={status} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <h3 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center justify-between">
+            <Card key={status} className="p-4 bg-gray-50 dark:bg-gray-800">
+              <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between`}>
                 {status}
                 <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
                   {taskGroups[status]?.length || 0}
@@ -273,7 +274,7 @@ export default function ProjectDetail() {
                   </Link>
                 ))}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -283,24 +284,24 @@ export default function ProjectDetail() {
           {/* Left Side - Project Details & Specification */}
           <div className="flex flex-col space-y-6 overflow-hidden">
             {/* Project Details Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-shrink-0">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Project Details</h3>
+            <Card className="p-6 flex-shrink-0">
+              <h3 className={`text-lg font-medium ${textColors.primary} mb-4`}>Project Details</h3>
               <div className="space-y-2">
                 <div>
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Name:</span>
-                  <span className="ml-2 text-gray-900 dark:text-white">{project.name}</span>
+                  <span className={`text-sm font-medium ${textColors.muted}`}>Name:</span>
+                  <span className={`ml-2 ${textColors.primary}`}>{project.name}</span>
                 </div>
                 <div>
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Description:</span>
-                  <span className="ml-2 text-gray-900 dark:text-white">{project.description}</span>
+                  <span className={`text-sm font-medium ${textColors.muted}`}>Description:</span>
+                  <span className={`ml-2 ${textColors.primary}`}>{project.description}</span>
                 </div>
               </div>
-            </div>
+            </Card>
 
             {/* Specification Document Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col overflow-hidden">
+            <Card className="p-6 flex-1 flex flex-col overflow-hidden">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Project Specification</h3>
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Specification</h3>
                 {!isEditingSpecification ? (
                   <button
                     onClick={() => {
@@ -333,10 +334,10 @@ export default function ProjectDetail() {
               
               <div className="flex-1 overflow-hidden">
                 {isEditingSpecification ? (
-                  <textarea
+                  <Textarea
                     value={editedSpecification}
                     onChange={(e) => setEditedSpecification(e.target.value)}
-                    className="w-full h-full px-3 py-2 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-none"
+                    className="w-full h-full font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900"
                     placeholder="Enter project specification in Markdown format..."
                   />
                 ) : (
@@ -349,17 +350,17 @@ export default function ProjectDetail() {
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           </div>
 
           {/* Right Side - Chat */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex flex-col overflow-hidden">
+          <Card className="p-6 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div className="flex items-center">
                 <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Agent</h3>
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent</h3>
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className={`text-sm ${textColors.secondary}`}>
                 {modelLoading ? (
                   <span>Loading...</span>
                 ) : agentModel ? (
@@ -372,15 +373,15 @@ export default function ProjectDetail() {
             <div className="flex-1 overflow-hidden">
               <Chat projectId={parseInt(id!)} />
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {activeTab === 'settings' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Project Settings</h3>
-          <p className="text-gray-600 dark:text-gray-400">Project settings configuration will be implemented here.</p>
-        </div>
+        <Card className="p-6">
+          <h3 className={`text-lg font-medium ${textColors.primary} mb-4`}>Project Settings</h3>
+          <p className={textColors.secondary}>Project settings configuration will be implemented here.</p>
+        </Card>
       )}
 
       {/* Create Task Modal */}

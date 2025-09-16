@@ -47,7 +47,7 @@ describe('ProjectDetail', () => {
         return HttpResponse.json([])
       }),
       http.get('*/api/settings/agents/project/model', () => {
-        return HttpResponse.json({ model_id: 'openai/gpt-4' })
+        return HttpResponse.json({ model_id: 'openai:gpt-4' })
       })
     )
   })
@@ -165,7 +165,7 @@ describe('ProjectDetail', () => {
     
     // Should display the model information
     await waitFor(() => {
-      expect(screen.getByText('Model: openai/gpt-4')).toBeInTheDocument()
+      expect(screen.getByText('Model: openai:gpt-4')).toBeInTheDocument()
     })
   })
 })

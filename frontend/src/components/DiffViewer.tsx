@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react'
-import { ChevronUpIcon, ChevronDownIcon, EyeIcon, EyeSlashIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect, useCallback } from 'react'
+import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import type { PendingApproval } from '../lib/api'
 import { 
   generateUnifiedDiff, 
   createInlineHighlight, 
-  createDocumentComparison,
   calculateDiffStats,
   formatDiffStats,
   highlightUnifiedDiff
 } from '../utils/diffUtils'
-import InlineChangeHighlighter, { ChangeComparison } from './InlineChangeHighlighter'
+import { ChangeComparison } from './InlineChangeHighlighter'
 
 interface DiffViewerProps {
   approval: PendingApproval
@@ -20,8 +19,14 @@ type ViewMode = 'cards' | 'unified'
 
 export default function DiffViewer({ approval, className = '' }: DiffViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
-  const [expandedEdits, setExpandedEdits] = useState<Set<number>>(new Set())
-  const [showWhitespace, setShowWhitespace] = useState(false)
+
+  const expandAllEdits = useCallback(() => {
+    // Functionality removed - keeping for potential future use
+  }, [])
+
+  const collapseAllEdits = useCallback(() => {
+    // Functionality removed - keeping for potential future use
+  }, [])
 
   // Keyboard navigation for view mode switching
   useEffect(() => {
@@ -61,27 +66,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
-
-  const toggleEditExpansion = (index: number) => {
-    const newExpanded = new Set(expandedEdits)
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index)
-    } else {
-      newExpanded.add(index)
-    }
-    setExpandedEdits(newExpanded)
-  }
-
-  const expandAllEdits = () => {
-    if (approval.edits) {
-      setExpandedEdits(new Set(approval.edits.map((_, index) => index)))
-    }
-  }
-
-  const collapseAllEdits = () => {
-    setExpandedEdits(new Set())
-  }
+  }, [expandAllEdits, collapseAllEdits])
 
   const renderUnifiedDiff = () => {
     if (!approval.edits || approval.edits.length === 0) {
@@ -168,7 +153,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
             <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
               <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Change {index + 1} of {approval.edits.length}
+                  Change {index + 1} of {approval.edits?.length || 0}
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-500">
                   {formatDiffStats(editStats)}

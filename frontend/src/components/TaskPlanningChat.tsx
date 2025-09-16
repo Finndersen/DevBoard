@@ -6,7 +6,8 @@ import type {
   ToolApprovalRequest,
   ToolApprovalDecision
 } from '../lib/api'
-import { useApprovals, createTaskApprovalKey } from '../contexts/ApprovalsContext'
+import { useApprovals } from '../contexts/ApprovalsContext'
+import { createTaskApprovalKey } from '../utils/approvalKeys'
 import { standardChatInputClasses, standardFeedbackTextareaClasses } from '../styles/inputStyles'
 
 interface TaskPlanningChatProps {

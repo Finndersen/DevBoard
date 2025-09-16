@@ -1,5 +1,5 @@
-import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import type { PendingApproval, ToolApprovalDecision } from '../lib/api'
+import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react'
+import type { PendingApproval } from '../lib/api'
 
 interface ApprovalsState {
   // Key structure: `project-${projectId}` or `task-${taskId}`
@@ -61,12 +61,14 @@ function approvalsReducer(state: ApprovalsState, action: ApprovalsAction): Appro
         }
       }
     
-    case 'CLEAR_APPROVALS':
+    case 'CLEAR_APPROVALS': {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [action.payload.key]: removed, ...rest } = state.approvals
       return {
         ...state,
         approvals: rest
       }
+    }
     
     case 'LOAD_FROM_STORAGE':
       try {
@@ -118,7 +120,9 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
   // Clean up expired/old approvals (older than 24 hours)
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const now = Date.now()
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars  
       const oneDay = 24 * 60 * 60 * 1000
 
       Object.keys(state.approvals).forEach(key => {
@@ -186,6 +190,3 @@ export function useApprovals() {
   return context
 }
 
-// Helper functions for creating keys
-export const createProjectApprovalKey = (projectId: string | number) => `project-${projectId}`
-export const createTaskApprovalKey = (taskId: string | number) => `task-${taskId}`

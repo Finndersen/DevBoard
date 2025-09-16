@@ -1,40 +1,45 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PlusIcon, FolderIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import { apiClient } from '../lib/api'
-import type { Project } from '../lib/api'
+import { useProjects, useCreateProject } from '../hooks'
+import { Button, Card, Modal, Input, Textarea, StatusBadge, ErrorMessage } from '../components/ui'
+import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 
 export default function ProjectDashboard() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: projects, loading, error, refetch } = useProjects()
+  const { mutate: createProject, loading: creating, error: createError } = useCreateProject()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({
     name: '',
-    description: ''
-  })
-
-  useEffect(() => {
-    fetchProjects()
-  }, [])
-
-  const fetchProjects = async () => {
-    try {
-      const data = await apiClient.getProjects()
-      setProjects(data)
-    } catch (error) {
-      console.error('Failed to fetch projects:', error)
-    } finally {
-      setLoading(false)
+    description: '',
+    specification: {
+      id: 0,
+      document_type: 'project_specification',
+      content: '',
+      content_hash: '',
+      created_at: '',
+      updated_at: ''
     }
-  }
+  })
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await apiClient.createProject(newProject)
-      await fetchProjects()
+      await createProject(newProject)
+      await refetch()
       setShowCreateModal(false)
-      setNewProject({ name: '', description: '' })
+      setNewProject({ 
+        name: '', 
+        description: '',
+        specification: {
+          id: 0,
+          document_type: 'project_specification',
+          content: '',
+          content_hash: '',
+          created_at: '',
+          updated_at: ''
+        }
+      })
     } catch (error) {
       console.error('Failed to create project:', error)
     }
@@ -42,148 +47,133 @@ export default function ProjectDashboard() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className={`${layouts.flexCenter} h-64`}>
+        <div className={loadingSpinner}></div>
       </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <ErrorMessage error={error} retry={refetch} className="max-w-lg mx-auto mt-8" />
     )
   }
 
   return (
     <div>
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className={`${layouts.flexBetween} mb-8`}>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Projects</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <h1 className={`text-3xl font-bold ${textColors.primary}`}>Projects</h1>
+          <p className={`${textColors.secondary} mt-2`}>
             Manage your development projects and AI-powered workflows
           </p>
         </div>
-        <button
+        <Button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          icon={<PlusIcon />}
         >
-          <PlusIcon className="w-4 h-4 mr-2" />
           New Project
-        </button>
+        </Button>
       </div>
 
       {/* Projects Grid */}
-      {projects.length === 0 ? (
+      {!projects || projects.length === 0 ? (
         <div className="text-center py-12">
           <FolderIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No projects</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <h3 className={`mt-2 text-sm font-medium ${textColors.primary}`}>No projects</h3>
+          <p className={`mt-1 text-sm ${textColors.secondary}`}>
             Get started by creating a new project.
           </p>
           <div className="mt-6">
-            <button
+            <Button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              icon={<PlusIcon />}
             >
-              <PlusIcon className="w-4 h-4 mr-2" />
               New Project
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+        <div className={layouts.gridAuto}>
           {projects.map((project) => (
-            <div
-              key={project.id}
-              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-                    {project.name}
-                  </h3>
-                  <div className="flex-shrink-0">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                      Project
-                    </span>
-                  </div>
-                </div>
-                
-                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-3">
-                  {project.description}
-                </p>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Created {new Date(project.created_at).toLocaleDateString()}
-                  </span>
-                  <div className="flex space-x-2">
-                    <Link
-                      to={`/projects/${project.id}`}
-                      className="inline-flex items-center px-3 py-1 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                    >
-                      <ChatBubbleLeftIcon className="w-4 h-4 mr-1" />
-                      Open
-                    </Link>
-                  </div>
+            <Card key={project.id} hover>
+              <div className={`${layouts.flexBetween} mb-4`}>
+                <h3 className={`text-lg font-semibold ${textColors.primary} truncate`}>
+                  {project.name}
+                </h3>
+                <div className="flex-shrink-0">
+                  <StatusBadge variant="info">Project</StatusBadge>
                 </div>
               </div>
-            </div>
+              
+              <p className={`${textColors.secondary} text-sm mb-4 line-clamp-3`}>
+                {project.description}
+              </p>
+              
+              <div className={`${layouts.flexBetween}`}>
+                <span className={`text-xs ${textColors.muted}`}>
+                  Created {new Date(project.created_at).toLocaleDateString()}
+                </span>
+                <Link to={`/projects/${project.id}`}>
+                  <Button variant="secondary" size="sm" icon={<ChatBubbleLeftIcon />}>
+                    Open
+                  </Button>
+                </Link>
+              </div>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Create Project Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Create New Project
-            </h3>
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New Project"
+      >
+        <form onSubmit={handleCreateProject}>
+          {createError && (
+            <ErrorMessage error={createError} className="mb-4" />
+          )}
+          
+          <div className="space-y-4">
+            <Input
+              label="Project Name"
+              type="text"
+              required
+              value={newProject.name}
+              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              placeholder="Enter project name"
+            />
             
-            <form onSubmit={handleCreateProject}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Project Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter project name"
-                />
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Description
-                </label>
-                <textarea
-                  required
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Describe your project, its goals, and key features..."
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Create Project
-                </button>
-              </div>
-            </form>
+            <Textarea
+              label="Description"
+              required
+              value={newProject.description}
+              onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+              rows={3}
+              placeholder="Describe your project, its goals, and key features..."
+            />
           </div>
-        </div>
-      )}
+          
+          <div className="flex justify-end space-x-3 mt-6">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowCreateModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              loading={creating}
+            >
+              Create Project
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

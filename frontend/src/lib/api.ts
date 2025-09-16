@@ -263,6 +263,7 @@ export interface ModelInfo {
   id: string
   provider: string
   name: string
+  model_type: 'reasoning' | 'fast'
 }
 
 export interface AvailableModelsForAgentResponse {
@@ -270,11 +271,10 @@ export interface AvailableModelsForAgentResponse {
   available_models: ModelInfo[]
   preferred_model: string | null
   total_available: number
-  model_hierarchy?: string[]  // Default fallback hierarchy for this agent
 }
 
 export interface UpdateAgentModelRequest {
-  model_id: string | null  // null means use default hierarchy
+  model_id: string | null  // null means use default recommendation
 }
 
 export class ApiClient {
@@ -389,6 +389,12 @@ export class ApiClient {
     return this.request<PromptResponse>(`/api/projects/${projectId}/agent/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
+    })
+  }
+
+  async clearProjectAgentMessages(projectId: number | string): Promise<{ message: string; success: boolean }> {
+    return this.request<{ message: string; success: boolean }>(`/api/projects/${projectId}/agent/messages`, {
+      method: 'DELETE',
     })
   }
 

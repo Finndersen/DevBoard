@@ -75,7 +75,7 @@ interface ChangeComparisonProps {
 
 export function ChangeComparison({ 
   oldText, 
-  newText, 
+  newText: _newText, // eslint-disable-line @typescript-eslint/no-unused-vars
   changes, 
   title,
   className = '' 

@@ -23,6 +23,7 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.deps import BaseDeps
+from devboard.agents.language_models import LLMProvider
 from devboard.agents.llm_service import LLMService
 from devboard.agents.types import AgentType
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
@@ -48,10 +49,8 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
     def _create_agent(self) -> Agent[TDeps]:
         """Create the PydanticAI agent with context tools."""
 
-        preferred_model = self._get_preferred_model()
-
         agent = Agent[TDeps](
-            preferred_model.split("/")[1],
+            self._get_preferred_model(),
             deps_type=self.deps_type,
             system_prompt=self._get_system_prompt(),
             tools=self._get_tools(),
@@ -62,7 +61,11 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
     def _get_preferred_model(self) -> str:
         """Get preferred model for this agent type."""
-        return self.llm_service.get_preferred_model_for_agent(self.agent_type)
+        model = self.llm_service.get_preferred_model_for_agent(self.agent_type)
+        if model.provider == LLMProvider.GOOGLE:
+            return f"google-gla:{model.name}"
+        else:
+            return f"{model.provider.value}:{model.name}"
 
     @abstractmethod
     def _get_system_prompt(self) -> str:

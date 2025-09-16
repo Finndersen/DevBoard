@@ -12,7 +12,12 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.run import AgentRunResult
-from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
+from pydantic_ai.tools import (
+    DeferredToolRequests,
+    DeferredToolResults,
+    ToolApproved,
+    ToolDenied,
+)
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -89,13 +94,6 @@ class MockAgent(BaseAgent):
 
 class TestAgentConversationService:
     """Test AgentConversationService functionality."""
-
-    @pytest.fixture
-    def mock_llm_service(self):
-        """Mock LLM service to avoid database dependencies."""
-        mock_service = Mock()
-        mock_service.get_preferred_model_for_agent.return_value = "openai/gpt-4"
-        return mock_service
 
     @pytest.fixture
     def mock_context_service(self):
@@ -195,7 +193,13 @@ class TestAgentConversationService:
         tool_call_message.message_type = MessageType.TOOL_CALL
         tool_call_message.pydantic_content = {
             "kind": "response",
-            "parts": [{"part_kind": "tool-call", "tool_name": "edit_document", "tool_call_id": "tool_123"}],
+            "parts": [
+                {
+                    "part_kind": "tool-call",
+                    "tool_name": "edit_document",
+                    "tool_call_id": "tool_123",
+                }
+            ],
         }
 
         mock_message_repo.create(user_message)
@@ -356,7 +360,13 @@ class TestAgentConversationService:
         tool_call_message.message_type = MessageType.TOOL_CALL
         tool_call_message.pydantic_content = {
             "kind": "response",
-            "parts": [{"part_kind": "tool-call", "tool_name": "edit_document", "tool_call_id": "tool_123"}],
+            "parts": [
+                {
+                    "part_kind": "tool-call",
+                    "tool_name": "edit_document",
+                    "tool_call_id": "tool_123",
+                }
+            ],
         }
         mock_message_repo.create(tool_call_message)
 
@@ -420,7 +430,10 @@ class TestAgentConversationService:
 
         approvals = {"tool_123": ToolApprovalDecision(approved=True)}
 
-        with pytest.raises(ValueError, match="Last message is not a tool call; cannot process approvals"):
+        with pytest.raises(
+            ValueError,
+            match="Last message is not a tool call; cannot process approvals",
+        ):
             await service.process_tool_approvals(approvals=approvals, entity_id=1)
 
     @pytest.mark.asyncio
@@ -448,5 +461,8 @@ class TestAgentConversationService:
         # Create a DeferredToolResults object
         tool_results = DeferredToolResults(approvals={"tool_1": ToolApproved()})
 
-        with pytest.raises(ValueError, match="Last message is not a tool call; cannot process approvals"):
+        with pytest.raises(
+            ValueError,
+            match="Last message is not a tool call; cannot process approvals",
+        ):
             await service._handle_message_or_approval(entity_id=1, message_or_approvals=tool_results)

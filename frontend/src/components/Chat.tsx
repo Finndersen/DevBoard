@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest, PendingApproval, DocumentEdit } from '../lib/api'
 import PendingApprovalsList from './PendingApprovalsList'
-import { useApprovals, createProjectApprovalKey } from '../contexts/ApprovalsContext'
+import { useApprovals } from '../contexts/ApprovalsContext'
+import { createProjectApprovalKey } from '../utils/approvalKeys'
 import { standardChatInputClasses } from '../styles/inputStyles'
+import Button from './ui/Button'
+import Modal from './ui/Modal'
 
 interface ChatProps {
   projectId: number
@@ -14,6 +17,8 @@ export default function Chat({ projectId }: ChatProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showClearModal, setShowClearModal] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const { getApprovals, setApprovals, clearApprovals } = useApprovals()
@@ -94,6 +99,10 @@ export default function Chat({ projectId }: ChatProps) {
 
   const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApproval[]> => {
     return toolRequests.map((request) => {
+      console.log('Chat: Converting tool request:', request)
+      console.log('Chat: tool_args type:', typeof request.tool_args)
+      console.log('Chat: tool_args content:', request.tool_args)
+      
       let documentType: string | null = null
       let edits: DocumentEdit[] | null = null
       let reasoning: string | null = null
@@ -104,12 +113,26 @@ export default function Chat({ projectId }: ChatProps) {
         
         // Extract edits and reasoning from tool_args
         if (typeof request.tool_args === 'object' && request.tool_args !== null) {
+          console.log('Chat: Extracting from object tool_args:', request.tool_args)
           edits = request.tool_args.edits || null
           reasoning = request.tool_args.reasoning || null
+        } else if (typeof request.tool_args === 'string') {
+          console.log('Chat: Parsing string tool_args:', request.tool_args)
+          try {
+            const parsed = JSON.parse(request.tool_args)
+            console.log("Chat: Parsed JSON successfully:", parsed)
+            console.log("Chat: Parsed JSON keys:", Object.keys(parsed))
+            edits = parsed.edits || null
+            reasoning = parsed.reasoning || null
+            console.log("Chat: Extracted edits:", edits)
+            console.log("Chat: Extracted reasoning:", reasoning)
+          } catch (e) {
+            console.warn('Chat: Failed to parse tool_args as JSON:', e)
+          }
         }
       }
 
-      return {
+      const approvalObject = {
         tool_call_id: request.tool_call_id,
         tool_name: request.tool_name,
         document_type: documentType,
@@ -117,6 +140,9 @@ export default function Chat({ projectId }: ChatProps) {
         diff_preview: null, // Backend doesn't provide this yet
         reasoning: reasoning
       }
+      
+      console.log("Chat: Final approval object:", approvalObject)
+      return approvalObject
     })
   }
 
@@ -154,8 +180,40 @@ export default function Chat({ projectId }: ChatProps) {
     }
   }
 
+  const handleClearHistory = async () => {
+    setClearing(true)
+    try {
+      const response = await apiClient.clearProjectAgentMessages(projectId)
+      console.log('Clear history response:', response)
+      setMessages([])
+      setShowClearModal(false)
+    } catch (error) {
+      console.error('Failed to clear chat history:', error)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
+      {messages.length > 0 && (
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600 flex-shrink-0">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {messages.length} message{messages.length !== 1 ? 's' : ''}
+          </span>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setShowClearModal(true)}
+            disabled={loading || clearing || pendingApprovals.length > 0}
+            icon={<TrashIcon className="w-4 h-4" />}
+          >
+            Clear History
+          </Button>
+        </div>
+      )}
+      
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.length === 0 ? (
@@ -240,6 +298,39 @@ export default function Chat({ projectId }: ChatProps) {
           </p>
         )}
       </div>
+
+      {/* Clear History Confirmation Modal */}
+      {showClearModal && (
+        <Modal 
+          isOpen={showClearModal}
+          onClose={() => setShowClearModal(false)}
+          title="Clear Chat History"
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600 dark:text-gray-300">
+              Are you sure you want to clear all conversation history? This action cannot be undone.
+            </p>
+            
+            <div className="flex justify-end space-x-3">
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowClearModal(false)}
+                disabled={clearing}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleClearHistory}
+                loading={clearing}
+              >
+                Clear History
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

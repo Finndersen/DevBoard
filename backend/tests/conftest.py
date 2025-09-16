@@ -1,9 +1,12 @@
+from unittest.mock import Mock
+
 from fastapi.testclient import TestClient
 from pytest import fixture
 from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base
@@ -130,3 +133,14 @@ def config_service(configuration_repository):
 def integration_service(configuration_repository):
     """IntegrationService instance with real repository for testing."""
     return IntegrationService(configuration_repository)
+
+
+# Mock fixtures
+@fixture
+def mock_llm_service():
+    """Mock LLM service to avoid database dependencies."""
+    mock_service = Mock()
+    # Return a LanguageModel instance instead of a string
+    default_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.REASONING)
+    mock_service.get_preferred_model_for_agent.return_value = default_model
+    return mock_service

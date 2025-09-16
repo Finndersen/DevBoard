@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { XMarkIcon, DocumentTextIcon, CheckIcon, XMarkIcon as DenyIcon } from '@heroicons/react/24/outline'
 import DiffViewer from './DiffViewer'
 import type { PendingApproval, ToolApprovalDecision } from '../lib/api'
@@ -35,6 +35,49 @@ export default function DocumentDiffModal({
         return documentType || 'Document'
     }
   }
+
+  const handleApprove = useCallback(() => {
+    const feedback = feedbackRef.current?.value
+    onApproval(approval.tool_call_id, {
+      approved: true,
+      feedback: feedback || undefined
+    })
+    onClose()
+  }, [approval.tool_call_id, onApproval, onClose])
+
+  const handleDeny = useCallback(() => {
+    if (!showDenyFeedback) {
+      // First click: show feedback input and focus it
+      setShowDenyFeedback(true)
+      setTimeout(() => {
+        feedbackRef.current?.focus()
+      }, 100)
+    } else {
+      // Second click or confirm: proceed with denial
+      const feedback = feedbackRef.current?.value
+      onApproval(approval.tool_call_id, {
+        approved: false,
+        feedback: feedback || undefined
+      })
+      onClose()
+    }
+  }, [showDenyFeedback, approval.tool_call_id, onApproval, onClose])
+
+  const handleConfirmDeny = useCallback(() => {
+    const feedback = feedbackRef.current?.value
+    onApproval(approval.tool_call_id, {
+      approved: false,
+      feedback: feedback || undefined
+    })
+    onClose()
+  }, [approval.tool_call_id, onApproval, onClose])
+
+  const handleCancelDeny = useCallback(() => {
+    setShowDenyFeedback(false)
+    if (feedbackRef.current) {
+      feedbackRef.current.value = ''
+    }
+  }, [])
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -91,7 +134,7 @@ export default function DocumentDiffModal({
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen, onClose, showDenyFeedback])
+  }, [isOpen, onClose, showDenyFeedback, handleApprove, handleConfirmDeny, handleDeny, handleCancelDeny])
 
   // Handle click outside modal
   const handleBackdropClick = (event: React.MouseEvent) => {
@@ -100,48 +143,6 @@ export default function DocumentDiffModal({
     }
   }
 
-  const handleApprove = () => {
-    const feedback = feedbackRef.current?.value
-    onApproval(approval.tool_call_id, {
-      approved: true,
-      feedback: feedback || undefined
-    })
-    onClose()
-  }
-
-  const handleDeny = () => {
-    if (!showDenyFeedback) {
-      // First click: show feedback input and focus it
-      setShowDenyFeedback(true)
-      setTimeout(() => {
-        feedbackRef.current?.focus()
-      }, 100)
-    } else {
-      // Second click or confirm: proceed with denial
-      const feedback = feedbackRef.current?.value
-      onApproval(approval.tool_call_id, {
-        approved: false,
-        feedback: feedback || undefined
-      })
-      onClose()
-    }
-  }
-
-  const handleConfirmDeny = () => {
-    const feedback = feedbackRef.current?.value
-    onApproval(approval.tool_call_id, {
-      approved: false,
-      feedback: feedback || undefined
-    })
-    onClose()
-  }
-
-  const handleCancelDeny = () => {
-    setShowDenyFeedback(false)
-    if (feedbackRef.current) {
-      feedbackRef.current.value = ''
-    }
-  }
 
   if (!isOpen) {
     return null
@@ -170,7 +171,7 @@ export default function DocumentDiffModal({
           <div className="flex items-center space-x-3">
             <DocumentTextIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <h2 id="modal-title" className="text-xl font-semibold text-gray-900 dark:text-white">
-              Review Changes: {getDocumentTypeDisplay(approval.document_type)}
+              Review Changes: {getDocumentTypeDisplay(approval.document_type || null)}
             </h2>
           </div>
           <button

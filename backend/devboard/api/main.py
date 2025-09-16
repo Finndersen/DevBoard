@@ -1,20 +1,26 @@
 """Main FastAPI application."""
 
-import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from devboard.api.routers import agents, codebases, configurations, projects, settings, tasks
+from devboard.api.routers import (
+    agents,
+    codebases,
+    configurations,
+    projects,
+    settings,
+    tasks,
+)
 from devboard.config.logfire_config import setup_logfire
 
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
 load_dotenv(Path.home() / ".env", override=False)
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="DevBoard API",

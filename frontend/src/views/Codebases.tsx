@@ -3,13 +3,22 @@ import { FolderIcon, PlusIcon, PencilIcon, CheckIcon, XMarkIcon, TrashIcon, Docu
 import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Codebase, ArchitectureDocument } from '../lib/api'
+import { useCodebases, useCreateCodebase, useUpdateCodebase, useDeleteCodebase } from '../hooks/useCodebases'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import Textarea from '../components/ui/Textarea'
+import Card from '../components/ui/Card'
+import ErrorMessage from '../components/ui/ErrorMessage'
+import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 
 export default function Codebases() {
-  const [codebases, setCodebases] = useState<Codebase[]>([])
+  const { data: codebases, loading, error, refetch } = useCodebases()
+  const { mutate: createCodebase } = useCreateCodebase()
+  const { mutate: updateCodebase, loading: updateLoading } = useUpdateCodebase()
+  const { mutate: deleteCodebase } = useDeleteCodebase()
+  
   const [selectedCodebase, setSelectedCodebase] = useState<Codebase | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   
   const [editForm, setEditForm] = useState({
@@ -27,9 +36,12 @@ export default function Codebases() {
   const [editedArchitectureContent, setEditedArchitectureContent] = useState('')
   const [originalContentHash, setOriginalContentHash] = useState<string | null>(null)
 
+  // Set initial selected codebase when data loads
   useEffect(() => {
-    fetchCodebases()
-  }, [])
+    if (codebases && codebases.length > 0 && !selectedCodebase) {
+      setSelectedCodebase(codebases[0])
+    }
+  }, [codebases, selectedCodebase])
 
   useEffect(() => {
     if (selectedCodebase) {
@@ -39,38 +51,16 @@ export default function Codebases() {
     }
   }, [selectedCodebase])
 
-  const fetchCodebases = async () => {
-    try {
-      setLoading(true)
-      const data = await apiClient.getCodebases()
-      setCodebases(data)
-      if (data.length > 0 && !selectedCodebase) {
-        setSelectedCodebase(data[0])
-      }
-      setError(null)
-    } catch (err) {
-      setError('Failed to fetch codebases')
-      console.error('Failed to fetch codebases:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleCreateCodebase = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      setLoading(true)
-      const newCodebase = await apiClient.createCodebase(editForm)
-      setCodebases([...codebases, newCodebase])
+      const newCodebase = await createCodebase(editForm)
       setSelectedCodebase(newCodebase)
       setShowCreateModal(false)
       setEditForm({ name: '', description: '', local_path: '' })
-      setError(null)
+      refetch() // Refresh the list
     } catch (err) {
-      setError('Failed to create codebase')
       console.error('Failed to create codebase:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -79,17 +69,12 @@ export default function Codebases() {
     if (!selectedCodebase) return
     
     try {
-      setLoading(true)
-      const updatedCodebase = await apiClient.updateCodebase(selectedCodebase.id, editForm)
-      setCodebases(codebases.map(cb => cb.id === selectedCodebase.id ? updatedCodebase : cb))
+      const updatedCodebase = await updateCodebase({ id: selectedCodebase.id, codebase: editForm })
       setSelectedCodebase(updatedCodebase)
       setIsEditing(false)
-      setError(null)
+      refetch() // Refresh the list
     } catch (err) {
-      setError('Failed to update codebase')
       console.error('Failed to update codebase:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -99,18 +84,12 @@ export default function Codebases() {
     }
     
     try {
-      setLoading(true)
-      await apiClient.deleteCodebase(codebase.id)
-      const newCodebases = codebases.filter(cb => cb.id !== codebase.id)
-      setCodebases(newCodebases)
-      setSelectedCodebase(newCodebases[0] || null)
+      await deleteCodebase(codebase.id)
+      setSelectedCodebase(null)
       setIsEditing(false)
-      setError(null)
+      refetch() // Refresh the list
     } catch (err) {
-      setError('Failed to delete codebase')
       console.error('Failed to delete codebase:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -215,14 +194,14 @@ export default function Codebases() {
         console.error('Failed to save architecture:', err)
       }
     } finally {
-      setLoading(false)
+      // Loading state is handled by the architecture-specific state
     }
   }
 
-  if (loading && codebases.length === 0) {
+  if (loading && (!codebases || codebases.length === 0)) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className={`${layouts.flexCenter} h-64`}>
+        <div className={loadingSpinner}></div>
       </div>
     )
   }
@@ -230,38 +209,31 @@ export default function Codebases() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className={`${layouts.flexBetween} mb-8`}>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Codebases</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <h1 className={`text-3xl font-bold ${textColors.primary}`}>Codebases</h1>
+          <p className={`${textColors.secondary} mt-2`}>
             Manage your local code repositories and development environments
           </p>
         </div>
-        <button
-          onClick={handleStartCreate}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
+        <Button onClick={handleStartCreate}>
           <PlusIcon className="w-4 h-4 mr-2" />
           New Codebase
-        </button>
+        </Button>
       </div>
 
-      {error && (
-        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        </div>
-      )}
+      <ErrorMessage error={error} className="mb-6" />
 
       {/* Codebase Selection Dropdown */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className={`block text-sm font-medium ${textColors.primary} mb-2`}>
           Select Codebase
         </label>
-        {codebases.length === 0 ? (
+        {!codebases || codebases.length === 0 ? (
           <div className="text-center py-8">
             <FolderIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No codebases</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className={`text-lg font-medium ${textColors.primary} mb-2`}>No codebases</h3>
+            <p className={`text-sm ${textColors.secondary} mb-4`}>
               Get started by adding your first codebase
             </p>
           </div>
@@ -270,7 +242,7 @@ export default function Codebases() {
             value={selectedCodebase?.id || ''}
             onChange={(e) => {
               const codebaseId = parseInt(e.target.value)
-              const codebase = codebases.find(cb => cb.id === codebaseId)
+              const codebase = codebases?.find(cb => cb.id === codebaseId)
               setSelectedCodebase(codebase || null)
               setIsEditing(false)
               setIsEditingArchitecture(false)
@@ -278,7 +250,7 @@ export default function Codebases() {
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
           >
             <option value="" className="text-gray-900 dark:text-white">Choose a codebase...</option>
-            {codebases.map((codebase) => (
+            {codebases?.map((codebase) => (
               <option key={codebase.id} value={codebase.id} className="text-gray-900 dark:text-white">
                 {codebase.name} - {codebase.local_path}
               </option>
@@ -290,33 +262,27 @@ export default function Codebases() {
       {/* Codebase Details */}
       <div className="w-full">
           {selectedCodebase ? (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <Card padding="none">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    <h3 className={`text-lg font-medium ${textColors.primary}`}>
                       {isEditing ? 'Edit Codebase' : selectedCodebase.name}
                     </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <p className={`text-sm ${textColors.secondary} mt-1`}>
                       {isEditing ? 'Update codebase details' : selectedCodebase.local_path}
                     </p>
                   </div>
                   {!isEditing && (
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={handleStartEdit}
-                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
+                      <Button variant="secondary" size="sm" onClick={handleStartEdit}>
                         <PencilIcon className="w-4 h-4 mr-1" />
                         Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCodebase(selectedCodebase)}
-                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-gray-700 border border-red-300 dark:border-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                      >
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteCodebase(selectedCodebase)} className="text-red-600 border-red-300 hover:bg-red-50">
                         <TrashIcon className="w-4 h-4 mr-1" />
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -326,76 +292,66 @@ export default function Codebases() {
                 {isEditing ? (
                   <form onSubmit={handleUpdateCodebase} className="space-y-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className={`block text-sm font-medium ${textColors.primary} mb-2`}>
                         Name *
                       </label>
-                      <input
+                      <Input
                         type="text"
                         required
                         value={editForm.name}
                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className={`block text-sm font-medium ${textColors.primary} mb-2`}>
                         Description *
                       </label>
-                      <textarea
+                      <Textarea
                         required
                         value={editForm.description}
                         onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                         rows={6}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white font-mono text-sm"
+                        className="font-mono text-sm"
                         placeholder="Enter description in Markdown format..."
                       />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className={`text-xs ${textColors.muted} mt-1`}>
                         You can use Markdown formatting
                       </p>
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className={`block text-sm font-medium ${textColors.primary} mb-2`}>
                         Local Path *
                       </label>
-                      <input
+                      <Input
                         type="text"
                         required
                         value={editForm.local_path}
                         onChange={(e) => setEditForm({ ...editForm, local_path: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                       />
                     </div>
                     
                     <div className="flex justify-end space-x-3">
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
+                      <Button variant="secondary" type="button" onClick={handleCancelEdit}>
                         Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                      >
-                        {loading ? 'Saving...' : 'Save Changes'}
-                      </button>
+                      </Button>
+                      <Button type="submit" disabled={updateLoading}>
+                        {updateLoading ? 'Saving...' : 'Save Changes'}
+                      </Button>
                     </div>
                   </form>
                 ) : (
                   <div className="space-y-6">
                     <div>
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Description</h4>
+                      <h4 className={`text-sm font-medium ${textColors.primary} mb-3`}>Description</h4>
                       <div className="prose prose-sm dark:prose-invert max-w-none text-left">
                         <ReactMarkdown>{selectedCodebase.description}</ReactMarkdown>
                       </div>
                     </div>
                     
                     <div>
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Local Path</h4>
+                      <h4 className={`text-sm font-medium ${textColors.primary} mb-3`}>Local Path</h4>
                       <code className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md text-sm block">
                         {selectedCodebase.local_path}
                       </code>
@@ -403,7 +359,7 @@ export default function Codebases() {
                     
                     {selectedCodebase.repository_url && (
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Repository URL</h4>
+                        <h4 className={`text-sm font-medium ${textColors.primary} mb-3`}>Repository URL</h4>
                         <a
                           href={selectedCodebase.repository_url}
                           target="_blank"
@@ -418,7 +374,7 @@ export default function Codebases() {
                     {/* Architecture Documentation Section */}
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">Architecture Documentation</h4>
+                        <h4 className={`text-sm font-medium ${textColors.primary}`}>Architecture Documentation</h4>
                         <div className="flex items-center space-x-2">
                           {architectureDocument?.content && !isEditingArchitecture && (
                             <button
@@ -555,17 +511,17 @@ export default function Codebases() {
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+            <Card className="p-8 text-center">
               <FolderIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+              <h3 className={`mt-4 text-lg font-medium ${textColors.primary}`}>
                 Select a codebase
               </h3>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              <p className={`mt-2 text-sm ${textColors.secondary}`}>
                 Choose a codebase from the list to view its details
               </p>
-            </div>
+            </Card>
           )}
       </div>
 

@@ -223,7 +223,7 @@ export const handlers = [
 
   http.get('*/api/settings/agents/:agentType/model', () => {
     return HttpResponse.json({
-      model_id: 'openai/gpt-4'
+      model_id: 'openai:gpt-4'
     })
   }),
 ]

@@ -12,9 +12,9 @@ from devboard.config.integration_configs import (
     JiraIntegrationConfig,
     SlackIntegrationConfig,
 )
-from devboard.config.llm_config import (
+from devboard.config.llm_providers import (
     AnthropicProviderConfig,
-    GeminiProviderConfig,
+    GoogleProviderConfig,
     OpenAIProviderConfig,
 )
 from devboard.core.registry import Registry
@@ -29,7 +29,7 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
         # LLM provider configurations
         OpenAIProviderConfig,
         AnthropicProviderConfig,
-        GeminiProviderConfig,
+        GoogleProviderConfig,
         # Agent configurations
         ProjectAgentConfig,
         PlanningAgentConfig,

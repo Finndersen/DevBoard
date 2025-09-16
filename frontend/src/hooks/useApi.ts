@@ -1,0 +1,80 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+
+export interface ApiState<T> {
+  data: T | null
+  loading: boolean
+  error: string | null
+}
+
+export interface UseApiOptions {
+  immediate?: boolean
+}
+
+export function useApi<T>(
+  apiCall: () => Promise<T>,
+  options: UseApiOptions = {}
+): ApiState<T> & { refetch: () => Promise<void> } {
+  const { immediate = true } = options
+  
+  // Store the apiCall in a ref to avoid dependency issues
+  const apiCallRef = useRef(apiCall)
+  apiCallRef.current = apiCall
+  
+  const [state, setState] = useState<ApiState<T>>({
+    data: null,
+    loading: immediate,
+    error: null
+  })
+
+  const execute = useCallback(async () => {
+    setState(prev => ({ ...prev, loading: true, error: null }))
+    
+    try {
+      const data = await apiCallRef.current()
+      setState({ data, loading: false, error: null })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+      setState({ data: null, loading: false, error: errorMessage })
+    }
+  }, []) // Remove apiCall from dependencies
+
+  useEffect(() => {
+    if (immediate) {
+      execute()
+    }
+  }, [immediate, execute])
+
+  return {
+    ...state,
+    refetch: execute
+  }
+}
+
+export function useMutation<T, TArgs extends unknown[]>(
+  mutationFn: (...args: TArgs) => Promise<T>
+): {
+  mutate: (...args: TArgs) => Promise<T>
+  loading: boolean
+  error: string | null
+} {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const mutate = useCallback(async (...args: TArgs): Promise<T> => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const result = await mutationFn(...args)
+      setLoading(false)
+      return result
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
+      setError(errorMessage)
+      setLoading(false)
+      throw err
+    }
+  }, [mutationFn])
+
+  return { mutate, loading, error }
+}
