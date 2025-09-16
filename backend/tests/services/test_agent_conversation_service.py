@@ -58,7 +58,6 @@ class MockMessageRepository(BaseConversationMessageRepository):
 
     def delete_tool_approval_messages(self, entity_id: int) -> int:
         """Delete tool approval messages and return count of deleted messages."""
-        initial_count = len(self.messages)
         # Filter out the last message if it's a tool call for this entity
         entity_messages = [msg for msg in self.messages if msg.parent_id == entity_id]
         if entity_messages and entity_messages[-1].message_type == MessageType.TOOL_CALL:
@@ -190,7 +189,7 @@ class TestAgentConversationService:
             "kind": "request",
             "parts": [{"part_kind": "user-prompt", "content": "Edit this document"}],
         }
-        
+
         tool_call_message = MockConversationMessage()
         tool_call_message.parent_id = 1
         tool_call_message.message_type = MessageType.TOOL_CALL
@@ -198,10 +197,10 @@ class TestAgentConversationService:
             "kind": "response",
             "parts": [{"part_kind": "tool-call", "tool_name": "edit_document", "tool_call_id": "tool_123"}],
         }
-        
+
         mock_message_repo.create(user_message)
         mock_message_repo.create(tool_call_message)
-        
+
         # Set up approvals
         approvals = {
             "tool_123": ToolApprovalDecision(approved=True),

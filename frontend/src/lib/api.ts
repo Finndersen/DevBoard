@@ -16,7 +16,7 @@ export interface Task {
   conversation_id: string | null
   created_at: string
   specification: DocumentResponse
-  implementation_plan: DocumentResponse | null
+  implementation_plan: DocumentResponse
 }
 
 export interface DocumentEdit {
@@ -54,9 +54,10 @@ export interface ConversationMessageResponse {
 export interface PendingApproval {
   tool_call_id: string
   tool_name: string
-  reasoning?: string
-  diff_preview?: string
-  edits?: Array<{ find: string; replace: string }>
+  document_type?: string | null
+  reasoning?: string | null
+  diff_preview?: string | null
+  edits?: Array<{ find: string; replace: string }> | null
 }
 
 export interface MessageRequest {

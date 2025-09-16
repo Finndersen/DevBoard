@@ -3,6 +3,8 @@ import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest, PendingApproval, DocumentEdit } from '../lib/api'
 import PendingApprovalsList from './PendingApprovalsList'
+import { useApprovals, createProjectApprovalKey } from '../contexts/ApprovalsContext'
+import { standardChatInputClasses } from '../styles/inputStyles'
 
 interface ChatProps {
   projectId: number
@@ -12,8 +14,17 @@ export default function Chat({ projectId }: ChatProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  const { getApprovals, setApprovals, clearApprovals } = useApprovals()
+  const approvalKey = createProjectApprovalKey(projectId)
+  const pendingApprovals = getApprovals(approvalKey)
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('Chat: approvalKey:', approvalKey)
+    console.log('Chat: pendingApprovals:', pendingApprovals)
+  }, [approvalKey, pendingApprovals])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -60,11 +71,12 @@ export default function Chat({ projectId }: ChatProps) {
       if (response.type === 'message' && response.message) {
         // Agent provided a direct response
         setMessages(prev => [...prev, response.message!])
-        setPendingApprovals([]) // Clear any existing approvals
+        // Note: Don't clear approvals here - only clear when explicitly processed
       } else if (response.type === 'tool_request' && response.tool_requests) {
         // Agent wants to use tools - convert to PendingApproval format
         const approvals = await convertToolRequestsToApprovals(response.tool_requests)
-        setPendingApprovals(approvals)
+        console.log('Chat: Setting approvals:', approvals)
+        setApprovals(approvalKey, approvals)
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -117,7 +129,7 @@ export default function Chat({ projectId }: ChatProps) {
       const response = await apiClient.approveProjectAgentTools(projectId, approvalRequest)
 
       // Clear pending approvals first
-      setPendingApprovals([])
+      clearApprovals(approvalKey)
 
       if (response.type === 'message' && response.message) {
         // Agent provided response after tool execution
@@ -125,7 +137,7 @@ export default function Chat({ projectId }: ChatProps) {
       } else if (response.type === 'tool_request' && response.tool_requests) {
         // Agent wants to use more tools
         const newApprovals = await convertToolRequestsToApprovals(response.tool_requests)
-        setPendingApprovals(newApprovals)
+        setApprovals(approvalKey, newApprovals)
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
@@ -136,7 +148,7 @@ export default function Chat({ projectId }: ChatProps) {
         timestamp: new Date().toISOString()
       }
       setMessages(prev => [...prev, errorMessage])
-      setPendingApprovals([]) // Clear approvals on error
+      clearApprovals(approvalKey) // Clear approvals on error
     } finally {
       setLoading(false)
     }
@@ -210,7 +222,7 @@ export default function Chat({ projectId }: ChatProps) {
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Ask a question about this project..."
             disabled={loading || pendingApprovals.length > 0}
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex-1 ${standardChatInputClasses}`}
           />
           <button
             type="submit"

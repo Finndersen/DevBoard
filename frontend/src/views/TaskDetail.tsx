@@ -27,8 +27,8 @@ export default function TaskDetail() {
     try {
       const data = await apiClient.getTask(id!)
       setTask(data)
-      setEditedDescription(data.specification?.content || '')
-      setEditedPlan(data.implementation_plan?.content || '')
+      setEditedDescription(data.specification.content || '')
+      setEditedPlan(data.implementation_plan.content || '')
       setEditedTitle(data.title || '')
       // Fetch project details
       fetchProject(data.project_id)
@@ -69,16 +69,9 @@ export default function TaskDetail() {
       await apiClient.updateTask(id!, { implementation_plan: editedPlan })
       setTask(prev => prev ? { 
         ...prev, 
-        implementation_plan: prev.implementation_plan ? {
+        implementation_plan: {
           ...prev.implementation_plan, 
           content: editedPlan 
-        } : {
-          id: 0,
-          document_type: 'task_implementation_plan',
-          content: editedPlan,
-          content_hash: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
         }
       } : null)
       setIsEditingPlan(false)
@@ -88,12 +81,12 @@ export default function TaskDetail() {
   }
 
   const handleCancelSpecEdit = () => {
-    setEditedDescription(task?.specification?.content || '')
+    setEditedDescription(task?.specification.content || '')
     setIsEditingSpec(false)
   }
 
   const handleCancelPlanEdit = () => {
-    setEditedPlan(task?.implementation_plan?.content || '')
+    setEditedPlan(task?.implementation_plan.content || '')
     setIsEditingPlan(false)
   }
 
@@ -222,17 +215,17 @@ export default function TaskDetail() {
             {project ? project.name : 'Projects'}
           </Link>
           <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-between h-8">
+              <div className="flex items-center space-x-3 h-full">
                 {isEditingTitle ? (
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3 h-full">
                     <input
                       type="text"
                       value={editedTitle}
                       onChange={(e) => setEditedTitle(e.target.value)}
-                      className="text-xl font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-white shadow-sm transition-all duration-200 min-w-0 max-w-full"
+                      className="text-xl font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-white shadow-sm transition-all duration-200 min-w-0 max-w-full h-8"
                       style={{
-                        width: `${Math.max(20, editedTitle.length * 0.65 + 4)}ch`
+                        width: `${Math.max(25, editedTitle.length * 1.1 + 8)}ch`
                       }}
                       autoFocus
                       onKeyDown={(e) => {
@@ -240,17 +233,17 @@ export default function TaskDetail() {
                         if (e.key === 'Escape') handleCancelTitleEdit()
                       }}
                     />
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1 h-full">
                       <button
                         onClick={handleSaveTitle}
-                        className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-md transition-all duration-200"
+                        className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-md transition-all duration-200 h-6 w-6 flex items-center justify-center"
                         title="Save (Enter)"
                       >
                         <CheckIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={handleCancelTitleEdit}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-all duration-200"
+                        className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700 rounded-md transition-all duration-200 h-6 w-6 flex items-center justify-center"
                         title="Cancel (Escape)"
                       >
                         <XMarkIcon className="w-4 h-4" />
@@ -258,11 +251,11 @@ export default function TaskDetail() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2 group">
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{task.title}</h1>
+                  <div className="flex items-center space-x-2 group h-full">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{task.title}</h1>
                     <button
                       onClick={() => setIsEditingTitle(true)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-400 dark:hover:bg-gray-700 rounded-md transition-all duration-200"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-400 dark:hover:bg-gray-700 rounded-md transition-all duration-200 h-6 w-6 flex items-center justify-center"
                       title="Edit title"
                     >
                       <PencilIcon className="w-4 h-4" />
@@ -354,7 +347,7 @@ export default function TaskDetail() {
               />
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                {task.specification?.content ? (
+                {task.specification.content ? (
                   <ReactMarkdown>{task.specification.content}</ReactMarkdown>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 italic">No task specification provided. Click Edit to add specification.</p>
@@ -406,7 +399,7 @@ export default function TaskDetail() {
               />
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                {task.implementation_plan?.content ? (
+                {task.implementation_plan.content ? (
                   <ReactMarkdown>{task.implementation_plan.content}</ReactMarkdown>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 italic">No implementation plan provided. Click Edit to add plan.</p>

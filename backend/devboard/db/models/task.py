@@ -42,7 +42,7 @@ class Task(Base):
 
     # Document relationships
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
-    implementation_plan_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    implementation_plan_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
@@ -58,7 +58,7 @@ class Task(Base):
         foreign_keys=[specification_id],
         lazy="joined",  # Always eager load
     )
-    implementation_plan: Mapped["Document | None"] = relationship(
+    implementation_plan: Mapped["Document"] = relationship(
         foreign_keys=[implementation_plan_id],
         lazy="joined",  # Always eager load
     )

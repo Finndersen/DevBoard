@@ -83,7 +83,11 @@ class ProjectAgent(BaseAgent[BaseDeps]):
         # )
 
         context_message = f"""
-        PROJECT SPECIFICATION DOCUMENT:
+        # LIVE DOCUMENTS
+
+        These documents are available for editing and represent the current live state of the document (may be dynamically updated during the conversation).
+
+        ## PROJECT SPECIFICATION DOCUMENT:
         ```markdown
         {self.project.specification.content}
         ```

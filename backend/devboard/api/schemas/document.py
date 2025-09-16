@@ -1,8 +1,9 @@
 """Document Pydantic schemas."""
 
 import datetime
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentBase(BaseModel):
@@ -39,5 +40,10 @@ class DocumentUpdate(BaseModel):
 class DocumentEdit(BaseModel):
     """Schema for a single document edit."""
 
-    find: str
-    replace: str
+    find: Annotated[
+        str,
+        Field(
+            description="Text to find in the document to replace with new text. Use the MINIMUM necessary text to uniquely identify the location to replace.",
+        ),
+    ]
+    replace: Annotated[str, Field(description="New text to replace the found text with.")]

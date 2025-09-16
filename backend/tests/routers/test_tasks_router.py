@@ -454,42 +454,53 @@ class TestTaskPlanningAgentEndpoints:
         task = test_task_with_project
 
         # First, send a message that would trigger a tool call to create conversation history
-        from pydantic_ai.tools import DeferredToolRequests
         from unittest.mock import Mock
+
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+        from pydantic_ai.tools import DeferredToolRequests
 
         # Mock the agent to return a tool request first, then tool approval result
         def mock_run_side_effect(*args, **kwargs):
             prompt_or_approvals = kwargs.get("prompt_or_approvals")
             if isinstance(prompt_or_approvals, str):
                 # First call - return tool request
-                tool_request = Mock()
-                tool_request.tool_call_id = "test_call_1"
-                tool_request.tool_name = "edit_document"
-                tool_request.args = {"edits": [{"find": "old", "replace": "new"}]}
-                
+                tool_call_part = ToolCallPart(
+                    tool_name="edit_document",
+                    tool_call_id="test_call_1",
+                    args={"edits": [{"find": "old", "replace": "new"}]},
+                )
+
                 mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = DeferredToolRequests(approvals=[tool_request])
-                mock_result.new_messages = Mock(return_value=[
-                    ModelRequest(parts=[UserPromptPart(content="Edit the specification")]),
-                    ModelResponse(parts=[ToolCallPart(tool_name="edit_document", tool_call_id="test_call_1", args={"edits": [{"find": "old", "replace": "new"}]})])
-                ])
+                mock_result.output = DeferredToolRequests(approvals=[tool_call_part])
+                mock_result.new_messages = Mock(
+                    return_value=[
+                        ModelRequest(parts=[UserPromptPart(content="Edit the specification")]),
+                        ModelResponse(parts=[tool_call_part]),
+                    ]
+                )
                 return mock_result
             else:
                 # Second call - return approval result
                 mock_result = Mock(spec=AgentRunResult)
                 mock_result.output = "Great! I've processed your tool approvals and made the requested edits."
-                mock_result.new_messages = Mock(return_value=[
-                    ModelResponse(parts=[TextPart(content="Great! I've processed your tool approvals and made the requested edits.")])
-                ])
+                mock_result.new_messages = Mock(
+                    return_value=[
+                        ModelResponse(
+                            parts=[
+                                TextPart(
+                                    content="Great! I've processed your tool approvals and made the requested edits."
+                                )
+                            ]
+                        )
+                    ]
+                )
                 return mock_result
-        
+
         mock_task_agent.run.side_effect = mock_run_side_effect
 
         # Step 1: Send a message that triggers a tool call
         message_request = {"message": "Please update the task specification with better requirements"}
-        response1 = client_with_mock_task_agent.post(
-            f"/api/tasks/{task.id}/agent/messages", json=message_request
-        )
+        response1 = client_with_mock_task_agent.post(f"/api/tasks/{task.id}/agent/messages", json=message_request)
         assert response1.status_code == 200
         assert response1.json()["type"] == "tool_request"
 
@@ -510,7 +521,7 @@ class TestTaskPlanningAgentEndpoints:
 
         # Verify the mock agent was called twice (message + approval)
         assert mock_task_agent.run.call_count == 2
-        
+
         # Check the second call was with tool approvals
         second_call_kwargs = mock_task_agent.run.call_args_list[1][1]
         assert not isinstance(second_call_kwargs["prompt_or_approvals"], str)

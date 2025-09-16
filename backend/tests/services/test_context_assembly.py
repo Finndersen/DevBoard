@@ -207,19 +207,9 @@ class TestContextAssemblyService:
         )
 
     @pytest.fixture
-    def mock_project_repo(self):
-        """Mock project repository."""
-        return Mock(spec=ProjectRepository)
-
-    @pytest.fixture
     def mock_task_repo(self):
         """Mock task repository."""
         return Mock(spec=TaskRepository)
-
-    @pytest.fixture
-    def mock_resource_repo(self):
-        """Mock resource repository."""
-        return Mock(spec=ContextProviderResourceRepository)
 
     @pytest.fixture
     def service(self, test_registry, mock_project_repo, mock_task_repo, mock_resource_repo):

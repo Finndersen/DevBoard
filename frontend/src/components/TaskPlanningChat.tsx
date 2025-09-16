@@ -6,6 +6,8 @@ import type {
   ToolApprovalRequest,
   ToolApprovalDecision
 } from '../lib/api'
+import { useApprovals, createTaskApprovalKey } from '../contexts/ApprovalsContext'
+import { standardChatInputClasses, standardFeedbackTextareaClasses } from '../styles/inputStyles'
 
 interface TaskPlanningChatProps {
   taskId: number
@@ -15,9 +17,18 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
   const [approvalFeedback, setApprovalFeedback] = useState<Record<string, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  const { getApprovals, setApprovals, clearApprovals } = useApprovals()
+  const approvalKey = createTaskApprovalKey(taskId)
+  const pendingApprovals = getApprovals(approvalKey)
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('TaskPlanningChat: approvalKey:', approvalKey)
+    console.log('TaskPlanningChat: pendingApprovals:', pendingApprovals)
+  }, [approvalKey, pendingApprovals])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -59,7 +70,7 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
           text_content: response.message.text_content,
           created_at: response.message.timestamp
         }])
-        setPendingApprovals([])
+        // Note: Don't clear approvals here - only clear when explicitly processed
       } else if (response.type === 'tool_request' && response.tool_requests) {
         // Convert tool_requests to pending approvals format
         const approvals = response.tool_requests.map(req => ({
@@ -69,7 +80,8 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
           diff_preview: req.tool_args?.diff_preview || '',
           edits: req.tool_args?.edits || []
         }))
-        setPendingApprovals(approvals)
+        console.log('TaskPlanningChat: Setting approvals:', approvals)
+        setApprovals(approvalKey, approvals)
       }
       
       // Clear approval feedback
@@ -113,7 +125,7 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
       }
       
       // Clear pending approvals (should be empty after approval)
-      setPendingApprovals([])
+      clearApprovals(approvalKey)
       setApprovalFeedback({})
       
     } catch (error) {
@@ -228,7 +240,7 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
               <textarea
                 value={approvalFeedback[approval.tool_call_id] || ''}
                 onChange={(e) => updateApprovalFeedback(approval.tool_call_id, e.target.value)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className={`w-full ${standardFeedbackTextareaClasses}`}
                 rows={2}
                 placeholder="Provide feedback or reasons for your decision..."
               />
@@ -260,7 +272,7 @@ export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Ask me to help with task specification or implementation planning..."
             disabled={loading || pendingApprovals.length > 0}
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex-1 ${standardChatInputClasses}`}
           />
           <button
             type="submit"

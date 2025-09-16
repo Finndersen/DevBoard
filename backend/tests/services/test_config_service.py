@@ -192,7 +192,7 @@ class TestConfigService:
             "max_retries": 5,
         }
 
-        result = service.update_configuration("test.simple", config_data)
+        service.update_configuration("test.simple", config_data)
 
         # Verify create was called with correct data
         mock_config_repository.create.assert_called_once()

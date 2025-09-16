@@ -90,7 +90,9 @@ class TestSettingsRouter:
         db_session.commit()
 
         # Mock external API failure
-        mock_github_test.side_effect = Exception("API connection failed")
+        from devboard.integrations.base import ConnectionError
+
+        mock_github_test.side_effect = ConnectionError("API connection failed")
 
         response = client.post("/api/settings/integrations/github/test")
 
@@ -152,15 +154,9 @@ class TestSettingsRouter:
         assert response.status_code == 200
         data = response.json()
 
-        # Should return structure for all agent types even without config
-        assert "qa" in data or "planning" in data or "implementation" in data
-
-        # Each agent type should have available_models list
-        for agent_data in data.values():
-            if agent_data:  # Skip None values
-                assert "available_models" in agent_data
-                assert "total_available" in agent_data
-                assert isinstance(agent_data["available_models"], list)
+        # Should return aggregated models for all agent types
+        assert data["agent_type"] == "all"
+        assert "available_models" in data
 
     def test_get_available_models_with_openai_config(self, client, db_session, openai_config_data):
         """Test getting available models with OpenAI configuration."""
@@ -180,25 +176,24 @@ class TestSettingsRouter:
         data = response.json()
 
         # Should include OpenAI models in the available models
-        for agent_data in data.values():
-            if agent_data and agent_data.get("available_models"):
-                # Should have some models available
-                assert len(agent_data["available_models"]) > 0
+        assert "available_models" in data
+        # Should have some models available
+        assert len(data["available_models"]) > 0
 
-                # Check that models have required fields
-                for model in agent_data["available_models"]:
-                    assert "id" in model
-                    assert "provider" in model
-                    assert "name" in model
+        # Check that models have required fields
+        for model in data["available_models"]:
+            assert "id" in model
+            assert "provider" in model
+            assert "name" in model
 
     def test_get_available_models_specific_agent_type(self, client):
         """Test getting available models for specific agent type."""
-        response = client.get("/api/settings/agents/available-models?agent_type=planning")
+        response = client.get("/api/settings/agents/available-models?agent_type=task_planning")
 
         assert response.status_code == 200
         data = response.json()
 
-        assert data["agent_type"] == "planning"
+        assert data["agent_type"] == "task_planning"
         assert "available_models" in data
         assert "preferred_model" in data
         assert "total_available" in data
@@ -213,8 +208,8 @@ class TestSettingsRouter:
         assert "Unknown agent type" in data["detail"]
         assert "invalid" in data["detail"]
 
-        # Should list valid API agent types (API-friendly names)
-        expected_valid_types = ["qa", "planning", "implementation"]
+        # Should list valid API agent types (internal names)
+        expected_valid_types = ["project", "task_planning", "task_implementation"]
         for agent_type in expected_valid_types:
             assert agent_type in data["detail"]
 
@@ -225,17 +220,13 @@ class TestSettingsRouter:
         assert response.status_code == 200
         data = response.json()
 
-        # Should have some agent types in the response
-        agent_types_in_response = [key for key, value in data.items() if value is not None]
-        assert len(agent_types_in_response) > 0
-
-        # Each non-null entry should have the expected structure
-        for agent_type, agent_data in data.items():
-            if agent_data is not None:
-                assert "available_models" in agent_data
-                assert "total_available" in agent_data
-                assert isinstance(agent_data["available_models"], list)
-                assert isinstance(agent_data["total_available"], int)
+        # Should return aggregated response for all agent types
+        assert data["agent_type"] == "all"
+        assert "available_models" in data
+        assert "total_available" in data
+        assert isinstance(data["available_models"], list)
+        assert isinstance(data["total_available"], int)
+        assert len(data["available_models"]) > 0
 
     def test_end_to_end_integration_workflow(self, client, db_session):
         """Test complete integration setup and testing workflow."""

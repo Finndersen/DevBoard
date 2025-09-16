@@ -1,7 +1,5 @@
 """Settings API endpoints."""
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.llm_service import LLMService
@@ -37,7 +35,7 @@ async def test_integration_connection(
 
 @router.get("/agents/available-models", response_model=AvailableModelsResponse)
 async def get_available_models(
-    agent_type: Optional[str] = None,
+    agent_type: str | None = None,
     llm_service: LLMService = Depends(get_llm_service),
 ) -> AvailableModelsResponse:
     """Get available models for agents.
@@ -59,15 +57,16 @@ async def get_available_models(
                 status_code=400,
                 detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
             ) from None
-        
+
         # Get models for specific agent type
         available_models = llm_service.get_available_models()
         preferred_model = llm_service.get_preferred_model_for_agent(agent_enum)
-        
+
         # Import model hierarchies to include in response
         from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES
+
         model_hierarchy = AGENT_MODEL_HIERARCHIES.get(agent_enum, [])
-        
+
         return AvailableModelsResponse(
             agent_type=agent_type,
             available_models=available_models,
@@ -78,11 +77,11 @@ async def get_available_models(
     else:
         # Return models for all agent types (defaulting to first agent type for response format)
         available_models = llm_service.get_available_models()
-        
+
         # Get model data for all agent types
         agent_models = {}
         from devboard.config.llm_config import AGENT_MODEL_HIERARCHIES
-        
+
         for agent_enum in AgentType:
             preferred = llm_service.get_preferred_model_for_agent(agent_enum)
             hierarchy = AGENT_MODEL_HIERARCHIES.get(agent_enum, [])
@@ -90,7 +89,7 @@ async def get_available_models(
                 "preferred_model": preferred,
                 "model_hierarchy": hierarchy,
             }
-        
+
         # Use a default agent type for the response structure
         default_agent = AgentType.PROJECT
         return AvailableModelsResponse(

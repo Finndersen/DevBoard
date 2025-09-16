@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { useDarkMode } from '../contexts/DarkModeContext'
+import ApprovalNotifications from './ApprovalNotifications'
 
 interface LayoutProps {
   children: ReactNode
@@ -83,6 +84,7 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Main Content */}
       <main className="w-full py-6 px-4 sm:px-6 lg:px-8">
+        <ApprovalNotifications />
         {children}
       </main>
     </div>

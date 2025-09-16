@@ -2,7 +2,6 @@
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Generic, TypeVar
 
 from pydantic_ai import Agent, Tool
 from pydantic_ai.messages import (
@@ -34,10 +33,8 @@ from devboard.services.context_assembly import (
 
 logger = logging.getLogger(__name__)
 
-TDeps = TypeVar("TDeps", bound=BaseDeps)
 
-
-class BaseAgent(Generic[TDeps], metaclass=ABCMeta):
+class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
     """Base class for all document-editing agents using PydanticAI."""
 
     agent_type: AgentType

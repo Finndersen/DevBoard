@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ExclamationTriangleIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import DocumentEditApproval from './DocumentEditApproval'
 import type { PendingApproval, ToolApprovalDecision, ToolApprovalRequest } from '../lib/api'
+import { standardFeedbackTextareaClasses } from '../styles/inputStyles'
 
 interface PendingApprovalsListProps {
   approvals: PendingApproval[]
@@ -116,7 +117,7 @@ export default function PendingApprovalsList({
             value={globalFeedback}
             onChange={(e) => setGlobalFeedback(e.target.value)}
             disabled={loading}
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white disabled:opacity-50"
+            className={`w-full ${standardFeedbackTextareaClasses}`}
             rows={2}
             placeholder="Optional feedback that will apply to all tools..."
           />

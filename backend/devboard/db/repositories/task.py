@@ -63,33 +63,24 @@ class TaskRepository(BaseRepository[Task]):
         # Create required specification document
         specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, "")
 
+        # Create implementation plan document (always created upfront)
+        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+
         # Create task with document references
-        task = Task(project_id=project_id, title=title, specification_id=specification_doc.id, **kwargs)
+        task = Task(
+            project_id=project_id,
+            title=title,
+            specification_id=specification_doc.id,
+            implementation_plan_id=implementation_plan_doc.id,
+            **kwargs,
+        )
 
         self.db.add(task)
         self.db.flush()  # Get the ID without committing
         return task
 
-    def create_implementation_plan(self, task: Task) -> Task:
-        """Create implementation plan document for a task if it doesn't exist.
-
-        Args:
-            task: Task instance to add implementation plan to
-
-        Returns:
-            Updated task with implementation plan
-        """
-        if task.implementation_plan_id is None:
-            implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-            task.implementation_plan_id = implementation_plan_doc.id
-            self.db.flush()
-        return task
-
     def set_task_implementation_plan(self, task: Task, content: str) -> Task:
-        """Create or update implementation plan document for a task.
-
-        This method handles both creating a new implementation plan document
-        if it doesn't exist and updating the content.
+        """Update implementation plan document content for a task.
 
         Args:
             task: Task instance to set implementation plan for
@@ -98,16 +89,8 @@ class TaskRepository(BaseRepository[Task]):
         Returns:
             Updated task with implementation plan
         """
-        # Create implementation plan document if it doesn't exist
-        if task.implementation_plan_id is None:
-            implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, content)
-            task.implementation_plan_id = implementation_plan_doc.id
-            self.db.flush()
-            self.db.refresh(task)  # Refresh to load the new relationship
-        else:
-            # Update existing implementation plan content
-            self.document_repo.update_content(task.implementation_plan, content)
-        
+        # Update implementation plan content (document always exists)
+        self.document_repo.update_content(task.implementation_plan, content)
         return task
 
     def update(self, task: Task) -> Task:
@@ -145,9 +128,6 @@ class TaskRepository(BaseRepository[Task]):
         Returns:
             Updated task
         """
-        if task.implementation_plan is None:
-            self.create_implementation_plan(task)
-
         self.document_repo.update_content(task.implementation_plan, content)
         return task
 

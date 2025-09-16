@@ -1,12 +1,15 @@
 import React, { type ReactElement } from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { ApprovalsProvider } from '../contexts/ApprovalsContext'
 
 // Custom render function with providers
 const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
   return (
     <BrowserRouter>
-      {children}
+      <ApprovalsProvider>
+        {children}
+      </ApprovalsProvider>
     </BrowserRouter>
   )
 }

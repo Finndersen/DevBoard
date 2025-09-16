@@ -18,8 +18,13 @@ We are working to develop an application as described in @PROJECT_SPECIFICATION.
 - Use newer SQLAlchemy 2.0 style (e.g. use `select()` instead of `session.query()`)
 
 
+## Testing
+- Consider the available fixtures in `backend/devboard/tests/conftest.py` when writing tests
+
 
 # Frontend Development Guidelines
 
 - Types must be imported using type-only imports (e.g. `import type { XYZ } from '...'`)
 - use `npm run test *` to run tests, DO NOT use `timeout XXX npm run test *` 
+
+@ARCHITECTURE.md

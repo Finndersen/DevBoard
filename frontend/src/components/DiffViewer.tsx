@@ -1,17 +1,27 @@
 import { useState, useEffect } from 'react'
-import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { ChevronUpIcon, ChevronDownIcon, EyeIcon, EyeSlashIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import type { PendingApproval } from '../lib/api'
+import { 
+  generateUnifiedDiff, 
+  createInlineHighlight, 
+  createDocumentComparison,
+  calculateDiffStats,
+  formatDiffStats,
+  highlightUnifiedDiff
+} from '../utils/diffUtils'
+import InlineChangeHighlighter, { ChangeComparison } from './InlineChangeHighlighter'
 
 interface DiffViewerProps {
   approval: PendingApproval
   className?: string
 }
 
-type ViewMode = 'unified' | 'split' | 'edits'
+type ViewMode = 'cards' | 'unified'
 
 export default function DiffViewer({ approval, className = '' }: DiffViewerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('edits')
+  const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const [expandedEdits, setExpandedEdits] = useState<Set<number>>(new Set())
+  const [showWhitespace, setShowWhitespace] = useState(false)
 
   // Keyboard navigation for view mode switching
   useEffect(() => {
@@ -25,16 +35,10 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
         case '1':
           if (event.altKey) {
             event.preventDefault()
-            setViewMode('edits')
+            setViewMode('cards')
           }
           break
         case '2':
-          if (event.altKey) {
-            event.preventDefault()
-            setViewMode('split')
-          }
-          break
-        case '3':
           if (event.altKey) {
             event.preventDefault()
             setViewMode('unified')
@@ -80,29 +84,72 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
   }
 
   const renderUnifiedDiff = () => {
-    if (!approval.diff_preview) {
+    if (!approval.edits || approval.edits.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          No unified diff preview available
+          No edits available to generate unified diff
         </div>
       )
+    }
+
+    const unifiedDiffText = generateUnifiedDiff(approval.edits)
+    const highlightedLines = highlightUnifiedDiff(unifiedDiffText)
+    const stats = calculateDiffStats(approval.edits)
+
+    const copyToClipboard = async () => {
+      try {
+        await navigator.clipboard.writeText(unifiedDiffText)
+      } catch (err) {
+        console.warn('Failed to copy to clipboard:', err)
+      }
     }
 
     return (
       <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div className="bg-gray-100 dark:bg-gray-700 px-4 py-2 border-b border-gray-200 dark:border-gray-600">
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-            Unified Diff View
-          </span>
+        <div className="bg-gray-100 dark:bg-gray-700 px-4 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+              Unified Diff
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-500">
+              {formatDiffStats(stats)}
+            </span>
+          </div>
+          <button
+            onClick={copyToClipboard}
+            className="text-xs px-2 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+            title="Copy to clipboard"
+          >
+            <DocumentDuplicateIcon className="w-4 h-4" />
+          </button>
         </div>
-        <pre className="text-xs p-4 overflow-x-auto whitespace-pre-wrap font-mono text-gray-800 dark:text-gray-200 max-h-96 overflow-y-auto">
-          {approval.diff_preview}
-        </pre>
+        <div className="p-4 max-h-96 overflow-y-auto font-mono text-xs">
+          {highlightedLines.map((line, index) => (
+            <div key={index} className={`leading-relaxed ${getUnifiedDiffLineStyle(line.type)}`}>
+              {line.line || '\u00A0'} {/* Non-breaking space for empty lines */}
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
-  const renderSplitDiff = () => {
+  const getUnifiedDiffLineStyle = (type: 'header' | 'added' | 'removed' | 'context') => {
+    switch (type) {
+      case 'header':
+        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 font-medium px-2 py-1 my-1 rounded'
+      case 'added':
+        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+      case 'removed':
+        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+      case 'context':
+      default:
+        return 'text-gray-700 dark:text-gray-300'
+    }
+  }
+
+
+  const renderCards = () => {
     if (!approval.edits || approval.edits.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -113,143 +160,31 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
 
     return (
       <div className="space-y-4">
-        {/* Controls */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {approval.edits.length} change{approval.edits.length !== 1 ? 's' : ''}
-          </span>
-          <div className="flex space-x-2">
-            <button
-              onClick={expandAllEdits}
-              className="text-xs px-2 py-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-            >
-              Expand All
-            </button>
-            <button
-              onClick={collapseAllEdits}
-              className="text-xs px-2 py-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-            >
-              Collapse All
-            </button>
-          </div>
-        </div>
-
-        {/* Split View */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Before Column */}
-          <div>
-            <div className="bg-red-50 dark:bg-red-900/20 px-3 py-2 border border-red-200 dark:border-red-800 rounded-t-lg">
-              <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                Before (Remove)
-              </span>
-            </div>
-            <div className="border-l border-r border-b border-red-200 dark:border-red-800 rounded-b-lg bg-red-50/50 dark:bg-red-900/10 max-h-96 overflow-y-auto">
-              {approval.edits.map((edit, index) => (
-                <div key={index} className="border-b border-red-200 dark:border-red-800 last:border-b-0">
-                  <div className="px-3 py-2 bg-red-100 dark:bg-red-900/30 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-                    <span>Change {index + 1}</span>
-                    <button
-                      onClick={() => toggleEditExpansion(index)}
-                      className="hover:bg-red-200 dark:hover:bg-red-800 p-1 rounded"
-                    >
-                      {expandedEdits.has(index) ? (
-                        <ChevronUpIcon className="w-3 h-3" />
-                      ) : (
-                        <ChevronDownIcon className="w-3 h-3" />
-                      )}
-                    </button>
-                  </div>
-                  {expandedEdits.has(index) && (
-                    <pre className="text-xs p-3 text-red-800 dark:text-red-200 whitespace-pre-wrap font-mono">
-                      {edit.find}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* After Column */}
-          <div>
-            <div className="bg-green-50 dark:bg-green-900/20 px-3 py-2 border border-green-200 dark:border-green-800 rounded-t-lg">
-              <span className="text-sm font-medium text-green-700 dark:text-green-400">
-                After (Replace with)
-              </span>
-            </div>
-            <div className="border-l border-r border-b border-green-200 dark:border-green-800 rounded-b-lg bg-green-50/50 dark:bg-green-900/10 max-h-96 overflow-y-auto">
-              {approval.edits.map((edit, index) => (
-                <div key={index} className="border-b border-green-200 dark:border-green-800 last:border-b-0">
-                  <div className="px-3 py-2 bg-green-100 dark:bg-green-900/30 text-xs text-green-600 dark:text-green-400 flex items-center justify-between">
-                    <span>Change {index + 1}</span>
-                    <button
-                      onClick={() => toggleEditExpansion(index)}
-                      className="hover:bg-green-200 dark:hover:bg-green-800 p-1 rounded"
-                    >
-                      {expandedEdits.has(index) ? (
-                        <ChevronUpIcon className="w-3 h-3" />
-                      ) : (
-                        <ChevronDownIcon className="w-3 h-3" />
-                      )}
-                    </button>
-                  </div>
-                  {expandedEdits.has(index) && (
-                    <pre className="text-xs p-3 text-green-800 dark:text-green-200 whitespace-pre-wrap font-mono">
-                      {edit.replace}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const renderEditsList = () => {
-    if (!approval.edits || approval.edits.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          No individual edits available
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-4">
-        {approval.edits.map((edit, index) => (
-          <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Change {index + 1} of {approval.edits.length}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2">
-              {/* Remove Section */}
-              <div className="border-r border-gray-200 dark:border-gray-700">
-                <div className="bg-red-50 dark:bg-red-900/20 px-4 py-2 border-b border-red-200 dark:border-red-800">
-                  <span className="text-xs font-medium text-red-700 dark:text-red-400">
-                    Remove:
-                  </span>
-                </div>
-                <pre className="text-xs p-4 text-red-800 dark:text-red-200 bg-red-50 dark:bg-red-900/10 whitespace-pre-wrap font-mono min-h-[6rem] max-h-48 overflow-auto">
-                  {edit.find}
-                </pre>
+        {approval.edits.map((edit, index) => {
+          const highlight = createInlineHighlight(edit.find, edit.replace)
+          const editStats = calculateDiffStats([edit])
+          
+          return (
+            <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Change {index + 1} of {approval.edits.length}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-500">
+                  {formatDiffStats(editStats)}
+                </span>
               </div>
-              {/* Replace Section */}
-              <div>
-                <div className="bg-green-50 dark:bg-green-900/20 px-4 py-2 border-b border-green-200 dark:border-green-800">
-                  <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Replace with:
-                  </span>
-                </div>
-                <pre className="text-xs p-4 text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-900/10 whitespace-pre-wrap font-mono min-h-[6rem] max-h-48 overflow-auto">
-                  {edit.replace}
-                </pre>
-              </div>
+              
+              {/* Enhanced comparison with highlighting */}
+              <ChangeComparison
+                oldText={edit.find}
+                newText={edit.replace}
+                changes={highlight.changes}
+                className="border-0 rounded-none"
+              />
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -260,26 +195,15 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
       <div className="flex items-center justify-between">
         <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
           <button
-            onClick={() => setViewMode('edits')}
+            onClick={() => setViewMode('cards')}
             className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-              viewMode === 'edits'
+              viewMode === 'cards'
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
-            title="Individual Changes (Alt+1)"
+            title="Cards View - Review each change individually (Alt+1)"
           >
-            Individual Changes
-          </button>
-          <button
-            onClick={() => setViewMode('split')}
-            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-              viewMode === 'split'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-            }`}
-            title="Split View (Alt+2)"
-          >
-            Split View
+            Cards View
           </button>
           <button
             onClick={() => setViewMode('unified')}
@@ -288,7 +212,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
-            title="Unified Diff (Alt+3)"
+            title="Unified Diff - Git-style diff format (Alt+2)"
           >
             Unified Diff
           </button>
@@ -296,7 +220,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
         
         {/* Keyboard shortcuts help */}
         <div className="text-xs text-gray-500 dark:text-gray-400 space-x-2">
-          <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Alt+1,2,3</kbd> Switch views</span>
+          <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Alt+1,2</kbd> Switch views</span>
           <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Alt+E</kbd> Expand</span>
           <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Alt+C</kbd> Collapse</span>
         </div>
@@ -305,8 +229,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
       {/* Content based on view mode */}
       <div>
         {viewMode === 'unified' && renderUnifiedDiff()}
-        {viewMode === 'split' && renderSplitDiff()}
-        {viewMode === 'edits' && renderEditsList()}
+        {viewMode === 'cards' && renderCards()}
       </div>
     </div>
   )

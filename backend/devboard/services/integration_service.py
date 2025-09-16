@@ -10,6 +10,7 @@ from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.base import (
     AuthenticationError,
     BaseIntegration,
+    ConnectionError,
     IntegrationConfigurationError,
     RateLimitError,
 )
@@ -118,6 +119,19 @@ class IntegrationService:
                     success=False,
                     error_message=str(e),
                     error_type="rate_limit_error",
+                )
+            except ConnectionError as e:
+                logfire.error(
+                    "Integration connection error",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
+                return IntegrationTestResult(
+                    integration_type=integration_type,
+                    success=False,
+                    error_message=str(e),
+                    error_type="connection_error",
                 )
             except Exception as e:
                 logfire.error(

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.run import AgentRunResult
-from starlette.testclient import TestClient
 
 from devboard.api.dependencies.agents import get_project_agent
 from devboard.api.main import app
@@ -369,12 +368,11 @@ class TestProjectAgentEndpoints:
         return mock_agent
 
     @pytest.fixture
-    def client_with_mock_project_agent(self, mock_project_agent):
+    def client_with_mock_project_agent(self, client, mock_project_agent):
         """Test client with mocked project agent."""
         # Override the dependency
         app.dependency_overrides[get_project_agent] = lambda: mock_project_agent
 
-        client = TestClient(app)
         yield client
 
         # Clean up override
@@ -426,35 +424,46 @@ class TestProjectAgentEndpoints:
         project = test_project_with_data
 
         # First, send a message that would trigger a tool call to create conversation history
-        from pydantic_ai.tools import DeferredToolRequests, ToolRequest
         from unittest.mock import Mock
+
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+        from pydantic_ai.tools import DeferredToolRequests
 
         # Mock the agent to return a tool request first, then tool approval result
         def mock_run_side_effect(*args, **kwargs):
             prompt_or_approvals = kwargs.get("prompt_or_approvals")
             if isinstance(prompt_or_approvals, str):
                 # First call - return tool request
-                tool_request = Mock()
-                tool_request.tool_call_id = "test_call_1"
-                tool_request.tool_name = "fetch_github_issues"
-                tool_request.args = {}
-                
+                tool_call_part = ToolCallPart(tool_name="fetch_github_issues", tool_call_id="test_call_1", args={})
+
                 mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = DeferredToolRequests(approvals=[tool_request])
-                mock_result.new_messages = Mock(return_value=[
-                    ModelRequest(parts=[UserPromptPart(content="Fetch GitHub issues")]),
-                    ModelResponse(parts=[ToolCallPart(tool_name="fetch_github_issues", tool_call_id="test_call_1", args={})])
-                ])
+                mock_result.output = DeferredToolRequests(approvals=[tool_call_part])
+                mock_result.new_messages = Mock(
+                    return_value=[
+                        ModelRequest(parts=[UserPromptPart(content="Fetch GitHub issues")]),
+                        ModelResponse(parts=[tool_call_part]),
+                    ]
+                )
                 return mock_result
             else:
                 # Second call - return approval result
                 mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = "Great! I've processed your tool approvals and retrieved the requested information."
-                mock_result.new_messages = Mock(return_value=[
-                    ModelResponse(parts=[TextPart(content="Great! I've processed your tool approvals and retrieved the requested information.")])
-                ])
+                mock_result.output = (
+                    "Great! I've processed your tool approvals and retrieved the requested information."
+                )
+                mock_result.new_messages = Mock(
+                    return_value=[
+                        ModelResponse(
+                            parts=[
+                                TextPart(
+                                    content="Great! I've processed your tool approvals and retrieved the requested information."
+                                )
+                            ]
+                        )
+                    ]
+                )
                 return mock_result
-        
+
         mock_project_agent.run.side_effect = mock_run_side_effect
 
         # Step 1: Send a message that triggers a tool call
@@ -484,7 +493,7 @@ class TestProjectAgentEndpoints:
 
         # Verify the mock agent was called twice (message + approval)
         assert mock_project_agent.run.call_count == 2
-        
+
         # Check the second call was with tool approvals
         second_call_kwargs = mock_project_agent.run.call_args_list[1][1]
         assert not isinstance(second_call_kwargs["prompt_or_approvals"], str)

@@ -224,7 +224,7 @@ class TestDocumentEditTool:
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
         assert tool.name == f"edit_{mock_document.document_type}"
-        assert tool.requires_approval == True
+        assert tool.requires_approval
 
     def test_tool_pre_validation_success(self, mock_document, mock_document_repo):
         """Test tool validates edits before approval."""

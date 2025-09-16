@@ -44,6 +44,12 @@ class ResourceNotFoundError(IntegrationError):
     pass
 
 
+class ConnectionError(IntegrationError):
+    """Raised when a connection to an external service fails."""
+
+    pass
+
+
 class BaseIntegration(ABC):
     """Abstract base class for all external service integrations."""
 

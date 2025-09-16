@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { XMarkIcon, DocumentTextIcon, CheckIcon, XMarkIcon as DenyIcon } from '@heroicons/react/24/outline'
 import DiffViewer from './DiffViewer'
 import type { PendingApproval, ToolApprovalDecision } from '../lib/api'
+import { standardFeedbackTextareaClasses } from '../styles/inputStyles'
 
 interface DocumentDiffModalProps {
   approval: PendingApproval
@@ -20,6 +21,7 @@ export default function DocumentDiffModal({
 }: DocumentDiffModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const feedbackRef = useRef<HTMLTextAreaElement>(null)
+  const [showDenyFeedback, setShowDenyFeedback] = useState(false)
 
   const getDocumentTypeDisplay = (documentType: string | null) => {
     switch (documentType) {
@@ -41,13 +43,24 @@ export default function DocumentDiffModal({
 
       switch (event.key) {
         case 'Escape':
-          onClose()
+          if (showDenyFeedback) {
+            // Cancel deny feedback mode
+            event.preventDefault()
+            handleCancelDeny()
+          } else {
+            onClose()
+          }
           break
         case 'Enter':
           if (event.ctrlKey || event.metaKey) {
-            // Ctrl/Cmd + Enter to approve quickly
             event.preventDefault()
-            handleApprove()
+            if (showDenyFeedback) {
+              // Confirm deny with feedback
+              handleConfirmDeny()
+            } else {
+              // Approve changes
+              handleApprove()
+            }
           }
           break
         case 'r':
@@ -78,7 +91,7 @@ export default function DocumentDiffModal({
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, showDenyFeedback])
 
   // Handle click outside modal
   const handleBackdropClick = (event: React.MouseEvent) => {
@@ -97,12 +110,37 @@ export default function DocumentDiffModal({
   }
 
   const handleDeny = () => {
+    if (!showDenyFeedback) {
+      // First click: show feedback input and focus it
+      setShowDenyFeedback(true)
+      setTimeout(() => {
+        feedbackRef.current?.focus()
+      }, 100)
+    } else {
+      // Second click or confirm: proceed with denial
+      const feedback = feedbackRef.current?.value
+      onApproval(approval.tool_call_id, {
+        approved: false,
+        feedback: feedback || undefined
+      })
+      onClose()
+    }
+  }
+
+  const handleConfirmDeny = () => {
     const feedback = feedbackRef.current?.value
     onApproval(approval.tool_call_id, {
       approved: false,
       feedback: feedback || undefined
     })
     onClose()
+  }
+
+  const handleCancelDeny = () => {
+    setShowDenyFeedback(false)
+    if (feedbackRef.current) {
+      feedbackRef.current.value = ''
+    }
   }
 
   if (!isOpen) {
@@ -170,20 +208,37 @@ export default function DocumentDiffModal({
             </div>
           )}
 
-          {/* Feedback Section */}
-          <div>
+          {/* Feedback Section - Show always but highlight when denying */}
+          <div className={showDenyFeedback ? 'ring-2 ring-red-500 ring-opacity-50 rounded-lg p-3 bg-red-50 dark:bg-red-900/20' : ''}>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Feedback (optional):
-              <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-                Provide context when denying changes
-              </span>
+              {showDenyFeedback ? (
+                <>
+                  <span className="text-red-700 dark:text-red-400">Please provide feedback for denial:</span>
+                  <span className="text-xs text-red-600 dark:text-red-400 ml-2">
+                    Help the agent understand why the changes were rejected
+                  </span>
+                </>
+              ) : (
+                <>
+                  Feedback (optional):
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                    Provide context when denying changes
+                  </span>
+                </>
+              )}
             </label>
             <textarea
               ref={feedbackRef}
               disabled={disabled}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed resize-vertical"
-              rows={4}
-              placeholder="Provide feedback, corrections, or additional instructions for the agent..."
+              className={`w-full ${standardFeedbackTextareaClasses} resize-vertical ${
+                showDenyFeedback ? 'ring-2 ring-red-500 border-red-300 dark:border-red-600' : ''
+              }`}
+              rows={showDenyFeedback ? 6 : 4}
+              placeholder={
+                showDenyFeedback 
+                  ? "Explain why these changes are being rejected and provide guidance for improvement..."
+                  : "Provide feedback, corrections, or additional instructions for the agent..."
+              }
             />
           </div>
         </div>
@@ -191,35 +246,73 @@ export default function DocumentDiffModal({
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            <div>
-              <strong>Accept</strong> to apply these changes to the document.{' '}
-              <strong>Deny</strong> to reject them.
-            </div>
-            <div className="mt-1 space-x-4">
-              <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> Close</span>
-              <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+Enter</kbd> Accept</span>
-              <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+R</kbd> Deny</span>
-            </div>
+            {showDenyFeedback ? (
+              <div>
+                <div className="text-red-600 dark:text-red-400">
+                  <strong>Provide feedback</strong> and click <strong>Confirm Denial</strong> to reject the changes.
+                </div>
+                <div className="mt-1 space-x-4">
+                  <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> Cancel</span>
+                  <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+Enter</kbd> Confirm</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div>
+                  <strong>Accept</strong> to apply these changes to the document.{' '}
+                  <strong>Deny</strong> to reject them.
+                </div>
+                <div className="mt-1 space-x-4">
+                  <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> Close</span>
+                  <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+Enter</kbd> Accept</span>
+                  <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+R</kbd> Deny</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex space-x-3">
-            <button
-              onClick={handleDeny}
-              disabled={disabled}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Deny changes (Ctrl/Cmd+R)"
-            >
-              <DenyIcon className="w-4 h-4 mr-2" />
-              Deny
-            </button>
-            <button
-              onClick={handleApprove}
-              disabled={disabled}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Accept changes (Ctrl/Cmd+Enter)"
-            >
-              <CheckIcon className="w-4 h-4 mr-2" />
-              Accept
-            </button>
+            {showDenyFeedback ? (
+              <>
+                <button
+                  onClick={handleCancelDeny}
+                  disabled={disabled}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Cancel denial"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDeny}
+                  disabled={disabled}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Confirm denial with feedback (Ctrl/Cmd+Enter)"
+                >
+                  <DenyIcon className="w-4 h-4 mr-2" />
+                  Confirm Denial
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleDeny}
+                  disabled={disabled}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Deny changes - provide feedback (Ctrl/Cmd+R)"
+                >
+                  <DenyIcon className="w-4 h-4 mr-2" />
+                  Deny
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={disabled}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Accept changes (Ctrl/Cmd+Enter)"
+                >
+                  <CheckIcon className="w-4 h-4 mr-2" />
+                  Accept
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
