@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import Chat from '../components/Chat'
 import Button from '../components/ui/Button'
-import Textarea from '../components/ui/Textarea'
 import Card from '../components/ui/Card'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
@@ -19,11 +18,11 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true)
   
   // Get tab from URL query params, default to 'home'
-  const getTabFromUrl = () => {
+  const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
     const tab = params.get('tab') as 'home' | 'board' | 'settings'
     return ['home', 'board', 'settings'].includes(tab) ? tab : 'home'
-  }
+  }, [location.search])
   
   const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>(getTabFromUrl() === 'home' ? 'editor' : getTabFromUrl())
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
@@ -52,22 +51,9 @@ export default function ProjectDetail() {
     const urlTab = getTabFromUrl()
     const internalTab = urlTab === 'home' ? 'editor' : urlTab
     setActiveTab(internalTab)
-  }, [location.search])
+  }, [getTabFromUrl])
 
-  useEffect(() => {
-    fetchProject()
-    fetchTasks()
-    fetchAgentModel()
-  }, [id])
-
-  // Update editedSpecification when project loads or editing mode changes
-  useEffect(() => {
-    if (project && isEditingSpecification) {
-      setEditedSpecification(project.specification?.content || '')
-    }
-  }, [project, isEditingSpecification])
-
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     try {
       const data = await apiClient.getProject(id!)
       setProject(data)
@@ -75,9 +61,9 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error('Failed to fetch project:', error)
     }
-  }
+  }, [id])
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const data = await apiClient.getProjectTasks(id!)
       setTasks(data)
@@ -86,7 +72,20 @@ export default function ProjectDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    fetchProject()
+    fetchTasks()
+    fetchAgentModel()
+  }, [fetchProject, fetchTasks])
+
+  // Update editedSpecification when project loads or editing mode changes
+  useEffect(() => {
+    if (project && isEditingSpecification) {
+      setEditedSpecification(project.specification?.content || '')
+    }
+  }, [project, isEditingSpecification])
 
   const fetchAgentModel = async () => {
     try {
@@ -332,12 +331,12 @@ export default function ProjectDetail() {
                 )}
               </div>
               
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden flex flex-col">
                 {isEditingSpecification ? (
-                  <Textarea
+                  <textarea
                     value={editedSpecification}
                     onChange={(e) => setEditedSpecification(e.target.value)}
-                    className="w-full h-full font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900"
+                    className="w-full flex-1 font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter project specification in Markdown format..."
                   />
                 ) : (

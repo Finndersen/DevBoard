@@ -210,7 +210,7 @@ class FilesystemIntegration(BaseIntegration):
                         tree[item.name] = {
                             "type": "file",
                             "path": relative_path,
-                            "size": item.stat().st_size,
+                            "size": str(item.stat().st_size),
                         }
             except PermissionError:
                 logger.warning(f"Permission denied accessing: {path}")

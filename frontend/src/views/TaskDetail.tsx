@@ -44,7 +44,7 @@ export default function TaskDetail() {
 
   const handleSaveSpecification = async () => {
     try {
-      await updateTask({ id: id!, task: { specification: editedDescription as any } })
+      await updateTask({ id: id!, task: { specification: editedDescription } })
       await refetch()
       setIsEditingSpec(false)
     } catch (error) {
@@ -54,7 +54,7 @@ export default function TaskDetail() {
 
   const handleSavePlan = async () => {
     try {
-      await updateTask({ id: id!, task: { implementation_plan: editedPlan as any } })
+      await updateTask({ id: id!, task: { implementation_plan: editedPlan } })
       await refetch()
       setIsEditingPlan(false)
     } catch (error) {

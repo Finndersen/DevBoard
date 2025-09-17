@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { CogIcon, LinkIcon, CloudIcon, CpuChipIcon } from '@heroicons/react/24/outline'
+import { CogIcon, LinkIcon, CpuChipIcon } from '@heroicons/react/24/outline'
 import { ConfigurationForm } from '../components/ConfigurationForm'
+import { ConfigurationList } from '../components/ConfigurationList'
 import { AgentModelSelector } from '../components/AgentModelSelector'
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
 import { Card } from '../components/ui'
 import { textColors } from '../styles/designSystem'
+import { apiClient } from '../lib/api'
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -14,24 +16,24 @@ export default function Settings() {
   const { isDarkMode, toggleDarkMode } = useDarkMode()
   
   // Get tab from URL query params, default to 'integrations'
-  const getTabFromUrl = () => {
+  const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as 'integrations' | 'agents' | 'providers' | 'general'
-    return ['integrations', 'agents', 'providers', 'general'].includes(tab) ? tab : 'integrations'
-  }
+    const tab = params.get('tab') as 'integrations' | 'agents' | 'general'
+    return ['integrations', 'agents', 'general'].includes(tab) ? tab : 'integrations'
+  }, [location.search])
   
-  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'providers' | 'general'>(getTabFromUrl())
+  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'general'>(getTabFromUrl())
   
   const integrationConfigs = [
-    { key: 'integration.github.main', title: 'GitHub Integration', type: 'github' },
-    { key: 'integration.jira.main', title: 'Jira Integration', type: 'jira' },
-    { key: 'integration.slack.main', title: 'Slack Integration', type: 'slack' },
+    { key: 'integration.github.main', title: 'GitHub', type: 'github' },
+    { key: 'integration.jira.main', title: 'Jira', type: 'jira' },
+    { key: 'integration.slack.main', title: 'Slack', type: 'slack' },
   ]
 
   const llmConfigs = [
-    { key: 'llm.openai.main', title: 'OpenAI Provider', type: 'openai' },
-    { key: 'llm.anthropic.main', title: 'Anthropic Provider', type: 'anthropic' },
-    { key: 'llm.gemini.main', title: 'Gemini Provider', type: 'gemini' },
+    { key: 'llm.openai.main', title: 'OpenAI', type: 'openai' },
+    { key: 'llm.anthropic.main', title: 'Anthropic', type: 'anthropic' },
+    { key: 'llm.google.main', title: 'Google', type: 'google' },
   ]
 
   const agentTypes = [
@@ -42,11 +44,25 @@ export default function Settings() {
     { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
   ]
   
-  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(integrationConfigs[0]?.key || null)
-  const [selectedLLMProvider, setSelectedLLMProvider] = useState<string | null>(null)
+  const [selectedConfig, setSelectedConfig] = useState<string | null>(integrationConfigs[0]?.key || null)
+  const [configStatuses, setConfigStatuses] = useState<Record<string, { isValid: boolean; errors?: string[] }>>({})
+  const [configDetailsCache, setConfigDetailsCache] = useState<Record<string, ConfigurationDetailResponse>>({})
+  const [loadingStatuses, setLoadingStatuses] = useState(false)
 
   const handleConfigurationSave = (config: ConfigurationDetailResponse) => {
     console.log('Configuration saved:', config)
+    // Update both status and cached details after save
+    setConfigStatuses(prev => ({
+      ...prev,
+      [config.key]: {
+        isValid: config.is_valid,
+        errors: config.validation_errors
+      }
+    }))
+    setConfigDetailsCache(prev => ({
+      ...prev,
+      [config.key]: config
+    }))
     // Could show a toast notification here
   }
 
@@ -55,23 +71,59 @@ export default function Settings() {
     // Could show a toast notification here
   }
 
+  const loadConfigurationStatuses = async () => {
+    try {
+      setLoadingStatuses(true)
+      
+      // Fetch integration configurations
+      const integrationConfigsData = await apiClient.listConfigurations('integration.')
+      // Fetch LLM provider configurations  
+      const llmConfigsData = await apiClient.listConfigurations('llm.')
+      
+      const statusMap: Record<string, { isValid: boolean; errors?: string[] }> = {}
+      const detailsCache: Record<string, ConfigurationDetailResponse> = {}
+      
+      // Process integration configs
+      integrationConfigsData.forEach(config => {
+        statusMap[config.key] = {
+          isValid: config.is_valid,
+          errors: config.validation_errors || undefined
+        }
+        detailsCache[config.key] = config
+      })
+      
+      // Process LLM configs
+      llmConfigsData.forEach(config => {
+        statusMap[config.key] = {
+          isValid: config.is_valid,
+          errors: config.validation_errors || undefined
+        }
+        detailsCache[config.key] = config
+      })
+      
+      setConfigStatuses(statusMap)
+      setConfigDetailsCache(detailsCache)
+    } catch (error) {
+      console.error('Failed to load configuration statuses:', error)
+    } finally {
+      setLoadingStatuses(false)
+    }
+  }
+
   // Update URL when tab changes
-  const handleTabChange = (newTab: 'integrations' | 'agents' | 'providers' | 'general') => {
+  const handleTabChange = (newTab: 'integrations' | 'agents' | 'general') => {
     setActiveTab(newTab)
     const params = new URLSearchParams(location.search)
     params.set('tab', newTab)
     navigate(`/settings?${params.toString()}`, { replace: true })
     
-    // Auto-select first item when switching tabs
+    // Auto-select first item when switching to integrations
     if (newTab === 'integrations') {
-      setSelectedIntegration(integrationConfigs[0]?.key || null)
-      setSelectedLLMProvider(null)
-    } else if (newTab === 'providers') {
-      setSelectedLLMProvider(llmConfigs[0]?.key || null)
-      setSelectedIntegration(null)
+      setSelectedConfig(integrationConfigs[0]?.key || null)
+      // Load configuration statuses when switching to integrations
+      loadConfigurationStatuses()
     } else {
-      setSelectedIntegration(null)
-      setSelectedLLMProvider(null)
+      setSelectedConfig(null)
     }
   }
 
@@ -79,7 +131,14 @@ export default function Settings() {
   useEffect(() => {
     const urlTab = getTabFromUrl()
     setActiveTab(urlTab)
-  }, [location.search])
+  }, [getTabFromUrl])
+
+  // Load configuration statuses on mount if on integrations tab
+  useEffect(() => {
+    if (activeTab === 'integrations') {
+      loadConfigurationStatuses()
+    }
+  }, [activeTab])
 
   return (
     <div>
@@ -97,7 +156,6 @@ export default function Settings() {
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
             { id: 'agents' as const, name: 'Agents', icon: CpuChipIcon },
-            { id: 'providers' as const, name: 'AI Providers', icon: CloudIcon },
             { id: 'general' as const, name: 'General', icon: CogIcon },
           ].map((tab) => (
             <button
@@ -118,56 +176,51 @@ export default function Settings() {
 
       {/* Tab Content */}
       {activeTab === 'integrations' && (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Integration List */}
-          <div className="xl:col-span-1">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Combined Integration List */}
+          <div className="md:col-span-1">
             <Card padding="none">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>External Integrations</h3>
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>All Integrations</h3>
                 <p className={`text-sm ${textColors.secondary} mt-1`}>
-                  Select an integration to configure
+                  Configure external connections
                 </p>
               </div>
               
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {integrationConfigs.map((integration) => (
-                  <button
-                    key={integration.key}
-                    onClick={() => setSelectedIntegration(integration.key)}
-                    className={`w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                      selectedIntegration === integration.key ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                          {integration.title}
-                        </h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-                          {integration.type}
-                        </p>
-                      </div>
-                      {selectedIntegration === integration.key && (
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <ConfigurationList
+                integrationConfigs={integrationConfigs}
+                llmConfigs={llmConfigs}
+                selectedConfig={selectedConfig}
+                configStatuses={configStatuses}
+                onSelectConfig={setSelectedConfig}
+              />
             </Card>
           </div>
 
           {/* Configuration Form */}
-          <div className="xl:col-span-3">
-            {selectedIntegration ? (
-              <Card padding="none">
-                <ConfigurationForm
-                  configKey={selectedIntegration}
-                  title={integrationConfigs.find(i => i.key === selectedIntegration)?.title || ''}
-                  onSave={handleConfigurationSave}
-                  onTestConnection={handleTestConnection}
-                />
-              </Card>
+          <div className="md:col-span-3">
+            {selectedConfig ? (
+              loadingStatuses || !configDetailsCache[selectedConfig] ? (
+                <Card className="p-6">
+                  <div className="animate-pulse">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
+                    <div className="space-y-3">
+                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <Card padding="none">
+                  <ConfigurationForm
+                    config={configDetailsCache[selectedConfig]}
+                    title={[...integrationConfigs, ...llmConfigs].find(i => i.key === selectedConfig)?.title || ''}
+                    onSave={handleConfigurationSave}
+                    onTestConnection={selectedConfig.includes('integration') ? handleTestConnection : undefined}
+                  />
+                </Card>
+              )
             ) : (
               <Card className="p-8 text-center">
                 <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -206,71 +259,6 @@ export default function Settings() {
               ))}
             </div>
           </Card>
-        </div>
-      )}
-
-      {activeTab === 'providers' && (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* LLM Provider List */}
-          <div className="xl:col-span-1">
-            <Card padding="none">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>AI Providers</h3>
-                <p className={`text-sm ${textColors.secondary} mt-1`}>
-                  Select a provider to configure
-                </p>
-              </div>
-              
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {llmConfigs.map((provider) => (
-                  <button
-                    key={provider.key}
-                    onClick={() => setSelectedLLMProvider(provider.key)}
-                    className={`w-full px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                      selectedLLMProvider === provider.key ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                          {provider.title}
-                        </h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-                          {provider.type}
-                        </p>
-                      </div>
-                      {selectedLLMProvider === provider.key && (
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* Configuration Form */}
-          <div className="xl:col-span-3">
-            {selectedLLMProvider ? (
-              <Card padding="none">
-                <ConfigurationForm
-                  configKey={selectedLLMProvider}
-                  title={llmConfigs.find(p => p.key === selectedLLMProvider)?.title || ''}
-                  onSave={handleConfigurationSave}
-                />
-              </Card>
-            ) : (
-              <Card className="p-8 text-center">
-                <CloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                  Select an AI provider
-                </h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  Choose a provider from the list to configure its API settings
-                </p>
-              </Card>
-            )}
-          </div>
         </div>
       )}
 

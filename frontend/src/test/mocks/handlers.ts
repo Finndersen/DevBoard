@@ -184,7 +184,7 @@ export const handlers = [
   }),
 
   // Integration test endpoint
-  http.post('*/api/settings/integrations/:integrationType/test', ({ params: _params }) => {
+  http.post('*/api/settings/integrations/:integrationType/test', () => {
     const response: IntegrationTestResponse = {
       success: true,
     }

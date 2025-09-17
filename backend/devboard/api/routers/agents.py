@@ -37,7 +37,7 @@ async def get_model_for_agent(
         ) from None
 
     # Get the preferred model for this agent type
-    model = llm_service.get_preferred_model_for_agent(agent_enum)
+    model = llm_service.get_model_for_agent(agent_enum)
 
     return AgentModelResponse(model_id=model.id)
 
@@ -68,12 +68,12 @@ async def get_available_models(
 
     # Get all available models and preferred model for this agent
     available_models = llm_service.get_available_models()
-    preferred_model = llm_service.get_preferred_model_for_agent(agent_enum)
+    selected_model = llm_service.get_model_for_agent(agent_enum)
 
     return AvailableModelsResponse(
         agent_type=agent_type,
         available_models=available_models,
-        preferred_model=preferred_model.id,
+        preferred_model=selected_model.id,
         total_available=len(available_models),
     )
 
@@ -105,5 +105,6 @@ async def update_agent_model(
         ) from None
 
     # Update the agent model using the service method
-    updated_model_id = llm_service.set_agent_model(agent_enum, request.model_id)
-    return AgentModelResponse(model_id=updated_model_id)
+    llm_service.set_agent_model(agent_enum, request.model_id)
+    agent_model = llm_service.get_model_for_agent(agent_enum)
+    return AgentModelResponse(model_id=agent_model.id)

@@ -40,12 +40,14 @@ def _get_message_type(message: ModelMessage) -> MessageType:
             # Could also be a SystemPromptPart, but we are not storing those, or a RetryPromptPart
             return MessageType.TOOL_RESULT
     else:
-        if any(isinstance(part, TextPart) for part in message.parts):
-            return MessageType.TEXT_RESPONSE
-        elif isinstance(message.parts[-1], ToolCallPart) and message.parts[-1].tool_name == "final_result":
+        if isinstance(message.parts[-1], ToolCallPart) and message.parts[-1].tool_name == "final_result":
             return MessageType.STRUCTURED_RESPONSE
-        else:
+        elif any(isinstance(part, ToolCallPart) for part in message.parts):
             return MessageType.TOOL_CALL
+        elif any(isinstance(part, TextPart) for part in message.parts):
+            return MessageType.TEXT_RESPONSE
+        else:
+            raise ValueError(f"Cannot determine message type for response message with parts: {message.parts}")
 
 
 class BaseConversationMessage(Base):

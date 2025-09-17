@@ -68,7 +68,7 @@ class LLMRepository:
         """Initialize repository with language models."""
         self._models = {model.id: model for model in models}
 
-    def get_model_by_id(self, model_id: str) -> LanguageModel | None:
+    def get_model_by_id(self, model_id: str) -> LanguageModel:
         """Get a language model by its ID.
 
         Args:
@@ -77,7 +77,9 @@ class LLMRepository:
         Returns:
             LanguageModel instance or None if not found
         """
-        return self._models.get(model_id)
+        if model_id not in self._models:
+            raise ValueError(f"Model ID '{model_id}' not found.")
+        return self._models[model_id]
 
     def get_models_by_type(self, model_type: ModelType) -> list[LanguageModel]:
         """Get all models of a specific type.
@@ -130,4 +132,4 @@ RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentType.INVESTIGATION: ModelType.FAST,
 }
 # Global default LLM repository instance
-llm_repository = LLMRepository(ALL_MODELS)
+default_llm_repository = LLMRepository(ALL_MODELS)

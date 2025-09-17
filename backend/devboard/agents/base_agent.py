@@ -17,6 +17,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
     DeferredToolApprovalResult,
     DeferredToolRequests,
+    DeferredToolResults,
     ToolApproved,
     ToolDenied,
     ToolFuncEither,
@@ -50,7 +51,7 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         """Create the PydanticAI agent with context tools."""
 
         agent = Agent[TDeps](
-            self._get_preferred_model(),
+            self._get_model(),
             deps_type=self.deps_type,
             system_prompt=self._get_system_prompt(),
             tools=self._get_tools(),
@@ -59,9 +60,9 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
         return agent
 
-    def _get_preferred_model(self) -> str:
+    def _get_model(self) -> str:
         """Get preferred model for this agent type."""
-        model = self.llm_service.get_preferred_model_for_agent(self.agent_type)
+        model = self.llm_service.get_model_for_agent(self.agent_type)
         if model.provider == LLMProvider.GOOGLE:
             return f"google-gla:{model.name}"
         else:
@@ -97,15 +98,15 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
     async def run(
         self,
-        prompt_or_approvals: str | DeferredToolApprovalResult,
-        message_history: list[ModelMessage],
-        deps: BaseDeps,
+        prompt_or_approvals: str | DeferredToolResults,
+        conversation_history: list[ModelMessage],
+        deps: TDeps,
     ) -> AgentRunResult:
         """Process a user message with conversation history.
 
         Args:
             prompt_or_approvals: The user's message
-            message_history: Previous conversation messages
+            conversation_history: Previous conversation messages
             deps: Agent-specific dependencies/context
 
         Returns:
@@ -116,12 +117,25 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         dummy_response = ModelResponse(
             parts=[TextPart(content="Understood, I will use the provided context and tools to answer your query.")]
         )
+        total_message_history: list[ModelMessage] = [
+            initial_request,
+            dummy_response,
+        ] + conversation_history
+
         # Run the agent with message history
-        result = await self.agent.run(
-            prompt_or_approvals,
-            deps=deps,
-            message_history=[initial_request, dummy_response] + message_history,
-        )
+        if isinstance(prompt_or_approvals, DeferredToolResults):
+            result = await self.agent.run(
+                deferred_tool_results=prompt_or_approvals,
+                deps=deps,
+                message_history=total_message_history,
+            )
+        else:
+            result = await self.agent.run(
+                user_prompt=prompt_or_approvals,
+                deps=deps,
+                message_history=total_message_history,
+            )
+
         return result
 
     def _build_context_summary(self, context_data: ProjectContextData) -> str:

@@ -23,7 +23,7 @@ class ConfigurationRepository(BaseRepository[Configuration]):
         stmt = select(Configuration).where(Configuration.key == key)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_all(self, prefix: str = None) -> list[Configuration]:
+    def get_all(self, prefix: str | None = None) -> list[Configuration]:
         """Get all configurations, optionally filtered by key prefix.
 
         Args:

@@ -4,6 +4,7 @@ import os
 
 import logfire
 from fastapi import FastAPI
+from logfire import ConsoleOptions
 
 from devboard.db.database import engine
 
@@ -19,7 +20,7 @@ def setup_logfire(app: FastAPI) -> None:
     logfire.configure(
         service_name="devboard",
         environment=environment,
-        console={"verbose": True} if environment == "development" else False,
+        console=ConsoleOptions(verbose=True) if environment == "development" else False,
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
         send_to_logfire=bool(token),
     )

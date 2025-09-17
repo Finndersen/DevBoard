@@ -5,6 +5,7 @@ import logging
 import logfire
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from pydantic_ai.tools import (
+    DeferredToolApprovalResult,
     DeferredToolRequests,
     DeferredToolResults,
     ToolApproved,
@@ -112,7 +113,7 @@ class AgentConversationService:
         # Process with agent
         result = await self.agent.run(
             prompt_or_approvals=message_or_approvals,
-            message_history=message_history,
+            conversation_history=message_history,
             deps=BaseDeps(),
         )
 
@@ -155,7 +156,7 @@ class AgentConversationService:
         Returns:
             PydanticAI DeferredToolResults object to continue agent execution
         """
-        converted_approvals = {}
+        converted_approvals: dict[str, DeferredToolApprovalResult] = {}
         for tool_call_id, decision in approvals.items():
             if decision.approved:
                 # For approved tools, set approval to True

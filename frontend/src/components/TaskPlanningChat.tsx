@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { PaperAirplaneIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { 
+  ConversationMessage,
   MessageRequest,
   ToolApprovalRequest,
   ToolApprovalDecision
@@ -15,7 +16,7 @@ interface TaskPlanningChatProps {
 }
 
 export default function TaskPlanningChat({ taskId }: TaskPlanningChatProps) {
-  const [messages, setMessages] = useState<any[]>([])
+  const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [approvalFeedback, setApprovalFeedback] = useState<Record<string, string>>({})

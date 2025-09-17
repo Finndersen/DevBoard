@@ -113,7 +113,6 @@ async def update_project(
 @router.delete("/{project_id}", response_model=DeleteResponse)
 async def delete_project(
     project_id: int,
-    project: Project = Depends(get_verified_project),
     project_repo: ProjectRepository = Depends(get_project_repository),
 ):
     """Delete a project."""
@@ -189,8 +188,6 @@ async def create_project_resource(
             resource_uri=resource.resource_uri,
             description=resource.description,
         )
-        resource_service.repository.db.commit()
-        resource_service.repository.db.refresh(created_resource)
         return created_resource
     except UnsupportedResourceUriError as e:
         resource_service.repository.db.rollback()
@@ -213,14 +210,12 @@ async def delete_project_resource(
             detail="Resource not found or does not belong to this project",
         )
 
-    resource_service.repository.db.commit()
     return {"message": "Resource deleted successfully", "success": True}
 
 
 @router.get("/{project_id}/agent/messages", response_model=list[ConversationMessage])
 def list_project_agent_messages(
     project_id: int,
-    project: Project = Depends(get_verified_project),
     message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
 ) -> list[ConversationMessage]:
     """List all conversation messages for a project's agent.
@@ -251,7 +246,6 @@ def list_project_agent_messages(
 async def send_project_agent_message(
     project_id: int,
     request: ChatRequest,
-    project: Project = Depends(get_verified_project),
     project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
 ) -> PromptResponse:
     """Chat with the project agent.
@@ -279,7 +273,6 @@ async def send_project_agent_message(
 async def approve_project_agent_tools(
     project_id: int,
     request: ToolApprovalRequest,
-    project: Project = Depends(get_verified_project),
     project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
 ) -> PromptResponse:
     """Approve or deny tools for the project agent.
@@ -307,9 +300,8 @@ async def approve_project_agent_tools(
 @router.delete("/{project_id}/agent/messages", response_model=DeleteResponse)
 async def clear_project_agent_messages(
     project_id: int,
-    project: Project = Depends(get_verified_project),
     message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
-) -> DeleteResponse:
+):
     """Clear all conversation messages for a project's agent.
 
     This endpoint deletes all conversation history between the user and the project agent,
@@ -326,7 +318,10 @@ async def clear_project_agent_messages(
     deleted_count = message_repo.delete_by_project(project_id)
     message_repo.db.commit()
 
-    return {"message": f"Cleared {deleted_count} conversation messages", "success": True}
+    return {
+        "message": f"Cleared {deleted_count} conversation messages",
+        "success": True,
+    }
 
 
 @router.get("/{project_id}/context", response_model=dict[str, Any])
@@ -403,7 +398,7 @@ async def validate_resource_uri(
         Validation results and provider information
     """
     try:
-        result = await context_service.get_resource_info(resource_uri)
+        result = await context_service.get_resource_info(resource_uri, description=None)
         return {
             "resource_uri": resource_uri,
             "valid": True,

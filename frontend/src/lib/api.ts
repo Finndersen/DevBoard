@@ -432,6 +432,10 @@ export class ApiClient {
   }
 
   // Configuration Management
+  async listConfigurations(prefix: string): Promise<ConfigurationDetailResponse[]> {
+    return this.request<ConfigurationDetailResponse[]>(`/api/configurations?prefix=${encodeURIComponent(prefix)}`)
+  }
+  
   async getConfigurationDetail(configKey: string): Promise<ConfigurationDetailResponse> {
     return this.request<ConfigurationDetailResponse>(`/api/configurations/${configKey}/detail`)
   }

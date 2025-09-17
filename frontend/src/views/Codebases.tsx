@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { FolderIcon, PlusIcon, PencilIcon, CheckIcon, XMarkIcon, TrashIcon, DocumentIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
@@ -43,13 +43,30 @@ export default function Codebases() {
     }
   }, [codebases, selectedCodebase])
 
+  // Architecture-related functions
+  const fetchArchitectureDocument = useCallback(async () => {
+    if (!selectedCodebase) return
+    
+    try {
+      setLoadingArchitecture(true)
+      const document = await apiClient.getArchitectureDocument(selectedCodebase.id)
+      setArchitectureDocument(document)
+      setArchitectureError(null)
+    } catch (err) {
+      setArchitectureError('Failed to fetch architecture document')
+      console.error('Failed to fetch architecture document:', err)
+    } finally {
+      setLoadingArchitecture(false)
+    }
+  }, [selectedCodebase])
+
   useEffect(() => {
     if (selectedCodebase) {
       fetchArchitectureDocument()
     } else {
       setArchitectureDocument(null)
     }
-  }, [selectedCodebase])
+  }, [selectedCodebase, fetchArchitectureDocument])
 
   const handleCreateCodebase = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,23 +131,6 @@ export default function Codebases() {
     setShowCreateModal(true)
   }
 
-  // Architecture-related functions
-  const fetchArchitectureDocument = async () => {
-    if (!selectedCodebase) return
-    
-    try {
-      setLoadingArchitecture(true)
-      const document = await apiClient.getArchitectureDocument(selectedCodebase.id)
-      setArchitectureDocument(document)
-      setArchitectureError(null)
-    } catch (err) {
-      setArchitectureError('Failed to fetch architecture document')
-      console.error('Failed to fetch architecture document:', err)
-    } finally {
-      setLoadingArchitecture(false)
-    }
-  }
-
   const handleGenerateArchitecture = async () => {
     if (!selectedCodebase) return
     
@@ -157,7 +157,7 @@ export default function Codebases() {
     if (!selectedCodebase || editedArchitectureContent === undefined) return
     
     try {
-      setLoading(true)
+      setLoadingArchitecture(true)
       const result = await apiClient.updateArchitectureDocument(selectedCodebase.id, {
         content: editedArchitectureContent,
         original_hash: originalContentHash
@@ -175,12 +175,13 @@ export default function Codebases() {
         setIsEditingArchitecture(false)
         setArchitectureError(null)
       }
-    } catch (err: any) {
+    } catch (err) {
       // Check if it's a conflict error
-      if (err.message?.includes('409')) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (errorMessage.includes('409')) {
         // Parse the error detail from the API response
         try {
-          const errorDetail = JSON.parse(err.message.split('409 Conflict: ')[1])
+          const errorDetail = JSON.parse(errorMessage.split('409 Conflict: ')[1])
           setArchitectureError(errorDetail.message || 'Document has been modified by another process')
           // Update the original hash for retry
           if (errorDetail.current_hash) {

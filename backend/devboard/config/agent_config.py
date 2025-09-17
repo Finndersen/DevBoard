@@ -14,8 +14,8 @@ class AgentConfig(BaseConfig):
     selected_model: str | None = None  # User's preferred model override
 
     @classmethod
-    @property
-    def config_key(cls) -> str:
+    @property  # type: ignore[misc]
+    def config_key(cls) -> str:  # type: ignore[misc,override]
         return f"agent.{cls.agent_type.value}.default"
 
 

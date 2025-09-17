@@ -645,7 +645,7 @@ describe('ApiClient', () => {
     })
 
     it('handles string and number IDs in URLs', async () => {
-      let capturedUrls: string[] = []
+      const capturedUrls: string[] = []
 
       server.use(
         http.get('*', ({ request }) => {

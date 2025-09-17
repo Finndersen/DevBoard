@@ -3,7 +3,12 @@
 import logging
 from typing import cast
 
-from devboard.agents.language_models import LanguageModel, LLMProvider, llm_repository
+from devboard.agents.language_models import (
+    LanguageModel,
+    LLMProvider,
+    LLMRepository,
+    default_llm_repository,
+)
 from devboard.agents.types import AgentType
 from devboard.api.schemas import ModelInfo
 from devboard.config.agent_config import AgentConfig
@@ -16,10 +21,10 @@ logger = logging.getLogger(__name__)
 class LLMService:
     """Service for LLM provider management and testing."""
 
-    def __init__(self, config_service: ConfigService):
+    def __init__(self, config_service: ConfigService, llm_repository: LLMRepository | None = None) -> None:
         """Initialize LLMService with configuration service."""
         self.config_service = config_service
-        self.repository = llm_repository
+        self.repository = llm_repository or default_llm_repository
 
     def get_available_models(self) -> list[ModelInfo]:
         """Get all available models from configured providers.
@@ -51,7 +56,7 @@ class LLMService:
 
         return available_models
 
-    def get_preferred_model_for_agent(self, agent_type: AgentType) -> LanguageModel:
+    def get_model_for_agent(self, agent_type: AgentType) -> LanguageModel:
         """Get the preferred model for an agent based on configuration and availability.
 
         Args:
@@ -72,10 +77,10 @@ class LLMService:
         available_model_ids = {model.id for model in available_models}
 
         # If user has selected a specific model and it's available, use that
-        if config_result.success and config_result.config.selected_model:
+        if config_result.success and config_result.config and config_result.config.selected_model:
             selected_model_id = config_result.config.selected_model
             if selected_model_id in available_model_ids:
-                return llm_repository.get_model_by_id(selected_model_id)
+                return self.repository.get_model_by_id(selected_model_id)
 
         # Fall back to recommended model type for this agent
         recommended_type = self.repository.get_recommended_model_type_for_agent(agent_type)
@@ -83,12 +88,12 @@ class LLMService:
         # Get available models of the recommended type
         for model_info in available_models:
             model = self.repository.get_model_by_id(model_info.id)
-            if model and model.type == recommended_type:
+            if model.type == recommended_type:
                 return model
 
         raise ValueError(f"Could not find model configuration for agent type '{agent_type}'")
 
-    def set_agent_model(self, agent_type: AgentType, model_id: str | None) -> str:
+    def set_agent_model(self, agent_type: AgentType, model_id: str | None) -> str | None:
         """Set the preferred model for an agent type.
 
         Args:
@@ -104,9 +109,7 @@ class LLMService:
         # Validate that the model exists and is available if a specific one is requested
         if model_id is not None:
             # Check that the model exists in the repository
-            model = self.repository.get_model_by_id(model_id)
-            if model is None:
-                raise ValueError(f"Model '{model_id}' does not exist")
+            self.repository.get_model_by_id(model_id)
 
             # Check that the model is available (provider is configured)
             available_models = self.get_available_models()

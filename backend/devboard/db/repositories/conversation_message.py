@@ -1,6 +1,6 @@
 """Task conversation message repository for message data access operations."""
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from sqlalchemy import delete, select
 
@@ -11,7 +11,7 @@ from devboard.db.repositories.base import BaseRepository
 MessageT = TypeVar("MessageT", bound=BaseConversationMessage)
 
 
-class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversationMessage]):
+class BaseConversationMessageRepository[MessageT: BaseConversationMessage](BaseRepository[MessageT]):
     """
     Abstract base repository for Project and Task conversation messages
     """
@@ -20,11 +20,12 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
 
     def get_all_for_entity(self, entity_id: int, exclude_tool_calls: bool = False) -> list[MessageT]:
         """Get all messages for an entity (task or project)."""
-        stmt = select(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
+        model = cast(type[BaseConversationMessage], self.MESSAGE_MODEL)
+        stmt = select(model).where(model.parent_id == entity_id)  # type: ignore[arg-type]
         if exclude_tool_calls:
-            stmt = stmt.where(self.MESSAGE_MODEL.message_type.not_in([MessageType.TOOL_CALL, MessageType.TOOL_RESULT]))
-        stmt = stmt.order_by(self.MESSAGE_MODEL.timestamp.asc())
-        return list(self.db.execute(stmt).scalars().all())
+            stmt = stmt.where(model.message_type.not_in([MessageType.TOOL_CALL, MessageType.TOOL_RESULT]))
+        stmt = stmt.order_by(model.timestamp.asc())
+        return list(self.db.execute(stmt).scalars().all())  # type: ignore[return-value,arg-type]
 
     def get_by_id(self, message_id: int) -> MessageT | None:
         """Get a message by its ID.
@@ -35,8 +36,9 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         Returns:
             TaskConversationMessage instance if found, None otherwise
         """
-        stmt = select(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.id == message_id)
-        return self.db.execute(stmt).scalar_one_or_none()
+        model = cast(type[BaseConversationMessage], self.MESSAGE_MODEL)
+        stmt = select(model).where(model.id == message_id)
+        return self.db.execute(stmt).scalar_one_or_none()  # type: ignore[return-value]
 
     def create(self, message: MessageT) -> MessageT:
         """Create a new message.
@@ -72,7 +74,8 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         Returns:
             True if message was deleted, False if not found
         """
-        stmt = delete(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.id == message_id)
+        model = cast(type[BaseConversationMessage], self.MESSAGE_MODEL)
+        stmt = delete(model).where(model.id == message_id)
         result = self.db.execute(stmt)
         return result.rowcount > 0
 
@@ -85,7 +88,8 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         Returns:
             Number of messages deleted
         """
-        stmt = delete(self.MESSAGE_MODEL).where(self.MESSAGE_MODEL.parent_id == entity_id)
+        model = cast(type[BaseConversationMessage], self.MESSAGE_MODEL)
+        stmt = delete(model).where(model.parent_id == entity_id)  # type: ignore[arg-type]
         result = self.db.execute(stmt)
         return result.rowcount
 
@@ -96,15 +100,16 @@ class BaseConversationMessageRepository[MessageT](BaseRepository[BaseConversatio
         :param entity_id:
         :return:
         """
-        stmt = delete(self.MESSAGE_MODEL).where(
-            self.MESSAGE_MODEL.id
+        model = cast(type[BaseConversationMessage], self.MESSAGE_MODEL)
+        stmt = delete(model).where(
+            model.id
             >= (
-                select(self.MESSAGE_MODEL.id)
+                select(model.id)
                 .where(
-                    self.MESSAGE_MODEL.message_type == MessageType.USER_PROMPT,
-                    self.MESSAGE_MODEL.parent_id == entity_id,
+                    model.message_type == MessageType.USER_PROMPT,  # type: ignore[arg-type]
+                    model.parent_id == entity_id,  # type: ignore[arg-type]
                 )
-                .order_by(self.MESSAGE_MODEL.id.desc())
+                .order_by(model.id.desc())
                 .limit(1)
                 .scalar_subquery()
             )

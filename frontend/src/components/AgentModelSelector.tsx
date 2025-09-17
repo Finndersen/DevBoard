@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import type { AvailableModelsForAgentResponse, ModelInfo, UpdateAgentModelRequest } from '../lib/api'
 import { apiClient } from '../lib/api'
@@ -19,9 +19,24 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await apiClient.getAvailableModelsForAgent(agentType)
+      setData(response)
+      setSelectedModel(response.preferred_model)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load agent models')
+    } finally {
+      setLoading(false)
+    }
+  }, [agentType])
+
   useEffect(() => {
     loadData()
-  }, [agentType])
+  }, [loadData])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -38,21 +53,6 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
       }
     }
   }, [isOpen])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await apiClient.getAvailableModelsForAgent(agentType)
-      setData(response)
-      setSelectedModel(response.preferred_model)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agent models')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleModelChange = async (modelId: string | null) => {
     if (saving) return

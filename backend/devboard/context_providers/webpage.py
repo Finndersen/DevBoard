@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from .base import (
     BaseContextProvider,
@@ -172,7 +172,7 @@ class WebPageContextProvider(BaseContextProvider):
                 comment.extract()
 
         # Extract main content areas (prioritize main content)
-        content_element = None
+        content_element: Tag | BeautifulSoup | None = None
         for selector in ["main", "article", '[role="main"]', ".content", "#content", ".post"]:
             content_element = soup.select_one(selector)
             if content_element:
@@ -180,10 +180,14 @@ class WebPageContextProvider(BaseContextProvider):
 
         # If no main content area found, use body
         if not content_element:
-            content_element = soup.find("body") or soup
+            body_element = soup.find("body")
+            content_element = body_element if body_element is not None else soup
 
         # Extract text and clean it up
-        extracted_text = content_element.get_text()
+        if content_element is not None:
+            extracted_text = content_element.get_text()
+        else:
+            extracted_text = ""
 
         # Clean up whitespace
         extracted_text = re.sub(r"\s+", " ", extracted_text)

@@ -3,13 +3,12 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.tools import DeferredToolApprovalResult
-
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
 from devboard.agents.types import AgentType
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.tools import DeferredToolApprovalResult
 
 
 class MockDeps(BaseDeps):
@@ -62,12 +61,12 @@ class TestBaseAgent:
     def test_get_preferred_model(self, mock_agent_instance, mock_llm_service):
         """Test _get_preferred_model returns model from LLM service."""
         # Reset the mock call count since it was called during initialization
-        mock_llm_service.get_preferred_model_for_agent.reset_mock()
+        mock_llm_service.get_model_for_agent.reset_mock()
         # The mock_llm_service fixture already returns a proper LanguageModel instance
-        model_name = mock_agent_instance._get_preferred_model()
+        model_name = mock_agent_instance._get_model()
         # The method should return the pydanticai_id property of the LanguageModel
         assert model_name == "openai:gpt-4"  # This matches the mock fixture
-        mock_llm_service.get_preferred_model_for_agent.assert_called_once_with(AgentType.PROJECT)
+        mock_llm_service.get_model_for_agent.assert_called_once_with(AgentType.PROJECT)
 
     def test_create_agent(self, mock_agent_instance):
         """Test _create_agent creates PydanticAI Agent instance."""
@@ -91,7 +90,7 @@ class TestBaseAgent:
 
         result = await mock_agent_instance.run(
             prompt_or_approvals="Test message",
-            message_history=message_history,
+            conversation_history=message_history,
             deps=deps,
         )
 
@@ -119,7 +118,7 @@ class TestBaseAgent:
 
         result = await mock_agent_instance.run(
             prompt_or_approvals=mock_approvals,
-            message_history=message_history,
+            conversation_history=message_history,
             deps=deps,
         )
 
@@ -144,7 +143,9 @@ class TestBaseAgent:
         deps = MockDeps()
 
         result = await mock_agent_instance.run(
-            prompt_or_approvals="Test message", message_history=mock_messages, deps=deps
+            prompt_or_approvals="Test message",
+            conversation_history=mock_messages,
+            deps=deps,
         )
 
         assert result == mock_result

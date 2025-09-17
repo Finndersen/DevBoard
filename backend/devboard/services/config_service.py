@@ -5,8 +5,7 @@ import os
 from typing import Any, TypeVar, Union, get_args, get_origin
 
 from pydantic import ValidationError
-from pydantic._internal._fields import PydanticUndefined
-from pydantic.fields import FieldInfo
+from pydantic.fields import FieldInfo, PydanticUndefined
 
 from devboard.api.schemas.configuration import (
     ConfigurationDetailResponse,
@@ -68,7 +67,7 @@ class ConfigService:
                         env_var_data[field_name] = self.env_vars[env_var_name]
 
             # Merge env var data with db data (db data takes priority)
-            merged_data = {**env_var_data, **db_data}
+            merged_data: dict[str, Any] = {**env_var_data, **db_data}
 
             # Instantiate config with merged data
             config = config_class(**merged_data)

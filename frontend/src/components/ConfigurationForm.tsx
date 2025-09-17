@@ -5,54 +5,39 @@ import type { ConfigurationDetailResponse } from '../lib/api'
 import { ConfigurationField } from './ConfigurationField'
 
 interface ConfigurationFormProps {
-  configKey: string
+  config: ConfigurationDetailResponse
   title: string
   onSave?: (data: ConfigurationDetailResponse) => void
   onTestConnection?: () => void
 }
 
 export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ 
-  configKey, 
+  config,
   title,
   onSave,
   onTestConnection
 }) => {
-  const [config, setConfig] = useState<ConfigurationDetailResponse | null>(null)
   const [values, setValues] = useState<Record<string, string | number | boolean | null>>({})
   const [overrideStates, setOverrideStates] = useState<Record<string, boolean>>({})
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null)
 
   useEffect(() => {
-    loadConfiguration()
-  }, [configKey])
-
-  const loadConfiguration = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      setTestResult(null)  // Clear test result when loading new configuration
-      const result = await apiClient.getConfigurationDetail(configKey)
-      setConfig(result)
-      
-      // Initialize form values with effective values and override states
-      const initialValues: Record<string, string | number | boolean | null> = {}
-      const initialOverrideStates: Record<string, boolean> = {}
-      result.fields.forEach(field => {
-        initialValues[field.name] = field.effective_value
-        initialOverrideStates[field.name] = field.is_overridden
-      })
-      setValues(initialValues)
-      setOverrideStates(initialOverrideStates)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load configuration')
-    } finally {
-      setLoading(false)
-    }
-  }
+    // Initialize form values when config changes
+    setError(null)
+    setTestResult(null)  // Clear test result when config changes
+    
+    const initialValues: Record<string, string | number | boolean | null> = {}
+    const initialOverrideStates: Record<string, boolean> = {}
+    config.fields.forEach(field => {
+      initialValues[field.name] = field.effective_value
+      initialOverrideStates[field.name] = field.is_overridden
+    })
+    setValues(initialValues)
+    setOverrideStates(initialOverrideStates)
+  }, [config])
 
   const handleFieldChange = (fieldName: string, value: string | number | boolean | null) => {
     setValues(prev => ({ ...prev, [fieldName]: value }))
@@ -104,8 +89,7 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
         return
       }
 
-      const result = await apiClient.updateConfigurationFields(configKey, updatableFields)
-      setConfig(result)
+      const result = await apiClient.updateConfigurationFields(config.key, updatableFields)
       
       // Update form values and override states with the result
       const newValues: Record<string, string | number | boolean | null> = {}
@@ -133,7 +117,7 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       setTestResult(null)
       
       // Extract integration type from config key (e.g., 'integration.github.main' -> 'github')
-      const integrationType = configKey.split('.')[1]
+      const integrationType = config.key.split('.')[1]
       const result = await apiClient.testIntegrationConnection(integrationType)
       
       setTestResult({
@@ -152,9 +136,22 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
     }
   }
 
-  const getStatusIndicator = () => {
-    if (!config) return null
+  const resetForm = () => {
+    // Reset form values to original config values
+    setError(null)
+    setTestResult(null)
+    
+    const initialValues: Record<string, string | number | boolean | null> = {}
+    const initialOverrideStates: Record<string, boolean> = {}
+    config.fields.forEach(field => {
+      initialValues[field.name] = field.effective_value
+      initialOverrideStates[field.name] = field.is_overridden
+    })
+    setValues(initialValues)
+    setOverrideStates(initialOverrideStates)
+  }
 
+  const getStatusIndicator = () => {
     if (config.is_valid) {
       return (
         <div className="flex items-center text-green-600 dark:text-green-400">
@@ -173,7 +170,6 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
   }
 
   const hasChanges = () => {
-    if (!config) return false
     return config.fields.some(field => {
       const isOverrideEnabled = overrideStates[field.name]
       const wasOverridden = field.is_overridden
@@ -202,37 +198,9 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
     })
   }
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
-          <div className="space-y-3">
-            <div className="h-10 bg-gray-200 rounded"></div>
-            <div className="h-10 bg-gray-200 rounded"></div>
-            <div className="h-10 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!config) {
-    return (
-      <div className="p-6">
-        <div className="text-center py-8">
-          <XCircleIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">Configuration not found</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            The requested configuration could not be loaded.
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6 max-w-full lg:max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">{title}</h2>
         {getStatusIndicator()}
@@ -336,7 +304,7 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
 
           <button
             type="button"
-            onClick={loadConfiguration}
+            onClick={resetForm}
             className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
           >
             Reset

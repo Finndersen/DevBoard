@@ -48,6 +48,7 @@ def get_task_agent(
     context_service: ContextAssemblyService = Depends(get_context_assembly_service),
     llm_service: LLMService = Depends(get_llm_service),
 ) -> BaseTaskAgent:
+    agent_type: type[BaseTaskAgent]
     if task.status == TaskStatus.DEFINING:
         agent_type = TaskSpecificationAgent
     elif task.status == TaskStatus.PLANNING:

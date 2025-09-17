@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { PaperAirplaneIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest, PendingApproval, DocumentEdit } from '../lib/api'
@@ -39,18 +39,18 @@ export default function Chat({ projectId }: ChatProps) {
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    fetchChatHistory()
-  }, [projectId])
-
-  const fetchChatHistory = async () => {
+  const fetchChatHistory = useCallback(async () => {
     try {
       const data = await apiClient.getProjectAgentMessages(projectId)
       setMessages(data)
     } catch (error) {
       console.error('Failed to fetch chat history:', error)
     }
-  }
+  }, [projectId])
+
+  useEffect(() => {
+    fetchChatHistory()
+  }, [fetchChatHistory])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
