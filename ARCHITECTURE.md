@@ -43,8 +43,9 @@ backend/
 │   │   │   ├── repositories.py  # Repository factory functions
 │   │   │   └── services.py      # Service factory functions
 │   │   ├── routers/             # API endpoint implementations
-│   │   │   ├── projects.py      # Project CRUD + agent chat
-│   │   │   ├── tasks.py         # Task management + planning agents
+│   │   │   ├── projects.py      # Project CRUD operations
+│   │   │   ├── tasks.py         # Task management + state transitions
+│   │   │   ├── conversations.py # Unified agent conversation endpoints
 │   │   │   ├── codebases.py     # Codebase + architecture docs
 │   │   │   ├── configurations.py # Configuration management
 │   │   │   └── settings.py      # System settings + connection tests
@@ -68,8 +69,9 @@ backend/
 │   ├── db/                     # Database + persistence layer
 │   │   ├── models/             # SQLAlchemy 2.0 models with full typing
 │   │   │   ├── project.py      # Project + specification documents
-│   │   │   ├── task.py         # Tasks + implementation plans  
-│   │   │   ├── messages.py     # Agent conversation persistence
+│   │   │   ├── task.py         # Tasks + implementation plans
+│   │   │   ├── conversation.py # Unified conversation containers
+│   │   │   ├── messages.py     # Agent conversation messages
 │   │   │   └── configuration.py # Hierarchical configuration storage
 │   │   ├── repositories/       # Data access patterns
 │   │   │   ├── base.py         # Generic repository with type safety
@@ -256,9 +258,17 @@ frontend/
 
 **Database Schema Highlights**:
 - **Document Storage**: Generic document system with content hashing for conflict detection
-- **Message Persistence**: Agent conversation history with structured PydanticAI message format
+- **Unified Conversation System**: Polymorphic conversation architecture supporting all entity types through single table
+- **Message Persistence**: Unified message storage with structured PydanticAI message format across all conversations
 - **Resource Sharing**: Many-to-many relationships for context provider resources
 - **Configuration Hierarchy**: JSON-based configuration storage with Pydantic validation
+
+**Conversation Architecture Benefits**:
+- **Unified API Pattern**: Single set of conversation endpoints for all entity types eliminates duplication
+- **Easy Extensibility**: Adding new conversational entities requires only adding enum value, no new tables or endpoints
+- **Simplified Codebase**: One repository and service pattern replaces N entity-specific implementations
+- **Better Separation**: Conversation logic cleanly separated from entity-specific concerns
+- **Future-Ready**: Supports nested conversations for advanced agent-to-agent communication patterns
 
 ### Development & Deployment Infrastructure
 
@@ -376,10 +386,31 @@ The backend exposes a RESTful API with the following main endpoint categories:
 -   `ConfigurationResponse`: `key` (str), `value_json` (str), `schema_version` (str), `updated_at` (datetime)
 -   `ConfigurationDetailResponse`: `key` (str), `fields` (list[ConfigurationFieldInfo]), `validation_status` (str), `validation_errors` (list[str], optional)
 
+### Tasks API (`/api/tasks`)
+-   `GET /api/tasks/`: List all tasks.
+-   `POST /api/tasks/`: Create a new task.
+-   `GET /api/tasks/{task_id}`: Get details of a specific task.
+-   `PATCH /api/tasks/{task_id}`: Update an existing task.
+-   `DELETE /api/tasks/{task_id}`: Delete a task.
+-   `POST /api/tasks/{task_id}/state-transition`: Trigger task state transition with optional AI agent assistance.
+
+### Conversations API (`/api/conversations`)
+**Unified conversation endpoints for all entity types (projects, tasks, codebases)**
+
+-   `GET /api/conversations/{conversation_id}/messages`: Retrieve conversation message history.
+-   `POST /api/conversations/{conversation_id}/messages`: Send a message to the agent.
+-   `POST /api/conversations/{conversation_id}/approve-tools`: Approve or deny tool execution requests.
+-   `DELETE /api/conversations/{conversation_id}/messages`: Clear all messages in a conversation.
+
+**Request/Response Schemas (Pydantic)**:
+-   `ChatRequest`: `message` (str)
+-   `ToolApprovalRequest`: `approvals` (dict[str, bool])
+-   `PromptResponse`: `type` (MESSAGE | TOOL_REQUEST), `message` (str, optional), `tool_requests` (list, optional)
+-   `ConversationMessage`: `id` (int), `role` (str), `text_content` (str), `timestamp` (datetime)
+-   `DeleteResponse`: `message` (str), `success` (bool)
+
 ### Other Routers
--   `/api/tasks`: For managing tasks (specific endpoints not detailed here).
 -   `/api/settings`: For managing application settings (specific endpoints not detailed here).
--   `/api/qa`: For Quality Assurance related functionalities (specific endpoints not detailed here).
 
 ### General Endpoints
 -   `GET /`: Health check endpoint, returns `{"message": "DevBoard API is running"}`.
@@ -393,10 +424,13 @@ The backend exposes a RESTful API with the following main endpoint categories:
 ### Database Schemas (SQLAlchemy)
 The backend uses SQLAlchemy for ORM, with models defined in `devboard/db/models`. These models represent the entities stored in the relational database. Examples include:
 -   **Project**: Represents a development project.
--   **Codebase**: Represents a code repository or local codebase.
--   **Configuration**: Stores application configurations.
 -   **Task**: Represents a development task.
--   **Resource**: Represents an external resource linked to a project or task.
+-   **Codebase**: Represents a code repository or local codebase.
+-   **Conversation**: Container for agent conversations with polymorphic parent entity association.
+-   **ConversationMessage**: Individual messages within a conversation (supports PydanticAI message format).
+-   **Configuration**: Stores application configurations.
+-   **ContextProviderResource**: External resources linked to projects.
+-   **Document**: Generic document storage with content hashing.
 
 Alembic is used for managing database migrations, ensuring schema evolution is tracked and applied.
 
@@ -569,7 +603,7 @@ Analyzes code repositories to generate and maintain living architecture document
 #### Agent Conversation Service Implementation
 
 **AgentConversationService (`devboard/services/agent_conversation.py`)**:
-Central orchestration service managing agent conversations with persistence and tool approval workflows. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Integrates with PydanticAI framework for structured agent interactions.
+Central orchestration service managing agent conversations with persistence and tool approval workflows. Constructor takes `conversation_id` as first parameter, eliminating need to pass it to each method call. Key methods include `send_message(message)` for user prompts, `process_tool_approvals(approvals)` for deferred tool execution, `store_new_messages(messages)` for persistence, and `clear_messages()` for conversation history deletion. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Automatically detects and cleans up pending tool calls when user sends new message instead of approving tools. Integrates with unified `ConversationRepository` and PydanticAI framework for structured agent interactions.
 
 #### Context Assembly Implementation
 
@@ -581,8 +615,17 @@ Central orchestration service managing agent conversations with persistence and 
 
 #### Message Persistence Implementation
 
-**Conversation Message Models (`devboard/db/models/messages.py`)**:
-Database models for different message types including `ProjectConversationMessage` and `TaskConversationMessage`. Supports structured PydanticAI message format with role-based messaging (USER, AGENT, SYSTEM), tool call storage, and temporal conversation tracking. Message repositories in `devboard/db/repositories/conversation_message.py` handle entity-specific message retrieval and filtering.
+**Unified Conversation System (`devboard/db/models/`)**:
+Implements polymorphic conversation architecture supporting all entity types (Projects, Tasks, Codebases) through unified models:
+
+**Conversation Model (`conversation.py`)**:
+Container model with polymorphic parent entity association using `parent_entity_type` enum (PROJECT, TASK, CODEBASE) and `parent_entity_id`. Enforces one conversation per entity via unique constraint on (parent_entity_type, parent_entity_id). Supports nested conversations through `parent_conversation_id` for future agent-to-agent communication. Conversations are created lazily via `get_or_create_for_entity()` when accessing entity details, ensuring every entity has an associated conversation without explicit API calls.
+
+**ConversationMessage Model (`messages.py`)**:
+Unified message model storing all conversation messages with support for structured PydanticAI message format. Fields include `message_type` enum (USER_PROMPT, TEXT_RESPONSE, TOOL_CALL, TOOL_RESULT, STRUCTURED_RESPONSE), `pydantic_content` JSON storage for complete message structure, and `text_content` for quick text access. Provides temporal ordering and role-based messaging across all entity types.
+
+**ConversationRepository (`devboard/db/repositories/conversation.py`)**:
+Unified repository providing conversation management across all entity types. Key methods include `get_or_create_for_entity(entity_type, entity_id)` for lazy conversation initialization (called by entity GET endpoints), `create_message(conversation_id, pydantic_message)` for PydanticAI message persistence, `get_messages(conversation_id, exclude_tool_calls=False)` with optional tool call filtering, `delete_messages(conversation_id)` for clearing history, and `convert_messages_to_pydantic(message_records)` for reconstructing PydanticAI message objects from database records.
 
 ### Document Collaboration Implementation
 
@@ -618,6 +661,12 @@ Represents discrete work units with lifecycle state management (DEFINING → DES
 **Document Model (`devboard/db/models/document.py`)**:
 Generic document storage with content hashing for conflict detection using SHA-256. Supports different document types (specifications, plans, architecture docs) with template versioning. Implements content diffing and collaborative editing features.
 
+**Conversation Model (`devboard/db/models/conversation.py`)**:
+Central conversation container with polymorphic parent entity support. Uses `parent_entity_type` enum (PROJECT, TASK, CODEBASE) and `parent_entity_id` for flexible entity association. Unique constraint ensures one conversation per entity. Supports nested conversations via `parent_conversation_id` for agent-to-agent communication patterns.
+
+**ConversationMessage Model (`devboard/db/models/messages.py`)**:
+Unified message storage for all conversation types. Fields include `conversation_id` foreign key, `message_type` enum for message classification, `pydantic_content` JSON for full PydanticAI message structure, `text_content` for extracted text, and `timestamp` for ordering. Replaces previous entity-specific message models with single unified implementation.
+
 #### Association Tables & Many-to-Many Relationships
 
 **Resource Sharing Implementation (`devboard/db/models/base.py`)**:
@@ -639,6 +688,7 @@ Type-safe repository base class providing common CRUD operations with generic ty
 **Specialized Repositories**:
 - **ProjectRepository (`devboard/db/repositories/project.py`)**: Project-specific queries with eager loading of specification documents and relationship management
 - **TaskRepository (`devboard/db/repositories/task.py`)**: Task filtering by project and state with lifecycle management support
+- **ConversationRepository (`devboard/db/repositories/conversation.py`)**: Unified conversation management for all entity types with polymorphic parent resolution
 - **DocumentRepository (`devboard/db/repositories/document.py`)**: Content hashing and conflict detection for collaborative editing workflows
 - **ContextProviderResourceRepository (`devboard/db/repositories/context_provider_resource.py`)**: URI-based resource management with project association handling
 
@@ -729,7 +779,7 @@ Provides repository instances with automatically managed database sessions throu
 Orchestrates complex service dependencies including context assembly services with multiple integration dependencies (GitHub, Jira, Slack). Implements dependency composition where higher-level services receive all required lower-level dependencies automatically. Handles optional integration dependencies with graceful fallback when services are unavailable.
 
 **Agent Dependencies (`devboard/api/dependencies/agents.py`)**:
-Provides agent conversation services with full context assembly, LLM service integration, and dynamic agent configuration. Retrieves agent-specific configuration from the config service and composes the complete agent conversation service with all required dependencies including message repositories and context services.
+Provides agent conversation services with full context assembly, LLM service integration, and dynamic agent configuration. Key dependency `get_conversation_agent(conversation_id)` resolves appropriate agent type (ProjectAgent, TaskAgent, CodebaseAgent) by querying the conversation's parent_entity_type from the database. Retrieves agent-specific configuration from the config service and composes the complete agent conversation service with all required dependencies including conversation repository and context services. This dependency-based agent resolution enables the unified conversation endpoints to work with any entity type.
 
 #### Entity Validation Dependencies
 

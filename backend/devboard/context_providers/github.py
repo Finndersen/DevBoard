@@ -7,7 +7,13 @@ from urllib.parse import urlparse
 
 import logfire
 
+from devboard.config.integration_configs import GitHubIntegrationConfig
+
+# Get database session and create config service
+from devboard.db.database import get_db
+from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.config_service import ConfigService
 
 from .base import (
     BaseContextProvider,
@@ -30,7 +36,7 @@ class GitHubContextProvider(BaseContextProvider):
     def create_instance(cls) -> "GitHubContextProvider":
         """Create an instance of the GitHub context provider.
 
-        Uses GitHubIntegration.create() to handle configuration validation and initialization.
+        Gets GitHub configuration and creates integration instance.
 
         Returns:
             Configured GitHubContextProvider instance
@@ -39,7 +45,18 @@ class GitHubContextProvider(BaseContextProvider):
             ContextProviderUnavailable: If GitHub configuration is missing or invalid
         """
         try:
-            integration = GitHubIntegration.create()
+            session = next(get_db())
+            config_repo = ConfigurationRepository(session)
+            config_service = ConfigService(config_repo)
+
+            # Get GitHub configuration
+            config = config_service.get_config(GitHubIntegrationConfig)
+            if not config:
+                raise ContextProviderUnavailable(
+                    "GitHub configuration not found or invalid. Please configure the GitHub integration."
+                )
+
+            integration = GitHubIntegration(config)
             return cls(integration)
         except Exception as e:
             raise ContextProviderUnavailable(f"Failed to initialize GitHub integration: {e}") from e

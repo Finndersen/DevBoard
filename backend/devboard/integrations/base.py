@@ -2,10 +2,19 @@
 
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-from devboard.services.config_service import ConfigService
+from devboard.config.base import BaseConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IntegrationConnectionResult:
+    """Result of integration connection test."""
+
+    success: bool
+    message: str
 
 
 class IntegrationError(Exception):
@@ -54,18 +63,13 @@ class BaseIntegration(ABC):
     """Abstract base class for all external service integrations."""
 
     integration_type: str
+    configuration_schema: type[BaseConfig]
 
-    @classmethod
-    @abstractmethod
-    def create(cls, config_service: ConfigService) -> "BaseIntegration":
-        """Create integration instance with required configuration.
-
-        Raises:
-            IntegrationConfigurationError: If configuration is missing or invalid.
-        """
-        return cls()
+    def __init__(self, config: BaseConfig):
+        """Initialize with configuration."""
+        self.config = config
 
     @abstractmethod
-    async def test_connection(self) -> bool:
+    async def test_connection(self) -> IntegrationConnectionResult:
         """Test the connection to the external service."""
         pass

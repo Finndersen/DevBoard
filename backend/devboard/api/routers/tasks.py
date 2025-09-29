@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.api.dependencies.agents import get_task_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
+    get_conversation_repository,
     get_document_repository,
     get_project_repository,
     get_task_repository,
@@ -21,18 +21,14 @@ from devboard.api.schemas import (
     TaskResponse,
     TaskUpdate,
 )
-from devboard.api.schemas.agent_conversation import (
-    ChatRequest,
-    PromptResponse,
-    ToolApprovalRequest,
-)
+from devboard.db.models import ParentEntityType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
+    ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
-from devboard.services.agent_conversation import AgentConversationService
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
@@ -80,9 +76,28 @@ async def create_task(
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: int, task: Task = Depends(get_verified_task)):
-    """Get a specific task."""
-    return task
+async def get_task(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> TaskResponse:
+    """Get a specific task with conversation_id."""
+    # Get or create conversation for task
+    conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.TASK, task_id)
+
+    return TaskResponse(
+        id=task.id,
+        title=task.title,
+        project_id=task.project_id,
+        codebase_id=task.codebase_id,
+        status=task.status,
+        remote_task_id=task.remote_task_id,
+        conversation_id=task.remote_task_id,  # Keep this for backward compatibility
+        default_conversation_id=conversation.id,
+        created_at=task.created_at,
+        specification=task.specification,
+        implementation_plan=task.implementation_plan,
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -187,45 +202,6 @@ async def delete_task_resource(
 
     resource_service.repository.db.commit()
     return {"message": "Resource deleted successfully", "success": True}
-
-
-# Task Planning Agent Endpoints
-@router.post("/{task_id}/agent/messages", response_model=PromptResponse)
-async def send_task_agent_message(
-    task_id: int,
-    request: ChatRequest,
-    task_conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
-) -> PromptResponse:
-    """Chat with the project agent.
-
-    This endpoint allows users to ask questions about their project and get
-    AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
-
-    Args:
-        task_id: The project to query
-        request: The chat request with user query
-        task_conversation_service: Agent conversation service dependency
-
-    Returns:
-        AI-generated response based on project context
-    """
-    # Process query with Q&A agent
-    response = await task_conversation_service.send_message(message=request.message, entity_id=task_id)
-
-    return response
-
-
-@router.post("/{task_id}/agent/approve-tools", response_model=PromptResponse)
-async def approve_task_agent_tools(
-    task_id: int,
-    request: ToolApprovalRequest,
-    task_conversation_service: AgentConversationService = Depends(get_task_agent_conversation_service),
-):
-    """Approve or deny tool calls from the task planning agent."""
-    # Process query with Q&A agent
-    response = await task_conversation_service.process_tool_approvals(approvals=request.approvals, entity_id=task_id)
-
-    return response
 
 
 @router.post("/{task_id}/state-transition", response_model=TaskResponse)

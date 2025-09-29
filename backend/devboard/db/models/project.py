@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from .codebase import Codebase
     from .configuration import ContextProviderResource
     from .document import Document
-    from .messages import ProjectConversationMessage
     from .task import Task
 
 
@@ -41,7 +40,6 @@ class Project(Base):
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=project_context_resource_association, back_populates="projects"
     )
-    messages: Mapped[list["ProjectConversationMessage"]] = relationship(back_populates="project")
 
     # Document relationship with eager loading
     specification: Mapped["Document"] = relationship(

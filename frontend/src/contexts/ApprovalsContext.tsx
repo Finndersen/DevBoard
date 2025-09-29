@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useReducer, useEffect, useState, type ReactNode } from 'react'
 import type { PendingApproval } from '../lib/api'
 
 interface ApprovalsState {
@@ -11,7 +11,6 @@ type ApprovalsAction =
   | { type: 'ADD_APPROVAL'; payload: { key: string; approval: PendingApproval } }
   | { type: 'REMOVE_APPROVAL'; payload: { key: string; toolCallId: string } }
   | { type: 'CLEAR_APPROVALS'; payload: { key: string } }
-  | { type: 'LOAD_FROM_STORAGE' }
 
 interface ApprovalsContextType {
   state: ApprovalsState
@@ -70,23 +69,6 @@ function approvalsReducer(state: ApprovalsState, action: ApprovalsAction): Appro
       }
     }
     
-    case 'LOAD_FROM_STORAGE':
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        console.log('ApprovalsContext: Loading from storage, found:', stored)
-        if (stored) {
-          const parsedApprovals = JSON.parse(stored)
-          console.log('ApprovalsContext: Parsed approvals:', parsedApprovals)
-          return {
-            ...state,
-            approvals: parsedApprovals
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to load approvals from localStorage:', error)
-      }
-      return state
-    
     default:
       return state
   }
@@ -96,44 +78,49 @@ interface ApprovalsProviderProps {
   children: ReactNode
 }
 
-export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
-  const [state, dispatch] = useReducer(approvalsReducer, {
-    approvals: {}
-  })
+// Lazy initial state function to load from localStorage synchronously
+function initializeApprovals(): ApprovalsState {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    console.log('ApprovalsProvider: Initializing from localStorage, found:', stored)
+    if (stored) {
+      const parsedApprovals = JSON.parse(stored)
+      console.log('ApprovalsProvider: Parsed initial approvals:', parsedApprovals)
+      return { approvals: parsedApprovals }
+    }
+  } catch (error) {
+    console.warn('Failed to load initial approvals from localStorage:', error)
+  }
+  return { approvals: {} }
+}
 
-  // Load from localStorage on mount
+export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
+  const [state, dispatch] = useReducer(approvalsReducer, undefined, initializeApprovals)
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Mark as initialized after first render
   useEffect(() => {
-    console.log('ApprovalsProvider: Loading from localStorage on mount')
-    dispatch({ type: 'LOAD_FROM_STORAGE' })
+    setIsInitialized(true)
   }, [])
 
-  // Save to localStorage whenever state changes
+  // Save to localStorage whenever state changes, but only after initialization
   useEffect(() => {
-    try {
-      console.log('ApprovalsProvider: Saving to localStorage:', state.approvals)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.approvals))
-    } catch (error) {
-      console.warn('Failed to save approvals to localStorage:', error)
+    if (isInitialized) {
+      try {
+        console.log('ApprovalsProvider: Saving to localStorage:', state.approvals)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.approvals))
+      } catch (error) {
+        console.warn('Failed to save approvals to localStorage:', error)
+      }
     }
-  }, [state.approvals])
+  }, [state.approvals, isInitialized])
 
   // Clean up expired/old approvals (older than 24 hours)
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const now = Date.now()
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars  
-      const oneDay = 24 * 60 * 60 * 1000
-
-      Object.keys(state.approvals).forEach(key => {
-        const approvals = state.approvals[key]
-        // For simplicity, we'll clear all approvals for a key if any exist for more than 24 hours
-        // In a real implementation, you might want to add timestamps to approvals
-        if (approvals && approvals.length > 0) {
-          // This is a simple cleanup - you might want more sophisticated logic
-          // based on actual approval timestamps if available
-        }
-      })
+      // Note: Currently no automatic cleanup logic implemented
+      // In a real implementation, you might want to add timestamps to approvals
+      // and clean up expired ones here
     }, 60 * 60 * 1000) // Run cleanup every hour
 
     return () => clearInterval(cleanupInterval)
@@ -182,6 +169,7 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useApprovals() {
   const context = useContext(ApprovalsContext)
   if (context === undefined) {

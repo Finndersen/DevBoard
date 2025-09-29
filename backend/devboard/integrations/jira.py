@@ -7,12 +7,12 @@ from jira import JIRA as JiraClient
 from jira import JIRAError
 
 from devboard.config.integration_configs import JiraIntegrationConfig
-from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
     IntegrationConfigurationError,
+    IntegrationConnectionResult,
     IntegrationError,
     ResourceNotFoundError,
 )
@@ -24,10 +24,11 @@ class JiraIntegration(BaseIntegration):
     """Integration for Jira API access."""
 
     integration_type = "jira"
+    configuration_schema = JiraIntegrationConfig
 
     def __init__(self, config: JiraIntegrationConfig):
         """Initialize with Jira configuration and client."""
-        self.config = config
+        super().__init__(config)
         try:
             self.client = JiraClient(
                 server=config.server_url,
@@ -39,29 +40,25 @@ class JiraIntegration(BaseIntegration):
             logger.error(f"Failed to initialize Jira integration: {e}")
             raise IntegrationConfigurationError(f"Failed to initialize Jira: {e}") from e
 
-    @classmethod
-    def create(cls, config_service: ConfigService) -> "JiraIntegration":
-        """Create Jira integration instance with configuration from database and environment."""
-        try:
-            # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(JiraIntegrationConfig)
-            if not config:
-                raise IntegrationConfigurationError(
-                    "Jira configuration not found or invalid. Please configure the Jira integration."
-                )
-            return cls(config)
-        except Exception as e:
-            logger.error(f"Failed to create Jira integration: {e}")
-            raise IntegrationConfigurationError(f"Jira configuration error: {e}") from e
-
-    async def test_connection(self) -> bool:
+    async def test_connection(self) -> IntegrationConnectionResult:
         """Test Jira API connection."""
         try:
-            self.client.myself()
-            return True
-        except Exception as e:
-            logger.error(f"Jira connection test failed: {e}")
-            return False
+            user_info = self.client.myself()
+            return IntegrationConnectionResult(
+                success=True,
+                message=f"Successfully connected to Jira as {user_info['displayName']} ({user_info['emailAddress']})",
+            )
+        except JIRAError as e:
+            if e.status_code == 401:
+                return IntegrationConnectionResult(
+                    success=False, message="Jira authentication failed: Invalid credentials"
+                )
+            elif e.status_code == 403:
+                return IntegrationConnectionResult(
+                    success=False, message="Jira access forbidden: Check user permissions"
+                )
+            else:
+                return IntegrationConnectionResult(success=False, message=f"Jira API error: {e}")
 
     async def get_issue(self, issue_key: str, fields: list[str] | None = None) -> dict[str, Any]:
         """Get details of a specific Jira issue."""

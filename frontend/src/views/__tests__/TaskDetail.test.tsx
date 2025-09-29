@@ -4,16 +4,22 @@ import { http, HttpResponse } from 'msw'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
+import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
+import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import TaskDetail from '../TaskDetail'
 
 // Helper function to render TaskDetail with proper routing
 const renderTaskDetail = (taskId: string = '1') => {
   return render(
-    <MemoryRouter initialEntries={[`/tasks/${taskId}`]}>
-      <Routes>
-        <Route path="/tasks/:id" element={<TaskDetail />} />
-      </Routes>
-    </MemoryRouter>
+    <ApprovalsProvider>
+      <PendingMessagesProvider>
+        <MemoryRouter initialEntries={[`/tasks/${taskId}`]}>
+          <Routes>
+            <Route path="/tasks/:id" element={<TaskDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </PendingMessagesProvider>
+    </ApprovalsProvider>
   )
 }
 
@@ -22,7 +28,6 @@ describe('TaskDetail', () => {
     id: 1,
     project_id: 1,
     title: 'Test Task',
-    description: 'Test task description',
     status: 'Planning',
   })
 
@@ -46,6 +51,9 @@ describe('TaskDetail', () => {
       }),
       http.get('*/api/tasks/1/qa/history', () => {
         return HttpResponse.json([])
+      }),
+      http.get('*/api/conversations/*/messages', () => {
+        return HttpResponse.json([])
       })
     )
   })
@@ -54,11 +62,13 @@ describe('TaskDetail', () => {
     renderTaskDetail()
     
     await waitFor(() => {
-      expect(screen.getByText('Test Task')).toBeInTheDocument()
+      expect(screen.getByText('Test task specification content')).toBeInTheDocument()
     }, { timeout: 3000 })
     
-    expect(screen.getByText('Test task description')).toBeInTheDocument()
     expect(screen.getAllByText('Planning').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Task Specification').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Implementation Plan')).toBeInTheDocument()
+    expect(screen.getByText('Task Agent')).toBeInTheDocument()
   })
 
   it('renders project information', async () => {
@@ -79,7 +89,7 @@ describe('TaskDetail', () => {
     renderTaskDetail('999')
     
     await waitFor(() => {
-      expect(screen.getByText('Task not found')).toBeInTheDocument()
+      expect(screen.getByText('API request failed: 404 Not Found')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 })

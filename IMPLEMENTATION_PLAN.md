@@ -317,6 +317,53 @@ This document outlines the detailed, step-by-step tasks required to build the De
   * **Deferred Tool Approval UI**: Replace edit confirmation modal with deferred tool approval interface
   * **State Transition Controls**: UI buttons for progressing through design → planning → implementation
   * **Agent Conversation UI**: Chat interface with tool approval rendering and research summaries
+
+### Epic 11: Conversation Model Refactor ✅
+
+**Major Architecture Upgrade COMPLETED**: Successfully refactored the conversation messaging system from entity-specific models to a unified, polymorphic conversation architecture.
+
+**Implemented Architecture**:
+- **Polymorphic Conversations**: Single `Conversation` model with `parent_entity_type` and `parent_entity_id` for flexible entity associations
+- **Unified Message Storage**: Single `ConversationMessage` table replacing separate `TaskConversationMessage` and `ProjectConversationMessage` tables
+- **Sub-Conversation Support**: Optional `parent_conversation_id` for agent-to-agent internal conversations
+- **Unified Repository**: Single `ConversationRepository` handling both conversations and messages, eliminating code duplication
+- **Unified API**: Single `/conversations/{id}/messages` endpoint replacing entity-specific agent endpoints
+
+* [x] **Task 11.1: Database Schema Refactor**
+  * **COMPLETED**: Created `Conversation` model with polymorphic entity associations and optional parent conversation support
+  * **COMPLETED**: Updated `ConversationMessage` model to reference conversations instead of entities directly
+  * **COMPLETED**: Added `text_content` field for display-specific content that can differ from computed values
+  * **COMPLETED**: Removed old `TaskConversationMessage` and `ProjectConversationMessage` models
+  * **COMPLETED**: Database migration to new schema with table drops and recreation
+
+* [x] **Task 11.2: Repository Layer Unification**
+  * **COMPLETED**: Created unified `ConversationRepository` handling both conversation and message operations
+  * **COMPLETED**: Implemented `get_or_create_for_entity()` for polymorphic conversation management
+  * **COMPLETED**: Consolidated message CRUD operations into single repository
+  * **COMPLETED**: Removed duplicate `ProjectConversationMessageRepository` and `TaskConversationMessageRepository`
+
+* [x] **Task 11.3: Service Layer Updates**
+  * **COMPLETED**: Updated `AgentConversationService` to work with conversation IDs instead of entity type/ID
+  * **COMPLETED**: Created `get_conversation_agent()` dependency function for agent resolution based on conversation context
+  * **COMPLETED**: Simplified service instantiation pattern with direct dependency injection
+
+* [x] **Task 11.4: API Consolidation**
+  * **COMPLETED**: Created unified `/conversations/{conversation_id}/messages` endpoints for all agent communication
+  * **COMPLETED**: Updated project and task GET endpoints to include `default_conversation_id` in responses
+  * **COMPLETED**: Removed duplicate entity-specific agent endpoints (`/projects/{id}/agent/messages`, `/tasks/{id}/agent/messages`)
+  * **COMPLETED**: Maintained backward compatibility through conversation ID provision in entity responses
+
+* [x] **Task 11.5: Testing & Documentation Updates**
+  * **COMPLETED**: Rewrote conversation repository tests for new unified structure
+  * **COMPLETED**: Updated PROJECT_SPECIFICATION.md with conversation architecture details
+  * **COMPLETED**: Verified all existing functionality works with new architecture
+
+**Benefits Achieved**:
+- **Code Simplification**: Eliminated duplicate repository and service logic
+- **API Consistency**: Single conversation API pattern across all entity types
+- **Extensibility**: Easy to add new entity types (e.g., codebase conversations) without code duplication
+- **Sub-Conversation Support**: Foundation for agent-to-agent internal conversations
+- **Cleaner Frontend Integration**: Frontend only needs conversation ID to communicate with any agent
   * **Document Locking**: Disable editing during agent processing and pending approvals
 
 * [ ] **Task 9.6: Document Structure Templates**

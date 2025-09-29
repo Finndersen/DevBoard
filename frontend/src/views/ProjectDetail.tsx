@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, PlusIcon, ChatBubbleLeftIcon, XMarkIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon, XMarkIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
-import Chat from '../components/Chat'
+import AgentChat from '../components/AgentChat'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
@@ -140,6 +140,7 @@ export default function ProjectDetail() {
     setIsEditingSpecification(false)
   }
 
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'defining':
@@ -193,56 +194,53 @@ export default function ProjectDetail() {
 
   return (
     <div>
-      {/* Header */}
-      <div className={`${layouts.flexBetween} mb-6`}>
-        <div className="flex items-center space-x-4">
-          <Link
-            to="/projects"
-            className={`inline-flex items-center ${textColors.secondary} hover:text-gray-700 dark:hover:text-gray-300`}
-          >
-            <ArrowLeftIcon className="w-5 h-5 mr-2" />
-            Projects
-          </Link>
-          <div>
-            <h1 className={`text-2xl font-bold ${textColors.primary}`}>{project.name}</h1>
+      {/* Navigation Tabs with Project Name and Actions */}
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
+        <div className="flex items-center justify-between relative">
+          {/* Left: Navigation Tabs */}
+          <nav className="-mb-px flex space-x-8">
+            {[
+              { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
+              { id: 'board' as const, name: 'Tasks', icon: null },
+              { id: 'settings' as const, name: 'Settings', icon: null },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                {tab.icon && <tab.icon className="w-4 h-4 mr-2" />}
+                {tab.name}
+              </button>
+            ))}
+          </nav>
+          
+          {/* Center: Project Name */}
+          <div className="absolute left-1/2 transform -translate-x-1/2">
+            <h1 className={`text-xl font-bold ${textColors.primary}`}>
+              {project?.name}
+            </h1>
+          </div>
+          
+          {/* Right: Actions */}
+          <div className="flex items-center">
+            <Button onClick={() => setShowCreateTaskModal(true)} size="sm">
+              <PlusIcon className="w-4 h-4 mr-2" />
+              New Task
+            </Button>
           </div>
         </div>
-        
-        <Button onClick={() => setShowCreateTaskModal(true)}>
-          <PlusIcon className="w-4 h-4 mr-2" />
-          New Task
-        </Button>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
-            { id: 'board' as const, name: 'Board', icon: null },
-            { id: 'settings' as const, name: 'Settings', icon: null },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              {tab.icon && <tab.icon className="w-4 h-4 mr-2" />}
-              {tab.name}
-            </button>
-          ))}
-        </nav>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'board' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {statusColumns.map((status) => (
-            <Card key={status} className="p-4 bg-gray-50 dark:bg-gray-800">
+            <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800">
               <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between`}>
                 {status}
                 <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
@@ -279,27 +277,12 @@ export default function ProjectDetail() {
       )}
 
       {activeTab === 'editor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 h-[calc(100vh-280px)] overflow-hidden">
-          {/* Left Side - Project Details & Specification */}
-          <div className="flex flex-col space-y-6 overflow-hidden">
-            {/* Project Details Section */}
-            <Card className="p-6 flex-shrink-0">
-              <h3 className={`text-lg font-medium ${textColors.primary} mb-4`}>Project Details</h3>
-              <div className="space-y-2">
-                <div>
-                  <span className={`text-sm font-medium ${textColors.muted}`}>Name:</span>
-                  <span className={`ml-2 ${textColors.primary}`}>{project.name}</span>
-                </div>
-                <div>
-                  <span className={`text-sm font-medium ${textColors.muted}`}>Description:</span>
-                  <span className={`ml-2 ${textColors.primary}`}>{project.description}</span>
-                </div>
-              </div>
-            </Card>
-
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 h-[calc(100vh-200px)] overflow-hidden">
+          {/* Left Side - Project Specification */}
+          <div className="flex flex-col overflow-hidden">
             {/* Specification Document Section */}
-            <Card className="p-6 flex-1 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <Card padding="xs" className="h-full flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-2 flex-shrink-0">
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Specification</h3>
                 {!isEditingSpecification ? (
                   <button
@@ -353,12 +336,12 @@ export default function ProjectDetail() {
           </div>
 
           {/* Right Side - Chat */}
-          <Card className="p-6 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-4 flex-shrink-0">
-              <div className="flex items-center">
-                <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent</h3>
-              </div>
+          <AgentChat
+            title="Agent"
+            conversationId={project.default_conversation_id}
+            placeholder="Ask a question about this project..."
+            emptyStateMessage="Ask me anything about this project!"
+            rightHeaderContent={
               <div className={`text-sm ${textColors.secondary}`}>
                 {modelLoading ? (
                   <span>Loading...</span>
@@ -368,16 +351,14 @@ export default function ProjectDetail() {
                   <span>Model: Unknown</span>
                 )}
               </div>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <Chat projectId={parseInt(id!)} />
-            </div>
-          </Card>
+            }
+            className="h-full flex flex-col overflow-hidden"
+          />
         </div>
       )}
 
       {activeTab === 'settings' && (
-        <Card className="p-6">
+        <Card padding="xs">
           <h3 className={`text-lg font-medium ${textColors.primary} mb-4`}>Project Settings</h3>
           <p className={textColors.secondary}>Project settings configuration will be implemented here.</p>
         </Card>
@@ -451,6 +432,7 @@ export default function ProjectDetail() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

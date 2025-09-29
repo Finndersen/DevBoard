@@ -13,12 +13,11 @@ from github import (
 from github.Auth import Token
 
 from devboard.config.integration_configs import GitHubIntegrationConfig
-from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
-    IntegrationConfigurationError,
+    IntegrationConnectionResult,
     IntegrationError,
     RateLimitError,
     ResourceNotFoundError,
@@ -31,10 +30,11 @@ class GitHubIntegration(BaseIntegration):
     """Integration for GitHub API access."""
 
     integration_type = "github"
+    configuration_schema = GitHubIntegrationConfig
 
     def __init__(self, config: GitHubIntegrationConfig):
         """Initialize with GitHub configuration and client."""
-        self.config = config
+        super().__init__(config)
         try:
             self.client = Github(auth=Token(config.api_token), base_url=config.base_url)
             logger.info("Initialized GitHub integration")
@@ -42,30 +42,20 @@ class GitHubIntegration(BaseIntegration):
             logger.error(f"Failed to initialize GitHub integration: {e}")
             raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
 
-    @classmethod
-    def create(cls, config_service: ConfigService) -> "GitHubIntegration":
-        """Create GitHub integration instance with configuration from database and environment."""
-        try:
-            # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(GitHubIntegrationConfig)
-            if not config:
-                raise IntegrationConfigurationError(
-                    "GitHub configuration not found or invalid. Please configure the GitHub integration."
-                )
-            return cls(config)
-        except Exception as e:
-            logger.error(f"Failed to create GitHub integration: {e}")
-            raise IntegrationConfigurationError(f"GitHub configuration error: {e}") from e
-
-    async def test_connection(self) -> bool:
+    async def test_connection(self) -> IntegrationConnectionResult:
         """Test GitHub API connection."""
         try:
             # Test connection by getting current user info
-            self.client.get_user()
-            return True
-        except Exception as e:
-            logger.error(f"GitHub connection test failed: {e}")
-            return False
+            user = self.client.get_user()
+            return IntegrationConnectionResult(
+                success=True, message=f"Successfully connected to GitHub as {user.login}"
+            )
+        except BadCredentialsException:
+            return IntegrationConnectionResult(
+                success=False, message="GitHub authentication failed: Invalid credentials"
+            )
+        except RateLimitExceededException as e:
+            return IntegrationConnectionResult(success=False, message=f"GitHub rate limit exceeded: {e}")
 
     async def get_pull_request(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
         """Get details of a specific pull request."""

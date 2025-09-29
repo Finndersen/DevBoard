@@ -1,19 +1,29 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { PaperAirplaneIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest, PendingApproval, DocumentEdit } from '../lib/api'
 import PendingApprovalsList from './PendingApprovalsList'
 import { useApprovals } from '../contexts/ApprovalsContext'
-import { createProjectApprovalKey } from '../utils/approvalKeys'
+import { usePendingMessages, type PendingMessage } from '../contexts/PendingMessagesContext'
+import { createConversationApprovalKey, createConversationPendingKey } from '../utils/approvalKeys'
 import { standardChatInputClasses } from '../styles/inputStyles'
 import Button from './ui/Button'
 import Modal from './ui/Modal'
 
-interface ChatProps {
-  projectId: number
+interface ConversationChatProps {
+  conversationId: number
+  placeholder?: string
+  emptyStateMessage?: string
+  onClearHistory?: () => void
+  showClearButton?: boolean
 }
 
-export default function Chat({ projectId }: ChatProps) {
+export default function ConversationChat({ 
+  conversationId,
+  placeholder = "Ask a question...",
+  emptyStateMessage = "Start a conversation!",
+  onClearHistory
+}: ConversationChatProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -22,14 +32,43 @@ export default function Chat({ projectId }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const { getApprovals, setApprovals, clearApprovals } = useApprovals()
-  const approvalKey = createProjectApprovalKey(projectId)
+  const approvalKey = createConversationApprovalKey(conversationId)
   const pendingApprovals = getApprovals(approvalKey)
+  
+  const { 
+    addPendingMessage, 
+    updateMessageStatus, 
+    removeMessage, 
+    getPendingMessages, 
+    retryMessage,
+    clearConversationMessages
+  } = usePendingMessages()
+  const pendingKey = createConversationPendingKey(conversationId)
+  const pendingMessages = getPendingMessages(pendingKey)
   
   // Debug logging
   useEffect(() => {
-    console.log('Chat: approvalKey:', approvalKey)
-    console.log('Chat: pendingApprovals:', pendingApprovals)
-  }, [approvalKey, pendingApprovals])
+    console.log('ConversationChat: approvalKey:', approvalKey)
+    console.log('ConversationChat: pendingApprovals:', pendingApprovals)
+    console.log('ConversationChat: pendingMessages:', pendingMessages)
+  }, [approvalKey, pendingApprovals, pendingMessages])
+
+  // Combine backend messages with pending messages and sort by timestamp
+  const allMessages = [...messages, ...pendingMessages.map(pendingMsg => ({
+    id: pendingMsg.id,
+    role: 'user' as const,
+    text_content: pendingMsg.text_content,
+    timestamp: pendingMsg.timestamp,
+    isPending: true,
+    pendingStatus: pendingMsg.status,
+    pendingError: pendingMsg.error,
+    pendingRetryCount: pendingMsg.retryCount
+  } as ConversationMessage & {
+    isPending: boolean
+    pendingStatus: 'pending' | 'sent' | 'failed'
+    pendingError?: string
+    pendingRetryCount: number
+  }))].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -37,16 +76,16 @@ export default function Chat({ projectId }: ChatProps) {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [allMessages])
 
   const fetchChatHistory = useCallback(async () => {
     try {
-      const data = await apiClient.getProjectAgentMessages(projectId)
+      const data = await apiClient.getConversationMessages(conversationId)
       setMessages(data)
     } catch (error) {
       console.error('Failed to fetch chat history:', error)
     }
-  }, [projectId])
+  }, [conversationId])
 
   useEffect(() => {
     fetchChatHistory()
@@ -56,42 +95,79 @@ export default function Chat({ projectId }: ChatProps) {
     e.preventDefault()
     if (!newMessage.trim() || loading || pendingApprovals.length > 0) return
 
-    // Add user message to chat immediately
-    const userMessage: ConversationMessage = {
-      id: Date.now(), // temporary ID
-      role: 'user',
-      text_content: newMessage.trim(),
-      timestamp: new Date().toISOString()
-    }
+    const messageText = newMessage.trim()
+    setNewMessage('') // Clear input immediately
 
-    setMessages(prev => [...prev, userMessage])
-    setNewMessage('')
+    // Add message to pending state
+    const pendingMessageId = addPendingMessage(pendingKey, {
+      conversationId,
+      text_content: messageText
+    })
+
     setLoading(true)
 
     try {
-      const response = await apiClient.sendProjectAgentMessage(projectId, {
-        message: userMessage.text_content
+      // Update status to 'sent' when making API call
+      updateMessageStatus(pendingKey, pendingMessageId, 'sent')
+      
+      const response = await apiClient.sendConversationMessage(conversationId, {
+        message: messageText
       })
 
       if (response.type === 'message' && response.message) {
-        // Agent provided a direct response
+        // Success: remove from pending and add agent response to regular messages
+        removeMessage(pendingKey, pendingMessageId)
         setMessages(prev => [...prev, response.message!])
-        // Note: Don't clear approvals here - only clear when explicitly processed
       } else if (response.type === 'tool_request' && response.tool_requests) {
-        // Agent wants to use tools - convert to PendingApproval format
+        // Tool request: remove from pending and handle approvals
+        removeMessage(pendingKey, pendingMessageId)
         const approvals = await convertToolRequestsToApprovals(response.tool_requests)
-        console.log('Chat: Setting approvals:', approvals)
+        console.log('ConversationChat: Setting approvals:', approvals)
         setApprovals(approvalKey, approvals)
       }
     } catch (error) {
       console.error('Failed to send message:', error)
-      const errorMessage: ConversationMessage = {
-        id: Date.now() + 1,
-        role: 'agent',
-        text_content: 'Sorry, I encountered an error processing your request. Please try again.',
-        timestamp: new Date().toISOString()
+      // Update pending message status to failed
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRetryMessage = (messageId: string) => {
+    const pendingMessage = pendingMessages.find(msg => msg.id === messageId)
+    if (!pendingMessage) return
+
+    // Retry the message
+    retryMessage(pendingKey, messageId)
+    
+    // Resend using the same flow as regular send
+    resendPendingMessage(pendingMessage)
+  }
+
+  const resendPendingMessage = async (pendingMessage: PendingMessage) => {
+    setLoading(true)
+
+    try {
+      updateMessageStatus(pendingKey, pendingMessage.id, 'sent')
+      
+      const response = await apiClient.sendConversationMessage(conversationId, {
+        message: pendingMessage.text_content
+      })
+
+      if (response.type === 'message' && response.message) {
+        removeMessage(pendingKey, pendingMessage.id)
+        setMessages(prev => [...prev, response.message!])
+      } else if (response.type === 'tool_request' && response.tool_requests) {
+        removeMessage(pendingKey, pendingMessage.id)
+        const approvals = await convertToolRequestsToApprovals(response.tool_requests)
+        setApprovals(approvalKey, approvals)
       }
-      setMessages(prev => [...prev, errorMessage])
+    } catch (error) {
+      console.error('Failed to retry message:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      updateMessageStatus(pendingKey, pendingMessage.id, 'failed', errorMessage)
     } finally {
       setLoading(false)
     }
@@ -99,9 +175,9 @@ export default function Chat({ projectId }: ChatProps) {
 
   const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApproval[]> => {
     return toolRequests.map((request) => {
-      console.log('Chat: Converting tool request:', request)
-      console.log('Chat: tool_args type:', typeof request.tool_args)
-      console.log('Chat: tool_args content:', request.tool_args)
+      console.log('ConversationChat: Converting tool request:', request)
+      console.log('ConversationChat: tool_args type:', typeof request.tool_args)
+      console.log('ConversationChat: tool_args content:', request.tool_args)
       
       let documentType: string | null = null
       let edits: DocumentEdit[] | null = null
@@ -113,21 +189,21 @@ export default function Chat({ projectId }: ChatProps) {
         
         // Extract edits and reasoning from tool_args
         if (typeof request.tool_args === 'object' && request.tool_args !== null) {
-          console.log('Chat: Extracting from object tool_args:', request.tool_args)
+          console.log('ConversationChat: Extracting from object tool_args:', request.tool_args)
           edits = request.tool_args.edits || null
           reasoning = request.tool_args.reasoning || null
         } else if (typeof request.tool_args === 'string') {
-          console.log('Chat: Parsing string tool_args:', request.tool_args)
+          console.log('ConversationChat: Parsing string tool_args:', request.tool_args)
           try {
             const parsed = JSON.parse(request.tool_args)
-            console.log("Chat: Parsed JSON successfully:", parsed)
-            console.log("Chat: Parsed JSON keys:", Object.keys(parsed))
+            console.log("ConversationChat: Parsed JSON successfully:", parsed)
+            console.log("ConversationChat: Parsed JSON keys:", Object.keys(parsed))
             edits = parsed.edits || null
             reasoning = parsed.reasoning || null
-            console.log("Chat: Extracted edits:", edits)
-            console.log("Chat: Extracted reasoning:", reasoning)
+            console.log("ConversationChat: Extracted edits:", edits)
+            console.log("ConversationChat: Extracted reasoning:", reasoning)
           } catch (e) {
-            console.warn('Chat: Failed to parse tool_args as JSON:', e)
+            console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
           }
         }
       }
@@ -141,7 +217,7 @@ export default function Chat({ projectId }: ChatProps) {
         reasoning: reasoning
       }
       
-      console.log("Chat: Final approval object:", approvalObject)
+      console.log("ConversationChat: Final approval object:", approvalObject)
       return approvalObject
     })
   }
@@ -152,7 +228,7 @@ export default function Chat({ projectId }: ChatProps) {
     setLoading(true)
 
     try {
-      const response = await apiClient.approveProjectAgentTools(projectId, approvalRequest)
+      const response = await apiClient.approveConversationTools(conversationId, approvalRequest)
 
       // Clear pending approvals first
       clearApprovals(approvalKey)
@@ -181,11 +257,20 @@ export default function Chat({ projectId }: ChatProps) {
   }
 
   const handleClearHistory = async () => {
+    if (onClearHistory) {
+      // Use external clear handler if provided
+      onClearHistory()
+      return
+    }
+    
+    // Fallback to internal clear handler
     setClearing(true)
     try {
-      const response = await apiClient.clearProjectAgentMessages(projectId)
+      const response = await apiClient.clearConversationMessages(conversationId)
       console.log('Clear history response:', response)
       setMessages([])
+      // Also clear pending messages
+      clearConversationMessages(pendingKey)
       setShowClearModal(false)
     } catch (error) {
       console.error('Failed to clear chat history:', error)
@@ -196,50 +281,69 @@ export default function Chat({ projectId }: ChatProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      {messages.length > 0 && (
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600 flex-shrink-0">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {messages.length} message{messages.length !== 1 ? 's' : ''}
-          </span>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => setShowClearModal(true)}
-            disabled={loading || clearing || pendingApprovals.length > 0}
-            icon={<TrashIcon className="w-4 h-4" />}
-          >
-            Clear History
-          </Button>
-        </div>
-      )}
-      
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-        {messages.length === 0 ? (
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">{/* Removed floating Clear History Button - now handled externally */}
+        
+        {allMessages.length === 0 ? (
           <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-            <p className="text-sm">Ask me anything about this project!</p>
+            <p className="text-sm">{emptyStateMessage}</p>
             <p className="text-xs mt-2">I can help with code analysis, documentation, and project insights.</p>
           </div>
         ) : (
-          messages.map((message) => (
+          allMessages.map((message) => (
             <div
               key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{message.text_content}</div>
-                <div className={`text-xs mt-1 opacity-70 ${
-                  message.role === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div className={`max-w-[80%] flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div
+                  className={`rounded-lg px-3 py-2 text-sm ${
+                    message.role === 'user'
+                      ? (message.isPending && message.pendingStatus === 'failed')
+                        ? 'bg-red-500 text-white'
+                        : (message.isPending && message.pendingStatus === 'pending')
+                        ? 'bg-blue-400 text-white opacity-75'
+                        : 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap">{message.text_content}</div>
+                  <div className={`text-xs mt-1 opacity-70 flex items-center justify-between ${
+                    message.role === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+                  }`}>
+                    <span>
+                      {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {message.isPending && (
+                      <span className="ml-2 flex items-center">
+                        {message.pendingStatus === 'pending' && '⏳'}
+                        {message.pendingStatus === 'sent' && '📤'}
+                        {message.pendingStatus === 'failed' && '⚠️'}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                
+                {/* Retry button for failed messages */}
+                {message.isPending && message.pendingStatus === 'failed' && (
+                  <div className="mt-1 flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRetryMessage(message.id)}
+                      disabled={loading}
+                      className="text-xs px-2 py-1 h-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      <ArrowPathIcon className="w-3 h-3 mr-1" />
+                      Retry
+                    </Button>
+                    {message.pendingError && (
+                      <span className="text-xs text-red-600 dark:text-red-400">
+                        {message.pendingError}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))
@@ -278,7 +382,7 @@ export default function Chat({ projectId }: ChatProps) {
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Ask a question about this project..."
+            placeholder={placeholder}
             disabled={loading || pendingApprovals.length > 0}
             className={`flex-1 ${standardChatInputClasses}`}
           />

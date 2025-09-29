@@ -5,11 +5,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.api.dependencies.agents import get_project_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_project
 from devboard.api.dependencies.repositories import (
+    get_conversation_repository,
     get_document_repository,
-    get_project_conversation_message_repository,
     get_project_repository,
     get_task_repository,
 )
@@ -27,25 +26,15 @@ from devboard.api.schemas import (
     TaskCreate,
     TaskResponse,
 )
-from devboard.api.schemas.agent_conversation import (
-    ChatRequest,
-    ConversationMessage,
-    MessageRole,
-    PromptResponse,
-    ToolApprovalRequest,
-)
 from devboard.context_providers import ContextProviderUnavailable
-from devboard.db.models.messages import MessageType
+from devboard.db.models import ParentEntityType
 from devboard.db.models.project import Project
 from devboard.db.repositories import (
+    ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
-from devboard.db.repositories.conversation_message import (
-    ProjectConversationMessageRepository,
-)
-from devboard.services.agent_conversation import AgentConversationService
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
@@ -82,9 +71,20 @@ async def create_project(
 async def get_project(
     project_id: int,
     project: Project = Depends(get_verified_project),
-):
-    """Get a specific project."""
-    return project
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> ProjectResponse:
+    """Get a specific project with conversation_id."""
+    # Get or create conversation for project
+    conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.PROJECT, project_id)
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        description=project.description,
+        created_at=project.created_at,
+        specification=project.specification,
+        default_conversation_id=conversation.id,
+    )
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -211,117 +211,6 @@ async def delete_project_resource(
         )
 
     return {"message": "Resource deleted successfully", "success": True}
-
-
-@router.get("/{project_id}/agent/messages", response_model=list[ConversationMessage])
-def list_project_agent_messages(
-    project_id: int,
-    message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
-) -> list[ConversationMessage]:
-    """List all conversation messages for a project's agent.
-
-    Args:
-        project_id: The project to get messages for
-        project: Project instance
-        message_repo: Message repository
-
-    Returns:
-        List of conversation messages
-    """
-
-    messages = message_repo.get_all_for_entity(entity_id=project_id, exclude_tool_calls=True)
-
-    return [
-        ConversationMessage(
-            id=msg.id,
-            role=MessageRole.USER if msg.message_type == MessageType.USER_PROMPT else MessageRole.AGENT,
-            text_content=msg.text_content,
-            timestamp=msg.timestamp,
-        )
-        for msg in messages
-    ]
-
-
-@router.post("/{project_id}/agent/messages", response_model=PromptResponse)
-async def send_project_agent_message(
-    project_id: int,
-    request: ChatRequest,
-    project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
-) -> PromptResponse:
-    """Chat with the project agent.
-
-    This endpoint allows users to ask questions about their project and get
-    AI-powered responses based on context from GitHub, Jira, Slack, and codebase.
-
-    Args:
-        project_id: The project to query
-        request: The chat request with user query
-        project: Project instance
-        project_conversation_service: Agent conversation service
-
-    Returns:
-        AI-generated response based on project context
-    """
-
-    # Process query with Q&A agent
-    response = await project_conversation_service.send_message(message=request.message, entity_id=project_id)
-
-    return response
-
-
-@router.post("/{project_id}/agent/approve-tools", response_model=PromptResponse)
-async def approve_project_agent_tools(
-    project_id: int,
-    request: ToolApprovalRequest,
-    project_conversation_service: AgentConversationService = Depends(get_project_agent_conversation_service),
-) -> PromptResponse:
-    """Approve or deny tools for the project agent.
-
-    This endpoint allows users to approve or deny tool calls from the project agent
-    and continue the conversation based on the approval decisions.
-
-    Args:
-        project_id: The project to query
-        request: The tool approval request
-        project: Project instance
-        project_conversation_service: Agent conversation service
-
-    Returns:
-        AI-generated response based on tool approval decisions
-    """
-    # Process tool approvals
-    response = await project_conversation_service.process_tool_approvals(
-        approvals=request.approvals, entity_id=project_id
-    )
-
-    return response
-
-
-@router.delete("/{project_id}/agent/messages", response_model=DeleteResponse)
-async def clear_project_agent_messages(
-    project_id: int,
-    message_repo: ProjectConversationMessageRepository = Depends(get_project_conversation_message_repository),
-):
-    """Clear all conversation messages for a project's agent.
-
-    This endpoint deletes all conversation history between the user and the project agent,
-    effectively resetting the conversation to a clean state.
-
-    Args:
-        project_id: The project to clear messages for
-        project: Project instance (verified to exist)
-        message_repo: Project conversation message repository
-
-    Returns:
-        Success response with count of deleted messages
-    """
-    deleted_count = message_repo.delete_by_project(project_id)
-    message_repo.db.commit()
-
-    return {
-        "message": f"Cleared {deleted_count} conversation messages",
-        "success": True,
-    }
 
 
 @router.get("/{project_id}/context", response_model=dict[str, Any])

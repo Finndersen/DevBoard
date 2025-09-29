@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { screen, waitFor, render } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
-import { createMockProject, createMockTask } from '../../test/utils'
+import { render, createMockProject, createMockTask } from '../../test/utils'
 import ProjectDetail from '../ProjectDetail'
 
 // Helper function to render ProjectDetail with proper routing
@@ -22,7 +22,6 @@ describe('ProjectDetail', () => {
   const mockProject = createMockProject({
     id: 1,
     name: 'Test Project',
-    specification: 'This is a test project for development',
   })
 
   const mockTasks = [

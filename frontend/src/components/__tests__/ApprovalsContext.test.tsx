@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ApprovalsProvider, useApprovals, createProjectApprovalKey } from '../../contexts/ApprovalsContext'
+import { ApprovalsProvider, useApprovals } from '../../contexts/ApprovalsContext'
+import { createProjectApprovalKey } from '../../utils/approvalKeys'
 import type { PendingApproval } from '../../lib/api'
 
 // Mock localStorage

@@ -3,12 +3,13 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
-from devboard.agents.types import AgentType
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
+
+from devboard.agents.base_agent import BaseAgent
+from devboard.agents.deps import BaseDeps
+from devboard.agents.types import AgentType
 
 
 class MockDeps(BaseDeps):

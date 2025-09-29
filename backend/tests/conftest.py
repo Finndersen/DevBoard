@@ -1,6 +1,14 @@
 from collections.abc import Generator
 from unittest.mock import AsyncMock, Mock
 
+from fastapi.testclient import TestClient
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.run import AgentRunResult
+from pytest import fixture
+from sqlalchemy import Connection, Engine, create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
@@ -14,13 +22,6 @@ from devboard.db.repositories import (
 )
 from devboard.services.config_service import ConfigService
 from devboard.services.integration_service import IntegrationService
-from fastapi.testclient import TestClient
-from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.run import AgentRunResult
-from pytest import fixture
-from sqlalchemy import Connection, Engine, create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 
 @fixture(scope="session")

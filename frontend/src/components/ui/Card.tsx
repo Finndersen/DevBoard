@@ -3,12 +3,13 @@ import type { ReactNode } from 'react'
 interface CardProps {
   children: ReactNode
   className?: string
-  padding?: 'none' | 'sm' | 'md' | 'lg'
+  padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
   hover?: boolean
 }
 
 const paddingClasses = {
   none: '',
+  xs: 'p-3',
   sm: 'p-4',
   md: 'p-6',
   lg: 'p-8'

@@ -1,18 +1,13 @@
 """Tests for tasks router."""
 
-from unittest.mock import Mock
-
 import pytest
-from devboard.api.dependencies.agents import get_task_agent
-from devboard.api.main import app
+
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ProjectRepository,
     TaskRepository,
 )
-from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.run import AgentRunResult
 
 
 @pytest.fixture
@@ -32,15 +27,6 @@ def test_resource_data():
         "resource_uri": "https://github.com/owner/repo",
         "description": "Test GitHub repository",
     }
-
-
-@pytest.fixture
-def client_with_mock_task_agent(client, mock_agent):
-    """Client with mocked task agent."""
-    app.dependency_overrides[get_task_agent] = lambda: mock_agent
-    yield client
-    if get_task_agent in app.dependency_overrides:
-        del app.dependency_overrides[get_task_agent]
 
 
 class TestTasksRouter:
@@ -365,12 +351,12 @@ class TestTaskResourcesRouter:
         assert "Resource not found or does not belong to this task" in response.json()["detail"]
 
 
-class TestTaskPlanningAgentEndpoints:
-    """Test task planning agent API endpoints."""
+class TestTaskStateTransition:
+    """Test task state transition API endpoints."""
 
     @pytest.fixture
     def test_task_with_project(self, db_session):
-        """Create a test task with project for planning agent tests."""
+        """Create a test task with project for state transition tests."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         created_project = project_repo.create(name="Test Project", description="A test project for development")
@@ -381,119 +367,6 @@ class TestTaskPlanningAgentEndpoints:
         db_session.commit()
 
         return created_task
-
-    def test_send_task_conversation_message(self, client_with_mock_task_agent, test_task_with_project, mock_agent):
-        """Test sending a message to the task planning agent."""
-        task = test_task_with_project
-
-        message_request = {"message": "Help me create a task specification for user authentication."}
-
-        response = client_with_mock_task_agent.post(f"/api/tasks/{task.id}/agent/messages", json=message_request)
-        assert response.status_code == 200
-
-        conversation_response = response.json()
-        assert "type" in conversation_response
-        assert conversation_response["type"] == "message"
-        assert "message" in conversation_response
-        assert conversation_response["message"]["role"] == "agent"
-        assert "I can help you analyze" in conversation_response["message"]["text_content"]
-
-        # Verify the mock agent was called correctly
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
-        assert kwargs["prompt_or_approvals"] == "Help me create a task specification for user authentication."
-
-    def test_send_task_conversation_message_task_not_found(self, client):
-        """Test sending message to non-existent task."""
-        message_request = {"query": "Test message"}
-
-        response = client.post("/api/tasks/999/agent/messages", json=message_request)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Task not found"
-
-    def test_approve_task_tools(self, client_with_mock_task_agent, test_task_with_project, mock_agent):
-        """Test approving tool calls from the task planning agent."""
-        task = test_task_with_project
-
-        # First, send a message that would trigger a tool call to create conversation history
-
-        from pydantic_ai.messages import ModelRequest, ToolCallPart, UserPromptPart
-        from pydantic_ai.tools import DeferredToolRequests
-
-        # Mock the agent to return a tool request first, then tool approval result
-        def mock_run_side_effect(*args, **kwargs):
-            prompt_or_approvals = kwargs.get("prompt_or_approvals")
-            if isinstance(prompt_or_approvals, str):
-                # First call - return tool request
-                tool_call_part = ToolCallPart(
-                    tool_name="edit_document",
-                    tool_call_id="test_call_1",
-                    args={"edits": [{"find": "old", "replace": "new"}]},
-                )
-
-                mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = DeferredToolRequests(approvals=[tool_call_part])
-                mock_result.new_messages = Mock(
-                    return_value=[
-                        ModelRequest(parts=[UserPromptPart(content="Edit the specification")]),
-                        ModelResponse(parts=[tool_call_part]),
-                    ]
-                )
-                return mock_result
-            else:
-                # Second call - return approval result
-                mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = "Great! I've processed your tool approvals and made the requested edits."
-                mock_result.new_messages = Mock(
-                    return_value=[
-                        ModelResponse(
-                            parts=[
-                                TextPart(
-                                    content="Great! I've processed your tool approvals and made the requested edits."
-                                )
-                            ]
-                        )
-                    ]
-                )
-                return mock_result
-
-        mock_agent.run.side_effect = mock_run_side_effect
-
-        # Step 1: Send a message that triggers a tool call
-        message_request = {"message": "Please update the task specification with better requirements"}
-        response1 = client_with_mock_task_agent.post(f"/api/tasks/{task.id}/agent/messages", json=message_request)
-        assert response1.status_code == 200
-        assert response1.json()["type"] == "tool_request"
-
-        # Step 2: Now approve the tool call
-        approval_request = {
-            "approvals": {"test_call_1": {"approved": True, "feedback": "Looks good, proceed with the edit"}}
-        }
-
-        response = client_with_mock_task_agent.post(f"/api/tasks/{task.id}/agent/approve-tools", json=approval_request)
-        assert response.status_code == 200
-
-        conversation_response = response.json()
-        assert "type" in conversation_response
-        assert conversation_response["type"] == "message"
-        assert "message" in conversation_response
-        assert conversation_response["message"]["role"] == "agent"
-        assert "tool approvals" in conversation_response["message"]["text_content"]
-
-        # Verify the mock agent was called twice (message + approval)
-        assert mock_agent.run.call_count == 2
-
-        # Check the second call was with tool approvals
-        second_call_kwargs = mock_agent.run.call_args_list[1][1]
-        assert not isinstance(second_call_kwargs["prompt_or_approvals"], str)
-
-    def test_approve_task_tools_task_not_found(self, client):
-        """Test tool approval for non-existent task."""
-        approval_request = {"approvals": {"test_call_1": {"approved": True}}}
-
-        response = client.post("/api/tasks/999/agent/approve-tools", json=approval_request)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Task not found"
 
     def test_transition_task_state_success(self, client, test_task_with_project):
         """Test successful task state transition."""

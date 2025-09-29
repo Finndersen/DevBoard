@@ -8,12 +8,12 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from devboard.config.integration_configs import SlackIntegrationConfig
-from devboard.services.config_service import ConfigService
 
 from .base import (
     AuthenticationError,
     BaseIntegration,
     IntegrationConfigurationError,
+    IntegrationConnectionResult,
     IntegrationError,
     RateLimitError,
     ResourceNotFoundError,
@@ -26,10 +26,11 @@ class SlackIntegration(BaseIntegration):
     """Integration for Slack API access."""
 
     integration_type = "slack"
+    configuration_schema = SlackIntegrationConfig
 
     def __init__(self, config: SlackIntegrationConfig):
         """Initialize with Slack configuration and client."""
-        self.config = config
+        super().__init__(config)
         try:
             self.client = WebClient(token=config.api_token)
             logger.info("Initialized Slack integration")
@@ -37,39 +38,35 @@ class SlackIntegration(BaseIntegration):
             logger.error(f"Failed to initialize Slack integration: {e}")
             raise IntegrationConfigurationError(f"Failed to initialize Slack: {e}") from e
 
-    @classmethod
-    def create(cls, config_service: ConfigService) -> "SlackIntegration":
-        """Create Slack integration instance with configuration from database and environment."""
-        try:
-            # Get configuration from config service (includes database + environment)
-            config = config_service.get_config(SlackIntegrationConfig)
-            if not config:
-                raise IntegrationConfigurationError(
-                    "Slack configuration not found or invalid. Please configure the Slack integration."
-                )
-            return cls(config)
-        except Exception as e:
-            logger.error(f"Failed to create Slack integration: {e}")
-            raise IntegrationConfigurationError(f"Slack configuration error: {e}") from e
-
-    async def test_connection(self) -> bool:
+    async def test_connection(self) -> IntegrationConnectionResult:
         """Test Slack API connection."""
         try:
             response = self.client.auth_test()
-            return response.get("ok", False)
+            if response.get("ok", False):
+                user_info = response.get("user", "unknown")
+                team_info = response.get("team", "unknown")
+                return IntegrationConnectionResult(
+                    success=True, message=f"Successfully connected to Slack as {user_info} in team {team_info}"
+                )
+            else:
+                return IntegrationConnectionResult(success=False, message="Slack authentication test failed")
         except SlackApiError as e:
             if e.response["error"] in [
                 "invalid_auth",
                 "account_inactive",
                 "token_revoked",
             ]:
-                raise AuthenticationError(f"Slack authentication failed: {e}") from e
+                return IntegrationConnectionResult(
+                    success=False, message=f"Slack authentication failed: {e.response['error']}"
+                )
             else:
                 logger.error(f"Slack connection test failed: {e}")
-                return False
+                return IntegrationConnectionResult(
+                    success=False, message=f"Slack API error: {e.response.get('error', str(e))}"
+                )
         except Exception as e:
             logger.error(f"Slack connection test failed: {e}")
-            return False
+            return IntegrationConnectionResult(success=False, message=f"Slack connection failed: {e}")
 
     async def get_message(self, channel: str, timestamp: str) -> dict[str, Any] | None:
         """Get a specific message by channel and timestamp."""

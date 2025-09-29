@@ -34,6 +34,7 @@ class ProjectResponse(ProjectBase):
 
     id: int
     created_at: datetime.datetime
+    default_conversation_id: int | None = None
 
     # Document relationship - automatically loaded
     specification: DocumentResponse

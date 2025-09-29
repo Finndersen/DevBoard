@@ -140,25 +140,53 @@ describe('ApiClient', () => {
         id: 1,
         project_id: 1,
         title: 'Test Task 1',
-        description: 'Task 1 description',
         status: 'Pending',
         codebase_id: null,
         remote_task_id: null,
-        conversation_id: null,
-        implementation_plan: null,
+        default_conversation_id: 1,
         created_at: '2024-01-01T00:00:00Z',
+        specification: {
+          id: 1,
+          document_type: 'task_specification',
+          content: 'Task 1 specification',
+          content_hash: 'hash1',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+        implementation_plan: {
+          id: 2,
+          document_type: 'implementation_plan',
+          content: 'Task 1 plan',
+          content_hash: 'hash2',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
       },
       {
         id: 2,
         project_id: 1,
         title: 'Test Task 2',
-        description: 'Task 2 description',
         status: 'Planning',
         codebase_id: null,
         remote_task_id: null,
-        conversation_id: null,
-        implementation_plan: null,
+        default_conversation_id: 2,
         created_at: '2024-01-02T00:00:00Z',
+        specification: {
+          id: 3,
+          document_type: 'task_specification',
+          content: 'Task 2 specification',
+          content_hash: 'hash3',
+          created_at: '2024-01-02T00:00:00Z',
+          updated_at: '2024-01-02T00:00:00Z',
+        },
+        implementation_plan: {
+          id: 4,
+          document_type: 'implementation_plan',
+          content: 'Task 2 plan',
+          content_hash: 'hash4',
+          created_at: '2024-01-02T00:00:00Z',
+          updated_at: '2024-01-02T00:00:00Z',
+        },
       },
     ]
 
@@ -221,7 +249,7 @@ describe('ApiClient', () => {
       const updatedTask = { ...mockTasks[0], ...updates }
 
       server.use(
-        http.put('*/api/tasks/1', async ({ request }) => {
+        http.patch('*/api/tasks/1', async ({ request }) => {
           const body = await request.json()
           expect(body).toEqual(updates)
           return HttpResponse.json(updatedTask)
@@ -547,7 +575,7 @@ describe('ApiClient', () => {
 
     it('makes POST requests with body', async () => {
       let capturedMethod: string | undefined
-      let capturedBody: any
+      let capturedBody: unknown
 
       server.use(
         http.post('*/api/projects', async ({ request }) => {
@@ -570,7 +598,7 @@ describe('ApiClient', () => {
 
     it('makes PATCH requests with body', async () => {
       let capturedMethod: string | undefined
-      let capturedBody: any
+      let capturedBody: unknown
 
       server.use(
         http.patch('*/api/projects/1', async ({ request }) => {
@@ -602,7 +630,7 @@ describe('ApiClient', () => {
 
     it('makes PATCH requests to configuration endpoints', async () => {
       let capturedMethod: string | undefined
-      let capturedBody: any
+      let capturedBody: unknown
 
       server.use(
         http.patch('*/api/configurations/test/fields', async ({ request }) => {

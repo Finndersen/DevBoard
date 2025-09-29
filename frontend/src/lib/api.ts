@@ -3,6 +3,7 @@ export interface Project {
   name: string
   specification: DocumentResponse
   description: string
+  default_conversation_id: number | null
   created_at: string
 }
 
@@ -13,7 +14,7 @@ export interface Task {
   project_id: number
   codebase_id: number | null
   remote_task_id: string | null
-  conversation_id: string | null
+  default_conversation_id: number | null
   created_at: string
   specification: DocumentResponse
   implementation_plan: DocumentResponse
@@ -81,7 +82,7 @@ export interface ToolApprovalRequest {
 export interface ToolCallRequest {
   tool_call_id: string
   tool_name: string
-  tool_args: string | Record<string, any> | null
+  tool_args: string | Record<string, unknown> | null
 }
 
 export type PromptResponseType = 'message' | 'tool_request'
@@ -134,8 +135,8 @@ export interface ToolCallInfo {
   tool_call_id: string
   tool_name: string
   status: 'pending_approval' | 'approved' | 'denied'
-  arguments: Record<string, any>
-  preview: Record<string, any> | null
+  arguments: Record<string, unknown>
+  preview: Record<string, unknown> | null
 }
 
 export interface ConversationResponse {
@@ -174,7 +175,7 @@ export interface Integration {
   name: string
   type: string
   status: 'connected' | 'disconnected'
-  config: Record<string, any>
+  config: Record<string, unknown>
 }
 
 export interface LLMProvider {
@@ -182,7 +183,7 @@ export interface LLMProvider {
   name: string
   type: string
   enabled: boolean
-  config: Record<string, any>
+  config: Record<string, unknown>
 }
 
 export interface Codebase {
@@ -232,13 +233,13 @@ export interface ConfigurationFieldInfo {
   type: 'string' | 'boolean' | 'integer' | 'number'
   required: boolean
   description?: string
-  env_value?: any
-  db_value?: any
-  default_value?: any
+  env_value?: unknown
+  db_value?: unknown
+  default_value?: unknown
   is_secret: boolean
   env_var_name?: string
   is_overridden: boolean
-  effective_value: any
+  effective_value: unknown
 }
 
 export interface ConfigurationDetailResponse {
@@ -252,7 +253,7 @@ export interface IntegrationTestResponse {
   success: boolean
   error_type?: string
   error_message?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 }
 
 export interface AgentModelResponse {
@@ -351,20 +352,6 @@ export class ApiClient {
     return this.request<void>(`/api/tasks/${id}`, { method: 'DELETE' })
   }
 
-  // Task Planning Agent - New Deferred Tools API
-  async sendTaskConversationMessage(taskId: number | string, request: MessageRequest): Promise<any> {
-    return this.request<any>(`/api/tasks/${taskId}/agent/messages`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    })
-  }
-
-  async approveTaskTools(taskId: number | string, request: ToolApprovalRequest): Promise<any> {
-    return this.request<any>(`/api/tasks/${taskId}/agent/approve-tools`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    })
-  }
 
   async transitionTaskState(taskId: number | string, request: StateTransitionRequest): Promise<Task> {
     return this.request<Task>(`/api/tasks/${taskId}/state-transition`, {
@@ -373,27 +360,27 @@ export class ApiClient {
     })
   }
 
-  // Project Agent Conversation - New API
-  async getProjectAgentMessages(projectId: number | string): Promise<ConversationMessage[]> {
-    return this.request<ConversationMessage[]>(`/api/projects/${projectId}/agent/messages`)
+  // Unified Conversation API
+  async getConversationMessages(conversationId: number | string): Promise<ConversationMessage[]> {
+    return this.request<ConversationMessage[]>(`/api/conversations/${conversationId}/messages`)
   }
 
-  async sendProjectAgentMessage(projectId: number | string, request: UserPrompt): Promise<PromptResponse> {
-    return this.request<PromptResponse>(`/api/projects/${projectId}/agent/messages`, {
+  async sendConversationMessage(conversationId: number | string, request: UserPrompt): Promise<PromptResponse> {
+    return this.request<PromptResponse>(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
   }
 
-  async approveProjectAgentTools(projectId: number | string, request: ToolApprovalRequest): Promise<PromptResponse> {
-    return this.request<PromptResponse>(`/api/projects/${projectId}/agent/approve-tools`, {
+  async approveConversationTools(conversationId: number | string, request: ToolApprovalRequest): Promise<PromptResponse> {
+    return this.request<PromptResponse>(`/api/conversations/${conversationId}/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
   }
 
-  async clearProjectAgentMessages(projectId: number | string): Promise<{ message: string; success: boolean }> {
-    return this.request<{ message: string; success: boolean }>(`/api/projects/${projectId}/agent/messages`, {
+  async clearConversationMessages(conversationId: number | string): Promise<{ message: string; success: boolean }> {
+    return this.request<{ message: string; success: boolean }>(`/api/conversations/${conversationId}/messages`, {
       method: 'DELETE',
     })
   }
@@ -440,7 +427,7 @@ export class ApiClient {
     return this.request<ConfigurationDetailResponse>(`/api/configurations/${configKey}/detail`)
   }
 
-  async updateConfigurationFields(configKey: string, fieldUpdates: Record<string, any>): Promise<ConfigurationDetailResponse> {
+  async updateConfigurationFields(configKey: string, fieldUpdates: Record<string, unknown>): Promise<ConfigurationDetailResponse> {
     return this.request<ConfigurationDetailResponse>(`/api/configurations/${configKey}/fields`, {
       method: 'PATCH',
       body: JSON.stringify(fieldUpdates),

@@ -10,6 +10,7 @@ from devboard.api.routers import (
     agents,
     codebases,
     configurations,
+    conversations,
     projects,
     settings,
     tasks,
@@ -46,6 +47,7 @@ app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"]
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(conversations.router, prefix="/api", tags=["conversations"])
 
 
 @app.get("/")

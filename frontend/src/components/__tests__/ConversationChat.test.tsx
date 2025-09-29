@@ -4,10 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
-import Chat from '../Chat'
+import ConversationChat from '../ConversationChat'
 
-describe('Chat', () => {
-  const mockProjectId = 1
+describe('ConversationChat', () => {
+  const mockConversationId = 1
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -15,9 +15,9 @@ describe('Chat', () => {
     // Mock scrollIntoView which is not available in jsdom
     Element.prototype.scrollIntoView = vi.fn()
     
-    // Setup default API responses for new agent conversation API
+    // Setup default API responses for conversation API
     server.use(
-      http.get('*/api/projects/1/agent/messages', () => {
+      http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
             id: 1,
@@ -37,19 +37,17 @@ describe('Chat', () => {
   })
 
   it('renders chat interface with input and messages area', async () => {
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
     expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
-    // Note: The title "Q&A Agent" is rendered by the parent component, not Chat itself
-    // expect(screen.getByText('Q&A Agent')).toBeInTheDocument()
   })
 
   it('loads and displays chat history on mount', async () => {
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('What is the status?')).toBeInTheDocument()
@@ -58,7 +56,7 @@ describe('Chat', () => {
   })
 
   it('displays messages with correct user/assistant styling', async () => {
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('What is the status?')).toBeInTheDocument()
@@ -79,7 +77,7 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/agent/messages', async ({ request }) => {
+      http.post('*/api/conversations/1/messages', async ({ request }) => {
         const { message } = await request.json() as { message: string }
         return HttpResponse.json({
           type: 'message',
@@ -94,13 +92,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
     const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'New question')
@@ -124,7 +122,7 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
@@ -138,13 +136,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
 
     await user.type(input, 'Test message{enter}')
 
@@ -156,10 +154,10 @@ describe('Chat', () => {
   it('prevents sending empty messages', async () => {
     const user = userEvent.setup()
     
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
     const sendButton = screen.getByRole('button', { name: /send message/i })
@@ -173,7 +171,6 @@ describe('Chat', () => {
     // Should still only have the original 2 messages from setup
     expect(screen.getByText('What is the status?')).toBeInTheDocument()
     expect(screen.getByText('The project is progressing well.')).toBeInTheDocument()
-    // No new messages should have been added
   })
 
   it('shows loading state while sending message', async () => {
@@ -181,7 +178,7 @@ describe('Chat', () => {
     
     // Delay the API response to test loading state
     server.use(
-      http.post('*/api/projects/1/agent/messages', async () => {
+      http.post('*/api/conversations/1/messages', async () => {
         await new Promise(resolve => setTimeout(resolve, 200))
         return HttpResponse.json({
           type: 'message',
@@ -196,13 +193,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
     const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'Test message')
@@ -221,12 +218,12 @@ describe('Chat', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
-      http.get('*/api/projects/1/agent/messages', () => {
+      http.get('*/api/conversations/1/messages', () => {
         return new HttpResponse(null, { status: 500 })
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(consoleSpy).toHaveBeenCalledWith('Failed to fetch chat history:', expect.any(Error))
@@ -240,18 +237,18 @@ describe('Chat', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return new HttpResponse(null, { status: 500 })
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
     const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'Test message')
@@ -268,7 +265,7 @@ describe('Chat', () => {
     const testDate = '2024-01-01T15:30:00Z'
     
     server.use(
-      http.get('*/api/projects/1/agent/messages', () => {
+      http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
             id: 1,
@@ -280,7 +277,7 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('Test message')).toBeInTheDocument()
@@ -296,7 +293,7 @@ describe('Chat', () => {
     const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
     
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
@@ -310,13 +307,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
 
     await user.type(input, 'New message')
     await user.click(screen.getByRole('button', { name: /send/i }))
@@ -354,12 +351,12 @@ describe('Chat', () => {
     ]
 
     server.use(
-      http.get('*/api/projects/1/agent/messages', () => {
+      http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json(messages)
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('First message')).toBeInTheDocument()
@@ -376,7 +373,7 @@ describe('Chat', () => {
     
     // Mock agent requesting tool approval
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'tool_request',
           message: null,
@@ -394,7 +391,7 @@ describe('Chat', () => {
       }),
       
       // Mock approval endpoint
-      http.post('*/api/projects/1/agent/approve-tools', () => {
+      http.post('*/api/conversations/1/approve-tools', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
@@ -408,13 +405,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
     const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'Please update the project specification')
@@ -449,7 +446,7 @@ describe('Chat', () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'tool_request',
           message: null,
@@ -462,13 +459,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
     const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'Test message')
@@ -489,64 +486,48 @@ describe('Chat', () => {
 
   it('handles empty chat history gracefully', async () => {
     server.use(
-      http.get('*/api/projects/1/agent/messages', () => {
+      http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([])
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    // Should show empty state or no messages
-    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+    // Should show empty state
+    expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
   })
 
-  it('maintains input focus after sending message', async () => {
-    const user = userEvent.setup()
-    
+  it('accepts custom placeholder and empty state message', async () => {
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
-        return HttpResponse.json({
-          type: 'message',
-          message: {
-            id: 3,
-            text_content: 'AI response',
-            role: 'agent',
-            timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+      http.get('*/api/conversations/1/messages', () => {
+        return HttpResponse.json([])
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(
+      <ConversationChat 
+        conversationId={mockConversationId}
+        placeholder="Custom placeholder text"
+        emptyStateMessage="Custom empty state"
+      />
+    )
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/custom placeholder text/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
-
-    await user.type(input, 'Test message')
-    await user.click(screen.getByRole('button', { name: /send/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText('AI response')).toBeInTheDocument()
-    })
-
-    // Note: Focus behavior may vary - the button might retain focus after form submission
-    // This is acceptable behavior for accessibility
-    // expect(input).toHaveFocus()
+    expect(screen.getByText(/custom empty state/i)).toBeInTheDocument()
   })
 
   it('generates unique message IDs for new messages', async () => {
     const user = userEvent.setup()
     
     server.use(
-      http.post('*/api/projects/1/agent/messages', () => {
+      http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
@@ -560,13 +541,13 @@ describe('Chat', () => {
       })
     )
 
-    render(<Chat projectId={mockProjectId} />)
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this project/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question about this project/i)
+    const input = screen.getByPlaceholderText(/ask a question/i)
 
     // Send first message
     await user.type(input, 'First message')

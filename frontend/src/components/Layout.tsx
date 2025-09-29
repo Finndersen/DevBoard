@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
-import { useDarkMode } from '../contexts/DarkModeContext'
-import ApprovalNotifications from './ApprovalNotifications'
+import NotificationsPanel from './NotificationsPanel'
 
 interface LayoutProps {
   children: ReactNode
@@ -10,7 +8,6 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
-  const { isDarkMode, toggleDarkMode } = useDarkMode()
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path)
@@ -22,13 +19,15 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center">
-              <Link to="/" className="flex items-center space-x-2">
+            {/* Logo & Title */}
+            <div className="flex items-center space-x-3">
+              <Link to="/" className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">DB</span>
                 </div>
-                <span className="text-xl font-bold text-gray-900 dark:text-white">DevBoard</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">
+                  DevBoard
+                </span>
               </Link>
             </div>
 
@@ -64,27 +63,15 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Settings
               </Link>
-              
-              {/* Dark Mode Toggle */}
-              <button
-                onClick={toggleDarkMode}
-                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                aria-label="Toggle dark mode"
-              >
-                {isDarkMode ? (
-                  <SunIcon className="w-5 h-5" />
-                ) : (
-                  <MoonIcon className="w-5 h-5" />
-                )}
-              </button>
+
+              <NotificationsPanel />
             </div>
           </div>
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="w-full py-6 px-4 sm:px-6 lg:px-8">
-        <ApprovalNotifications />
+      <main className="w-full py-4 px-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

@@ -54,6 +54,7 @@ class TaskResponse(TaskBase):
 
     id: int
     conversation_id: str | None = None
+    default_conversation_id: int | None = None
     created_at: datetime.datetime
 
     # Document relationships - automatically loaded

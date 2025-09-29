@@ -28,7 +28,7 @@ class JiraContextProvider(BaseContextProvider):
     def create_instance(cls) -> "JiraContextProvider":
         """Create an instance of the Jira context provider.
 
-        Uses JiraIntegration.create() to handle configuration validation and initialization.
+        Gets Jira configuration and creates integration instance.
 
         Returns:
             Configured JiraContextProvider instance
@@ -37,7 +37,25 @@ class JiraContextProvider(BaseContextProvider):
             ContextProviderUnavailable: If Jira configuration is missing or invalid
         """
         try:
-            integration = JiraIntegration.create()
+            from devboard.config.integration_configs import JiraIntegrationConfig
+
+            # Get database session and create config service
+            from devboard.db.database import get_db_session
+            from devboard.db.repositories import ConfigurationRepository
+            from devboard.services.config_service import ConfigService
+
+            session = next(get_db_session())
+            config_repo = ConfigurationRepository(session)
+            config_service = ConfigService(config_repo)
+
+            # Get Jira configuration
+            config = config_service.get_config(JiraIntegrationConfig)
+            if not config:
+                raise ContextProviderUnavailable(
+                    "Jira configuration not found or invalid. Please configure the Jira integration."
+                )
+
+            integration = JiraIntegration(config)
             return cls(integration)
         except Exception as e:
             raise ContextProviderUnavailable(f"Failed to initialize Jira integration: {e}") from e

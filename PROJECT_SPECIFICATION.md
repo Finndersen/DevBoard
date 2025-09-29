@@ -266,11 +266,13 @@ Agents collaborate with users through **structured document editing**:
 - Conflict detection and resolution
 
 #### Conversation Persistence
-All agent interactions are **preserved across sessions**:
-- Continuous conversation threads
-- Context-aware responses based on history
-- State transitions tracked through conversations
-- Knowledge accumulation over time
+All agent interactions are **preserved across sessions** using a unified conversation system:
+- **Polymorphic Conversations**: Each project and task has a dedicated conversation that persists agent interactions
+- **Sub-Conversations**: Support for agent-to-agent conversations for internal operations (e.g., codebase investigation)
+- **Message Persistence**: Full conversation history with both raw agent messages and user-friendly text content
+- **Context-Aware Responses**: Agent responses informed by complete conversation history
+- **State Transitions**: Task and project state changes tracked through conversation flows
+- **Unified API**: Single `/conversations/{id}/messages` endpoint for all agent communication
 
 ## User Experience Design
 

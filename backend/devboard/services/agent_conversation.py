@@ -3,7 +3,7 @@
 import logging
 
 import logfire
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import (
     DeferredToolApprovalResult,
     DeferredToolRequests,
@@ -22,10 +22,9 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
     ToolCallRequest,
 )
-from devboard.db.models.messages import BaseConversationMessage, MessageType
-from devboard.db.repositories.conversation_message import (
-    BaseConversationMessageRepository,
-)
+from devboard.db.models.messages import ConversationMessage as DbConversationMessage
+from devboard.db.models.messages import MessageType
+from devboard.db.repositories.conversation import ConversationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -35,65 +34,55 @@ class AgentConversationService:
 
     def __init__(
         self,
+        conversation_id: int,
         agent: BaseAgent,
-        message_repository: BaseConversationMessageRepository,
+        conversation_repository: ConversationRepository,
     ):
+        self.conversation_id = conversation_id
         self.agent = agent
-        self.message_repo = message_repository
+        self.conversation_repo = conversation_repository
 
     async def send_message(
         self,
         message: str,
-        entity_id: int,
     ) -> PromptResponse:
         """Process a message and return conversation response.
 
         Args:
-            agent: The agent to use for processing
-            entity_id: ID of entity (task or project)
             message: User's message
         """
         with logfire.span(
             "agent_conversation.send_message",
-            entity_id=entity_id,
+            conversation_id=self.conversation_id,
             message_length=len(message),
         ):
-            return await self._handle_message_or_approval(entity_id=entity_id, message_or_approvals=message)
+            return await self._handle_message_or_approval(message_or_approvals=message)
 
     async def process_tool_approvals(
         self,
         approvals: dict[str, ToolApprovalDecision],
-        entity_id: int,
     ) -> PromptResponse:
         """Process tool approval/denial and continue agent execution.
 
         Args:
-            agent: The agent to use for processing
-            entity_id: ID of entity (task or project)
             approvals: User's approval decisions
         """
         with logfire.span(
             "agent_conversation.process_tool_approval",
-            entity_id=entity_id,
+            conversation_id=self.conversation_id,
             approval_count=len(approvals),
         ):
             tool_approval_results = self._create_deferred_results(approvals)
-            return await self._handle_message_or_approval(
-                entity_id=entity_id, message_or_approvals=tool_approval_results
-            )
+            return await self._handle_message_or_approval(message_or_approvals=tool_approval_results)
 
-    async def _handle_message_or_approval(
-        self, entity_id: int, message_or_approvals: str | DeferredToolResults
-    ) -> PromptResponse:
+    async def _handle_message_or_approval(self, message_or_approvals: str | DeferredToolResults) -> PromptResponse:
         """
         Handle either a new user message or tool approval result.
-        :param agent: The agent to use for processing
-        :param entity_id: ID of entity (task or project)
         :param message_or_approvals: User message/prompt or tool approval results
         :return:
         """
         # Load conversation history
-        existing_messages = self.message_repo.get_all_for_entity(entity_id)
+        existing_messages = self.get_message_history()
         # Verify integrity of message history
         if isinstance(message_or_approvals, DeferredToolResults):
             if not existing_messages:
@@ -104,11 +93,11 @@ class AgentConversationService:
             if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
                 # If there was an issue processing tool approvals or they were never provided,
                 # need to clear the message history until previous message
-                delete_count = self.message_repo.delete_tool_approval_messages(entity_id)
+                delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation_id)
                 existing_messages = existing_messages[:-delete_count]
                 logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
 
-        message_history = self.convert_messages_to_pydantic(existing_messages)
+        message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
 
         # Process with agent
         result = await self.agent.run(
@@ -118,7 +107,7 @@ class AgentConversationService:
         )
 
         # Store and process results
-        saved_messages = self.store_new_messages(new_messages=result.new_messages(), entity_id=entity_id)
+        saved_messages = self.store_new_messages(new_messages=result.new_messages())
 
         output = result.output
         if isinstance(output, DeferredToolRequests):
@@ -169,23 +158,13 @@ class AgentConversationService:
 
         return DeferredToolResults(approvals=converted_approvals)
 
-    def convert_messages_to_pydantic(self, message_records: list[BaseConversationMessage]) -> list[ModelMessage]:
-        """Extract PydanticAI message history from database records."""
-        # Extract pydantic_content from each record
-        serialized_messages = [record.pydantic_content for record in message_records]
+    def get_message_history(self) -> list[ConversationMessage]:
+        return self.conversation_repo.get_messages(self.conversation_id)
 
-        if not serialized_messages:
-            return []
-
-        # Deserialize the messages
-        messages = ModelMessagesTypeAdapter.validate_python(serialized_messages)
-        return messages
-
-    def store_new_messages(self, new_messages: list[ModelMessage], entity_id: int) -> list[BaseConversationMessage]:
+    def store_new_messages(self, new_messages: list[ModelMessage]) -> list[DbConversationMessage]:
         """Store new messages from agent result in DB."""
         # Extract all messages from the agent result
         saved_messages = []
         for message in new_messages:
-            db_message = self.message_repo.MESSAGE_MODEL.from_pydantic_message(entity_id, message)
-            saved_messages.append(self.message_repo.create(db_message))
+            saved_messages.append(self.conversation_repo.create_message(self.conversation_id, message))
         return saved_messages

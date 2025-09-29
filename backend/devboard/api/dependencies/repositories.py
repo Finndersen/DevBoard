@@ -8,13 +8,10 @@ from devboard.db.repositories import (
     CodebaseRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
+    ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
-)
-from devboard.db.repositories.conversation_message import (
-    ProjectConversationMessageRepository,
-    TaskConversationMessageRepository,
 )
 
 
@@ -52,15 +49,6 @@ def get_task_repository(db: Session = Depends(get_db)) -> TaskRepository:
     return TaskRepository(db)
 
 
-def get_project_conversation_message_repository(
-    db: Session = Depends(get_db),
-) -> ProjectConversationMessageRepository:
-    """Get ProjectConversationMessageRepository instance."""
-    return ProjectConversationMessageRepository(db)
-
-
-def get_task_conversation_message_repository(
-    db: Session = Depends(get_db),
-) -> TaskConversationMessageRepository:
-    """Get TaskConversationMessageRepository instance."""
-    return TaskConversationMessageRepository(db)
+def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRepository:
+    """Get ConversationRepository instance."""
+    return ConversationRepository(db)

@@ -4,10 +4,7 @@ from .base import BaseRepository
 from .codebase import CodebaseRepository
 from .configuration import ConfigurationRepository
 from .context_provider_resource import ContextProviderResourceRepository
-from .conversation_message import (
-    ProjectConversationMessageRepository,
-    TaskConversationMessageRepository,
-)
+from .conversation import ConversationRepository
 from .document import DocumentRepository
 from .project import ProjectRepository
 from .task import TaskRepository
@@ -18,8 +15,7 @@ __all__ = [
     "ContextProviderResourceRepository",
     "ConfigurationRepository",
     "CodebaseRepository",
+    "ConversationRepository",
     "DocumentRepository",
     "TaskRepository",
-    "ProjectConversationMessageRepository",
-    "TaskConversationMessageRepository",
 ]

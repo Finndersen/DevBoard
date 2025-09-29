@@ -213,18 +213,21 @@ class TestCodebaseContextProvider:
     """Test Codebase context provider."""
 
     @pytest.fixture
-    def mock_integration(self):
+    def mock_integration(self, tmp_path):
         """Mock Codebase integration."""
         integration = Mock()
-        integration.repo_path = "/test/repo"
+        integration.codebase_path = tmp_path
         integration.read_file = AsyncMock(return_value="file content")
         integration.get_file_info = AsyncMock(return_value={"size": 100})
         integration.investigate_codebase = AsyncMock(return_value="Analysis result")
+        integration.parse_file_url = Mock(side_effect=lambda x: x)
         return integration
 
     @pytest.fixture
-    def provider(self, mock_integration):
+    def provider(self, mock_integration, tmp_path):
         """Codebase context provider with mocked integration."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("code")
         return CodebaseContextProvider(mock_integration)
 
     def test_can_handle_uri(self, provider):

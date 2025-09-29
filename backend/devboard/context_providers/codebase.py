@@ -1,12 +1,12 @@
 """Codebase context provider for file and repository context using AI analysis."""
 
 import logging
-from pathlib import Path
+import os
 from typing import Any
 from urllib.parse import urlparse
 
 from devboard.agents.gemini_cli import GeminiCliError, execute_gemini_prompt
-from devboard.integrations.filesystem import FilesystemIntegration
+from devboard.integrations.codebase import CodebaseIntegration
 
 from .base import (
     BaseContextProvider,
@@ -35,19 +35,18 @@ class CodebaseContextProvider(BaseContextProvider):
         Returns:
             Configured CodebaseContextProvider instance
         """
-        import os
 
         try:
-            integration = FilesystemIntegration()
             current_dir = os.getcwd()
-            return cls(integration, current_dir)
+            integration = CodebaseIntegration(current_dir)
+            return cls(integration)
         except Exception as e:
             raise ContextProviderUnavailable(f"Failed to initialize Codebase integration: {e}") from e
 
-    def __init__(self, integration: FilesystemIntegration, base_path: str | None = None):
-        """Initialize with Filesystem integration and optional base path."""
+    def __init__(self, integration: CodebaseIntegration):
+        """Initialize with Codebase integration."""
         self.integration = integration
-        self.base_path = Path(base_path or Path.cwd()).resolve()
+        self.base_path = integration.codebase_path
 
     @classmethod
     def can_handle_uri(cls, resource_uri: str) -> bool:
@@ -84,10 +83,10 @@ class CodebaseContextProvider(BaseContextProvider):
         if resource_uri.startswith("file://"):
             # Remove file:// prefix and convert to relative path
             file_path = resource_uri[7:]
-            return self.integration.parse_file_url(file_path, str(self.base_path)) or file_path
+            return self.integration.parse_file_url(file_path) or file_path
         elif resource_uri.startswith("/"):
             # Absolute path - convert to relative
-            return self.integration.parse_file_url(resource_uri, str(self.base_path)) or resource_uri
+            return self.integration.parse_file_url(resource_uri) or resource_uri
         else:
             # Assume relative path
             return resource_uri
@@ -101,8 +100,8 @@ class CodebaseContextProvider(BaseContextProvider):
             file_path = self._normalize_file_path(resource_uri)
 
             # Get file content and metadata
-            content = await self.integration.read_file(file_path, str(self.base_path))
-            file_info = await self.integration.get_file_info(file_path, str(self.base_path))
+            content = await self.integration.read_file(file_path)
+            file_info = await self.integration.get_file_info(file_path)
 
             return {"content": content, "file_info": file_info, "uri": resource_uri}
 
@@ -167,10 +166,10 @@ Please search and analyze the codebase for patterns, implementations, or concept
         try:
             file_path = self._normalize_file_path(resource_uri)
 
-            full_path = self.integration.base_path / file_path
+            full_path = self.integration.codebase_path / file_path
             if full_path.is_file():
                 # Get file info and generate description
-                file_info = await self.integration.get_file_info(file_path, str(self.base_path))
+                file_info = await self.integration.get_file_info(file_path)
                 file_size = file_info.get("size", 0)
 
                 # Try to determine file type from extension
@@ -186,7 +185,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
 
             elif full_path.is_dir():
                 # Count files in directory
-                files = await self.integration.list_files(file_path, base_path=str(self.base_path))
+                files = await self.integration.list_files(file_path)
                 return f"Directory: {file_path} ({len(files)} files)"
             else:
                 return f"Codebase pattern: {file_path}"

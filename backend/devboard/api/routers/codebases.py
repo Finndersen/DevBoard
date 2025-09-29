@@ -21,7 +21,7 @@ from devboard.api.schemas.codebase import (
 )
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
-from devboard.integrations.filesystem import detect_git_remote_url
+from devboard.integrations.codebase import detect_git_remote_url
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 
 router = APIRouter()

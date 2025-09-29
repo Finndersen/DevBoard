@@ -15,6 +15,7 @@ const mockProjects: Project[] = [
       updated_at: '2024-01-01T00:00:00Z',
     },
     description: 'A comprehensive testing platform for automated QA workflows and continuous integration pipelines',
+    default_conversation_id: 1,
     created_at: '2024-01-01T00:00:00Z',
   },
   {
@@ -29,6 +30,7 @@ const mockProjects: Project[] = [
       updated_at: '2024-01-02T00:00:00Z',
     },
     description: 'Enterprise dashboard for real-time analytics and business intelligence reporting',
+    default_conversation_id: 2,
     created_at: '2024-01-02T00:00:00Z',
   },
 ]
@@ -38,24 +40,52 @@ const mockTasks: Task[] = [
     id: 1,
     project_id: 1,
     title: 'Test Task',
-    description: 'A test task for development',
     status: 'Designing',
     codebase_id: null,
     remote_task_id: null,
-    conversation_id: null,
-    implementation_plan: null,
+    default_conversation_id: 3,
+    specification: {
+      id: 3,
+      document_type: 'task_specification',
+      content: 'Test task specification',
+      content_hash: 'task123',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+    implementation_plan: {
+      id: 4,
+      document_type: 'implementation_plan',
+      content: 'Test implementation plan',
+      content_hash: 'plan123',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
     created_at: '2024-01-01T00:00:00Z',
   },
   {
     id: 2,
     project_id: 1,
     title: 'Another Task',
-    description: 'Another test task',
     status: 'Planning',
     codebase_id: null,
     remote_task_id: 'PROJ-123',
-    conversation_id: 'conv-456',
-    implementation_plan: 'Implementation details here',
+    default_conversation_id: 4,
+    specification: {
+      id: 5,
+      document_type: 'task_specification',
+      content: 'Another task specification',
+      content_hash: 'task456',
+      created_at: '2024-01-02T00:00:00Z',
+      updated_at: '2024-01-02T00:00:00Z',
+    },
+    implementation_plan: {
+      id: 6,
+      document_type: 'implementation_plan',
+      content: 'Implementation details here',
+      content_hash: 'plan456',
+      created_at: '2024-01-02T00:00:00Z',
+      updated_at: '2024-01-02T00:00:00Z',
+    },
     created_at: '2024-01-02T00:00:00Z',
   },
 ]
@@ -163,7 +193,37 @@ export const handlers = [
     return HttpResponse.json(task)
   }),
 
+  http.patch('*/api/tasks/:id', async ({ params, request }) => {
+    const updates = await request.json() as Partial<Task>
+    const task = mockTasks.find(t => t.id === Number(params.id))
+    if (!task) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    const updatedTask = { ...task, ...updates }
+    return HttpResponse.json(updatedTask)
+  }),
+
   // Configuration endpoints
+  http.get('*/api/configurations', ({ request }) => {
+    const url = new URL(request.url)
+    const prefix = url.searchParams.get('prefix')
+    
+    // Return list of configurations based on prefix
+    const configs = [
+      { key: 'integration.github.main', is_valid: true },
+      { key: 'integration.jira.main', is_valid: false },
+      { key: 'integration.slack.main', is_valid: true },
+      { key: 'ai_provider.openai.main', is_valid: true },
+      { key: 'ai_provider.anthropic.main', is_valid: false },
+      { key: 'ai_provider.google.main', is_valid: true },
+    ]
+    
+    if (prefix) {
+      return HttpResponse.json(configs.filter(c => c.key.startsWith(prefix)))
+    }
+    return HttpResponse.json(configs)
+  }),
+
   http.get('*/api/configurations/:configKey/detail', ({ params }) => {
     // Return different mock data based on config key
     const configKey = params.configKey as string
@@ -216,12 +276,46 @@ export const handlers = [
     })
   }),
 
-  // Agent conversation endpoints
-  http.get('*/api/projects/:projectId/agent/messages', () => {
+  // Unified conversation endpoints
+  http.get('*/api/conversations/:conversationId/messages', () => {
     return HttpResponse.json([])
   }),
 
-  http.get('*/api/settings/agents/:agentType/model', () => {
+  http.post('*/api/conversations/:conversationId/messages', async ({ request }) => {
+    const { message } = await request.json() as { message: string }
+    return HttpResponse.json({
+      type: 'message',
+      message: {
+        id: Date.now(),
+        role: 'agent',
+        text_content: `Mock response to: ${message}`,
+        timestamp: new Date().toISOString(),
+      },
+      tool_requests: null,
+    })
+  }),
+
+  http.post('*/api/conversations/:conversationId/approve-tools', () => {
+    return HttpResponse.json({
+      type: 'message',
+      message: {
+        id: Date.now(),
+        role: 'agent',
+        text_content: 'Tools approved and executed successfully.',
+        timestamp: new Date().toISOString(),
+      },
+      tool_requests: null,
+    })
+  }),
+
+  http.delete('*/api/conversations/:conversationId/messages', () => {
+    return HttpResponse.json({
+      success: true,
+      message: 'Conversation history cleared successfully',
+    })
+  }),
+
+  http.get('*/api/agents/:agentType/model', () => {
     return HttpResponse.json({
       model_id: 'openai:gpt-4'
     })

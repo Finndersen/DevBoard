@@ -8,16 +8,19 @@ import logfire
 from devboard.core.registry import Registry
 from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.base import (
-    AuthenticationError,
     BaseIntegration,
-    ConnectionError,
     IntegrationConfigurationError,
-    RateLimitError,
 )
 from devboard.integrations.registry import integration_registry
 from devboard.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidIntegrationTypeError(Exception):
+    """Raised when an invalid integration type is specified."""
+
+    pass
 
 
 @dataclass
@@ -45,41 +48,39 @@ class IntegrationService:
         """Test connection for a specific integration type."""
         with logfire.span("integration_service.test_connection", integration_type=integration_type):
             try:
-                integration_class = self.integration_registry.get(integration_type)
-                if not integration_class:
-                    logfire.warn(
-                        "Unsupported integration type",
-                        integration_type=integration_type,
-                    )
-                    return IntegrationTestResult(
-                        integration_type=integration_type,
-                        success=False,
-                        error_message=f"Unsupported integration type: {integration_type}",
-                        error_type="unsupported_integration",
-                    )
-
-                # Create integration instance
-                with logfire.span("integration_service.create_instance"):
-                    config_service = ConfigService(self.config_repo)
-                    integration = integration_class.create(config_service)
+                integration = self.get_integration_instance(integration_type)
 
                 # Test connection
-                with logfire.span("integration_service.test_api_connection"):
-                    success = await integration.test_connection()
+                connection_result = await integration.test_connection()
 
                 result = IntegrationTestResult(
                     integration_type=integration_type,
-                    success=success,
-                    error_message=None if success else "Connection test failed",
-                    error_type=None if success else "connection_error",
+                    success=connection_result.success,
+                    error_message=None if connection_result.success else connection_result.message,
+                    error_type=None if connection_result.success else "connection_error",
                 )
 
                 logfire.info(
                     "Integration test complete",
                     integration_type=integration_type,
-                    success=success,
+                    success=connection_result.success,
+                    message=connection_result.message,
                 )
                 return result
+
+            except InvalidIntegrationTypeError as e:
+                logfire.error(
+                    "Invalid integration type",
+                    integration_type=integration_type,
+                    error=str(e),
+                    exc_info=e,
+                )
+                return IntegrationTestResult(
+                    integration_type=integration_type,
+                    success=False,
+                    error_message=str(e),
+                    error_type="unsupported_integration",
+                )
 
             except IntegrationConfigurationError as e:
                 logfire.error(
@@ -93,58 +94,6 @@ class IntegrationService:
                     success=False,
                     error_message=str(e),
                     error_type="config_error",
-                )
-            except AuthenticationError as e:
-                logfire.error(
-                    "Integration authentication error",
-                    integration_type=integration_type,
-                    error=str(e),
-                    exc_info=e,
-                )
-                return IntegrationTestResult(
-                    integration_type=integration_type,
-                    success=False,
-                    error_message=str(e),
-                    error_type="auth_error",
-                )
-            except RateLimitError as e:
-                logfire.error(
-                    "Integration rate limit error",
-                    integration_type=integration_type,
-                    error=str(e),
-                    exc_info=e,
-                )
-                return IntegrationTestResult(
-                    integration_type=integration_type,
-                    success=False,
-                    error_message=str(e),
-                    error_type="rate_limit_error",
-                )
-            except ConnectionError as e:
-                logfire.error(
-                    "Integration connection error",
-                    integration_type=integration_type,
-                    error=str(e),
-                    exc_info=e,
-                )
-                return IntegrationTestResult(
-                    integration_type=integration_type,
-                    success=False,
-                    error_message=str(e),
-                    error_type="connection_error",
-                )
-            except Exception as e:
-                logfire.error(
-                    "Unexpected integration test error",
-                    integration_type=integration_type,
-                    error=str(e),
-                    exc_info=e,
-                )
-                return IntegrationTestResult(
-                    integration_type=integration_type,
-                    success=False,
-                    error_message=f"Unexpected error: {e}",
-                    error_type="unknown_error",
                 )
 
     async def test_all_integrations(self) -> dict[str, IntegrationTestResult]:
@@ -166,3 +115,20 @@ class IntegrationService:
                 failed_integrations=len(results) - successful_count,
             )
             return results
+
+    def get_integration_instance(self, integration_type: str) -> BaseIntegration:
+        """Get an instance of the specified integration type."""
+        integration_class = self.integration_registry.get(integration_type)
+        if not integration_class:
+            raise InvalidIntegrationTypeError(f"Unsupported integration type: {integration_type}")
+
+        config_service = ConfigService(self.config_repo)
+        config_class = integration_class.configuration_schema
+        config = config_service.get_config(config_class)
+        if not config:
+            raise IntegrationConfigurationError(
+                f"{integration_type.title()} configuration not found or invalid. "
+                f"Please configure the {integration_type.title()} integration."
+            )
+
+        return integration_class(config)

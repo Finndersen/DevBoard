@@ -1,15 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
+import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import Layout from '../Layout'
 
-// Helper function to render Layout with specific location
+// Helper function to render Layout with specific location and providers
 const renderWithRouter = (initialEntries: string[] = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Layout>
-        <div>Test Content</div>
-      </Layout>
+      <ApprovalsProvider>
+        <PendingMessagesProvider>
+          <Layout>
+            <div>Test Content</div>
+          </Layout>
+        </PendingMessagesProvider>
+      </ApprovalsProvider>
     </MemoryRouter>
   )
 }
@@ -30,9 +36,13 @@ describe('Layout', () => {
   it('renders children content in main area', () => {
     render(
       <MemoryRouter>
-        <Layout>
-          <div data-testid="child-content">Test Content</div>
-        </Layout>
+        <ApprovalsProvider>
+          <PendingMessagesProvider>
+            <Layout>
+              <div data-testid="child-content">Test Content</div>
+            </Layout>
+          </PendingMessagesProvider>
+        </ApprovalsProvider>
       </MemoryRouter>
     )
 
@@ -120,8 +130,8 @@ describe('Layout', () => {
     const nav = screen.getByRole('navigation')
     expect(nav).toHaveClass('border-b')
     
-    const container = nav.querySelector('.max-w-7xl')
-    expect(container).toHaveClass('mx-auto', 'px-4')
+    const container = nav.querySelector('.w-full')
+    expect(container).toHaveClass('px-4', 'sm:px-6', 'lg:px-8')
   })
 
   it('displays DevBoard logo correctly', () => {
@@ -151,7 +161,7 @@ describe('Layout', () => {
 
     const logoLink = screen.getByText('DevBoard').closest('a')
     expect(logoLink).toHaveAttribute('href', '/')
-    expect(logoLink).toHaveClass('flex', 'items-center', 'space-x-2')
+    expect(logoLink).toHaveClass('flex', 'items-center', 'space-x-3')
     
     // DevBoard text should have the font classes
     const logoText = screen.getByText('DevBoard')
@@ -162,7 +172,7 @@ describe('Layout', () => {
     renderWithRouter()
 
     const main = screen.getByRole('main')
-    expect(main).toHaveClass('max-w-7xl', 'mx-auto', 'py-6')
+    expect(main).toHaveClass('w-full', 'py-4', 'px-4', 'sm:px-6', 'lg:px-8')
   })
 
   it('handles navigation link hover states', () => {

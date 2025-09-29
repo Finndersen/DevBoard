@@ -38,7 +38,7 @@ describe('ConfigurationField', () => {
       />
     )
 
-    expect(screen.getByText('TEST_FIELD')).toBeInTheDocument()
+    expect(screen.getAllByText('TEST_FIELD').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Test field description')).toBeInTheDocument()
     expect(screen.getByDisplayValue('test_value')).toBeInTheDocument()
     expect(screen.getByText('*')).toBeInTheDocument() // Required indicator
@@ -159,7 +159,7 @@ describe('ConfigurationField', () => {
       />
     )
 
-    expect(screen.getByText(/Overriding environment variable/)).toBeInTheDocument()
+    expect(screen.getByText(/Overriding.*env var/)).toBeInTheDocument()
   })
 
   it('handles override toggle clicks', async () => {

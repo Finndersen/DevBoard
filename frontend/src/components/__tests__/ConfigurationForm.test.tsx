@@ -7,13 +7,6 @@ import { render, createMockConfigurationResponse } from '../../test/utils'
 import { ConfigurationForm } from '../ConfigurationForm'
 
 describe('ConfigurationForm', () => {
-  const defaultProps = {
-    configKey: 'integration.github.main',
-    title: 'GitHub Integration',
-    onSave: vi.fn(),
-    onTestConnection: vi.fn(),
-  }
-
   const mockConfig = createMockConfigurationResponse({
     key: 'integration.github.main',
     fields: [
@@ -48,15 +41,15 @@ describe('ConfigurationForm', () => {
     validation_errors: ['Missing required field: api_token'],
   })
 
+  const defaultProps = {
+    config: mockConfig,
+    title: 'GitHub Integration',
+    onSave: vi.fn(),
+    onTestConnection: vi.fn(),
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
-    
-    // Setup default API response
-    server.use(
-      http.get('*/api/configurations/integration.github.main/detail', () => {
-        return HttpResponse.json(mockConfig)
-      })
-    )
   })
 
   it('renders configuration form with title and status', async () => {
@@ -79,13 +72,6 @@ describe('ConfigurationForm', () => {
     })
   })
 
-  it('displays loading state initially', () => {
-    render(<ConfigurationForm {...defaultProps} />)
-
-    // Should show loading skeleton
-    expect(document.querySelectorAll('.animate-pulse')).toHaveLength(1)
-  })
-
   it('shows validation errors when configuration is invalid', async () => {
     render(<ConfigurationForm {...defaultProps} />)
 
@@ -102,13 +88,7 @@ describe('ConfigurationForm', () => {
       validation_errors: [],
     }
 
-    server.use(
-      http.get('*/api/configurations/integration.github.main/detail', () => {
-        return HttpResponse.json(validConfig)
-      })
-    )
-
-    render(<ConfigurationForm {...defaultProps} />)
+    render(<ConfigurationForm {...defaultProps} config={validConfig} />)
 
     await waitFor(() => {
       expect(screen.getByText('Valid')).toBeInTheDocument()
