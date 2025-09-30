@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+
 from devboard.integrations.codebase import CodebaseIntegration, detect_git_remote_url
 from devboard.integrations.shell import ShellCommandResult
 
@@ -257,6 +258,53 @@ class TestGetGitFileTree:
             mock_exec.assert_called_once()
             call_args = mock_exec.call_args[0][0]
             assert call_args == ["git ls-files | tree --fromfile -F -L 2"]
+
+    @pytest.mark.asyncio
+    async def test_get_git_file_tree_with_subdirectory(self, temp_codebase):
+        """Test git file tree with subdirectory filter."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        tree_result = ShellCommandResult("src\n└── main.py\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+            await integration.get_directory_tree(subdirectory="src")
+
+            # Verify the method was called with subdirectory filter
+            mock_exec.assert_called_once()
+            call_args = mock_exec.call_args[0][0]
+            assert call_args == ["git ls-files 'src/' | tree --fromfile -F"]
+
+    @pytest.mark.asyncio
+    async def test_get_git_file_tree_with_subdirectory_and_max_depth(self, temp_codebase):
+        """Test git file tree with both subdirectory and max depth."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        tree_result = ShellCommandResult("src\n└── components\n    └── Button.js\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+            await integration.get_directory_tree(max_depth=2, subdirectory="src/components")
+
+            # Verify the method was called with both parameters
+            # max_depth=2 + subdirectory_depth=2 = actual_depth=4
+            mock_exec.assert_called_once()
+            call_args = mock_exec.call_args[0][0]
+            assert call_args == ["git ls-files 'src/components/' | tree --fromfile -F -L 4"]
+
+    @pytest.mark.asyncio
+    async def test_get_git_file_tree_subdirectory_with_trailing_slash(self, temp_codebase):
+        """Test git file tree handles trailing slash in subdirectory."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        tree_result = ShellCommandResult("tests\n└── test_main.py\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+            # Test with trailing slash - should be stripped
+            await integration.get_directory_tree(subdirectory="tests/")
+
+            # Verify trailing slash was removed
+            mock_exec.assert_called_once()
+            call_args = mock_exec.call_args[0][0]
+            assert call_args == ["git ls-files 'tests/' | tree --fromfile -F"]
 
 
 class TestDetectGitRemoteUrl:

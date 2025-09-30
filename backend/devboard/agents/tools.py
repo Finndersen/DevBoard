@@ -277,8 +277,8 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     )
 
 
-def create_git_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
-    """Create a git file tree tool for visualizing tracked files in tree format.
+def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a directory tree tool for visualizing tracked files in tree format.
 
     This tool displays the structure of git-tracked files in a hierarchical tree view,
     which is ideal for:
@@ -292,11 +292,12 @@ def create_git_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
         codebase_integration: CodebaseIntegration instance for file system access
     """
 
-    async def show_git_file_tree(
+    async def show_directory_tree(
         ctx: RunContext[BaseDeps],
         max_depth: int | None = None,
+        subdirectory: str | None = None,
     ) -> str:
-        """Display git-tracked files in a hierarchical tree structure.
+        """Display codebase git-tracked files in a hierarchical tree structure.
 
         Use this tool when you need to:
         - Get an overview of the project structure and organization
@@ -304,25 +305,29 @@ def create_git_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
         - Find the general location of components or modules
         - Explore the codebase structure before diving into specific files
         - Document or communicate the project layout
+        - Focus on a specific subdirectory's structure
 
         Examples:
-        - show_git_file_tree() - Show complete project structure
-        - show_git_file_tree(max_depth=2) - Show only top 2 levels for overview
-        - show_git_file_tree(max_depth=1) - Show only root directories
+        - show_directory_tree() - Show complete project structure
+        - show_directory_tree(max_depth=2) - Show only top 2 levels for overview
+        - show_directory_tree(subdirectory="src/my_project") - Show only files in src/my_project directory
+        - show_directory_tree(max_depth=3, subdirectory="tests") - Show tests/ directory with 3 levels deep
 
         Args:
-            max_depth: Maximum directory depth to display. Use smaller values (1-3)
-                      for high-level overviews, or None for complete structure.
+            max_depth: Maximum directory depth to display relative to subdirectory.
+                      Use smaller values (1-3) for high-level overviews, or None for complete structure.
                       Helpful for large projects to avoid overwhelming output.
+            subdirectory: Optional subdirectory to explore (e.g., 'src', 'tests', 'docs').
+                         When specified, only shows files within that directory.
+                         Do not include leading/trailing slashes.
 
         Returns:
-            Formatted tree structure showing all git-tracked files and directories,
+            Formatted tree structure showing git-tracked files and directories,
             with proper indentation and tree characters for visualization.
         """
-        tree = await codebase_integration.get_directory_tree(max_depth=max_depth)
+        tree = await codebase_integration.get_directory_tree(max_depth=max_depth, subdirectory=subdirectory)
         return tree
 
     return Tool(
-        function=show_git_file_tree,
-        name="show_git_file_tree",
+        function=show_directory_tree,
     )

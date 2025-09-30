@@ -32,13 +32,13 @@ class TaskSpecificationAgentConfig(AgentConfig):
     agent_type = AgentType.TASK_SPECIFICATION
 
 
-class PlanningAgentConfig(AgentConfig):
+class TaskPlanningAgentConfig(AgentConfig):
     """Configuration for Task Planning Agent."""
 
     agent_type = AgentType.TASK_PLANNING
 
 
-class ImplementationAgentConfig(AgentConfig):
+class TaskImplementationAgentConfig(AgentConfig):
     """Configuration for Task Implementation Agent."""
 
     agent_type = AgentType.TASK_IMPLEMENTATION

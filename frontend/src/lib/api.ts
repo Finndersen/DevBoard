@@ -52,31 +52,13 @@ export interface ConversationMessageResponse {
   created_at: string
 }
 
-export interface PendingApproval {
-  tool_call_id: string
-  tool_name: string
-  document_type?: string | null
-  reasoning?: string | null
-  diff_preview?: string | null
-  edits?: Array<{ find: string; replace: string }> | null
-}
-
 export interface MessageRequest {
   message: string
 }
 
 export interface ConversationResponse {
   messages: ConversationMessageResponse[]
-  pending_approvals?: PendingApproval[]
-}
-
-export interface ToolApprovalDecision {
-  approved: boolean
-  feedback?: string
-}
-
-export interface ToolApprovalRequest {
-  approvals: Record<string, ToolApprovalDecision>
+  pending_approvals: PendingApproval[] | null
 }
 
 export interface ToolCallRequest {
@@ -106,7 +88,7 @@ export interface ToolApprovalRequest {
   approvals: Record<string, ToolApprovalDecision>
 }
 
-// Updated PendingApproval interface for component compatibility
+// Main PendingApproval interface for component compatibility
 export interface PendingApproval {
   tool_call_id: string
   tool_name: string
@@ -139,14 +121,10 @@ export interface ToolCallInfo {
   preview: Record<string, unknown> | null
 }
 
-export interface ConversationResponse {
+export interface ConversationResponseWithCompletion {
   messages: ConversationMessageResponse[]
   pending_approvals: PendingApproval[] | null
   conversation_complete: boolean
-}
-
-export interface MessageRequest {
-  message: string
 }
 
 export interface TaskPlanningRequest {

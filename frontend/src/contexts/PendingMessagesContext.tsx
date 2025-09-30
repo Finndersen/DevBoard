@@ -5,7 +5,7 @@ export interface PendingMessage {
   conversationId: number
   text_content: string
   timestamp: string
-  status: 'pending' | 'sent' | 'failed'
+  status: 'pending' | 'sent' | 'awaiting_approval' | 'failed'
   retryCount: number
   error?: string
 }

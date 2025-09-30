@@ -304,7 +304,20 @@ describe('ConversationChat', () => {
 
   it('auto-scrolls to bottom when new messages are added', async () => {
     const user = userEvent.setup()
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
+    
+    // Mock scrollTop property on HTMLElement
+    const mockScrollTop = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+      set: mockScrollTop,
+      get: () => 0,
+      configurable: true
+    })
+    
+    // Mock scrollHeight property 
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      get: () => 1000,
+      configurable: true
+    })
     
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -336,10 +349,8 @@ describe('ConversationChat', () => {
       expect(screen.getByText('AI response')).toBeInTheDocument()
     })
 
-    // Should call scrollIntoView to auto-scroll
-    expect(scrollSpy).toHaveBeenCalled()
-
-    scrollSpy.mockRestore()
+    // Should set scrollTop to scrollHeight to auto-scroll to bottom
+    expect(mockScrollTop).toHaveBeenCalledWith(1000)
   })
 
   it('displays messages in chronological order', async () => {

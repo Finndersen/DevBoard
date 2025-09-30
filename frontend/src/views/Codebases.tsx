@@ -1,14 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { FolderIcon, PlusIcon, PencilIcon, CheckIcon, XMarkIcon, TrashIcon, DocumentIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Codebase, ArchitectureDocument } from '../lib/api'
 import { useCodebases, useCreateCodebase, useUpdateCodebase, useDeleteCodebase } from '../hooks/useCodebases'
-import Button from '../components/ui/Button'
-import Input from '../components/ui/Input'
-import Textarea from '../components/ui/Textarea'
-import Card from '../components/ui/Card'
-import ErrorMessage from '../components/ui/ErrorMessage'
+import { Button, Input, Textarea, Card, ErrorMessage, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 
 export default function Codebases() {
@@ -346,9 +341,9 @@ export default function Codebases() {
                   <div className="space-y-6">
                     <div>
                       <h4 className={`text-sm font-medium ${textColors.primary} mb-3`}>Description</h4>
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                        <ReactMarkdown>{selectedCodebase.description}</ReactMarkdown>
-                      </div>
+                      <Markdown>
+                        {selectedCodebase.description}
+                      </Markdown>
                     </div>
                     
                     <div>
@@ -465,8 +460,10 @@ export default function Codebases() {
                                 </div>
                               ) : (
                                 architectureDocument.content && (
-                                  <div className="mt-4 prose prose-sm dark:prose-invert max-w-none text-left">
-                                    <ReactMarkdown>{architectureDocument.content}</ReactMarkdown>
+                                  <div className="mt-4">
+                                    <Markdown>
+                                      {architectureDocument.content}
+                                    </Markdown>
                                   </div>
                                 )
                               )}

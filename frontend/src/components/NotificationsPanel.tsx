@@ -2,14 +2,14 @@ import { useState, useRef, useEffect } from 'react'
 import { BellIcon } from '@heroicons/react/24/outline'
 import { useApprovals } from '../contexts/ApprovalsContext'
 import DocumentDiffModal from './DocumentDiffModal'
-import type { PendingApproval } from '../lib/api'
+import type { PendingApproval, ToolApprovalDecision } from '../lib/api'
 
 export default function NotificationsPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null)
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const { state, removeApproval } = useApprovals()
+  const { state, processApprovalDecision } = useApprovals()
 
   const getTotalApprovals = () => {
     return Object.keys(state.approvals).reduce((total, key) => {
@@ -68,11 +68,18 @@ export default function NotificationsPanel() {
     setSelectedApprovalKey(null)
   }
 
-  const handleApprovalDecision = (toolCallId: string) => {
+  const handleApprovalDecision = async (toolCallId: string, decision: ToolApprovalDecision) => {
     if (!selectedApprovalKey) return
 
-    removeApproval(selectedApprovalKey, toolCallId)
-    handleModalClose()
+    try {
+      await processApprovalDecision(selectedApprovalKey, toolCallId, decision)
+      handleModalClose()
+    } catch (error) {
+      console.error('NotificationsPanel: Failed to process approval decision:', error)
+      // TODO: Show error notification to user
+      // For now, still close the modal even on error to prevent UI lockup
+      handleModalClose()
+    }
   }
 
   const totalApprovals = getTotalApprovals()

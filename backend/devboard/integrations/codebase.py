@@ -228,21 +228,34 @@ class CodebaseIntegration:
             logger.error(f"Error searching code structure with ast-grep: {e}")
             return []
 
-    async def get_directory_tree(self, max_depth: int | None = None) -> str:
+    async def get_directory_tree(self, max_depth: int | None = None, subdirectory: str | None = None) -> str:
         """Get git-tracked file tree structure using piped git ls-files | tree command.
 
         Args:
-            max_depth: Maximum depth to display (None for unlimited)
+            max_depth: Maximum depth to display relative to subdirectory (None for unlimited)
+            subdirectory: Optional subdirectory to explore (e.g., 'src/', 'tests/')
 
         Returns:
             Tree structure as formatted string
         """
-        # Build the piped command: git ls-files | tree --fromfile
+        # Build the git ls-files command with optional subdirectory filter
+        git_cmd = "git ls-files"
+        if subdirectory:
+            # Remove trailing slash if present for consistency
+            subdirectory = subdirectory.rstrip("/")
+            git_cmd += f" '{subdirectory}/'"
+
+        # Calculate actual tree depth accounting for subdirectory depth
         tree_args = "tree --fromfile -F"
         if max_depth is not None:
-            tree_args += f" -L {max_depth}"
+            actual_depth = max_depth
+            if subdirectory:
+                # Add the depth of the subdirectory path to max_depth
+                subdirectory_depth = len(subdirectory.split("/"))
+                actual_depth = max_depth + subdirectory_depth
+            tree_args += f" -L {actual_depth}"
 
-        piped_cmd = f"git ls-files | {tree_args}"
+        piped_cmd = f"{git_cmd} | {tree_args}"
 
         try:
             result = await execute_shell_command(

@@ -19,9 +19,9 @@ export function useCreateTask() {
   )
 }
 
-export function useUpdateTask() {
+export function useUpdateTask(options?: { updateCache?: (data: Task) => void }) {
   return useMutation((data: { id: number | string; task: Partial<Task> }) => 
-    apiClient.updateTask(data.id, data.task)
+    apiClient.updateTask(data.id, data.task), options
   )
 }
 

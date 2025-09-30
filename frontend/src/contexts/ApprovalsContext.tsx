@@ -1,25 +1,39 @@
-import { createContext, useContext, useReducer, useEffect, useState, type ReactNode } from 'react'
-import type { PendingApproval } from '../lib/api'
+import { createContext, useContext, useReducer, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
+import type { PendingApproval, ToolApprovalDecision, ToolApprovalRequest } from '../lib/api'
+import { apiClient } from '../lib/api'
+import { toolApprovalConfig, type RefreshHandler } from '../services/toolApprovalConfig'
+
+// Enhanced approval with conversation context
+export interface PendingApprovalWithContext extends PendingApproval {
+  conversationId?: number
+}
 
 interface ApprovalsState {
-  // Key structure: `project-${projectId}` or `task-${taskId}`
-  approvals: Record<string, PendingApproval[]>
+  // Key structure: `project-${projectId}`, `task-${taskId}`, or `conversation-${conversationId}`
+  approvals: Record<string, PendingApprovalWithContext[]>
 }
 
 type ApprovalsAction =
-  | { type: 'SET_APPROVALS'; payload: { key: string; approvals: PendingApproval[] } }
-  | { type: 'ADD_APPROVAL'; payload: { key: string; approval: PendingApproval } }
+  | { type: 'SET_APPROVALS'; payload: { key: string; approvals: PendingApprovalWithContext[] } }
+  | { type: 'ADD_APPROVAL'; payload: { key: string; approval: PendingApprovalWithContext } }
   | { type: 'REMOVE_APPROVAL'; payload: { key: string; toolCallId: string } }
   | { type: 'CLEAR_APPROVALS'; payload: { key: string } }
 
 interface ApprovalsContextType {
   state: ApprovalsState
-  setApprovals: (key: string, approvals: PendingApproval[]) => void
-  addApproval: (key: string, approval: PendingApproval) => void
+  setApprovals: (key: string, approvals: PendingApprovalWithContext[]) => void
+  addApproval: (key: string, approval: PendingApprovalWithContext) => void
   removeApproval: (key: string, toolCallId: string) => void
   clearApprovals: (key: string) => void
-  getApprovals: (key: string) => PendingApproval[]
+  getApprovals: (key: string) => PendingApprovalWithContext[]
   hasApprovals: (key: string) => boolean
+  // Method to handle approval decisions with backend integration
+  processApprovalDecision: (key: string, toolCallId: string, decision: ToolApprovalDecision) => Promise<void>
+  // Refresh handler registry methods
+  registerRefreshHandler: (conversationId: number, refreshAction: string, callback: () => Promise<void>) => void
+  unregisterRefreshHandlers: (conversationId: number) => void
+  // Execute refresh handlers for approved tools
+  executeRefreshHandlers: (conversationId: number, toolNames: string[]) => Promise<void>
 }
 
 const ApprovalsContext = createContext<ApprovalsContextType | undefined>(undefined)
@@ -97,6 +111,8 @@ function initializeApprovals(): ApprovalsState {
 export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
   const [state, dispatch] = useReducer(approvalsReducer, undefined, initializeApprovals)
   const [isInitialized, setIsInitialized] = useState(false)
+  // Refresh handler registry: Map<conversationId, RefreshHandler[]>
+  const [refreshHandlers, setRefreshHandlers] = useState<Map<number, RefreshHandler[]>>(new Map())
 
   // Mark as initialized after first render
   useEffect(() => {
@@ -124,43 +140,166 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
     }, 60 * 60 * 1000) // Run cleanup every hour
 
     return () => clearInterval(cleanupInterval)
-  }, [state.approvals])
+  }, [])
 
-  const setApprovals = (key: string, approvals: PendingApproval[]) => {
+  const setApprovals = useCallback((key: string, approvals: PendingApprovalWithContext[]) => {
     console.log('ApprovalsContext: setApprovals called with key:', key, 'approvals:', approvals)
     dispatch({ type: 'SET_APPROVALS', payload: { key, approvals } })
-  }
+  }, [])
 
-  const addApproval = (key: string, approval: PendingApproval) => {
+  const addApproval = useCallback((key: string, approval: PendingApprovalWithContext) => {
     dispatch({ type: 'ADD_APPROVAL', payload: { key, approval } })
-  }
+  }, [])
 
-  const removeApproval = (key: string, toolCallId: string) => {
+  const removeApproval = useCallback((key: string, toolCallId: string) => {
     dispatch({ type: 'REMOVE_APPROVAL', payload: { key, toolCallId } })
-  }
+  }, [])
 
-  const clearApprovals = (key: string) => {
+  const clearApprovals = useCallback((key: string) => {
     dispatch({ type: 'CLEAR_APPROVALS', payload: { key } })
-  }
+  }, [])
 
-  const getApprovals = (key: string): PendingApproval[] => {
+  const getApprovals = useCallback((key: string): PendingApprovalWithContext[] => {
     return state.approvals[key] || []
-  }
+  }, [state.approvals])
 
-  const hasApprovals = (key: string): boolean => {
+  const hasApprovals = useCallback((key: string): boolean => {
     const approvals = state.approvals[key]
     return approvals && approvals.length > 0
-  }
+  }, [state.approvals])
 
-  const contextValue: ApprovalsContextType = {
+  const executeRefreshHandlers = useCallback(async (conversationId: number, toolNames: string[]): Promise<void> => {
+    const handlers = refreshHandlers.get(conversationId)
+    if (!handlers || handlers.length === 0) {
+      console.log('ApprovalsContext: No refresh handlers registered for conversation:', conversationId)
+      return
+    }
+
+    // Get required refresh actions for the approved tools
+    const requiredActions = toolApprovalConfig.getRequiredRefreshActions(toolNames)
+    if (requiredActions.length === 0) {
+      console.log('ApprovalsContext: No refresh actions required for tools:', toolNames)
+      return
+    }
+
+    console.log('ApprovalsContext: Executing refresh handlers:', { conversationId, toolNames, requiredActions })
+
+    // Execute handlers for the required refresh actions
+    const refreshPromises: Promise<void>[] = []
+    for (const handler of handlers) {
+      if (requiredActions.includes(handler.refreshAction)) {
+        console.log('ApprovalsContext: Executing refresh action:', handler.refreshAction)
+        refreshPromises.push(handler.callback())
+      }
+    }
+
+    try {
+      await Promise.all(refreshPromises)
+      console.log('ApprovalsContext: All refresh handlers completed successfully')
+    } catch (error) {
+      console.error('ApprovalsContext: Some refresh handlers failed:', error)
+      // Don't throw - refresh failures shouldn't block the approval flow
+    }
+  }, [refreshHandlers])
+
+  const processApprovalDecision = useCallback(async (key: string, toolCallId: string, decision: ToolApprovalDecision): Promise<void> => {
+    console.log('ApprovalsContext: Processing approval decision:', { key, toolCallId, decision })
+    
+    // Find the approval to get conversation context
+    const approvals = getApprovals(key)
+    const approval = approvals.find(a => a.tool_call_id === toolCallId)
+    
+    if (!approval) {
+      console.warn('ApprovalsContext: Could not find approval for toolCallId:', toolCallId)
+      return
+    }
+
+    // For conversation approvals, we need to send the decision to the backend
+    if (approval.conversationId) {
+      try {
+        console.log('ApprovalsContext: Sending approval to conversation:', approval.conversationId)
+        
+        const approvalRequest: ToolApprovalRequest = {
+          approvals: {
+            [toolCallId]: decision
+          }
+        }
+
+        // Send the approval decision to the backend
+        await apiClient.approveConversationTools(approval.conversationId, approvalRequest)
+        
+        console.log('ApprovalsContext: Successfully sent approval to backend')
+
+        // NEW: Execute refresh handlers after successful backend response
+        if (decision.approved) {
+          await executeRefreshHandlers(approval.conversationId, [approval.tool_name])
+        }
+      } catch (error) {
+        console.error('ApprovalsContext: Failed to send approval to backend:', error)
+        throw error // Re-throw so the UI can handle the error
+      }
+    }
+
+    // Remove the approval from local state after successful backend call
+    removeApproval(key, toolCallId)
+  }, [getApprovals, removeApproval, executeRefreshHandlers])
+
+  const registerRefreshHandler = useCallback((conversationId: number, refreshAction: string, callback: () => Promise<void>) => {
+    console.log('ApprovalsContext: Registering refresh handler:', { conversationId, refreshAction })
+    
+    setRefreshHandlers(prev => {
+      const updated = new Map(prev)
+      const handlers = updated.get(conversationId) || []
+      
+      // Remove existing handler for the same refresh action to avoid duplicates
+      const filteredHandlers = handlers.filter(h => h.refreshAction !== refreshAction)
+      
+      filteredHandlers.push({
+        conversationId,
+        refreshAction,
+        callback
+      })
+      
+      updated.set(conversationId, filteredHandlers)
+      return updated
+    })
+  }, [])
+
+  const unregisterRefreshHandlers = useCallback((conversationId: number) => {
+    console.log('ApprovalsContext: Unregistering refresh handlers for conversation:', conversationId)
+    
+    setRefreshHandlers(prev => {
+      const updated = new Map(prev)
+      updated.delete(conversationId)
+      return updated
+    })
+  }, [])
+
+  const contextValue: ApprovalsContextType = useMemo(() => ({
     state,
     setApprovals,
     addApproval,
     removeApproval,
     clearApprovals,
     getApprovals,
-    hasApprovals
-  }
+    hasApprovals,
+    processApprovalDecision,
+    registerRefreshHandler,
+    unregisterRefreshHandlers,
+    executeRefreshHandlers
+  }), [
+    state,
+    setApprovals,
+    addApproval,
+    removeApproval,
+    clearApprovals,
+    getApprovals,
+    hasApprovals,
+    processApprovalDecision,
+    registerRefreshHandler,
+    unregisterRefreshHandlers,
+    executeRefreshHandlers
+  ])
 
   return (
     <ApprovalsContext.Provider value={contextValue}>

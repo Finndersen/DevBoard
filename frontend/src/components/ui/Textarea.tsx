@@ -5,12 +5,14 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
   error?: string
   helpText?: string
+  fillHeight?: boolean
 }
 
 export default function Textarea({ 
   label, 
   error, 
   helpText, 
+  fillHeight = false,
   className = '', 
   id,
   ...props 
@@ -18,7 +20,7 @@ export default function Textarea({
   const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`
   
   return (
-    <div className="w-full">
+    <div className={fillHeight ? "w-full h-full flex flex-col" : "w-full"}>
       {label && (
         <label 
           htmlFor={textareaId} 
@@ -33,6 +35,7 @@ export default function Textarea({
         className={`
           ${standardTextareaClasses} 
           ${error ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500' : ''} 
+          ${fillHeight ? 'flex-1 resize-none' : ''}
           ${className}
         `}
         {...props}

@@ -6,8 +6,8 @@ import pytest
 
 from devboard.agents.tools import (
     create_code_structure_search_tool,
+    create_directory_tree_tool,
     create_file_search_tool,
-    create_git_tree_tool,
     create_text_search_tool,
 )
 from devboard.integrations.codebase import CodebaseIntegration
@@ -248,9 +248,9 @@ class TestGitTreeTool:
 
     def test_tool_creation(self, mock_codebase_integration):
         """Test git tree tool is created correctly."""
-        tool = create_git_tree_tool(mock_codebase_integration)
+        tool = create_directory_tree_tool(mock_codebase_integration)
 
-        assert tool.name == "show_git_file_tree"
+        assert tool.name == "show_directory_tree"
         assert tool.function is not None
 
     @pytest.mark.asyncio
@@ -258,30 +258,50 @@ class TestGitTreeTool:
         """Test successful git tree generation."""
         mock_codebase_integration.get_directory_tree.return_value = ".\n├── test.py\n└── src\n"
 
-        tool = create_git_tree_tool(mock_codebase_integration)
+        tool = create_directory_tree_tool(mock_codebase_integration)
         result = await tool.function(mock_context)
 
         assert "test.py" in result
         assert "src" in result
 
-        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=None)
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=None, subdirectory=None)
 
     @pytest.mark.asyncio
     async def test_tool_execution_with_max_depth(self, mock_codebase_integration, mock_context):
         """Test git tree generation with max depth."""
         mock_codebase_integration.get_directory_tree.return_value = ".\n└── test.py\n"
 
-        tool = create_git_tree_tool(mock_codebase_integration)
+        tool = create_directory_tree_tool(mock_codebase_integration)
         await tool.function(mock_context, max_depth=2)
 
-        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=2)
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=2, subdirectory=None)
+
+    @pytest.mark.asyncio
+    async def test_tool_execution_with_subdirectory(self, mock_codebase_integration, mock_context):
+        """Test git tree generation with subdirectory filter."""
+        mock_codebase_integration.get_directory_tree.return_value = "src\n└── main.py\n"
+
+        tool = create_directory_tree_tool(mock_codebase_integration)
+        await tool.function(mock_context, subdirectory="src")
+
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=None, subdirectory="src")
+
+    @pytest.mark.asyncio
+    async def test_tool_execution_with_both_parameters(self, mock_codebase_integration, mock_context):
+        """Test git tree generation with both max_depth and subdirectory."""
+        mock_codebase_integration.get_directory_tree.return_value = "tests\n└── test_main.py\n"
+
+        tool = create_directory_tree_tool(mock_codebase_integration)
+        await tool.function(mock_context, max_depth=3, subdirectory="tests")
+
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=3, subdirectory="tests")
 
     @pytest.mark.asyncio
     async def test_tool_execution_error_handling(self, mock_codebase_integration, mock_context):
         """Test git tree error handling."""
         mock_codebase_integration.get_directory_tree.side_effect = Exception("Git error")
 
-        tool = create_git_tree_tool(mock_codebase_integration)
+        tool = create_directory_tree_tool(mock_codebase_integration)
 
         # Since generic exception handling was removed, expect the exception to propagate
         with pytest.raises(Exception, match="Git error"):

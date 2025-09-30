@@ -1,17 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import ReactMarkdown from 'react-markdown'
 import AgentChat from '../components/AgentChat'
-import Button from '../components/ui/Button'
-import Card from '../components/ui/Card'
-import Input from '../components/ui/Input'
-import Textarea from '../components/ui/Textarea'
-import Modal from '../components/ui/Modal'
+import { Button, Card, Input, Textarea, Modal, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
 import { useModal, useEditableField } from '../hooks'
+import { useApprovals } from '../contexts/ApprovalsContext'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -40,6 +36,7 @@ export default function ProjectDetail() {
   })
   const [agentModel, setAgentModel] = useState<string | null>(null)
   const [modelLoading, setModelLoading] = useState(true)
+  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
   // Use new custom hooks
   const createTaskModal = useModal()
@@ -94,6 +91,27 @@ export default function ProjectDetail() {
     fetchTasks()
     fetchAgentModel()
   }, [fetchProject, fetchTasks])
+
+  // Register refresh handlers for project document updates
+  useEffect(() => {
+    if (project?.default_conversation_id) {
+      const conversationId = project.default_conversation_id
+      
+      console.log('ProjectDetail: Registering refresh handlers for conversation:', conversationId)
+      
+      // Register refresh handler for project-related approvals
+      registerRefreshHandler(conversationId, 'refresh_project', async () => {
+        console.log('ProjectDetail: Executing project refresh handler')
+        await fetchProject() // Refresh project data to get updated specification
+      })
+
+      // Cleanup on unmount or conversation change
+      return () => {
+        console.log('ProjectDetail: Unregistering refresh handlers for conversation:', conversationId)
+        unregisterRefreshHandlers(conversationId)
+      }
+    }
+  }, [project?.default_conversation_id, fetchProject, registerRefreshHandler, unregisterRefreshHandlers])
 
   const fetchAgentModel = async () => {
     try {
@@ -330,9 +348,9 @@ export default function ProjectDetail() {
                     placeholder="Enter project specification in Markdown format..."
                   />
                 ) : (
-                  <div className="h-full overflow-y-auto prose prose-sm dark:prose-invert max-w-none text-left">
+                  <div className="h-full overflow-y-auto">
                     {project.specification?.content ? (
-                      <ReactMarkdown>{project.specification.content}</ReactMarkdown>
+                      <Markdown>{project.specification.content}</Markdown>
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400 italic">No project specification provided. Click Edit to add specification.</p>
                     )}

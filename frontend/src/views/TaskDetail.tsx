@@ -1,62 +1,122 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
 import { useTask, useUpdateTask, useEditableField } from '../hooks'
-import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage } from '../components/ui'
+import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/AgentChat'
+import { useApprovals } from '../contexts/ApprovalsContext'
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: task, loading, error, refetch } = useTask(id!)
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
+  const [agentModel, setAgentModel] = useState<string | null>(null)
+  const [modelLoading, setModelLoading] = useState(true)
+  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
+  
+  // Use ref to store refetch function to avoid dependency issues
+  const refetchRef = useRef(refetch)
+  refetchRef.current = refetch
+
+  // Memoize the updateCache function to prevent infinite re-creation
+  const updateCache = useCallback(() => {
+    // Update local task state with returned data - no refetch needed!
+    refetchRef.current()
+  }, [])
 
   // Use enhanced useMutation with optimistic updates (eliminates refetch!)
   const { mutate: updateTask, error: updateError } = useUpdateTask({
-    updateCache: () => {
-      // Update local task state with returned data - no refetch needed!
-      refetch()
-    }
+    updateCache
   })
 
+  // Memoize save functions to prevent infinite re-creation of useEditableField hooks
+  const saveTitleField = useCallback((value: string) => 
+    updateTask({ id: id!, task: { title: value }}), [updateTask, id]
+  )
+  
+  const saveSpecificationField = useCallback((value: string) => 
+    updateTask({ id: id!, task: { specification: value } as unknown as Task }), [updateTask, id]
+  )
+  
+  const savePlanField = useCallback((value: string) => 
+    updateTask({ id: id!, task: { implementation_plan: value } as unknown as Task }), [updateTask, id]
+  )
+
   // Use useEditableField hooks to eliminate boilerplate
-  const titleField = useEditableField(
-    task?.title || '',
-    (value) => updateTask({ id: id!, task: { title: value }})
-  )
-
-  const specificationField = useEditableField(
-    task?.specification.content || '',
-    (value) => updateTask({ id: id!, task: { specification: value } as unknown as Task })
-  )
-
-  const planField = useEditableField(
-    task?.implementation_plan.content || '',
-    (value) => updateTask({ id: id!, task: { implementation_plan: value } as unknown as Task })
-  )
+  const titleField = useEditableField(task?.title || '', saveTitleField)
+  const specificationField = useEditableField(task?.specification.content || '', saveSpecificationField)
+  const planField = useEditableField(task?.implementation_plan.content || '', savePlanField)
 
   useEffect(() => {
+    const fetchProject = async (projectId: number) => {
+      try {
+        const data = await apiClient.getProject(projectId)
+        setProject(data)
+      } catch (error) {
+        console.error('Failed to fetch project:', error)
+      }
+    }
+
     if (task) {
       // Fetch project details
       fetchProject(task.project_id)
+      
+      // Fetch agent model for task agent
+      const fetchAgentModel = async () => {
+        try {
+          // Determine agent type based on task status
+          let agentType: string
+          const status = task.status.toLowerCase()
+          
+          if (status === 'defining') {
+            agentType = 'task_specification'
+          } else if (status === 'planning') {
+            agentType = 'task_planning'
+          } else {
+            // For other statuses, default to task_specification
+            agentType = 'task_specification'
+          }
+          
+          const data = await apiClient.getAgentModel(agentType)
+          setAgentModel(data.model_id)
+        } catch (error) {
+          console.error('Failed to fetch agent model:', error)
+        } finally {
+          setModelLoading(false)
+        }
+      }
+      
+      fetchAgentModel()
     }
   }, [task])
 
+  // Memoize the refresh handler to prevent infinite loops
+  const refreshHandler = useCallback(async () => {
+    console.log('TaskDetail: Executing task refresh handler')
+    await refetchRef.current() // Refresh task data to get updated specification and implementation plan
+  }, [])
 
-  const fetchProject = async (projectId: number) => {
-    try {
-      const data = await apiClient.getProject(projectId)
-      setProject(data)
-    } catch (error) {
-      console.error('Failed to fetch project:', error)
+  // Register refresh handlers for task document updates
+  useEffect(() => {
+    if (task?.default_conversation_id) {
+      const conversationId = task.default_conversation_id
+      
+      console.log('TaskDetail: Registering refresh handlers for conversation:', conversationId)
+      
+      // Register refresh handler for task-related approvals
+      registerRefreshHandler(conversationId, 'refresh_task', refreshHandler)
+
+      // Cleanup on unmount or conversation change
+      return () => {
+        console.log('TaskDetail: Unregistering refresh handlers for conversation:', conversationId)
+        unregisterRefreshHandlers(conversationId)
+      }
     }
-  }
-
-  // All handlers are now replaced by the useEditableField hooks!
+  }, [task?.default_conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
 
   const handleStateTransition = async (newState: string) => {
     try {
@@ -173,6 +233,65 @@ export default function TaskDetail() {
             {project ? project.name : 'Projects'}
           </Link>
           <div className="flex items-center space-x-3">
+            {/* Task Title Display and Edit */}
+            {titleField.isEditing ? (
+              <div className="flex items-center space-x-2">
+                <Input
+                  type="text"
+                  value={titleField.editedValue}
+                  onChange={(e) => titleField.setEditedValue(e.target.value)}
+                  className="text-lg font-bold h-8"
+                  style={{ width: `${Math.max(20, titleField.editedValue.length * 0.8 + 5)}ch` }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') titleField.save()
+                    if (e.key === 'Escape') titleField.cancelEditing()
+                  }}
+                />
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    titleField.save()
+                  }}
+                  variant="secondary"
+                  size="sm"
+                  className="p-1.5 min-w-[28px] h-7 border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400 dark:border-green-600 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                  title="Save (Enter)"
+                  loading={titleField.saving}
+                >
+                  <CheckIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    titleField.cancelEditing()
+                  }}
+                  variant="secondary"
+                  size="sm"
+                  className="p-1.5 min-w-[28px] h-7 border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                  title="Cancel (Escape)"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <h1 className={`text-xl font-bold ${textColors.primary}`}>
+                  {task.title}
+                </h1>
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    titleField.startEditing()
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="p-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Edit title"
+                >
+                  <PencilIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
             <StatusBadge variant={getStatusVariant(task.status)}>
               {task.status}
             </StatusBadge>
@@ -183,52 +302,6 @@ export default function TaskDetail() {
         </div>
         
         <div className="flex items-center space-x-3">
-          {/* Title Edit Controls */}
-          {titleField.isEditing ? (
-            <div className="flex items-center space-x-2">
-              <Input
-                type="text"
-                value={titleField.editedValue}
-                onChange={(e) => titleField.setEditedValue(e.target.value)}
-                className="text-sm h-8"
-                style={{ width: `${Math.max(20, titleField.editedValue.length * 0.8 + 5)}ch` }}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') titleField.save()
-                  if (e.key === 'Escape') titleField.cancelEditing()
-                }}
-              />
-              <Button
-                onClick={titleField.save}
-                variant="ghost"
-                size="sm"
-                className="p-1 text-green-600 hover:text-green-700 h-6 w-6"
-                title="Save (Enter)"
-                loading={titleField.saving}
-              >
-                <CheckIcon className="w-4 h-4" />
-              </Button>
-              <Button
-                onClick={titleField.cancelEditing}
-                variant="ghost"
-                size="sm"
-                className={`p-1 ${textColors.secondary} hover:text-gray-700 h-6 w-6`}
-                title="Cancel (Escape)"
-              >
-                <XMarkIcon className="w-4 h-4" />
-              </Button>
-            </div>
-          ) : (
-            <Button
-              onClick={titleField.startEditing}
-              variant="ghost"
-              size="sm"
-              className="p-1 h-6 w-6"
-              title="Edit title"
-            >
-              <PencilIcon className="w-4 h-4" />
-            </Button>
-          )}
           
           {/* State Transition Controls */}
           {getNextStateButton()}
@@ -237,140 +310,148 @@ export default function TaskDetail() {
 
       {/* Main Content Layout */}
       <div className="grid grid-cols-2 gap-6">
-        {/* Left Column: Document Content with Tabs */}
-        <div>
-          {/* Navigation Tabs */}
-          <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
-            <nav className="-mb-px flex space-x-8">
-              {[
-                { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
-                { id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span>{tab.name}</span>
-                </button>
-              ))}
-            </nav>
+        {/* Left Column: Document Content with Integrated Tabs */}
+        <Card padding="none" className="h-[600px] flex flex-col">
+          {/* Card Header with Tabs */}
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="px-6 py-3">
+              <div className="flex items-center justify-between">
+                {/* Navigation Tabs */}
+                <nav className="flex space-x-6">
+                  {[
+                    { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
+                    { id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${
+                        activeTab === tab.id
+                          ? 'text-blue-600 dark:text-blue-400'
+                          : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      <tab.icon className="w-4 h-4" />
+                      <span>{tab.name}</span>
+                    </button>
+                  ))}
+                </nav>
+
+                {/* Action Buttons */}
+                <div>
+                  {activeTab === 'specification' && (
+                    !specificationField.isEditing ? (
+                      <Button
+                        onClick={specificationField.startEditing}
+                        variant="secondary"
+                        size="sm"
+                        icon={<PencilIcon className="w-4 h-4" />}
+                      >
+                        Edit
+                      </Button>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          onClick={specificationField.save}
+                          variant="primary"
+                          size="sm"
+                          loading={specificationField.saving}
+                          icon={<CheckIcon className="w-4 h-4" />}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          onClick={specificationField.cancelEditing}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )
+                  )}
+
+                  {activeTab === 'plan' && (
+                    !planField.isEditing ? (
+                      <Button
+                        onClick={planField.startEditing}
+                        variant="secondary"
+                        size="sm"
+                        icon={<PencilIcon className="w-4 h-4" />}
+                      >
+                        Edit
+                      </Button>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          onClick={planField.save}
+                          variant="primary"
+                          size="sm"
+                          loading={planField.saving}
+                          icon={<CheckIcon className="w-4 h-4" />}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          onClick={planField.cancelEditing}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'specification' && (
-            <Card padding="xs">
-              <div className={`${layouts.flexBetween} mb-2`}>
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Task Specification</h3>
-                {!specificationField.isEditing ? (
-                  <Button
-                    onClick={specificationField.startEditing}
-                    variant="secondary"
-                    size="sm"
-                    icon={<PencilIcon className="w-4 h-4" />}
-                  >
-                    Edit
-                  </Button>
+          <div className="flex-1 p-6 overflow-hidden">
+            {activeTab === 'specification' && (
+              <div className="h-full flex flex-col">
+                {specificationField.isEditing ? (
+                  <Textarea
+                    value={specificationField.editedValue}
+                    onChange={(e) => specificationField.setEditedValue(e.target.value)}
+                    fillHeight={true}
+                    placeholder="Enter task specification in Markdown format..."
+                  />
                 ) : (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      onClick={specificationField.save}
-                      variant="primary"
-                      size="sm"
-                      loading={specificationField.saving}
-                      icon={<CheckIcon className="w-4 h-4" />}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      onClick={specificationField.cancelEditing}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      Cancel
-                    </Button>
+                  <div className="h-full overflow-y-auto">
+                    {task.specification.content ? (
+                      <Markdown>{task.specification.content}</Markdown>
+                    ) : (
+                      <p className={`${textColors.secondary} italic`}>No task specification provided. Click Edit to add specification.</p>
+                    )}
                   </div>
                 )}
               </div>
-              
-              {specificationField.isEditing ? (
-                <Textarea
-                  value={specificationField.editedValue}
-                  onChange={(e) => specificationField.setEditedValue(e.target.value)}
-                  className="w-full h-96 font-mono text-sm"
-                  placeholder="Enter task specification in Markdown format..."
-                />
-              ) : (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                  {task.specification.content ? (
-                    <ReactMarkdown>{task.specification.content}</ReactMarkdown>
-                  ) : (
-                    <p className={`${textColors.secondary} italic`}>No task specification provided. Click Edit to add specification.</p>
-                  )}
-                </div>
-              )}
-            </Card>
-          )}
+            )}
 
-          {activeTab === 'plan' && (
-            <Card padding="xs">
-              <div className={`${layouts.flexBetween} mb-2`}>
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Implementation Plan</h3>
-                {!planField.isEditing ? (
-                  <Button
-                    onClick={planField.startEditing}
-                    variant="secondary"
-                    size="sm"
-                    icon={<PencilIcon className="w-4 h-4" />}
-                  >
-                    Edit
-                  </Button>
+            {activeTab === 'plan' && (
+              <div className="h-full flex flex-col">
+                {planField.isEditing ? (
+                  <Textarea
+                    value={planField.editedValue}
+                    onChange={(e) => planField.setEditedValue(e.target.value)}
+                    fillHeight={true}
+                    placeholder="Enter implementation plan in Markdown format..."
+                  />
                 ) : (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      onClick={planField.save}
-                      variant="primary"
-                      size="sm"
-                      loading={planField.saving}
-                      icon={<CheckIcon className="w-4 h-4" />}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      onClick={planField.cancelEditing}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      Cancel
-                    </Button>
+                  <div className="h-full overflow-y-auto">
+                    {task.implementation_plan.content ? (
+                      <Markdown>{task.implementation_plan.content}</Markdown>
+                    ) : (
+                      <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
+                    )}
                   </div>
                 )}
               </div>
-              
-              {planField.isEditing ? (
-                <Textarea
-                  value={planField.editedValue}
-                  onChange={(e) => planField.setEditedValue(e.target.value)}
-                  className="w-full h-96 font-mono text-sm"
-                  placeholder="Enter implementation plan in Markdown format..."
-                />
-              ) : (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-left">
-                  {task.implementation_plan.content ? (
-                    <ReactMarkdown>{task.implementation_plan.content}</ReactMarkdown>
-                  ) : (
-                    <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
-                  )}
-                </div>
-              )}
-            </Card>
-          )}
-        </div>
+            )}
+          </div>
+        </Card>
 
         {/* Right Column: Task Agent Chat */}
         <div>
@@ -381,7 +462,13 @@ export default function TaskDetail() {
             emptyStateMessage="Welcome to the Task Agent!"
             rightHeaderContent={
               <div className={`text-sm ${textColors.secondary}`}>
-                Status: {task.status}
+                {modelLoading ? (
+                  <span>Loading...</span>
+                ) : agentModel ? (
+                  <span>Model: {agentModel}</span>
+                ) : (
+                  <span>Model: Unknown</span>
+                )}
               </div>
             }
             className="h-[600px] flex flex-col overflow-hidden"

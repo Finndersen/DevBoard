@@ -1,10 +1,11 @@
 """Registry for configuration schemas."""
 
 from devboard.config.agent_config import (
-    ImplementationAgentConfig,
     InvestigationAgentConfig,
-    PlanningAgentConfig,
     ProjectAgentConfig,
+    TaskImplementationAgentConfig,
+    TaskPlanningAgentConfig,
+    TaskSpecificationAgentConfig,
 )
 from devboard.config.base import BaseConfig
 from devboard.config.integration_configs import (
@@ -32,8 +33,9 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
         GoogleProviderConfig,
         # Agent configurations
         ProjectAgentConfig,
-        PlanningAgentConfig,
-        ImplementationAgentConfig,
+        TaskSpecificationAgentConfig,
+        TaskPlanningAgentConfig,
+        TaskImplementationAgentConfig,
         InvestigationAgentConfig,
     ],
     key_attr="config_key",

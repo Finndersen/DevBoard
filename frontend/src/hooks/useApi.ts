@@ -66,28 +66,36 @@ export function useMutation<T, TArgs extends unknown[]>(
 } {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Store options in ref to avoid dependency issues
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  
+  // Store mutationFn in ref to avoid dependency issues  
+  const mutationFnRef = useRef(mutationFn)
+  mutationFnRef.current = mutationFn
 
   const mutate = useCallback(async (...args: TArgs): Promise<T> => {
     setLoading(true)
     setError(null)
     
     try {
-      const result = await mutationFn(...args)
+      const result = await mutationFnRef.current(...args)
       
       // Update local cache with returned data (eliminates need for refetch!)
-      options.updateCache?.(result)
-      options.onSuccess?.(result)
+      optionsRef.current.updateCache?.(result)
+      optionsRef.current.onSuccess?.(result)
       
       setLoading(false)
       return result
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
       setError(errorMessage)
-      options.onError?.(err as Error)
+      optionsRef.current.onError?.(err as Error)
       setLoading(false)
       throw err
     }
-  }, [mutationFn, options])
+  }, []) // Empty dependency array for stable function
 
   return { mutate, loading, error }
 }
