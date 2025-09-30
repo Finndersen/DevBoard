@@ -228,7 +228,7 @@ class CodebaseIntegration:
             logger.error(f"Error searching code structure with ast-grep: {e}")
             return []
 
-    async def get_git_file_tree(self, max_depth: int | None = None) -> str:
+    async def get_directory_tree(self, max_depth: int | None = None) -> str:
         """Get git-tracked file tree structure using piped git ls-files | tree command.
 
         Args:
@@ -238,17 +238,15 @@ class CodebaseIntegration:
             Tree structure as formatted string
         """
         # Build the piped command: git ls-files | tree --fromfile
-        cmd = ["sh", "-c"]
-        tree_args = "tree --fromfile"
+        tree_args = "tree --fromfile -F"
         if max_depth is not None:
             tree_args += f" -L {max_depth}"
 
         piped_cmd = f"git ls-files | {tree_args}"
-        cmd.append(piped_cmd)
 
         try:
             result = await execute_shell_command(
-                cmd,
+                [piped_cmd],
                 working_dir=self.codebase_path,
                 timeout=30.0,
                 raise_on_error=False,
@@ -353,53 +351,6 @@ class CodebaseIntegration:
                 branches.append(branch[2:])
 
         return branches
-
-    async def get_file_tree(self, directory: str = "", max_depth: int | None = None) -> dict[str, Any]:
-        """Get hierarchical file tree structure.
-
-        Args:
-            directory: Relative directory path from codebase root
-            max_depth: Maximum depth to traverse
-
-        Returns:
-            Nested dictionary representing file tree
-        """
-        dir_path = self.codebase_path / directory
-        if not dir_path.exists():
-            raise FileNotFoundError(f"Directory not found: {directory}")
-
-        def build_tree(path: Path, current_depth: int = 0) -> dict[str, Any]:
-            if max_depth is not None and current_depth >= max_depth:
-                return {}
-
-            tree = {}
-            try:
-                for item in sorted(path.iterdir()):
-                    if item.name.startswith(".") and item.name not in [
-                        ".gitignore",
-                        ".env.example",
-                    ]:
-                        continue
-
-                    relative_path = str(item.relative_to(self.codebase_path))
-                    if item.is_dir():
-                        tree[item.name] = {
-                            "type": "directory",
-                            "path": relative_path,
-                            "children": build_tree(item, current_depth + 1),
-                        }
-                    else:
-                        tree[item.name] = {
-                            "type": "file",
-                            "path": relative_path,
-                            "size": str(item.stat().st_size),
-                        }
-            except PermissionError:
-                logger.warning(f"Permission denied accessing: {path}")
-
-            return tree
-
-        return build_tree(dir_path)
 
     async def get_file_info(self, file_path: str) -> dict[str, Any]:
         """Get detailed information about a file.

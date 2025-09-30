@@ -256,7 +256,7 @@ class TestGitTreeTool:
     @pytest.mark.asyncio
     async def test_tool_execution_success(self, mock_codebase_integration, mock_context):
         """Test successful git tree generation."""
-        mock_codebase_integration.get_git_file_tree.return_value = ".\n├── test.py\n└── src\n"
+        mock_codebase_integration.get_directory_tree.return_value = ".\n├── test.py\n└── src\n"
 
         tool = create_git_tree_tool(mock_codebase_integration)
         result = await tool.function(mock_context)
@@ -264,22 +264,22 @@ class TestGitTreeTool:
         assert "test.py" in result
         assert "src" in result
 
-        mock_codebase_integration.get_git_file_tree.assert_called_once_with(max_depth=None)
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=None)
 
     @pytest.mark.asyncio
     async def test_tool_execution_with_max_depth(self, mock_codebase_integration, mock_context):
         """Test git tree generation with max depth."""
-        mock_codebase_integration.get_git_file_tree.return_value = ".\n└── test.py\n"
+        mock_codebase_integration.get_directory_tree.return_value = ".\n└── test.py\n"
 
         tool = create_git_tree_tool(mock_codebase_integration)
         await tool.function(mock_context, max_depth=2)
 
-        mock_codebase_integration.get_git_file_tree.assert_called_once_with(max_depth=2)
+        mock_codebase_integration.get_directory_tree.assert_called_once_with(max_depth=2)
 
     @pytest.mark.asyncio
     async def test_tool_execution_error_handling(self, mock_codebase_integration, mock_context):
         """Test git tree error handling."""
-        mock_codebase_integration.get_git_file_tree.side_effect = Exception("Git error")
+        mock_codebase_integration.get_directory_tree.side_effect = Exception("Git error")
 
         tool = create_git_tree_tool(mock_codebase_integration)
 

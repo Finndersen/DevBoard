@@ -208,14 +208,14 @@ export const handlers = [
     const url = new URL(request.url)
     const prefix = url.searchParams.get('prefix')
     
-    // Return list of configurations based on prefix
+    // Return list of configurations with full details
     const configs = [
-      { key: 'integration.github.main', is_valid: true },
-      { key: 'integration.jira.main', is_valid: false },
-      { key: 'integration.slack.main', is_valid: true },
-      { key: 'ai_provider.openai.main', is_valid: true },
-      { key: 'ai_provider.anthropic.main', is_valid: false },
-      { key: 'ai_provider.google.main', is_valid: true },
+      { ...mockConfigurationResponse, key: 'integration.github.main', is_valid: true },
+      { ...mockConfigurationResponse, key: 'integration.jira.main', is_valid: false },
+      { ...mockConfigurationResponse, key: 'integration.slack.main', is_valid: true },
+      { ...mockConfigurationResponse, key: 'llm.openai.main', is_valid: true },
+      { ...mockConfigurationResponse, key: 'llm.anthropic.main', is_valid: false },
+      { ...mockConfigurationResponse, key: 'llm.google.main', is_valid: true },
     ]
     
     if (prefix) {
@@ -320,4 +320,34 @@ export const handlers = [
       model_id: 'openai:gpt-4'
     })
   }),
+
+  http.get('*/api/agents/:agentType/available-models', () => {
+    return HttpResponse.json([
+      { id: 'openai:gpt-4', name: 'OpenAI GPT-4', provider: 'OpenAI' },
+      { id: 'openai:gpt-3.5-turbo', name: 'OpenAI GPT-3.5 Turbo', provider: 'OpenAI' },
+      { id: 'anthropic:claude-3', name: 'Anthropic Claude 3', provider: 'Anthropic' },
+    ])
+  }),
+
+  // Codebases endpoints
+  http.get('*/api/codebases', () => {
+    return HttpResponse.json([
+      {
+        id: 1,
+        name: 'Test Codebase 1',
+        description: 'First test codebase',
+        local_path: '/path/to/codebase1',
+        repository_url: 'https://github.com/test/repo1',
+      },
+      {
+        id: 2,
+        name: 'Test Codebase 2',
+        description: 'Second test codebase',
+        local_path: '/path/to/codebase2',
+        repository_url: 'https://github.com/test/repo2',
+      },
+    ])
+  }),
+
+  // Architecture document endpoints - let tests set their own handlers
 ]

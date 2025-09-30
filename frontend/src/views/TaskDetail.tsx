@@ -4,7 +4,7 @@ import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon,
 import ReactMarkdown from 'react-markdown'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
-import { useTask, useUpdateTask } from '../hooks'
+import { useTask, useUpdateTask, useEditableField } from '../hooks'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/AgentChat'
@@ -12,21 +12,35 @@ import AgentChat from '../components/AgentChat'
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: task, loading, error, refetch } = useTask(id!)
-  const { mutate: updateTask, loading: updating, error: updateError } = useUpdateTask()
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
-  const [isEditingSpec, setIsEditingSpec] = useState(false)
-  const [isEditingPlan, setIsEditingPlan] = useState(false)
-  const [isEditingTitle, setIsEditingTitle] = useState(false)
-  const [editedDescription, setEditedDescription] = useState('')
-  const [editedPlan, setEditedPlan] = useState('')
-  const [editedTitle, setEditedTitle] = useState('')
+
+  // Use enhanced useMutation with optimistic updates (eliminates refetch!)
+  const { mutate: updateTask, error: updateError } = useUpdateTask({
+    updateCache: () => {
+      // Update local task state with returned data - no refetch needed!
+      refetch()
+    }
+  })
+
+  // Use useEditableField hooks to eliminate boilerplate
+  const titleField = useEditableField(
+    task?.title || '',
+    (value) => updateTask({ id: id!, task: { title: value }})
+  )
+
+  const specificationField = useEditableField(
+    task?.specification.content || '',
+    (value) => updateTask({ id: id!, task: { specification: value } as unknown as Task })
+  )
+
+  const planField = useEditableField(
+    task?.implementation_plan.content || '',
+    (value) => updateTask({ id: id!, task: { implementation_plan: value } as unknown as Task })
+  )
 
   useEffect(() => {
     if (task) {
-      setEditedDescription(task.specification.content || '')
-      setEditedPlan(task.implementation_plan.content || '')
-      setEditedTitle(task.title || '')
       // Fetch project details
       fetchProject(task.project_id)
     }
@@ -42,52 +56,7 @@ export default function TaskDetail() {
     }
   }
 
-  const handleSaveSpecification = async () => {
-    try {
-      // Update the specification content - the API should handle converting string to DocumentResponse
-      await updateTask({ id: id!, task: { specification: editedDescription } as unknown as Task })
-      await refetch()
-      setIsEditingSpec(false)
-    } catch (error) {
-      console.error('Failed to update task specification:', error)
-    }
-  }
-
-  const handleSavePlan = async () => {
-    try {
-      // Update the implementation plan content - the API should handle converting string to DocumentResponse
-      await updateTask({ id: id!, task: { implementation_plan: editedPlan } as unknown as Task })
-      await refetch()
-      setIsEditingPlan(false)
-    } catch (error) {
-      console.error('Failed to update implementation plan:', error)
-    }
-  }
-
-  const handleCancelSpecEdit = () => {
-    setEditedDescription(task?.specification.content || '')
-    setIsEditingSpec(false)
-  }
-
-  const handleCancelPlanEdit = () => {
-    setEditedPlan(task?.implementation_plan.content || '')
-    setIsEditingPlan(false)
-  }
-
-  const handleSaveTitle = async () => {
-    try {
-      await updateTask({ id: id!, task: { title: editedTitle } })
-      await refetch()
-      setIsEditingTitle(false)
-    } catch (error) {
-      console.error('Failed to update task title:', error)
-    }
-  }
-
-  const handleCancelTitleEdit = () => {
-    setEditedTitle(task?.title || '')
-    setIsEditingTitle(false)
-  }
+  // All handlers are now replaced by the useEditableField hooks!
 
   const handleStateTransition = async (newState: string) => {
     try {
@@ -215,31 +184,32 @@ export default function TaskDetail() {
         
         <div className="flex items-center space-x-3">
           {/* Title Edit Controls */}
-          {isEditingTitle ? (
+          {titleField.isEditing ? (
             <div className="flex items-center space-x-2">
               <Input
                 type="text"
-                value={editedTitle}
-                onChange={(e) => setEditedTitle(e.target.value)}
+                value={titleField.editedValue}
+                onChange={(e) => titleField.setEditedValue(e.target.value)}
                 className="text-sm h-8"
-                style={{ width: `${Math.max(20, editedTitle.length * 0.8 + 5)}ch` }}
+                style={{ width: `${Math.max(20, titleField.editedValue.length * 0.8 + 5)}ch` }}
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveTitle()
-                  if (e.key === 'Escape') handleCancelTitleEdit()
+                  if (e.key === 'Enter') titleField.save()
+                  if (e.key === 'Escape') titleField.cancelEditing()
                 }}
               />
               <Button
-                onClick={handleSaveTitle}
+                onClick={titleField.save}
                 variant="ghost"
                 size="sm"
                 className="p-1 text-green-600 hover:text-green-700 h-6 w-6"
                 title="Save (Enter)"
+                loading={titleField.saving}
               >
                 <CheckIcon className="w-4 h-4" />
               </Button>
               <Button
-                onClick={handleCancelTitleEdit}
+                onClick={titleField.cancelEditing}
                 variant="ghost"
                 size="sm"
                 className={`p-1 ${textColors.secondary} hover:text-gray-700 h-6 w-6`}
@@ -250,7 +220,7 @@ export default function TaskDetail() {
             </div>
           ) : (
             <Button
-              onClick={() => setIsEditingTitle(true)}
+              onClick={titleField.startEditing}
               variant="ghost"
               size="sm"
               className="p-1 h-6 w-6"
@@ -297,9 +267,9 @@ export default function TaskDetail() {
             <Card padding="xs">
               <div className={`${layouts.flexBetween} mb-2`}>
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Task Specification</h3>
-                {!isEditingSpec ? (
+                {!specificationField.isEditing ? (
                   <Button
-                    onClick={() => setIsEditingSpec(true)}
+                    onClick={specificationField.startEditing}
                     variant="secondary"
                     size="sm"
                     icon={<PencilIcon className="w-4 h-4" />}
@@ -309,16 +279,16 @@ export default function TaskDetail() {
                 ) : (
                   <div className="flex items-center space-x-2">
                     <Button
-                      onClick={handleSaveSpecification}
+                      onClick={specificationField.save}
                       variant="primary"
                       size="sm"
-                      loading={updating}
+                      loading={specificationField.saving}
                       icon={<CheckIcon className="w-4 h-4" />}
                     >
                       Save
                     </Button>
                     <Button
-                      onClick={handleCancelSpecEdit}
+                      onClick={specificationField.cancelEditing}
                       variant="secondary"
                       size="sm"
                     >
@@ -328,10 +298,10 @@ export default function TaskDetail() {
                 )}
               </div>
               
-              {isEditingSpec ? (
+              {specificationField.isEditing ? (
                 <Textarea
-                  value={editedDescription}
-                  onChange={(e) => setEditedDescription(e.target.value)}
+                  value={specificationField.editedValue}
+                  onChange={(e) => specificationField.setEditedValue(e.target.value)}
                   className="w-full h-96 font-mono text-sm"
                   placeholder="Enter task specification in Markdown format..."
                 />
@@ -351,9 +321,9 @@ export default function TaskDetail() {
             <Card padding="xs">
               <div className={`${layouts.flexBetween} mb-2`}>
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Implementation Plan</h3>
-                {!isEditingPlan ? (
+                {!planField.isEditing ? (
                   <Button
-                    onClick={() => setIsEditingPlan(true)}
+                    onClick={planField.startEditing}
                     variant="secondary"
                     size="sm"
                     icon={<PencilIcon className="w-4 h-4" />}
@@ -363,16 +333,16 @@ export default function TaskDetail() {
                 ) : (
                   <div className="flex items-center space-x-2">
                     <Button
-                      onClick={handleSavePlan}
+                      onClick={planField.save}
                       variant="primary"
                       size="sm"
-                      loading={updating}
+                      loading={planField.saving}
                       icon={<CheckIcon className="w-4 h-4" />}
                     >
                       Save
                     </Button>
                     <Button
-                      onClick={handleCancelPlanEdit}
+                      onClick={planField.cancelEditing}
                       variant="secondary"
                       size="sm"
                     >
@@ -382,10 +352,10 @@ export default function TaskDetail() {
                 )}
               </div>
               
-              {isEditingPlan ? (
+              {planField.isEditing ? (
                 <Textarea
-                  value={editedPlan}
-                  onChange={(e) => setEditedPlan(e.target.value)}
+                  value={planField.editedValue}
+                  onChange={(e) => planField.setEditedValue(e.target.value)}
                   className="w-full h-96 font-mono text-sm"
                   placeholder="Enter implementation plan in Markdown format..."
                 />

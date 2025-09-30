@@ -130,17 +130,22 @@ frontend/
 │   │   ├── __tests__/        # Component unit tests
 │   │   ├── Layout.tsx        # Navigation shell + routing
 │   │   ├── Chat.tsx          # Real-time agent conversation UI
+│   │   ├── AgentChat.tsx     # Agent conversation wrapper (refactored)
+│   │   ├── ConversationChat.tsx # Core chat implementation
 │   │   ├── ConfigurationForm.tsx # Dynamic config forms
 │   │   └── ConfigurationField.tsx # Individual field components
 │   ├── views/                # Page-level components
 │   │   ├── __tests__/        # View integration tests
 │   │   ├── ProjectDashboard.tsx # Project listing + creation (refactored)
-│   │   ├── ProjectDetail.tsx    # Project details + Q&A chat
+│   │   ├── ProjectDetail.tsx    # Project details + Q&A chat (refactored)
 │   │   ├── TaskDetail.tsx       # Task planning + specification (refactored)
 │   │   ├── Codebases.tsx        # Codebase + architecture management
 │   │   └── Settings.tsx         # System configuration UI
-│   ├── hooks/                # Custom React hooks for data fetching
-│   │   ├── useApi.ts         # Generic API hook with loading/error states
+│   ├── hooks/                # Custom React hooks for state management & data fetching
+│   │   ├── useApi.ts         # Generic API hook with loading/error states (enhanced)
+│   │   ├── useModal.ts       # Modal state management hook
+│   │   ├── useAsyncOperation.ts # Async operation standardization hook
+│   │   ├── useEditableField.ts  # Edit/save/cancel pattern hook
 │   │   ├── useProjects.ts    # Project CRUD operations hooks
 │   │   ├── useTasks.ts       # Task management hooks
 │   │   ├── useCodebases.ts   # Codebase operations hooks
@@ -872,13 +877,24 @@ Comprehensive styling system for form elements with standardized classes for dif
 
 ### Custom Hooks Architecture (`frontend/src/hooks/`)
 
+#### State Management Hooks
+
+**useModal Hook (`useModal.ts`)**:
+Eliminates modal state boilerplate with standardized open/close/toggle methods. Provides consistent modal state management patterns across all components, reducing 15-20 lines of repetitive state management to a single hook call.
+
+**useAsyncOperation Hook (`useAsyncOperation.ts`)**:
+Standardizes async operations with loading states, error handling, and success callbacks. Encapsulates common patterns for API calls, form submissions, and background operations with consistent error handling and user feedback.
+
+**useEditableField Hook (`useEditableField.ts`)**:
+Manages edit/save/cancel patterns for form fields with automatic state synchronization. Provides standardized editing workflows with save validation, error handling, and automatic rollback on cancel. Eliminates 30-40 lines of manual edit state management per editable field.
+
 #### Generic API Hook Pattern
 
 **useApi Hook (`useApi.ts`)**:
 Generic data fetching hook providing consistent patterns for loading states, error handling, and data refetching. Implements TypeScript generics for type-safe API responses and supports both immediate and deferred loading patterns.
 
 **useMutation Hook (`useMutation.ts`)**:
-Handles mutation operations (POST, PUT, PATCH, DELETE) with loading states and error handling. Provides promise-based return values for operation chaining and supports TypeScript generics for type-safe parameter passing.
+Enhanced mutation operations with optimistic updates and cache management. Handles POST, PUT, PATCH, DELETE operations with loading states, error handling, and automatic cache updates using returned data. Eliminates wasteful refetch patterns by leveraging API response data for local state updates.
 
 #### Domain-Specific Hooks
 
@@ -891,31 +907,27 @@ Task management operations for project tasks, individual task details, and task 
 **useCodebases Hook (`useCodebases.ts`)**:
 Codebase management operations including codebase CRUD operations, architecture document management, and codebase analysis workflows.
 
-### Component Refactoring Implementation
+### Frontend Component Architecture
 
-#### ProjectDashboard Refactoring
+#### Optimized State Management Implementation
 
-**Before**: 189-line monolithic component with inline styling, manual state management, and direct API calls
-**After**: 175-line component using standardized UI components, custom hooks, and design system utilities
+**Frontend Architecture Benefits**:
+- **API call optimization** through optimistic updates with returned mutation data
+- **Minimal boilerplate** with standardized hook patterns for common operations
+- **Consistent error handling** patterns across all components with unified user feedback
+- **Enhanced maintainability** through reusable hook patterns and component interfaces
+- **Immediate UI feedback** using optimistic updates from mutation responses
 
-**Key Improvements**:
-- Replaced direct `apiClient` calls with `useProjects()` and `useCreateProject()` hooks
-- Eliminated inline modal implementation in favor of reusable `Modal` component
-- Replaced manual form elements with `Input`, `Textarea`, and `Button` components
-- Added comprehensive error handling with `ErrorMessage` component
-- Implemented design system utilities for consistent spacing and colors
+#### Component Implementation Patterns
 
-#### TaskDetail Refactoring
+**AgentChat Component (`components/AgentChat.tsx`)**:
+Streamlined agent conversation wrapper using `useModal()` and `useAsyncOperation()` hooks for chat clearing functionality. Implements standardized modal and async operation patterns with consistent error handling and user feedback.
 
-**Before**: Large component with complex state management and inconsistent styling
-**After**: Refactored to use standardized UI components and custom hooks for data operations
+**TaskDetail Component (`views/TaskDetail.tsx`)**:
+Task detail view using three `useEditableField()` hooks for title, specification, and plan editing. Implements optimistic updates with enhanced `useMutation()` to eliminate unnecessary API refetches. Provides standardized edit/save/cancel patterns across all editable fields.
 
-**Key Improvements**:
-- Integrated `useTask()` and `useUpdateTask()` hooks for API operations
-- Replaced task status display with `StatusBadge` component
-- Standardized all buttons with `Button` component variants
-- Implemented consistent error handling and loading states
-- Used `Card` components for content sections
+**ProjectDetail Component (`views/ProjectDetail.tsx`)**:
+Project detail view using `useModal()` for task creation and `useEditableField()` for specification editing. Uses standard `Modal` component and `Button` variants for consistent UI patterns throughout the application.
 
 ### Theme System Implementation
 

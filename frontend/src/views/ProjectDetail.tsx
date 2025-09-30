@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, PlusIcon, XMarkIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import AgentChat from '../components/AgentChat'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import Input from '../components/ui/Input'
+import Textarea from '../components/ui/Textarea'
+import Modal from '../components/ui/Modal'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
+import { useModal, useEditableField } from '../hooks'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -24,18 +28,30 @@ export default function ProjectDetail() {
     return ['home', 'board', 'settings'].includes(tab) ? tab : 'home'
   }, [location.search])
   
-  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>(getTabFromUrl() === 'home' ? 'editor' : getTabFromUrl())
-  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>(() => {
+    const tab = getTabFromUrl()
+    return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
+  })
   const [newTask, setNewTask] = useState({
     title: '',
     status: 'defining',
     codebase_id: null,
     remote_task_id: null
   })
-  const [isEditingSpecification, setIsEditingSpecification] = useState(false)
-  const [editedSpecification, setEditedSpecification] = useState('')
   const [agentModel, setAgentModel] = useState<string | null>(null)
   const [modelLoading, setModelLoading] = useState(true)
+
+  // Use new custom hooks
+  const createTaskModal = useModal()
+  const specificationField = useEditableField(
+    project?.specification?.content || '',
+    (value) => apiClient.updateProject(id!, { 
+      specification: {
+        ...project!.specification,
+        content: value
+      }
+    })
+  )
 
   // Update URL when tab changes
   const handleTabChange = (tab: 'board' | 'editor' | 'settings') => {
@@ -57,7 +73,6 @@ export default function ProjectDetail() {
     try {
       const data = await apiClient.getProject(id!)
       setProject(data)
-      setEditedSpecification(data.specification?.content || '')
     } catch (error) {
       console.error('Failed to fetch project:', error)
     }
@@ -80,13 +95,6 @@ export default function ProjectDetail() {
     fetchAgentModel()
   }, [fetchProject, fetchTasks])
 
-  // Update editedSpecification when project loads or editing mode changes
-  useEffect(() => {
-    if (project && isEditingSpecification) {
-      setEditedSpecification(project.specification?.content || '')
-    }
-  }, [project, isEditingSpecification])
-
   const fetchAgentModel = async () => {
     try {
       const data = await apiClient.getAgentModel('project')
@@ -102,12 +110,31 @@ export default function ProjectDetail() {
     e.preventDefault()
     try {
       const taskData = {
-        ...newTask,
-        project_id: parseInt(id!)
+        title: newTask.title,
+        status: newTask.status,
+        codebase_id: newTask.codebase_id,
+        remote_task_id: newTask.remote_task_id,
+        default_conversation_id: null,
+        specification: {
+          id: 0, // Will be set by backend
+          document_type: 'task_specification',
+          content: '',
+          content_hash: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        implementation_plan: {
+          id: 0, // Will be set by backend
+          document_type: 'implementation_plan',
+          content: '',
+          content_hash: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
       }
       await apiClient.createTask(id!, taskData)
       await fetchTasks()
-      setShowCreateTaskModal(false)
+      createTaskModal.close()
       setNewTask({ 
         title: '', 
         status: 'defining',
@@ -117,27 +144,6 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error('Failed to create task:', error)
     }
-  }
-
-  const handleSaveSpecification = async () => {
-    try {
-      await apiClient.updateProject(id!, { specification: editedSpecification })
-      setProject(prev => prev ? { 
-        ...prev, 
-        specification: { 
-          ...prev.specification, 
-          content: editedSpecification 
-        } 
-      } : null)
-      setIsEditingSpecification(false)
-    } catch (error) {
-      console.error('Failed to update project specification:', error)
-    }
-  }
-
-  const handleCancelEdit = () => {
-    setEditedSpecification(project?.specification?.content || '')
-    setIsEditingSpecification(false)
   }
 
 
@@ -228,7 +234,7 @@ export default function ProjectDetail() {
           
           {/* Right: Actions */}
           <div className="flex items-center">
-            <Button onClick={() => setShowCreateTaskModal(true)} size="sm">
+            <Button onClick={createTaskModal.open} size="sm">
               <PlusIcon className="w-4 h-4 mr-2" />
               New Task
             </Button>
@@ -258,9 +264,9 @@ export default function ProjectDetail() {
                     <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
                       {task.title}
                     </h4>
-                    {task.description && (
+                    {task.specification?.content && (
                       <p className="text-gray-600 dark:text-gray-400 text-xs mb-2 line-clamp-2">
-                        {task.description}
+                        {task.specification.content}
                       </p>
                     )}
                     <div className="flex items-center justify-between">
@@ -284,42 +290,43 @@ export default function ProjectDetail() {
             <Card padding="xs" className="h-full flex flex-col overflow-hidden">
               <div className="flex items-center justify-between mb-2 flex-shrink-0">
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Specification</h3>
-                {!isEditingSpecification ? (
-                  <button
-                    onClick={() => {
-                      setEditedSpecification(project?.specification?.content || '')
-                      setIsEditingSpecification(true)
-                    }}
-                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                {!specificationField.isEditing ? (
+                  <Button
+                    onClick={specificationField.startEditing}
+                    variant="secondary"
+                    size="sm"
+                    icon={<PencilIcon className="w-4 h-4" />}
                   >
-                    <PencilIcon className="w-4 h-4 mr-2" />
                     Edit
-                  </button>
+                  </Button>
                 ) : (
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleSaveSpecification}
-                      className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    <Button
+                      onClick={specificationField.save}
+                      variant="primary"
+                      size="sm"
+                      loading={specificationField.saving}
+                      icon={<CheckIcon className="w-4 h-4" />}
                     >
-                      <CheckIcon className="w-4 h-4 mr-2" />
                       Save
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    </Button>
+                    <Button
+                      onClick={specificationField.cancelEditing}
+                      variant="secondary"
+                      size="sm"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
               
               <div className="flex-1 overflow-hidden flex flex-col">
-                {isEditingSpecification ? (
-                  <textarea
-                    value={editedSpecification}
-                    onChange={(e) => setEditedSpecification(e.target.value)}
-                    className="w-full flex-1 font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                {specificationField.isEditing ? (
+                  <Textarea
+                    value={specificationField.editedValue}
+                    onChange={(e) => specificationField.setEditedValue(e.target.value)}
+                    className="w-full flex-1 font-mono text-sm resize-none"
                     placeholder="Enter project specification in Markdown format..."
                   />
                 ) : (
@@ -365,73 +372,62 @@ export default function ProjectDetail() {
       )}
 
       {/* Create Task Modal */}
-      {showCreateTaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                Create New Task
-              </h3>
-              <button
-                onClick={() => setShowCreateTaskModal(false)}
-                className="text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
-              >
-                <XMarkIcon className="w-5 h-5" />
-              </button>
+      <Modal 
+        isOpen={createTaskModal.isOpen}
+        onClose={createTaskModal.close}
+        title="Create New Task"
+        maxWidth="md"
+      >
+        <form onSubmit={handleCreateTask}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Task Title
+              </label>
+              <Input
+                type="text"
+                required
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                placeholder="Enter task title"
+              />
             </div>
             
-            <form onSubmit={handleCreateTask}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Task Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter task title"
-                />
-              </div>
-              
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Status
-                </label>
-                <select
-                  value={newTask.status}
-                  onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="defining" className="text-gray-900 dark:text-white">Defining</option>
-                  <option value="planning" className="text-gray-900 dark:text-white">Planning</option>
-                  <option value="implementing" className="text-gray-900 dark:text-white">Implementing</option>
-                  <option value="reviewing" className="text-gray-900 dark:text-white">Reviewing</option>
-                  <option value="complete" className="text-gray-900 dark:text-white">Complete</option>
-                </select>
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateTaskModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Create Task
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Status
+              </label>
+              <select
+                value={newTask.status}
+                onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="defining">Defining</option>
+                <option value="planning">Planning</option>
+                <option value="implementing">Implementing</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="complete">Complete</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+          
+          <div className="flex justify-end space-x-3 mt-6">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={createTaskModal.close}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              Create Task
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
     </div>
   )

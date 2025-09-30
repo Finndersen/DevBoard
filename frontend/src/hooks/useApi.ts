@@ -50,8 +50,15 @@ export function useApi<T>(
   }
 }
 
+interface UseMutationOptions<T> {
+  onSuccess?: (data: T) => void
+  onError?: (error: Error) => void
+  updateCache?: (data: T) => void
+}
+
 export function useMutation<T, TArgs extends unknown[]>(
-  mutationFn: (...args: TArgs) => Promise<T>
+  mutationFn: (...args: TArgs) => Promise<T>,
+  options: UseMutationOptions<T> = {}
 ): {
   mutate: (...args: TArgs) => Promise<T>
   loading: boolean
@@ -66,15 +73,21 @@ export function useMutation<T, TArgs extends unknown[]>(
     
     try {
       const result = await mutationFn(...args)
+      
+      // Update local cache with returned data (eliminates need for refetch!)
+      options.updateCache?.(result)
+      options.onSuccess?.(result)
+      
       setLoading(false)
       return result
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
       setError(errorMessage)
+      options.onError?.(err as Error)
       setLoading(false)
       throw err
     }
-  }, [mutationFn])
+  }, [mutationFn, options])
 
   return { mutate, loading, error }
 }

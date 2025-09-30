@@ -3,7 +3,6 @@
 from unittest.mock import Mock, patch
 
 import pytest
-
 from devboard.integrations.codebase import CodebaseIntegration, detect_git_remote_url
 from devboard.integrations.shell import ShellCommandResult
 
@@ -234,7 +233,7 @@ class TestGetGitFileTree:
         tree_result = ShellCommandResult(".\n├── test.py\n└── subdir\n    └── file.txt\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
-            tree = await integration.get_git_file_tree()
+            tree = await integration.get_directory_tree()
 
             assert "test.py" in tree
             assert "subdir" in tree
@@ -242,7 +241,7 @@ class TestGetGitFileTree:
             # Verify the method was called
             mock_exec.assert_called_once()
             call_args = mock_exec.call_args[0][0]
-            assert call_args == ["sh", "-c", "git ls-files | tree --fromfile"]
+            assert call_args == ["git ls-files | tree --fromfile -F"]
 
     @pytest.mark.asyncio
     async def test_get_git_file_tree_with_max_depth(self, temp_codebase):
@@ -252,12 +251,12 @@ class TestGetGitFileTree:
         tree_result = ShellCommandResult(".\n└── test.py\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
-            await integration.get_git_file_tree(max_depth=2)
+            await integration.get_directory_tree(max_depth=2)
 
             # Verify the method was called
             mock_exec.assert_called_once()
             call_args = mock_exec.call_args[0][0]
-            assert call_args == ["sh", "-c", "git ls-files | tree --fromfile -L 2"]
+            assert call_args == ["git ls-files | tree --fromfile -F -L 2"]
 
 
 class TestDetectGitRemoteUrl:

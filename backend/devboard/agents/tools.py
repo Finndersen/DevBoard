@@ -319,7 +319,7 @@ def create_git_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
             Formatted tree structure showing all git-tracked files and directories,
             with proper indentation and tree characters for visualization.
         """
-        tree = await codebase_integration.get_git_file_tree(max_depth=max_depth)
+        tree = await codebase_integration.get_directory_tree(max_depth=max_depth)
         return tree
 
     return Tool(
