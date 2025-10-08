@@ -153,7 +153,12 @@ class AgentConversationService:
                 logger.info(f"Tool {tool_call_id} approved")
             else:
                 # For denied tools, set approval to False or use ToolDenied
-                converted_approvals[tool_call_id] = ToolDenied(message=decision.feedback or "The tool call was denied.")
+                if decision.feedback:
+                    message = f"Tool call DENIED with feedback: {decision.feedback}"
+                else:
+                    message = "The tool call was DENIED."
+
+                converted_approvals[tool_call_id] = ToolDenied(message=message)
                 logger.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
 
         return DeferredToolResults(approvals=converted_approvals)

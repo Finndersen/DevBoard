@@ -304,6 +304,19 @@ wheels = [
 ]
 
 [[package]]
+name = "claude-agent-sdk"
+version = "0.1.1"
+source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
+dependencies = [
+    { name = "anyio" },
+    { name = "mcp" },
+]
+sdist = { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/claude-agent-sdk/0.1.1/claude_agent_sdk-0.1.1.tar.gz", hash = "sha256:dcb224d4a65699cd9ceaddf4b9f9501606ba4f10d37fa691aff1ab60b9849b65" }
+wheels = [
+    { url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/claude-agent-sdk/0.1.1/claude_agent_sdk-0.1.1-py3-none-any.whl", hash = "sha256:4e95ed38786b045c5d42c942d5ce2870cd7e7c4c836cc22b5b9526b1543bfd8a" },
+]
+
+[[package]]
 name = "click"
 version = "8.2.1"
 source = { registry = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/" }
@@ -395,6 +408,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
     { name = "beautifulsoup4" },
+    { name = "claude-agent-sdk" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jira" },
@@ -423,6 +437,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.1" },
     { name = "fastapi", specifier = ">=0.104.0" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.25.0" },

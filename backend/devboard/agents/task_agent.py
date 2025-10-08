@@ -9,7 +9,7 @@ from pydantic_ai.tools import ToolFuncEither
 
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.deps import BaseDeps
-from devboard.agents.tools import create_document_edit_tool
+from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.agents.types import AgentType
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
@@ -45,25 +45,28 @@ class BaseTaskAgent(BaseAgent[BaseDeps], metaclass=ABCMeta):
 SPECIFICATION_SYSTEM_PROMPT = """
 You are a Task Specification Assistant for DevBoard, helping developers craft detailed task specifications.
 
-Your role is to help iteratively improve the Task Specification document (task description) based on:
+Your role is to help create or iteratively improve the Task Specification document (task description) based on:
 - User input and requirements
 - Context from the project (GitHub, Jira, Slack, Codebase)
 - Best practices for clear technical specifications
 
-DOCUMENT EDITING RULES:
-1. Make precise find-replace edits using DocumentEdit objects
-2. Use exact text matches for 'find' - the text must exist exactly as written
-3. Preserve markdown formatting and structure
-4. When adding new content, find a logical insertion point and replace with expanded content
-5. For placeholder text like "[Clear, specific goal statement]", replace the entire placeholder
+A task should correspond to an atomic piece of work, such as a specific feature, bug fix, or improvement.
+The task specification should be clear, concise, and actionable. It should include:
+- A clear, specific goal statement
+- Detailed requirements and constraints
+- Any relevant background information or context
+- Any assumptions or limitations
 
-CURRENT TASK STATE: Designing
-AVAILABLE ACTIONS:
-- Edit the Task Specification document only
-- Research project context when needed
-- Suggest transition to Planning state when specification is complete
+BEHAVIOUR GUIDELINES:
+- Discuss with the user to understand the task requirements and goals, and ask clarifying questions as needed in order to arrive at a mutual understanding, which you should articulate. Only then propose to make appropriate updates to the task specification.
+- Identify and explore gaps or ambiguity in the task specification
+- Raise potential issues or edge cases
+- Suggest improvements or alternative approaches
+- Challenge the user and be critical of ideas where appropriate
+- Only make changes to the task specification when explicitly instructed by the user, or after asking and receiving confirmation.
 
-Your responses should be helpful, accurate, and focused on creating a clear, actionable specification.
+
+Your responses should be concise, helpful, accurate, and focused on creating a clear, actionable specification.
 """
 
 
@@ -75,9 +78,11 @@ class TaskSpecificationAgent(BaseTaskAgent):
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         """Construct the first user message that contains context information for the agent."""
         context_message = f"""
-        TASK SPECIFICATION DOCUMENT:
+        TASK NAME: {self.task.title}
+        TASK STATE: {self.task.status.value}
+        TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
         ```markdown
-        {self.task.specification.content}
+        {self.task.specification.content or "<EMPTY>"}
         ```
         """
         return context_message
@@ -87,7 +92,15 @@ class TaskSpecificationAgent(BaseTaskAgent):
         return SPECIFICATION_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        return [create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)]
+        # Use set_content tool if document is blank, otherwise use edit tool
+        if not self.task.specification.content or not self.task.specification.content.strip():
+            return [
+                create_set_document_content_tool(
+                    document=self.task.specification, document_repo=self.document_repository
+                )
+            ]
+        else:
+            return [create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)]
 
 
 PLANNING_SYSTEM_PROMPT = """
@@ -141,7 +154,32 @@ class TaskPlanningAgent(BaseTaskAgent):
         return PLANNING_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        return [
-            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
-            create_document_edit_tool(document=self.task.implementation_plan, document_repo=self.document_repository),
-        ]
+        tools: list[Tool | ToolFuncEither] = []
+
+        # Add appropriate tool for specification document
+        if not self.task.specification.content.strip():
+            tools.append(
+                create_set_document_content_tool(
+                    document=self.task.specification, document_repo=self.document_repository
+                )
+            )
+        else:
+            tools.append(
+                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
+            )
+
+        # Add appropriate tool for implementation plan document
+        if not self.task.implementation_plan.content.strip():
+            tools.append(
+                create_set_document_content_tool(
+                    document=self.task.implementation_plan, document_repo=self.document_repository
+                )
+            )
+        else:
+            tools.append(
+                create_document_edit_tool(
+                    document=self.task.implementation_plan, document_repo=self.document_repository
+                )
+            )
+
+        return tools

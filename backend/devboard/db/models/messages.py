@@ -82,10 +82,9 @@ class ConversationMessage(Base):
 
         # Extract text content based on message type
         text_content = ""
-        if message_type == MessageType.USER_PROMPT:
-            text_content = message.parts[0].content if message.parts else ""
-        elif message_type == MessageType.TEXT_RESPONSE:
-            text_content = message.parts[0].content if message.parts else ""
+        for part in message.parts:
+            if isinstance(part, TextPart | UserPromptPart):
+                text_content += part.content
 
         return cls(
             conversation_id=conversation_id,

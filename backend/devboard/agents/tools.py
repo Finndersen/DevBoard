@@ -54,6 +54,51 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
     )
 
 
+def create_set_document_content_tool(document: Document, document_repo: DocumentRepository) -> Tool:
+    """Create a tool for setting the initial content of a blank document.
+
+    This tool is used when a document is empty and needs to be initialized with content.
+    Once the document has content, use create_document_edit_tool instead.
+
+    Args:
+        document: Document model to set content for
+        document_repo: Repository for document operations
+    """
+
+    def set_document_content_tool(ctx: RunContext[BaseDeps], content: str, reasoning: str = "") -> str:
+        """Set the content of a blank document.
+
+        Args:
+            content: The full content to set for the document
+            reasoning: Optional CONCISE reasoning for the content being set
+
+        Returns:
+            Success message or error details
+        """
+        # Validate the document is currently blank
+        if document.content and document.content.strip():
+            return f"Error: Document already has content. Use edit_{document.document_type} tool to make changes to existing content."
+
+        # Validate content is not empty
+        if not content or not content.strip():
+            return "Error: Content cannot be empty."
+
+        if not ctx.tool_call_approved:
+            # This will show the content to the user for approval
+            raise ApprovalRequired()
+
+        # Update document content and hash using repository
+        document_repo.update_content(document, content)
+
+        return f"Content set successfully for {document.document_type}."
+
+    return Tool(
+        function=set_document_content_tool,
+        name=f"set_{document.document_type}_content",
+        requires_approval=True,
+    )
+
+
 async def get_relevant_context(ctx: RunContext[BaseDeps], resource_uri: str, query: str) -> str:
     """Get focused context from an ON_DEMAND resource.
 

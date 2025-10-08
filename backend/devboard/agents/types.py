@@ -10,3 +10,4 @@ class AgentType(Enum):
     TASK_PLANNING = "task_planning"
     TASK_IMPLEMENTATION = "task_implementation"
     INVESTIGATION = "investigation"
+    CLAUDE_CODE = "claude_code"
