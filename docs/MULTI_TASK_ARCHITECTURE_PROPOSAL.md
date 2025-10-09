@@ -183,104 +183,571 @@ class ActivityManager {
 export const activityManager = new ActivityManager();
 ```
 
-## User Interface Design Recommendations
+## User Interface Design
 
-### 1. Tab Bar Component
+### Overall Layout: Hybrid Workspace with Unified Notifications
+
+The interface follows a global tab-based approach where users can mix any entities (tasks, projects, codebases, settings) in tabs. Navigation for major sections is accessible via a collapsible menu, and all activity/notifications are unified in a single notification panel.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ [☰Nav] [🏠] DevBoard                   [🔔3] [⚙️] [@User ▾]     │ ← Top Bar
+├─────────────────────────────────────────────────────────────────┤
+│ [Task#123●●] [Project:X] [Task#456○] [Settings] [+]            │ ← Global Tabs
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│                                                                  │
+│                     Main Content Area                            │
+│                                                                  │
+│   ┌──────────────────────────────────────────────────────────┐ │
+│   │ Entity Detail View                                        │ │
+│   │                                                            │ │
+│   │ [Overview] [Specification] [Plan] [💬 Chat (2)]           │ │
+│   └──────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Top Bar Components
+
+#### Navigation Menu (☰Nav)
+Collapsible slide-out menu providing access to primary navigation sections:
 
 ```typescript
-interface TabBarProps {
-  tabs: TabState[];
-  activeTabId: string | null;
-  onTabSwitch: (tabId: string) => void;
-  onTabClose: (tabId: string) => void;
-  onNewTab: () => void;
+interface NavigationMenu {
+  sections: [
+    { icon: '🏠', label: 'Home', route: '/home' },
+    { icon: '📋', label: 'Projects', route: '/projects' },
+    { icon: '💻', label: 'Codebases', route: '/codebases' },
+    { icon: '⏱️', label: 'Recent', items: RecentItem[] },
+    { icon: '⭐', label: 'Favorites', items: FavoriteItem[] }, // future feature
+    { icon: '⚙️', label: 'Settings', route: '/settings' }
+  ]
 }
 ```
 
+**Features**:
+- Keyboard shortcut to toggle (e.g., Cmd/Ctrl + B)
+- Search/filter within Projects and Codebases sections
+- Recent items show last 10 accessed entities
+- Can be pinned open for wider screens
+
+#### Home Button (🏠)
+Quick access to dashboard showing:
+- Recent activity across all projects
+- Active tasks summary
+- Quick access to frequently used entities
+
+#### Notification Panel (🔔)
+Unified notification center for all activity requiring attention. See detailed section below.
+
+### 2. Global Tab Bar
+
+```typescript
+interface TabState {
+  id: string; // Unique tab instance ID
+  type: 'task' | 'project' | 'codebase' | 'settings';
+  entityId: string;
+  title: string;
+  activityStatus: ActivityStatus;
+  hasUnsavedChanges: boolean;
+  lastActivity: Date;
+}
+
+type ActivityStatus =
+  | { type: 'idle' }
+  | { type: 'new_messages', count: number }
+  | { type: 'agent_working' }
+  | { type: 'action_required' }; // tool approvals, errors
+```
+
+**Tab Indicators**:
+- `●●` (dots with count) = Unread messages in conversation
+- `○` (hollow circle) = Conversation exists but agent idle
+- `⚡` (lightning bolt) = Agent actively working
+- `🔴` (red dot) = Action required (tool approval, error)
+- `*` (asterisk) = Unsaved changes in entity
+
+**Tab Title Format**:
+- Tasks: `[ProjectName] Task #123` or just `Task #123` if no project
+- Projects: `Project: ProjectName`
+- Codebases: `Codebase: RepoName`
+- Settings: `Settings`
+
 **Design Features**:
-- Browser-style tabs with close buttons
-- Activity indicators (pulsing dot for active agent conversations)
-- Unsaved changes indicators (modified dot)
+- Browser-style tabs with close buttons (×)
+- Hover shows full title + last activity timestamp
 - Drag-and-drop tab reordering
-- Tab overflow handling with scrolling
-- Context menu for tab management (close others, close all, etc.)
+- Tab overflow handling with horizontal scrolling
+- Context menu (right-click):
+  - Close Tab
+  - Close Other Tabs
+  - Close Tabs to the Right
+  - Pin Tab (future feature)
+  - Duplicate Tab (future feature)
 
-### 2. Global Activity Indicator
+**New Tab Button (+)**:
+- Opens quick launcher modal with recent/favorite entities
+- Or navigates to Projects/Tasks list
+
+### 3. Unified Notification Panel
+
+The notification panel is the single source of truth for all events requiring user attention, including conversation events, system events, and background operations.
+
+```typescript
+interface Notification {
+  id: string;
+  type:
+    | 'tool_approval'
+    | 'agent_complete'
+    | 'agent_blocked'
+    | 'agent_message'
+    | 'build_status'
+    | 'system_error';
+  priority: 'high' | 'normal' | 'low';
+  entityType: 'task' | 'project' | 'codebase' | null;
+  entityId: string | null;
+  entityTitle: string | null;
+  conversationId: string | null; // Link to conversation if relevant
+  timestamp: Date;
+  message: string;
+  actions: NotificationAction[];
+  read: boolean;
+  dismissed: boolean;
+}
+
+interface NotificationAction {
+  label: string;
+  action: () => void;
+  style: 'primary' | 'secondary' | 'danger';
+}
+```
+
+**Panel UI**:
+```
+┌─────────────────────────────────────────┐
+│ Notifications (3)           [Mark all] │
+├─────────────────────────────────────────┤
+│ 🔧 Task #123: API Integration           │
+│    Agent needs approval for tool:       │
+│    "git commit -m 'Add endpoint'"       │
+│    2 min ago                            │
+│    [Approve] [Deny] [View Chat]         │
+├─────────────────────────────────────────┤
+│ ✅ Task #456: Update Docs               │
+│    Agent completed work                 │
+│    5 min ago                            │
+│    [View Results] [Dismiss]             │
+├─────────────────────────────────────────┤
+│ 💬 Project X: Planning                  │
+│    New message from agent               │
+│    "I've analyzed the requirements"     │
+│    10 min ago                           │
+│    [Open] [Dismiss]                     │
+└─────────────────────────────────────────┘
+```
 
 **Features**:
-- Notification bell with count badge
-- Background activity status (agents working, messages received)
-- Quick access dropdown to jump to active conversations
-- Progress indicators for long-running operations
+- **Grouping**: Group notifications by entity or by type
+- **Filtering**: Filter by notification type, entity, unread/all
+- **Priority Sorting**: High-priority items (tool approvals, errors) at top
+- **Quick Actions**: Inline action buttons for common operations
+- **Click-to-Navigate**: Clicking notification body opens relevant entity tab and scrolls to context
+- **Badge Count**: [🔔3] shows count of unread notifications
+- **Auto-Dismiss**: Some notifications (e.g., completions) can auto-dismiss after viewing
+- **Persistence**: Critical notifications persist until explicitly dismissed
+- **Sound/Visual Alerts**: Configurable alerts for high-priority notifications
 
-### 3. Conversation Persistence UI
+**Notification Types & Actions**:
 
-**Features**:
-- Draft message preservation with visual indicators
-- Conversation continuation banners ("Agent was working while you were away")
+| Type | Icon | Actions |
+|------|------|---------|
+| Tool Approval | 🔧 | [Approve] [Deny] [View Chat] |
+| Agent Complete | ✅ | [View Results] [Dismiss] |
+| Agent Blocked | ⚠️ | [View Error] [Retry] [Open Chat] |
+| Agent Message | 💬 | [Open] [Reply] [Dismiss] |
+| Build Status | 🏗️ | [View Logs] [Dismiss] |
+| System Error | ❌ | [View Details] [Report] [Dismiss] |
+
+**Workflow Example**:
+1. User closes Task #123 tab while agent is working
+2. Agent continues work in background (via WebSocketManager)
+3. Agent needs tool approval
+4. Notification appears: [🔔] badge shows (1)
+5. User clicks notification bell
+6. Sees approval request with context
+7. Clicks [View Chat] → Opens Task #123 tab with chat sub-tab in focus
+8. User approves tool
+9. Notification auto-dismisses or user dismisses manually
+
+### 4. Entity Detail Views with Chat Integration
+
+Each entity type (Task, Project, Codebase) has a consistent structure with the chat integrated as a sub-tab/panel within the entity view.
+
+**Task Detail View**:
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Task #123: Implement User Authentication                    │
+│ [Overview] [Specification] [Plan] [Output] [💬 Chat (2)]    │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│              Content for Selected Sub-Tab                    │
+│                                                              │
+│  (When Chat tab active, shows full conversation interface)  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Chat Sub-Tab**:
+- Full conversation history with agent
+- Draft message preservation
 - Scroll position restoration
-- Tool approval queues with global notifications
+- Tool approval UI embedded in chat
+- File/code attachments display
 
-### 4. Multi-Context Layout
-
+**Alternative: Side-by-Side Layout** (Optional, for larger screens):
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ [Tab 1: Task ABC] [Tab 2: Project XYZ] [Tab 3: Settings] [+]│ ← Tab Bar
-├─────────────────────────────────────────────────────────────┤
-│                                                     🔔 (3)  │ ← Activity Indicator
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│                   Active Tab Content                       │
-│                                                             │
-│  ┌─────────────────┐  ┌─────────────────────────────────┐   │
-│  │   Task Details  │  │      Agent Conversation        │   │
-│  │                 │  │                                 │   │
-│  │                 │  │  [Draft message preserved...]   │   │
-│  └─────────────────┘  └─────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────┬─────────────────────────────────┐
+│                        │                                 │
+│   Task Details         │   💬 Chat (2)                   │
+│   [Spec] [Plan] [Out]  │   ─────────────────────────     │
+│                        │   Agent: I've analyzed...       │
+│   Specification:       │   You: Great, can you...        │
+│   ...                  │   Agent: [typing...]            │
+│                        │                                 │
+│                        │   [Type message...]             │
+└────────────────────────┴─────────────────────────────────┘
 ```
 
-### 5. Background Activity Visualization
+### 5. Conversation State Persistence
 
-**In Non-Active Tabs**:
-- Subtle animation on tab for agent activity
-- Badge count for new messages
-- Color coding for different activity types
+Conversations persist independently of tab state, managed by the ConversationStore and WebSocketManager:
 
-**Global Notifications**:
-- Toast notifications for completed operations
-- Sound/visual alerts for tool approval requests
-- Progress bars for long-running background tasks
+**Key Behaviors**:
+- Closing a tab does NOT close the conversation
+- Conversations continue in background
+- Opening tab restores full conversation state:
+  - Message history
+  - Draft message
+  - Scroll position
+  - Pending tool approvals
+- Notifications alert user to conversation events
+- User can explicitly "end conversation" to cleanup resources
+
+**Visual Indicators for Restored State**:
+- Banner: "Agent was working while you were away - 3 new messages"
+- Highlight new messages since last view
+- Auto-scroll to first unread or maintain previous scroll position (user preference)
+
+### 6. Responsive Design Considerations
+
+**Mobile/Tablet**:
+- Navigation menu becomes full-screen overlay
+- Tabs become dropdown selector
+- Single-column layout for entity views
+- Chat as full-screen modal when activated
+
+**Desktop**:
+- Full tab bar with overflow scrolling
+- Optional side-by-side entity/chat layout
+- Keyboard shortcuts for tab navigation (Cmd/Ctrl + 1-9)
+- Multi-monitor support: detach tabs to separate windows (future feature)
 
 ## Implementation Strategy
 
 The rollout will be phased to de-risk the migration and deliver value incrementally.
 
-### Phase 1: Build the Foundation (Week 1-2)
+### Phase 1: Foundation & Core Infrastructure
 
-1.  **Install and Configure Zustand**.
-2.  **Implement the UI Shell**: Create the main layout components (`Sidebar`, `TabBar`, `MainContentArea`).
-3.  **Create the `UIStore`**: Implement the core tab management logic (`openTab`, `closeTab`, `switchTab`).
-4.  **Wire the UI Shell**: Connect the `TabBar` and `MainContentArea` to the `UIStore`. The UI should be able to add, switch, and close tabs.
-5.  **Migrate a Simple View**: Migrate the **Settings page** to be the first component that opens in a tab. This validates the core tab mechanism with a low-risk component before tackling more complex views.
+**Goals**: Establish Zustand state management, implement basic UI shell, validate tab mechanism
 
-### Phase 2: Core Feature Migration (Week 3)
+**Tasks**:
+1. **Install and Configure Zustand**
+   - Add dependencies: `zustand`, `immer` (for easier state updates)
+   - Configure Zustand DevTools for development
+   - Set up TypeScript types for all stores
 
-1.  **Create `DataStore` and `ConversationStore`**.
-2.  **Implement `WebSocketManager`** as a singleton service.
-3.  **Migrate `ConversationChat` and `TaskDetail`**: Refactor these components to fetch data from the `DataStore` and manage their state via the new stores.
+2. **Implement Core Layout Components**
+   - `AppShell`: Top-level layout container
+   - `TopBar`: Header with navigation menu, notifications, user menu
+   - `NavigationMenu`: Collapsible slide-out menu
+   - `TabBar`: Global tab bar with basic tab rendering
+   - `MainContentArea`: Container for active tab content
 
-### Phase 3: Background Processing & UX Polish (Week 4)
+3. **Create UIStore**
+   - Implement tab state management (`tabs`, `activeTabId`)
+   - Implement actions: `openTab`, `closeTab`, `switchTab`, `updateTab`
+   - Add tab deduplication logic (don't open same entity twice)
+   - Implement tab overflow handling
 
-1.  **Implement `ActivityManager`** for tracking background agent work.
-2.  **Build Global UI Elements**: Implement the global activity indicator and notification system.
-3.  **Enhance Tab UX**: Add features like unsaved changes indicators and activity dots on the tabs.
+4. **Wire Basic Tab Functionality**
+   - Connect TabBar to UIStore
+   - Implement tab switching
+   - Implement tab closing
+   - Add "new tab" button with basic entity selector
 
-### Phase 4: Optimization & Advanced Features (Week 5)
+5. **Migrate Settings View**
+   - Refactor Settings page to render within tab
+   - Validate tab open/close/switch behavior
+   - Test state preservation across tab switches
 
-1.  **Performance Tuning**: Implement memory management and cleanup policies for inactive tabs.
-2.  **URL Synchronization**: Connect the `UIStore` to the browser's URL to enable state restoration on refresh and back/forward navigation.
-3.  **Advanced UX**: Implement drag-and-drop tab reordering, keyboard shortcuts, and context menus.
+**Success Criteria**:
+- Can open multiple tabs (at least Settings + one other view)
+- Tab switching is instant (<100ms)
+- No state loss when switching tabs
+- UI shell responsive and stable
+
+### Phase 2: Data Layer & Conversation Infrastructure
+
+**Goals**: Implement data stores, WebSocket management, migrate core features
+
+**Tasks**:
+1. **Create DataStore**
+   - Implement normalized entity storage (`projects`, `tasks`, `codebases`)
+   - Implement loading/error state tracking
+   - Implement fetch/update/delete actions for each entity type
+   - Add caching and deduplication logic
+
+2. **Create ConversationStore**
+   - Implement conversation state management
+   - Track messages, draft messages, scroll positions
+   - Track pending tool approvals
+   - Implement conversation lifecycle methods
+
+3. **Implement WebSocketManager Service**
+   - Create singleton WebSocket connection manager
+   - Implement connection pooling (max 10 concurrent)
+   - Implement automatic reconnection logic
+   - Wire WebSocket messages to ConversationStore updates
+   - Add message routing for multi-conversation support
+
+4. **Create Entity-Specific UI Stores**
+   - Implement TaskUIStore for task-specific transient state
+   - Implement ProjectUIStore for project-specific transient state
+   - Track edit modes, unsaved changes, scroll positions
+
+5. **Migrate Task Detail View**
+   - Refactor TaskDetail to use DataStore
+   - Integrate task-specific UI state from TaskUIStore
+   - Implement sub-tabs (Overview, Specification, Plan, Output, Chat)
+   - Ensure state persists across tab switches
+
+6. **Migrate Conversation/Chat Components**
+   - Refactor ConversationChat to use ConversationStore
+   - Implement draft message persistence
+   - Implement scroll position restoration
+   - Wire to WebSocketManager for real-time updates
+
+7. **Migrate Project Detail View**
+   - Refactor ProjectDetail to use DataStore
+   - Implement project-specific UI state
+   - Ensure consistency with Task Detail pattern
+
+**Success Criteria**:
+- Can open multiple tasks/projects in tabs
+- Conversation state persists when closing/reopening tabs
+- WebSocket connections maintained in background
+- No data refetching when switching between tabs
+- Draft messages preserved
+
+### Phase 3: Notifications & Background Activity
+
+**Goals**: Implement unified notification system, background operation tracking, enhance UX
+
+**Tasks**:
+1. **Create NotificationStore**
+   - Implement notification state management
+   - Support all notification types (tool approvals, completions, errors, etc.)
+   - Implement notification actions (approve, deny, dismiss, navigate)
+   - Add notification grouping/filtering logic
+   - Implement notification persistence (localStorage for critical notifications)
+
+2. **Build Notification Panel UI**
+   - Create NotificationPanel component
+   - Implement notification list with grouping/filtering
+   - Add inline action buttons
+   - Implement click-to-navigate behavior
+   - Add badge count to top bar bell icon
+   - Implement sound/visual alert system (configurable)
+
+3. **Implement ActivityManager Service**
+   - Create singleton service for tracking background operations
+   - Monitor agent activity across all conversations
+   - Generate notifications for important events
+   - Track long-running operations with progress indicators
+
+4. **Enhance Tab Activity Indicators**
+   - Implement tab status badge logic (●●, ○, ⚡, 🔴)
+   - Add subtle animations for active agent work
+   - Implement unsaved changes indicator (*)
+   - Add keyboard shortcuts for tab navigation
+
+5. **Wire Notifications to Conversations**
+   - WebSocket events trigger notifications
+   - Tool approvals create high-priority notifications
+   - Agent completions create normal-priority notifications
+   - Agent blocks/errors create high-priority notifications
+   - New messages create low-priority notifications (if tab not active)
+
+6. **Implement Conversation Continuation UI**
+   - "Agent was working while you were away" banner
+   - Highlight new messages since last view
+   - Smart scroll behavior (to unread or restore position)
+
+**Success Criteria**:
+- Closing tab doesn't stop conversation
+- Notifications appear for all important events
+- Can approve tools from notification panel
+- Can navigate to entity from notification
+- Tab indicators accurately reflect activity state
+- No missed events or approvals
+
+### Phase 4: Navigation & Polish
+
+**Goals**: Implement navigation menu, finalize UX, optimize performance
+
+**Tasks**:
+1. **Build Navigation Menu**
+   - Implement slide-out menu with sections
+   - Add Projects list with search/filter
+   - Add Codebases list with search/filter
+   - Add Recent items (last 10 accessed)
+   - Add Favorites section (future feature placeholder)
+   - Implement Home dashboard
+
+2. **Implement Home Dashboard**
+   - Show recent activity across all entities
+   - Show active tasks summary
+   - Quick access to frequently used entities
+   - Activity feed (optional)
+
+3. **Migrate Remaining Views**
+   - Migrate Codebases view to use DataStore and tab system
+   - Migrate Projects list view
+   - Migrate Tasks list view
+   - Ensure all views follow consistent patterns
+
+4. **Implement Tab Context Menu**
+   - Right-click menu for tabs
+   - Actions: Close, Close Others, Close to Right
+   - Pin Tab (future feature)
+
+5. **Add Keyboard Shortcuts**
+   - Cmd/Ctrl + B: Toggle navigation menu
+   - Cmd/Ctrl + 1-9: Switch to tab N
+   - Cmd/Ctrl + W: Close active tab
+   - Cmd/Ctrl + T: New tab
+   - Cmd/Ctrl + Shift + N: Open notifications
+
+6. **Implement Drag-and-Drop Tab Reordering**
+   - Use react-dnd or similar library
+   - Smooth animations for reordering
+   - Persist tab order to UIStore
+
+**Success Criteria**:
+- All major views migrated to tab system
+- Navigation menu fully functional
+- Keyboard shortcuts working
+- Tab reordering smooth and intuitive
+- Consistent UX across all entity types
+
+### Phase 5: Optimization & Advanced Features
+
+**Goals**: Performance tuning, URL synchronization, memory management, advanced UX
+
+**Tasks**:
+1. **Implement URL Synchronization**
+   - Parse URL on app load to restore tabs
+   - Update URL on tab switch
+   - Support browser back/forward navigation
+   - Maintain URL patterns for backward compatibility
+
+2. **Implement Memory Management**
+   - Define cleanup policy (max inactive tabs, timeout)
+   - Implement automatic cleanup of old conversations
+   - Add user preference for cleanup behavior
+   - Monitor memory usage and optimize
+
+3. **Performance Optimization**
+   - Implement lazy loading for tab content
+   - Optimize re-render performance with React.memo
+   - Implement virtual scrolling for long conversation histories
+   - Optimize WebSocket message processing
+   - Add performance monitoring
+
+4. **State Persistence**
+   - Auto-save UIStore state to localStorage
+   - Auto-save open tabs and active tab
+   - Restore state on app reload
+   - Save draft messages and unsaved changes
+   - Implement state migration for schema changes
+
+5. **Error Handling & Recovery**
+   - Implement WebSocket reconnection with exponential backoff
+   - Add error boundaries for tab content
+   - Implement state recovery from localStorage on errors
+   - Add graceful degradation (fallback to single-context mode if needed)
+   - User-friendly error messages and recovery options
+
+6. **Advanced UX Features**
+   - Pinned tabs (persist across sessions)
+   - Tab groups/workspaces (group related tabs)
+   - Tab search (Cmd/Ctrl + P style quick switcher)
+   - Detach tab to separate window (for multi-monitor setups)
+   - Export/import workspace configurations
+
+7. **Testing & Documentation**
+   - Unit tests for all stores
+   - Integration tests for tab lifecycle
+   - E2E tests for critical user flows
+   - Performance tests (memory, CPU, WebSocket limits)
+   - Update user documentation
+   - Create migration guide for users
+
+**Success Criteria**:
+- Tab state persists across page reloads
+- URLs work for direct navigation and sharing
+- Memory usage under 500MB for 10 tabs
+- Tab switching under 100ms
+- No WebSocket connection leaks
+- Comprehensive test coverage
+- Zero state loss on errors/crashes
+
+### Testing Strategy
+
+**Unit Tests**:
+- All Zustand stores (actions, state transitions)
+- Singleton services (WebSocketManager, ActivityManager)
+- Pure utility functions
+- Tab state management logic
+- Notification logic
+
+**Integration Tests**:
+- Tab open/close/switch flows
+- Conversation persistence across tab switches
+- Notification generation and dismissal
+- WebSocket message routing
+- URL synchronization
+
+**E2E Tests**:
+- Open multiple tasks, switch between them, close tabs
+- Agent conversation with tool approvals
+- Background agent work with notifications
+- State restoration on page reload
+- Error recovery scenarios
+
+**Performance Tests**:
+- Memory usage with 10+ open tabs
+- Tab switching performance (<100ms target)
+- WebSocket message throughput
+- Large conversation history rendering
+
+**User Acceptance Testing**:
+- Test with power users managing 5-10 concurrent tasks
+- Gather feedback on tab UX and notification system
+- Validate workflow improvements
+- Identify edge cases and pain points
 
 ## Technical Considerations
 

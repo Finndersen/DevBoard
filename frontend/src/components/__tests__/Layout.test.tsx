@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
-import Layout from '../Layout'
+import Layout from '../layout/Layout'
 
 // Helper function to render Layout with specific location and providers
 const renderWithRouter = (initialEntries: string[] = ['/']) => {

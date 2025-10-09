@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
-import type { AvailableModelsForAgentResponse, ModelInfo, UpdateAgentModelRequest } from '../lib/api'
-import { apiClient } from '../lib/api'
+import type { AvailableModelsForAgentResponse, ModelInfo, UpdateAgentModelRequest } from '../../lib/api'
+import { apiClient } from '../../lib/api'
 
 interface AgentModelSelectorProps {
   agentType: string

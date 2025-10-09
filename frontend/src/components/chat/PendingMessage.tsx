@@ -1,14 +1,14 @@
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
-import type { PendingMessage } from '../contexts/PendingMessagesContext'
-import { Button, Markdown } from './ui'
-import { 
-  getMessageAlignment, 
-  getMessageContainerAlignment, 
-  getPendingMessageBubbleClasses, 
-  getTimestampClasses, 
+import type { PendingMessage } from '../../contexts/PendingMessagesContext'
+import { Button, Markdown } from '../ui'
+import {
+  getMessageAlignment,
+  getMessageContainerAlignment,
+  getPendingMessageBubbleClasses,
+  getTimestampClasses,
   formatTimestamp,
   getStatusIcon
-} from '../styles/messageStyles'
+} from '../../styles/messageStyles'
 
 interface PendingMessageProps {
   message: PendingMessage

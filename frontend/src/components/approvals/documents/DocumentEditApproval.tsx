@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { CheckIcon, XMarkIcon, DocumentTextIcon, EyeIcon } from '@heroicons/react/24/outline'
-import DocumentDiffModal from './DocumentDiffModal'
-import type { PendingApproval, ToolApprovalDecision } from '../lib/api'
+import DocumentDiffModal from '../../documents/DocumentDiffModal'
+import {
+  isSetContentTool,
+  getDocumentTypeDisplay,
+  getDocumentTypeFromToolName,
+  getEditsFromToolArgs,
+  getContentFromToolArgs,
+  getReasoningFromToolArgs,
+  getDiffPreviewFromToolArgs
+} from '../../../utils/toolTypeUtils'
+import type { PendingApproval, ToolApprovalDecision } from '../../../lib/api'
 
 interface DocumentEditApprovalProps {
   approval: PendingApproval
@@ -9,32 +18,31 @@ interface DocumentEditApprovalProps {
   disabled?: boolean
 }
 
-export default function DocumentEditApproval({ 
-  approval, 
-  onApproval, 
-  disabled = false 
+export default function DocumentEditApproval({
+  approval,
+  onApproval,
+  disabled = false
 }: DocumentEditApprovalProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const getDocumentTypeDisplay = (documentType: string | null) => {
-    switch (documentType) {
-      case 'task_specification':
-        return 'Task Specification'
-      case 'implementation_plan':
-        return 'Implementation Plan'
-      case 'project_specification':
-        return 'Project Specification'
-      default:
-        return documentType || 'Document'
-    }
-  }
+  const isSetTool = isSetContentTool(approval.tool_name)
+  const documentType = getDocumentTypeFromToolName(approval.tool_name)
+  const edits = getEditsFromToolArgs(approval)
+  const content = getContentFromToolArgs(approval)
+  const reasoning = getReasoningFromToolArgs(approval)
+  const diffPreview = getDiffPreviewFromToolArgs(approval)
 
   const getChangeSummary = () => {
-    if (approval.edits && approval.edits.length > 0) {
-      return `${approval.edits.length} change${approval.edits.length !== 1 ? 's' : ''}`
+    if (isSetTool && content) {
+      const lines = content.split('\n').length
+      const chars = content.length
+      return `${lines} lines, ${chars} characters`
     }
-    if (approval.diff_preview) {
-      const lines = approval.diff_preview.split('\n')
+    if (edits && edits.length > 0) {
+      return `${edits.length} change${edits.length !== 1 ? 's' : ''}`
+    }
+    if (diffPreview) {
+      const lines = diffPreview.split('\n')
       const addedLines = lines.filter(line => line.startsWith('+')).length
       const removedLines = lines.filter(line => line.startsWith('-')).length
       return `+${addedLines} -${removedLines} lines`
@@ -63,7 +71,7 @@ export default function DocumentEditApproval({
             <DocumentTextIcon className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             <div>
               <h4 className="font-medium text-orange-800 dark:text-orange-200">
-                Edit {getDocumentTypeDisplay(approval.document_type || null)}
+                {isSetTool ? 'Set' : 'Edit'} {getDocumentTypeDisplay(documentType)}
               </h4>
               <p className="text-xs text-orange-600 dark:text-orange-400">
                 {getChangeSummary()}
@@ -83,11 +91,11 @@ export default function DocumentEditApproval({
         </div>
 
         {/* Agent Reasoning Preview */}
-        {approval.reasoning && (
+        {reasoning && (
           <div className="mb-3">
             <p className="text-sm text-gray-700 dark:text-gray-300 font-medium mb-1">Agent Reasoning:</p>
             <p className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-2 rounded line-clamp-2">
-              {approval.reasoning}
+              {reasoning}
             </p>
           </div>
         )}

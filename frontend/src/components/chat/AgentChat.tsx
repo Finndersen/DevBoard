@@ -1,13 +1,13 @@
 import { ChatBubbleLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
 import ConversationChat from './ConversationChat'
-import Button from './ui/Button'
-import Card from './ui/Card'
-import Modal from './ui/Modal'
-import { textColors } from '../styles/designSystem'
-import { apiClient } from '../lib/api'
-import { usePendingMessages } from '../contexts/PendingMessagesContext'
-import { createConversationPendingKey } from '../utils/approvalKeys'
-import { useModal, useAsyncOperation } from '../hooks'
+import Button from '../ui/Button'
+import Card from '../ui/Card'
+import Modal from '../ui/Modal'
+import { textColors } from '../../styles/designSystem'
+import { apiClient } from '../../lib/api'
+import { usePendingMessages } from '../../contexts/PendingMessagesContext'
+import { createConversationPendingKey } from '../../utils/approvalKeys'
+import { useModal, useAsyncOperation } from '../../hooks'
 
 interface AgentChatProps {
   title: string

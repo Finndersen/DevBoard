@@ -1,16 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
-import { apiClient } from '../lib/api'
-import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest, DocumentEdit } from '../lib/api'
-import PendingApprovalsList from './PendingApprovalsList'
-import { useApprovals, type PendingApprovalWithContext } from '../contexts/ApprovalsContext'
-import { usePendingMessages, type PendingMessage } from '../contexts/PendingMessagesContext'
-import { createConversationApprovalKey, createConversationPendingKey } from '../utils/approvalKeys'
-import { standardChatInputClasses } from '../styles/inputStyles'
+import { apiClient } from '../../lib/api'
+import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
+import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
+import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
+import { usePendingMessages, type PendingMessage } from '../../contexts/PendingMessagesContext'
+import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
+import { standardChatInputClasses } from '../../styles/inputStyles'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
-import Button from './ui/Button'
-import Modal from './ui/Modal'
+import Button from '../ui/Button'
+import Modal from '../ui/Modal'
+import { useUIStore } from '../../stores/uiStore'
 
 interface ConversationChatProps {
   conversationId: number
@@ -20,7 +21,7 @@ interface ConversationChatProps {
   showClearButton?: boolean
 }
 
-export default function ConversationChat({ 
+export default function ConversationChat({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
@@ -33,10 +34,13 @@ export default function ConversationChat({
   const [clearing, setClearing] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  
+
   const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
   const approvalKey = createConversationApprovalKey(conversationId)
   const pendingApprovals = getApprovals(approvalKey)
+
+  // Get UIStore methods for updating tab activity status
+  const { setTabActivityStatus, getActiveTab } = useUIStore()
   
   const { 
     addPendingMessage, 
@@ -58,6 +62,25 @@ export default function ConversationChat({
 
   // Get single pending message (only support one at a time)
   const pendingMessage = pendingMessages[0] || null
+
+  // Helper to update current tab's activity status
+  const updateCurrentTabStatus = useCallback((status: { type: 'idle' } | { type: 'new_messages'; count: number } | { type: 'agent_working' } | { type: 'action_required' }) => {
+    const activeTab = getActiveTab()
+    if (activeTab) {
+      setTabActivityStatus(activeTab.id, status)
+    }
+  }, [getActiveTab, setTabActivityStatus])
+
+  // Update tab status when loading state changes
+  useEffect(() => {
+    if (loading) {
+      updateCurrentTabStatus({ type: 'agent_working' })
+    } else if (pendingApprovals.length > 0) {
+      updateCurrentTabStatus({ type: 'action_required' })
+    } else {
+      updateCurrentTabStatus({ type: 'idle' })
+    }
+  }, [loading, pendingApprovals.length, updateCurrentTabStatus])
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -184,46 +207,27 @@ export default function ConversationChat({
       console.log('ConversationChat: Converting tool request:', request)
       console.log('ConversationChat: tool_args type:', typeof request.tool_args)
       console.log('ConversationChat: tool_args content:', request.tool_args)
-      
-      let documentType: string | null = null
-      let edits: DocumentEdit[] | null = null
-      let reasoning: string | null = null
 
-      // Check if this is a document editing tool
-      if (request.tool_name.startsWith('edit_')) {
-        documentType = request.tool_name.replace('edit_', '')
-        
-        // Extract edits and reasoning from tool_args
-        if (typeof request.tool_args === 'object' && request.tool_args !== null) {
-          console.log('ConversationChat: Extracting from object tool_args:', request.tool_args)
-          edits = request.tool_args.edits || null
-          reasoning = request.tool_args.reasoning || null
-        } else if (typeof request.tool_args === 'string') {
-          console.log('ConversationChat: Parsing string tool_args:', request.tool_args)
-          try {
-            const parsed = JSON.parse(request.tool_args)
-            console.log("ConversationChat: Parsed JSON successfully:", parsed)
-            console.log("ConversationChat: Parsed JSON keys:", Object.keys(parsed))
-            edits = parsed.edits || null
-            reasoning = parsed.reasoning || null
-            console.log("ConversationChat: Extracted edits:", edits)
-            console.log("ConversationChat: Extracted reasoning:", reasoning)
-          } catch (e) {
-            console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
-          }
+      // Parse tool_args if it's a string
+      let toolArgs: Record<string, unknown> | null = null
+      if (typeof request.tool_args === 'object' && request.tool_args !== null) {
+        toolArgs = request.tool_args as Record<string, unknown>
+      } else if (typeof request.tool_args === 'string') {
+        try {
+          toolArgs = JSON.parse(request.tool_args)
+          console.log("ConversationChat: Parsed JSON successfully:", toolArgs)
+        } catch (e) {
+          console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
         }
       }
 
       const approvalObject: PendingApprovalWithContext = {
         tool_call_id: request.tool_call_id,
         tool_name: request.tool_name,
-        document_type: documentType,
-        edits: edits,
-        diff_preview: null, // Backend doesn't provide this yet
-        reasoning: reasoning,
+        tool_args: toolArgs,
         conversationId: conversationId // Add conversation context
       }
-      
+
       console.log("ConversationChat: Final approval object with conversation context:", approvalObject)
       return approvalObject
     })

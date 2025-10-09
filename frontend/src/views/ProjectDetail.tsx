@@ -1,18 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import AgentChat from '../components/AgentChat'
+import AgentChat from '../components/chat/AgentChat'
 import { Button, Card, Input, Textarea, Modal, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
 import { useModal, useEditableField } from '../hooks'
+import { useTabTitle } from '../hooks/useTabTitle'
+import { useDataStore } from '../stores/dataStore'
 import { useApprovals } from '../contexts/ApprovalsContext'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const { setProject: setStoreProject } = useDataStore()
+
+  // Update tab title when project data is loaded
+  useTabTitle('project', id)
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,10 +76,11 @@ export default function ProjectDetail() {
     try {
       const data = await apiClient.getProject(id!)
       setProject(data)
+      setStoreProject(data)
     } catch (error) {
       console.error('Failed to fetch project:', error)
     }
-  }, [id])
+  }, [id, setStoreProject])
 
   const fetchTasks = useCallback(async () => {
     try {

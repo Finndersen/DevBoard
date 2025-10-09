@@ -1,24 +1,27 @@
 import { useState, useEffect, useCallback } from 'react'
 import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
-import type { PendingApproval } from '../lib/api'
-import { 
-  generateUnifiedDiff, 
-  createInlineHighlight, 
+import type { PendingApproval } from '../../lib/api'
+import {
+  generateUnifiedDiff,
+  createInlineHighlight,
   calculateDiffStats,
   formatDiffStats,
   highlightUnifiedDiff
-} from '../utils/diffUtils'
+} from '../../utils/diffUtils'
+import { getEditsFromToolArgs, getDiffPreviewFromToolArgs } from '../../utils/toolTypeUtils'
 import { ChangeComparison } from './InlineChangeHighlighter'
 
-interface DiffViewerProps {
+interface DocumentEditViewerProps {
   approval: PendingApproval
   className?: string
 }
 
 type ViewMode = 'cards' | 'unified'
 
-export default function DiffViewer({ approval, className = '' }: DiffViewerProps) {
+export default function DocumentEditViewer({ approval, className = '' }: DocumentEditViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
+  const edits = getEditsFromToolArgs(approval)
+  const diffPreview = getDiffPreviewFromToolArgs(approval)
 
   const expandAllEdits = useCallback(() => {
     // Functionality removed - keeping for potential future use
@@ -69,7 +72,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
   }, [expandAllEdits, collapseAllEdits])
 
   const renderUnifiedDiff = () => {
-    if (!approval.edits || approval.edits.length === 0) {
+    if (!edits || edits.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           No edits available to generate unified diff
@@ -77,9 +80,9 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
       )
     }
 
-    const unifiedDiffText = generateUnifiedDiff(approval.edits)
+    const unifiedDiffText = generateUnifiedDiff(edits)
     const highlightedLines = highlightUnifiedDiff(unifiedDiffText)
-    const stats = calculateDiffStats(approval.edits)
+    const stats = calculateDiffStats(edits)
 
     const copyToClipboard = async () => {
       try {
@@ -135,7 +138,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
 
 
   const renderCards = () => {
-    if (!approval.edits || approval.edits.length === 0) {
+    if (!edits || edits.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           No individual edits available
@@ -145,21 +148,21 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
 
     return (
       <div className="space-y-4">
-        {approval.edits.map((edit, index) => {
+        {edits.map((edit, index) => {
           const highlight = createInlineHighlight(edit.find, edit.replace)
           const editStats = calculateDiffStats([edit])
-          
+
           return (
             <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
               <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Change {index + 1} of {approval.edits?.length || 0}
+                  Change {index + 1} of {edits.length}
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-500">
                   {formatDiffStats(editStats)}
                 </span>
               </div>
-              
+
               {/* Enhanced comparison with highlighting */}
               <ChangeComparison
                 oldText={edit.find}
@@ -202,7 +205,7 @@ export default function DiffViewer({ approval, className = '' }: DiffViewerProps
             Unified Diff
           </button>
         </div>
-        
+
         {/* Keyboard shortcuts help */}
         <div className="text-xs text-gray-500 dark:text-gray-400 space-x-2">
           <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Alt+1,2</kbd> Switch views</span>

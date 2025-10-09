@@ -1,12 +1,12 @@
-import type { ConversationMessage } from '../lib/api'
-import { 
-  getMessageAlignment, 
-  getMessageContainerAlignment, 
-  getMessageBubbleClasses, 
-  getTimestampClasses, 
+import type { ConversationMessage } from '../../lib/api'
+import {
+  getMessageAlignment,
+  getMessageContainerAlignment,
+  getMessageBubbleClasses,
+  getTimestampClasses,
   formatTimestamp
-} from '../styles/messageStyles'
-import { Markdown } from './ui'
+} from '../../styles/messageStyles'
+import { Markdown } from '../ui'
 
 interface ConversationMessageProps {
   message: ConversationMessage

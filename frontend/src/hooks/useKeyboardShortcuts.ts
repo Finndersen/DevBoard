@@ -1,0 +1,87 @@
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useUIStore } from '../stores/uiStore'
+
+/**
+ * Global keyboard shortcuts hook
+ * Should be called at the app level to enable keyboard shortcuts
+ */
+export function useKeyboardShortcuts() {
+  const navigate = useNavigate()
+  const { tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, openTab } = useUIStore()
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const modifierKey = isMac ? event.metaKey : event.ctrlKey
+
+      // Ignore shortcuts when typing in input fields
+      const target = event.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        // Only allow Cmd/Ctrl shortcuts, not character keys
+        if (!modifierKey) {
+          return
+        }
+      }
+
+      // Cmd/Ctrl + B: Toggle navigation menu
+      if (modifierKey && event.key === 'b') {
+        event.preventDefault()
+        toggleNavigationMenu()
+        return
+      }
+
+      // Cmd/Ctrl + W: Close active tab
+      if (modifierKey && event.key === 'w') {
+        event.preventDefault()
+        if (activeTabId) {
+          closeTab(activeTabId)
+        }
+        return
+      }
+
+      // Cmd/Ctrl + T: New tab (opens home)
+      if (modifierKey && event.key === 't') {
+        event.preventDefault()
+        openTab({
+          type: 'home',
+          entityId: 'main',
+          title: 'Home'
+        })
+        navigate('/')
+        return
+      }
+
+      // Cmd/Ctrl + 1-9: Switch to tab N
+      if (modifierKey && event.key >= '1' && event.key <= '9') {
+        event.preventDefault()
+        const tabIndex = parseInt(event.key, 10) - 1
+        if (tabIndex < tabs.length) {
+          const tab = tabs[tabIndex]
+          switchTab(tab.id)
+        }
+        return
+      }
+
+      // Cmd/Ctrl + Shift + N: Focus notifications (not implemented yet, would need to trigger open)
+      if (modifierKey && event.shiftKey && event.key === 'N') {
+        event.preventDefault()
+        // This would need a state in NotificationsPanel to be controllable
+        console.log('Toggle notifications panel')
+        return
+      }
+
+      // Escape: Close any open modals/menus (handled by components individually)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, openTab, navigate])
+}

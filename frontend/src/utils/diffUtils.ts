@@ -1,5 +1,5 @@
 import { diffWordsWithSpace, diffChars, diffLines } from 'diff'
-import type { DocumentEdit } from '../lib/api'
+import type { DocumentEdit } from './toolTypeUtils'
 
 export interface HighlightedChange {
   type: 'added' | 'removed' | 'unchanged'

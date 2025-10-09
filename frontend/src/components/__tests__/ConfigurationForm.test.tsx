@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render, createMockConfigurationResponse } from '../../test/utils'
-import { ConfigurationForm } from '../ConfigurationForm'
+import { ConfigurationForm } from '../configuration/ConfigurationForm'
 
 describe('ConfigurationForm', () => {
   const mockConfig = createMockConfigurationResponse({

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import NotificationsPanel from './NotificationsPanel'
+import NotificationsPanel from '../notifications/NotificationsPanel'
 
 interface LayoutProps {
   children: ReactNode

@@ -12,5 +12,4 @@ __pycache__/
 .users_cache.json
 
 # Development files
-TODO.md
 backend/.env

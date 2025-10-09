@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ApprovalsProvider, useApprovals } from '../../contexts/ApprovalsContext'
 import { createProjectApprovalKey } from '../../utils/approvalKeys'
+import { getReasoningFromToolArgs } from '../../utils/toolTypeUtils'
 import type { PendingApproval } from '../../lib/api'
 
 // Mock localStorage
@@ -24,10 +25,10 @@ const TestComponent = () => {
     const testApproval: PendingApproval = {
       tool_call_id: 'test-123',
       tool_name: 'edit_task_specification',
-      document_type: 'task_specification',
-      reasoning: 'Test approval',
-      edits: [{ find: 'old', replace: 'new' }],
-      diff_preview: null
+      tool_args: {
+        edits: [{ find: 'old', replace: 'new' }],
+        reasoning: 'Test approval'
+      }
     }
     setApprovals(projectKey, [testApproval])
   }
@@ -40,7 +41,7 @@ const TestComponent = () => {
       <button onClick={() => clearApprovals(projectKey)}>Clear Approvals</button>
       {approvals.map(approval => (
         <div key={approval.tool_call_id} data-testid="approval-item">
-          {approval.tool_name}: {approval.reasoning}
+          {approval.tool_name}: {getReasoningFromToolArgs(approval)}
         </div>
       ))}
     </div>
@@ -107,10 +108,10 @@ describe('ApprovalsContext', () => {
         {
           tool_call_id: 'saved-123',
           tool_name: 'edit_implementation_plan',
-          document_type: 'implementation_plan',
-          reasoning: 'Saved approval',
-          edits: [{ find: 'saved', replace: 'loaded' }],
-          diff_preview: null
+          tool_args: {
+            edits: [{ find: 'saved', replace: 'loaded' }],
+            reasoning: 'Saved approval'
+          }
         }
       ]
     }

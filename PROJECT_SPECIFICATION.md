@@ -249,6 +249,24 @@ The system employs **specialized AI agents** that understand project context and
 - External system integration (Jira updates, GitHub PRs)
 - Real-time progress reporting
 
+#### Claude Code Agent
+**Purpose**: Provide access to Claude Code's full CLI capabilities including file operations, shell commands, and developer tools.
+
+**Capabilities**:
+- Direct integration with Claude Code CLI via `claude-agent-sdk`
+- Session management and conversation resumption
+- Custom tool registration via Python functions
+- Streaming and non-streaming execution modes
+- Access to Claude Code's complete toolset (file operations, bash, git, etc.)
+
+**Session Storage**:
+Claude Code maintains session history in JSONL files stored at:
+- Location: `~/.claude/projects/<normalized-project-path>/<session-id>.jsonl`
+- Path normalization: Forward slashes replaced with hyphens (e.g., `/Users/name/project` → `-Users-name-project`)
+- Format: One JSON object per line containing message metadata, content, and tool interactions
+- Message types: `user` (prompts), `assistant` (responses), `summary` (conversation summaries)
+- DevBoard can read these sessions via `ClaudeCodeSessionService` to display conversation history
+
 ### Agent Interaction Patterns
 
 #### Context Assembly
@@ -313,6 +331,87 @@ DevBoard is designed around **conversational workflows** where users collaborate
 - **Contextual Actions**: Available actions depend on current state
 - **Guided Workflows**: System guides users through appropriate next steps
 - **Flexible Control**: Users can override system suggestions when needed
+
+### Frontend Architecture & Multi-Tasking Interface
+
+#### Browser-Style Tab System
+DevBoard employs a **multi-task tab architecture** enabling users to work with multiple projects, tasks, and entities simultaneously without losing context.
+
+**Key Features**:
+- **Tab-Based Navigation**: Browser-style tabs for projects, tasks, codebases, and settings
+- **Persistent State**: Tab state and conversation history preserved across sessions
+- **Activity Indicators**: Visual feedback for agent activity, new messages, and required actions
+- **Unsaved Changes**: Clear indication of pending edits with tab-level tracking
+- **Deep Linking**: Shareable URLs for specific entities and conversations
+- **Keyboard Navigation**: Full keyboard shortcuts for power users (Cmd+1-9, Cmd+W, Cmd+T, etc.)
+
+**State Management**:
+- **Zustand Stores**: Lightweight state management with Immer for immutable updates
+- **Normalized Caching**: Efficient entity storage to prevent data duplication
+- **LocalStorage Persistence**: Critical UI state survives page refreshes
+- **Singleton Services**: WebSocket manager and activity tracking run in background
+
+#### Unified Home Dashboard
+The **Home view** serves as the central command center displaying all projects and codebases in a unified interface.
+
+**Dashboard Sections**:
+- **Projects Section**: Grid view of all projects with create functionality
+  - Click to open project in dedicated tab
+  - Shows project name, description, and creation date
+  - Empty state with guided creation flow
+  - Real-time count of total projects
+
+- **Codebases Section**: Grid view of all codebases with management tools
+  - Click to open codebase details in dedicated tab
+  - Inline delete functionality with confirmation
+  - Shows codebase name, description, and local path
+  - Create new codebase with path validation
+  - Real-time count of total codebases
+
+**Design Principles**:
+- **Everything at a Glance**: No need to navigate between separate list views
+- **Quick Actions**: Create new entities directly from dashboard
+- **Visual Hierarchy**: Clear section separation with iconography
+- **Responsive Layout**: Grid adapts to screen size (1/2/3 columns)
+- **Loading States**: Unified loading indicator for all sections
+
+#### Entity-Specific Views
+**Project Detail View**: Comprehensive project management interface
+- Tabbed interface for Board, Editor (specification), and Settings
+- Task list with status filtering and quick creation
+- Agent conversation panel with project context
+- External resource links and integration status
+
+**Task Detail View**: Focused task development interface
+- Specification and implementation plan editors
+- State-driven agent panels (different agents per task state)
+- External link management (Jira, GitHub, etc.)
+- Real-time collaboration with AI agents
+
+**Settings View**: Unified configuration management
+- Integration setup and testing
+- Agent model selection per agent type
+- Codebase registration and management
+- Environment variable display and override
+
+#### Background Operations & Notifications
+**WebSocket Management**: Singleton service managing multiple concurrent agent conversations
+- Connection pooling (max 10 concurrent)
+- Automatic reconnection with exponential backoff
+- Message routing to conversation stores
+- Connection status indicators
+
+**Activity Tracking**: Real-time monitoring of background agent operations
+- Tab activity badges (●, ⚡, 🔴)
+- Unified notification panel for all events
+- Tool approval workflow integration
+- Navigation to relevant entity from notifications
+
+**Notification Types**:
+- **Tool Approvals**: High-priority agent action requests
+- **Agent Complete**: Task/operation completion alerts
+- **Agent Blocked**: Error or blocking conditions
+- **New Messages**: Conversation updates while viewing other tabs
 
 ## Document Schemas & Templates
 

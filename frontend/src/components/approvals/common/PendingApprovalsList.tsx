@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { ExclamationTriangleIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import DocumentEditApproval from './DocumentEditApproval'
-import type { PendingApproval, ToolApprovalDecision, ToolApprovalRequest } from '../lib/api'
-import { standardFeedbackTextareaClasses } from '../styles/inputStyles'
+import DocumentEditApproval from '../documents/DocumentEditApproval'
+import type { PendingApproval, ToolApprovalDecision, ToolApprovalRequest } from '../../../lib/api'
+import { standardFeedbackTextareaClasses } from '../../../styles/inputStyles'
 
 interface PendingApprovalsListProps {
   approvals: PendingApproval[]

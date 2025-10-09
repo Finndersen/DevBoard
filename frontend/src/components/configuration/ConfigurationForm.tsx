@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircleIcon, XCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
-import { apiClient } from '../lib/api'
-import type { ConfigurationDetailResponse } from '../lib/api'
+import { apiClient } from '../../lib/api'
+import type { ConfigurationDetailResponse } from '../../lib/api'
 import { ConfigurationField } from './ConfigurationField'
 
 interface ConfigurationFormProps {

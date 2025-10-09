@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
-import ConversationChat from '../ConversationChat'
+import ConversationChat from '../chat/ConversationChat'
 
 describe('ConversationChat', () => {
   const mockConversationId = 1

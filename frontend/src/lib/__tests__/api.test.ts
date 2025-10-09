@@ -2,11 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { ApiClient } from '../api'
-import type { 
-  Project, 
-  Task,
-  DocumentEdit
-} from '../api'
+import type { Project, Task } from '../api'
+import type { DocumentEdit } from '../../utils/toolTypeUtils'
 
 describe('ApiClient', () => {
   let apiClient: ApiClient
@@ -269,50 +266,6 @@ describe('ApiClient', () => {
 
       const result = await apiClient.deleteTask(1)
       expect(result).toEqual({})
-    })
-  })
-
-  describe('Project Q&A API', () => {
-    const mockMessages = [
-      {
-        id: '1',
-        content: 'What is the status?',
-        role: 'user' as const,
-        timestamp: '2024-01-01T10:00:00.000Z',
-      },
-      {
-        id: '2',
-        content: 'The project is progressing well.',
-        role: 'assistant' as const,
-        timestamp: '2024-01-01T10:01:00.000Z',
-      },
-    ]
-
-    it('gets project Q&A history', async () => {
-      server.use(
-        http.get('*/api/projects/1/qa/history', () => {
-          return HttpResponse.json(mockMessages)
-        })
-      )
-
-      const result = await apiClient.getProjectQAHistory(1)
-      expect(result).toEqual(mockMessages)
-    })
-
-    it('asks a question to project Q&A', async () => {
-      const message = 'How many tasks are completed?'
-      const response = { response: 'There are 3 completed tasks.' }
-
-      server.use(
-        http.post('*/api/projects/1/qa/ask', async ({ request }) => {
-          const body = await request.json() as { message: string }
-          expect(body).toEqual({ message })
-          return HttpResponse.json(response)
-        })
-      )
-
-      const result = await apiClient.askProjectQA(1, message)
-      expect(result).toEqual(response)
     })
   })
 

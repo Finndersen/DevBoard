@@ -35,6 +35,21 @@ export const TOOL_APPROVAL_CONFIGS: ToolApprovalConfig[] = [
     toolName: 'edit_task_implementation_plan',
     documentType: 'task_implementation_plan',
     refreshAction: 'refresh_task'
+  },
+  {
+    toolName: 'set_project_specification_content',
+    documentType: 'project_specification',
+    refreshAction: 'refresh_project'
+  },
+  {
+    toolName: 'set_task_specification_content',
+    documentType: 'task_specification',
+    refreshAction: 'refresh_task'
+  },
+  {
+    toolName: 'set_task_implementation_plan_content',
+    documentType: 'task_implementation_plan',
+    refreshAction: 'refresh_task'
   }
 ]
 

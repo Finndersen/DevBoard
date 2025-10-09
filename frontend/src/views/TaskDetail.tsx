@@ -4,14 +4,32 @@ import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon,
 import { apiClient } from '../lib/api'
 import type { Project, Task } from '../lib/api'
 import { useTask, useUpdateTask, useEditableField } from '../hooks'
+import { useTabTitle } from '../hooks/useTabTitle'
+import { useDataStore } from '../stores/dataStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
-import AgentChat from '../components/AgentChat'
+import AgentChat from '../components/chat/AgentChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: task, loading, error, refetch } = useTask(id!)
+  const { setTask } = useDataStore()
+
+  // Refetch task when ID changes (for tab switching)
+  useEffect(() => {
+    refetch()
+  }, [id, refetch])
+
+  // Populate DataStore with task data when loaded
+  useEffect(() => {
+    if (task) {
+      setTask(task)
+    }
+  }, [task, setTask])
+
+  // Update tab title when task data is loaded
+  useTabTitle('task', id)
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
   const [agentModel, setAgentModel] = useState<string | null>(null)

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
-import NotificationsPanel from '../NotificationsPanel'
+import NotificationsPanel from '../notifications/NotificationsPanel'
 import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import type { PendingApproval } from '../../lib/api'
 
@@ -18,10 +18,10 @@ Object.defineProperty(window, 'localStorage', {
 const mockApproval: PendingApproval = {
   tool_call_id: 'test-123',
   tool_name: 'edit_task_specification',
-  document_type: 'task_specification',
-  reasoning: 'Update task specification',
-  edits: [{ find: 'old', replace: 'new' }],
-  diff_preview: null
+  tool_args: {
+    edits: [{ find: 'old', replace: 'new' }],
+    reasoning: 'Update task specification'
+  }
 }
 
 const renderWithProviders = (component: React.ReactElement) => {
@@ -65,8 +65,8 @@ describe('NotificationsPanel', () => {
     const bellButton = screen.getByRole('button', { name: /notifications/i })
     fireEvent.click(bellButton)
 
-    expect(screen.getByText('Notifications')).toBeInTheDocument()
-    expect(screen.getByText('No pending approvals')).toBeInTheDocument()
+    expect(screen.getByText(/Notifications \(/)).toBeInTheDocument()
+    expect(screen.getByText('No notifications')).toBeInTheDocument()
   })
 
   it('closes panel when clicking outside', async () => {
@@ -74,19 +74,28 @@ describe('NotificationsPanel', () => {
 
     const bellButton = screen.getByRole('button', { name: /notifications/i })
     fireEvent.click(bellButton)
-    expect(screen.getByText('Notifications')).toBeInTheDocument()
+    expect(screen.getByText(/Notifications \(/)).toBeInTheDocument()
 
     fireEvent.mouseDown(document.body)
 
     await waitFor(() => {
-      expect(screen.queryByText('No pending approvals')).not.toBeInTheDocument()
+      expect(screen.queryByText('No notifications')).not.toBeInTheDocument()
     })
   })
 
   it('displays pending approvals in the panel', () => {
+    const implementationPlanApproval: PendingApproval = {
+      tool_call_id: 'test-456',
+      tool_name: 'edit_implementation_plan',
+      tool_args: {
+        edits: [{ find: 'old', replace: 'new' }],
+        reasoning: 'Update implementation plan'
+      }
+    }
+
     const approvalsData = {
       'project-1': [mockApproval],
-      'task-5': [{ ...mockApproval, tool_call_id: 'test-456', document_type: 'implementation_plan' }]
+      'task-5': [implementationPlanApproval]
     }
     localStorageMock.getItem.mockReturnValue(JSON.stringify(approvalsData))
 

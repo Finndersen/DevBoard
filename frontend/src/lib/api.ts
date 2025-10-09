@@ -20,11 +20,6 @@ export interface Task {
   implementation_plan: DocumentResponse
 }
 
-export interface DocumentEdit {
-  find: string
-  replace: string
-}
-
 export interface DocumentResponse {
   id: number
   document_type: string
@@ -44,22 +39,6 @@ export interface ConversationMessage {
   timestamp: string
 }
 
-// Task Planning Chat specific interfaces
-export interface ConversationMessageResponse {
-  id: number
-  message_type: 'request' | 'response'
-  text_content: string
-  created_at: string
-}
-
-export interface MessageRequest {
-  message: string
-}
-
-export interface ConversationResponse {
-  messages: ConversationMessageResponse[]
-  pending_approvals: PendingApproval[] | null
-}
 
 export interface ToolCallRequest {
   tool_call_id: string
@@ -88,64 +67,15 @@ export interface ToolApprovalRequest {
   approvals: Record<string, ToolApprovalDecision>
 }
 
-// Main PendingApproval interface for component compatibility
+// Main PendingApproval interface - generic structure to support any tool type
 export interface PendingApproval {
   tool_call_id: string
   tool_name: string
-  document_type: string | null
-  edits: DocumentEdit[] | null
-  diff_preview: string | null
-  reasoning: string | null
-}
-
-// Legacy task planning interfaces (keep for TaskPlanningChat component)
-export interface TaskPlanningResponse {
-  message: string
-  task_specification_edits?: DocumentEdit[]
-  task_implementation_plan_edits?: DocumentEdit[]
-}
-
-export interface ConversationMessageResponse {
-  id: number
-  message_type: 'request' | 'response'
-  text_content: string | null
-  tool_calls: ToolCallInfo[] | null
-  created_at: string
-}
-
-export interface ToolCallInfo {
-  tool_call_id: string
-  tool_name: string
-  status: 'pending_approval' | 'approved' | 'denied'
-  arguments: Record<string, unknown>
-  preview: Record<string, unknown> | null
-}
-
-export interface ConversationResponseWithCompletion {
-  messages: ConversationMessageResponse[]
-  pending_approvals: PendingApproval[] | null
-  conversation_complete: boolean
-}
-
-export interface TaskPlanningRequest {
-  message: string
-}
-
-export interface ApplyEditsRequest {
-  message_id: number
-  task_specification_edits?: DocumentEdit[]
-  task_implementation_plan_edits?: DocumentEdit[]
+  tool_args: Record<string, unknown> | null  // Generic tool arguments, structure depends on tool type
 }
 
 export interface StateTransitionRequest {
   new_state: string
-}
-
-export interface Message {
-  id: string
-  content: string
-  role: 'user' | 'assistant'
-  timestamp: Date
 }
 
 export interface Integration {
@@ -360,18 +290,6 @@ export class ApiClient {
   async clearConversationMessages(conversationId: number | string): Promise<{ message: string; success: boolean }> {
     return this.request<{ message: string; success: boolean }>(`/api/conversations/${conversationId}/messages`, {
       method: 'DELETE',
-    })
-  }
-
-  // Project Q&A - Legacy API (keep for compatibility)
-  async getProjectQAHistory(projectId: number | string): Promise<Message[]> {
-    return this.request<Message[]>(`/api/projects/${projectId}/qa/history`)
-  }
-
-  async askProjectQA(projectId: number | string, message: string): Promise<{ response: string }> {
-    return this.request<{ response: string }>(`/api/projects/${projectId}/qa/ask`, {
-      method: 'POST',
-      body: JSON.stringify({ message }),
     })
   }
 

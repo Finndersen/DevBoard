@@ -21,12 +21,13 @@ DevBoard implements a **sophisticated local client-server architecture** optimiz
 **Real-time**: WebSocket support for agent progress streaming
 **Observability**: Pydantic Logfire integration with comprehensive instrumentation
 
-### Frontend Architecture  
-**Framework**: React 19+ with TypeScript, Vite build system, modern hooks-based state management
+### Frontend Architecture
+**Framework**: React 19+ with TypeScript, Vite build system, Zustand state management
 **Styling**: Tailwind CSS with responsive design system
 **Testing**: Vitest + React Testing Library + MSW for comprehensive test coverage
-**State Management**: Props-down/events-up pattern with API-driven data fetching
-**Real-time**: WebSocket integration for live agent updates
+**State Management**: Zustand stores with Immer middleware, normalized entity caching, LocalStorage persistence
+**Real-time**: WebSocket integration for live agent updates via singleton service
+**Multi-Tasking**: Browser-style tab system with persistent state and keyboard navigation
 
 ## Implementation Directory Structure
 
@@ -116,10 +117,10 @@ Modern React application with TypeScript, comprehensive testing, and reusable co
 ```
 frontend/
 ├── src/
-│   ├── components/            # Reusable UI components
+│   ├── components/            # Reusable UI components (organized by feature)
 │   │   ├── ui/               # Standardized UI component library
 │   │   │   ├── Button.tsx    # Standardized button with variants/sizes/states
-│   │   │   ├── Card.tsx      # Consistent card component with theming
+│   │   │   ├── Card.tsx      # Consistent card component with theming + click handlers
 │   │   │   ├── Input.tsx     # Theme-aware input with labels/errors
 │   │   │   ├── Textarea.tsx  # Standardized textarea component
 │   │   │   ├── Modal.tsx     # Reusable modal with proper theming
@@ -127,19 +128,46 @@ frontend/
 │   │   │   ├── ErrorBoundary.tsx # React error boundary handling
 │   │   │   ├── ErrorMessage.tsx # Standardized error display
 │   │   │   └── index.ts      # Component library exports
-│   │   ├── __tests__/        # Component unit tests
-│   │   ├── Layout.tsx        # Navigation shell + routing
-│   │   ├── Chat.tsx          # Real-time agent conversation UI
-│   │   ├── AgentChat.tsx     # Agent conversation wrapper (refactored)
-│   │   ├── ConversationChat.tsx # Core chat implementation
-│   │   ├── ConfigurationForm.tsx # Dynamic config forms
-│   │   └── ConfigurationField.tsx # Individual field components
+│   │   ├── layout/           # Application shell & navigation components
+│   │   │   ├── AppShell.tsx  # Main application shell with tab system
+│   │   │   ├── TabBar.tsx    # Tab container with management controls
+│   │   │   ├── Tab.tsx       # Individual tab with entity icons & activity indicators
+│   │   │   ├── TopBar.tsx    # Top navigation bar with notifications
+│   │   │   ├── NavigationMenu.tsx # Slide-out navigation menu
+│   │   │   └── Layout.tsx    # Page layout wrapper
+│   │   ├── chat/             # Agent conversation components
+│   │   │   ├── AgentChat.tsx # Agent conversation wrapper with clear history
+│   │   │   ├── ConversationChat.tsx # Core chat implementation with tool approvals
+│   │   │   ├── ConversationMessage.tsx # Individual message display
+│   │   │   ├── PendingMessage.tsx # Pending user message with retry
+│   │   │   └── AgentReasoning.tsx # Agent reasoning display component
+│   │   ├── approvals/        # Tool approval system (hierarchical)
+│   │   │   ├── common/       # Generic tool approval UI
+│   │   │   │   ├── PendingApprovalsList.tsx # Batch approval interface
+│   │   │   │   └── ApprovalActions.tsx # Approve/deny action buttons
+│   │   │   └── documents/    # Document-specific approval handling
+│   │   │       ├── DocumentEditApproval.tsx # Document edit approval wrapper
+│   │   │       └── DocumentApprovalModal.tsx # Approval modal container
+│   │   ├── documents/        # Document viewing & editing components
+│   │   │   ├── DocumentEditViewer.tsx # Diff viewer with cards/unified modes
+│   │   │   ├── DocumentContentViewer.tsx # Read-only document display
+│   │   │   ├── DocumentDiffModal.tsx # Modal for reviewing document changes
+│   │   │   └── InlineChangeHighlighter.tsx # Inline diff highlighting
+│   │   ├── configuration/    # Settings & configuration components
+│   │   │   ├── ConfigurationForm.tsx # Dynamic config forms with validation
+│   │   │   ├── ConfigurationField.tsx # Individual field components
+│   │   │   ├── ConfigurationList.tsx # Configuration list view
+│   │   │   ├── ConfigurationListItem.tsx # Configuration item display
+│   │   │   ├── ConfigurationSection.tsx # Configuration grouping
+│   │   │   └── AgentModelSelector.tsx # Agent model selection UI
+│   │   ├── notifications/    # Notification system
+│   │   │   └── NotificationsPanel.tsx # Notifications dropdown panel
+│   │   └── __tests__/        # Component unit tests
 │   ├── views/                # Page-level components
 │   │   ├── __tests__/        # View integration tests
-│   │   ├── ProjectDashboard.tsx # Project listing + creation (refactored)
+│   │   ├── Home.tsx          # Unified dashboard for projects + codebases
 │   │   ├── ProjectDetail.tsx    # Project details + Q&A chat (refactored)
 │   │   ├── TaskDetail.tsx       # Task planning + specification (refactored)
-│   │   ├── Codebases.tsx        # Codebase + architecture management
 │   │   └── Settings.tsx         # System configuration UI
 │   ├── hooks/                # Custom React hooks for state management & data fetching
 │   │   ├── useApi.ts         # Generic API hook with loading/error states (enhanced)
@@ -149,7 +177,16 @@ frontend/
 │   │   ├── useProjects.ts    # Project CRUD operations hooks
 │   │   ├── useTasks.ts       # Task management hooks
 │   │   ├── useCodebases.ts   # Codebase operations hooks
+│   │   ├── useTabTitle.ts    # Dynamic tab title updates from entity data
+│   │   ├── useURLSync.ts     # Bidirectional URL/tab state synchronization
+│   │   ├── useKeyboardShortcuts.ts # Global keyboard shortcut handlers
 │   │   └── index.ts          # Hook exports
+│   ├── stores/               # Zustand state management
+│   │   ├── uiStore.ts        # UI state: tabs, navigation, notifications
+│   │   ├── dataStore.ts      # Normalized entity cache with Maps
+│   │   └── activityStore.ts  # Background operation tracking
+│   ├── services/             # Frontend services
+│   │   └── websocket.ts      # WebSocket singleton for real-time updates
 │   ├── styles/               # Design system and styling utilities
 │   │   ├── designSystem.ts   # Color palette, layouts, typography
 │   │   └── inputStyles.ts    # Standardized input styling system
@@ -161,17 +198,18 @@ frontend/
 │   │   └── api.ts            # Typed API client + interfaces
 │   ├── contexts/             # React context providers
 │   │   ├── DarkModeContext.tsx # Theme switching context
-│   │   └── ApprovalsContext.tsx # Agent approval state management
+│   │   ├── ApprovalsContext.tsx # Agent approval state management
+│   │   └── PendingMessagesContext.tsx # Pending message tracking
 │   ├── test/                 # Test configuration
 │   │   ├── setup.ts          # Test environment setup
 │   │   ├── utils.tsx         # Test helper functions
 │   │   └── mocks/            # MSW API mocks
 │   ├── App.tsx               # Main application + routing
-│   ├── main.tsx              # Application entry point
+│   ├── main.tsx              # Application entry point + Immer setup
 │   └── index.css             # Global styles + Tailwind
 ├── package.json              # Dependencies + scripts
 ├── vite.config.ts            # Build configuration
-├── vitest.config.ts          # Test runner configuration  
+├── vitest.config.ts          # Test runner configuration
 ├── tailwind.config.js        # CSS framework configuration
 └── tsconfig.json             # TypeScript compiler settings
 ```
@@ -232,11 +270,13 @@ frontend/
 - **ESLint**: Code quality enforcement with React-specific rules
 
 **State Management & Data Flow**:
+- **Zustand State Management**: Lightweight reactive stores with TypeScript support
+- **Normalized Caching**: DataStore with Map-based entity storage for efficient lookups
 - **API-Driven State**: Centralized `ApiClient` with TypeScript interfaces
 - **Custom Hooks**: Reusable data fetching hooks with loading/error states
 - **React Hooks**: Modern state management with `useState`/`useEffect` patterns
-- **WebSocket Integration**: Real-time updates for agent conversations
-- **Props-Down/Events-Up**: Clean data flow architecture
+- **WebSocket Integration**: Real-time updates for agent conversations via singleton service
+- **LocalStorage Persistence**: Critical UI state (tabs, theme) survives page refreshes
 
 **Design System & Components**:
 - **Reusable UI Library**: Standardized component library in `src/components/ui/`
@@ -326,10 +366,15 @@ npm run type-check      # TypeScript compilation check
 
 ### Frontend
 -   **UI Component Library (`frontend/src/components/ui`)**: Standardized, reusable UI components with consistent theming, variants, and error handling. Includes Button, Card, Input, Modal, StatusBadge, and form components.
+-   **Layout Components (`frontend/src/components/layout`)**: Application shell and navigation components including AppShell, TabBar, Tab (with activity indicators), TopBar, NavigationMenu, and Layout wrapper.
+-   **Chat Components (`frontend/src/components/chat`)**: Agent conversation system with AgentChat wrapper, ConversationChat core implementation, message display components (ConversationMessage, PendingMessage), and AgentReasoning display.
+-   **Approval System (`frontend/src/components/approvals`)**: Hierarchical tool approval architecture with generic approval UI (`approvals/common/`) for PendingApprovalsList and ApprovalActions, and document-specific handling (`approvals/documents/`) for DocumentEditApproval and DocumentApprovalModal.
+-   **Document Components (`frontend/src/components/documents`)**: Document viewing and editing with DocumentEditViewer (diff viewer with cards/unified modes), DocumentContentViewer, DocumentDiffModal, and InlineChangeHighlighter.
+-   **Configuration Components (`frontend/src/components/configuration`)**: Settings UI with ConfigurationForm, ConfigurationField, list views, and AgentModelSelector for agent configuration management.
+-   **Notifications System (`frontend/src/components/notifications`)**: NotificationsPanel dropdown for displaying tool approval requests, agent activity updates, and system notifications.
 -   **Custom Hooks (`frontend/src/hooks`)**: Type-safe data fetching hooks that encapsulate API calls with loading states, error handling, and refetch capabilities. Includes generic `useApi` and domain-specific hooks like `useProjects`, `useTasks`.
 -   **Design System (`frontend/src/styles`)**: Centralized design tokens including color palette, typography scales, layout utilities, and standardized input styling for consistent theming across all components.
--   **Components (`frontend/src/components`)**: Reusable UI elements and complex components such as Chat, ConfigurationForm, and Layout components that use the standardized UI library.
--   **Views (`frontend/src/views`)**: Top-level components representing distinct pages (ProjectDashboard, TaskDetail, Codebases, Settings). Refactored to use standardized UI components and custom hooks for consistent UX.
+-   **Views (`frontend/src/views`)**: Top-level components representing distinct pages (Home unified dashboard, ProjectDetail, TaskDetail, Settings). Refactored to use standardized UI components and custom hooks for consistent UX.
 -   **API Client (`frontend/src/lib/api.ts`)**: Typed HTTP client with comprehensive TypeScript interfaces, abstracting API calls from UI components with proper error handling and response typing.
 
 ## API Endpoints
@@ -918,9 +963,36 @@ Codebase management operations including codebase CRUD operations, architecture 
 - **Enhanced maintainability** through reusable hook patterns and component interfaces
 - **Immediate UI feedback** using optimistic updates from mutation responses
 
+#### Frontend Component Organization Strategy
+
+**Feature-Based Directory Structure**:
+The frontend components are organized into feature-based subdirectories for improved maintainability and scalability. Components are grouped by their domain concern rather than technical type, making it easier to locate related functionality.
+
+**Hierarchical Component Architecture**:
+- **`ui/`**: Primitive UI components (buttons, inputs, cards, modals) - shared across all features
+- **`layout/`**: Application structure components (shell, tabs, navigation) - used by all views
+- **`chat/`**: Conversation and messaging components - isolated chat domain
+- **`approvals/`**: Tool approval workflow with hierarchical structure:
+  - **`common/`**: Generic approval UI components (reusable across tool types)
+  - **`documents/`**: Document-specific approval handling (specialized behavior)
+- **`documents/`**: Document viewing/editing - separate from approval concerns
+- **`configuration/`**: Settings and configuration - isolated settings domain
+- **`notifications/`**: Notification system - standalone notification feature
+
+**Benefits of This Organization**:
+- **Improved Discoverability**: Related components grouped together by feature/domain
+- **Clear Separation of Concerns**: Generic vs specific functionality clearly separated (e.g., `approvals/common` vs `approvals/documents`)
+- **Easier Refactoring**: Changes to a feature domain are localized to its directory
+- **Better Import Paths**: Feature-based imports like `from '../approvals/common/PendingApprovalsList'` are more descriptive than flat structure
+- **Scalability**: Easy to add new feature domains without cluttering root component directory
+- **Team Collaboration**: Different developers can work on different features with minimal file conflicts
+
+**Import Path Conventions**:
+Components in subdirectories use relative imports adjusted for nesting depth (e.g., `../../lib/api`, `../../stores/uiStore`). Cross-feature imports use sibling directory paths (e.g., `../documents/DocumentDiffModal` from approvals). UI library components are imported from parent (e.g., `../ui/Button`). This creates clear dependency relationships between component layers.
+
 #### Component Implementation Patterns
 
-**AgentChat Component (`components/AgentChat.tsx`)**:
+**AgentChat Component (`components/chat/AgentChat.tsx`)**:
 Streamlined agent conversation wrapper using `useModal()` and `useAsyncOperation()` hooks for chat clearing functionality. Implements standardized modal and async operation patterns with consistent error handling and user feedback.
 
 **TaskDetail Component (`views/TaskDetail.tsx`)**:
@@ -968,3 +1040,154 @@ Full TypeScript support across all components and hooks with strict type checkin
 
 **Component Library**:
 Barrel exports (`index.ts`) provide clean import patterns and improved developer experience. Consistent prop interfaces and documentation improve development velocity.
+
+## Multi-Task Frontend Architecture
+
+### Browser-Style Tab System Implementation
+
+DevBoard implements a **sophisticated multi-task tab architecture** enabling users to work with multiple entities simultaneously without losing context, similar to a web browser's tab system.
+
+#### Tab Management Implementation (`frontend/src/stores/uiStore.ts`)
+
+**Zustand UIStore with Immer Middleware**:
+Central state store managing tab lifecycle, navigation menu state, and notifications panel state. Tab system supports multiple tab types (home, project, task, codebase, settings) with unique entity identification via type + entityId pairs. Implements tab operations including `openTab()` for creating/switching to tabs, `closeTab(tabId)` for tab removal with automatic adjacent tab selection, `switchTab(tabId)` for changing active tab, and `updateTab(tabId, updates)` for modifying tab properties like titles.
+
+**Tab State Structure**:
+Each tab contains `id` (UUID), `type` (TabType enum), `entityId` (entity identifier), `title` (display name with entity name/icon), and optional `metadata` for custom properties. Active tab tracked via `activeTabId` with reactive Zustand subscriptions triggering re-renders on changes. Supports closing tabs individually while maintaining minimum of one tab (home tab cannot be closed).
+
+**LocalStorage Persistence**:
+Tab state automatically persisted to browser LocalStorage on changes, enabling session restoration on page reload. Middleware intercepts state changes and serializes tab data for storage. On application startup, stored tabs are rehydrated from LocalStorage, preserving user's multi-task context across sessions.
+
+#### Entity Data Management (`frontend/src/stores/dataStore.ts`)
+
+**Normalized Entity Cache**:
+Separate Zustand store with Immer middleware managing normalized entity data using Map structures for efficient lookups. Stores projects, tasks, and codebases in dedicated Maps keyed by entity ID. Provides getter methods `getProject(id)`, `getTask(id)`, `getCodebase(id)` for entity retrieval and setter methods `setProject(project)`, `setTask(task)`, `setCodebase(codebase)` for cache updates.
+
+**Cache Population Strategy**:
+Entity detail views (ProjectDetail, TaskDetail) populate DataStore when fetching data from API using `useEffect` hooks. Tab title hook (`useTabTitle`) subscribes to DataStore to update tab titles when entity data loads. Eliminates redundant API calls by serving cached data for already-loaded entities. Fetch operations (`fetchProjects`, `fetchCodebases`) update DataStore for list views.
+
+**Immer MapSet Plugin Integration**:
+DataStore uses Map and Set objects requiring Immer's MapSet plugin for immutable updates. The plugin must be enabled in two locations:
+1. **Application Entry (`frontend/src/main.tsx`)**: Calls `enableMapSet()` before rendering React app
+2. **DataStore Module (`frontend/src/stores/dataStore.ts`)**: Calls `enableMapSet()` at module initialization to ensure plugin is available during store creation
+Without this initialization, Map/Set operations in stores throw `[Immer] The plugin for 'MapSet' has not been loaded` runtime errors. The dual initialization ensures proper plugin availability in both test and production environments.
+
+#### URL Synchronization Implementation (`frontend/src/hooks/useURLSync.ts`)
+
+**Bidirectional URL/Tab Sync**:
+Custom hook implementing two-way synchronization between browser URL and active tab state. URL changes trigger tab opening/switching through `parseURL()` function mapping pathname patterns to tab types and entity IDs. Tab switches update browser URL through React Router's `navigate()` with `replace: true` to avoid polluting browser history.
+
+**URL Parsing Logic**:
+Home route (`/`) maps to home tab type. Project detail routes (`/projects/:id`) parse to project tabs with numeric entity ID. Task detail routes (`/tasks/:id`) parse to task tabs with entity ID. Settings route (`/settings`) maps to settings tab. Legacy routes (`/projects`, `/codebases`) redirect to home for consolidated dashboard.
+
+**Reactive Dependency Pattern**:
+Uses reactive Zustand subscription `useUIStore(state => state.activeTabId)` in dependency array instead of non-reactive `getState()` calls. This pattern ensures re-renders when active tab changes, critical for URL updates. Dependencies include `[activeTabId, location.pathname, navigate, getActiveTab]` for proper effect triggering.
+
+#### Dynamic Tab Titles (`frontend/src/hooks/useTabTitle.ts`)
+
+**Automatic Title Updates**:
+Custom hook subscribing to both UIStore (tabs) and DataStore (entities) to update tab titles with actual entity names. Finds relevant tab by entity type and ID, retrieves entity from DataStore using getter methods, truncates entity name to 30 characters with ellipsis if needed, and updates tab title only if changed (prevents infinite loops).
+
+**Entity Name Integration**:
+Projects show truncated project name, tasks display truncated task title, codebases show truncated codebase name. Replaces generic labels like "Task #123" with actual entity identifiers for improved user experience. Hook called from entity detail views (ProjectDetail, TaskDetail) passing entity type and ID.
+
+#### Tab Visual Design (`frontend/src/components/Tab.tsx`, `frontend/src/components/TabBar.tsx`)
+
+**Entity-Specific Icons**:
+Tabs display Heroicons matching entity type: FolderIcon for projects, ClipboardDocumentListIcon for tasks, CodeBracketIcon for codebases, Cog6ToothIcon for settings, HomeIcon for home. Icon rendered alongside truncated title for visual identification. `getTabIcon()` helper function maps tab types to appropriate icon components.
+
+**Tab Interaction Patterns**:
+Click tab to switch (calls `switchTab(id)`), click X button to close (calls `closeTab(id)`), active tab highlighted with distinct background and text colors, hover states provide visual feedback, keyboard navigation support via Cmd+1-9 for tab switching.
+
+**TabBar Layout**:
+Horizontal tab strip with overflow scrolling for many tabs, "New Tab" button (Cmd+T) for quick home tab creation, tabs ordered by creation time with active tab always visible, responsive design adapts to screen width.
+
+#### Keyboard Shortcuts Implementation (`frontend/src/hooks/useKeyboardShortcuts.ts`)
+
+**Global Shortcut System**:
+Custom hook registering keyboard event listeners for power user productivity. Shortcuts include Cmd+1 through Cmd+9 for switching to specific tabs by index, Cmd+W for closing active tab, Cmd+T for creating new home tab, and Cmd+Shift+N for toggling navigation menu.
+
+**Cross-Platform Compatibility**:
+Detects platform (Mac vs Windows/Linux) and uses appropriate modifier key (Cmd on Mac, Ctrl on Windows/Linux). Event handlers prevent default browser behavior for registered shortcuts. Cleanup function removes event listeners on component unmount.
+
+### Unified Home Dashboard Implementation
+
+#### Consolidated View Architecture (`frontend/src/views/Home.tsx`)
+
+**Single Dashboard for All Entities**:
+Home view replaces separate ProjectDashboard and Codebases views with unified interface displaying both entity types. Implements two distinct sections (Projects and Codebases) with separate create modals and management workflows. Grid layout adapts responsively from 1 column (mobile) to 2 columns (tablet) to 3 columns (desktop).
+
+**Projects Section**:
+Header shows FolderIcon, "Projects" title, and count of total projects. Grid displays project cards with click-to-open behavior calling `openTab()` with project type and ID. Each card shows project name, description (truncated with line-clamp-2), and creation date. Empty state displays centered FolderIcon, descriptive text, and "Create Project" button. "New Project" button in header opens create modal.
+
+**Codebases Section**:
+Similar structure to projects with CodeBracketIcon and codebase-specific styling. Cards display codebase name, description, and local file path with monospace font. Includes inline delete button (TrashIcon) with confirmation dialog before deletion. Click on codebase name opens codebase tab for detail view. "New Codebase" button opens create modal with path validation.
+
+**Create Modal Workflows**:
+Project modal captures name (required), description (optional), using standardized Modal, Input, and Textarea components. Codebase modal requires name, description (optional), and local_path (required with placeholder). Both modals use `useProjects()` and `useCodebases()` hooks for create mutations with loading states. On successful creation, modals close, lists refetch, and form state resets.
+
+**Entity Navigation**:
+Clicking project card calls `openTab({ type: 'project', entityId: String(project.id), title: project.name })`. Clicking codebase name calls `openTab({ type: 'codebase', entityId: String(codebase.id), title: codebase.name })`. Clicking delete icon calls `deleteCodebase()` mutation followed by list refetch. All navigation operations integrate with URL sync for proper browser history.
+
+#### Navigation Simplification (`frontend/src/components/NavigationMenu.tsx`)
+
+**Streamlined Menu Structure**:
+Navigation menu reduced to essential routes: Home (HomeIcon, `/`) and Settings (Cog6ToothIcon, `/settings`). Removed separate Projects and Codebases menu items since entities accessible from unified Home dashboard. Slide-out menu with overlay supports mobile-first responsive design.
+
+**Menu Interaction**:
+Clicking menu item navigates via React Router Link, closes menu automatically, highlights active route. Overlay click closes menu for mobile UX. Toggle via hamburger icon in AppShell header or Cmd+Shift+N keyboard shortcut.
+
+#### Routing Updates (`frontend/src/App.tsx`)
+
+**Consolidated Route Structure**:
+Home route (`/`) renders unified Home component with both projects and codebases. Legacy routes (`/projects`, `/codebases`) redirect to home using `<Navigate to="/" replace />`. Entity detail routes remain (`/projects/:id`, `/tasks/:id`) for deep linking. Settings route preserved at `/settings`.
+
+**URL Pattern Strategy**:
+Home and entity lists use single `/` route eliminating URL duplication. Entity details use resource-based URLs (`/projects/:id`, `/tasks/:id`) for bookmarkability. Redirects ensure old links continue working after consolidation. Tab system handles entity-specific views while URL represents current navigation context.
+
+### Background Operations & Real-Time Updates
+
+#### WebSocket Service Implementation (`frontend/src/services/websocket.ts`)
+
+**Singleton WebSocket Manager**:
+Centralized service managing WebSocket connections for real-time agent updates and notifications. Implements connection lifecycle management (connect, disconnect, reconnect), message routing to appropriate handlers, and automatic reconnection on connection loss.
+
+**Agent Activity Tracking (`frontend/src/stores/activityStore.ts`)**:
+Zustand store tracking background agent operations keyed by conversation ID. Stores activity state (running, waiting_approval, complete), progress updates, and error conditions. Provides activity indicators for tabs with ongoing agent work.
+
+**Notification Integration**:
+WebSocket messages update notification panel with new events including completed agent responses, tool approval requests, task state transitions, and error notifications. Notifications display in slide-out panel with timestamp, message, and action buttons.
+
+#### Activity Indicators in Tab System
+
+**Visual Feedback for Running Operations**:
+Tabs display activity indicators (animated spinner) when associated entity has running agent operations. Tool approval requests show badge count on affected tabs. Completed operations trigger notification badge on tab until viewed.
+
+**Tab-Specific State Management**:
+Each tab tracks its conversation state (idle, active, waiting_approval). Active conversations display typing indicators and message streaming. Waiting approval state shows prominent "Review & Approve" button in tab content.
+
+### Persistence & State Recovery
+
+#### Session Restoration Implementation
+
+**Tab State Persistence**:
+UIStore state serialized to LocalStorage on every state change via Zustand middleware. On application load, previous tab configuration restored including open tabs, active tab selection, and tab order. Home tab always created if no tabs exist in storage.
+
+**DataStore Cache Strategy**:
+Entity cache not persisted to LocalStorage (too large and potentially stale). On tab restoration, entity data refetched from API as needed. Tab titles initially show generic labels until entity data loads, then updated via `useTabTitle` hook.
+
+**User Preference Persistence**:
+Dark mode preference stored in LocalStorage and applied on app load via DarkModeContext. Navigation menu state (open/closed) not persisted, always starts closed. Notification panel state resets on page load.
+
+### Error Handling & User Feedback
+
+#### Tab Management Error Scenarios
+
+**Failed Entity Loading**:
+When entity fails to load (404, network error), tab remains open but displays error state with retry button. Error boundary catches React errors within tab content preventing full app crash. Tab can be closed manually to remove failed entity from view.
+
+**Concurrent Tab Operations**:
+Tab closing handles edge cases like closing last tab (prevented, home tab auto-created), closing active tab (switches to adjacent tab), closing non-active tab (no active tab change).
+
+**Data Consistency**:
+DataStore mutations update both cache and trigger re-fetches for affected lists. Tab titles update reactively when entity names change in cache. URL updates fail gracefully if route no longer exists (redirects to home).

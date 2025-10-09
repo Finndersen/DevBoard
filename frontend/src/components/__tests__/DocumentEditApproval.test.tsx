@@ -1,20 +1,21 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import DocumentEditApproval from '../DocumentEditApproval'
+import DocumentEditApproval from '../approvals/documents/DocumentEditApproval'
 import type { PendingApproval } from '../../lib/api'
 
 const mockApproval: PendingApproval = {
   tool_call_id: 'test-123',
-  tool_name: 'document_editor',
-  document_type: 'task_specification',
-  edits: [
-    {
-      find: 'old text',
-      replace: 'new text'
-    }
-  ],
-  diff_preview: '- old text\n+ new text',
-  reasoning: 'This change improves the task specification clarity'
+  tool_name: 'edit_task_specification',
+  tool_args: {
+    edits: [
+      {
+        find: 'old text',
+        replace: 'new text'
+      }
+    ],
+    diff_preview: '- old text\n+ new text',
+    reasoning: 'This change improves the task specification clarity'
+  }
 }
 
 describe('DocumentEditApproval', () => {
@@ -115,11 +116,14 @@ describe('DocumentEditApproval', () => {
   it('shows change summary for multiple edits', () => {
     const multiEditApproval: PendingApproval = {
       ...mockApproval,
-      edits: [
-        { find: 'text1', replace: 'new1' },
-        { find: 'text2', replace: 'new2' },
-        { find: 'text3', replace: 'new3' }
-      ]
+      tool_args: {
+        edits: [
+          { find: 'text1', replace: 'new1' },
+          { find: 'text2', replace: 'new2' },
+          { find: 'text3', replace: 'new3' }
+        ],
+        reasoning: 'Multiple changes'
+      }
     }
 
     const mockOnApproval = vi.fn()
@@ -137,8 +141,10 @@ describe('DocumentEditApproval', () => {
   it('shows diff line count when only diff preview available', () => {
     const diffOnlyApproval: PendingApproval = {
       ...mockApproval,
-      edits: null,
-      diff_preview: '- line1\n- line2\n+ newline1\n+ newline2\n+ newline3'
+      tool_args: {
+        diff_preview: '- line1\n- line2\n+ newline1\n+ newline2\n+ newline3',
+        reasoning: 'Diff changes'
+      }
     }
 
     const mockOnApproval = vi.fn()
@@ -171,5 +177,56 @@ describe('DocumentEditApproval', () => {
     expect(reviewButton).toBeDisabled()
     expect(approveButton).toBeDisabled()
     expect(denyButton).toBeDisabled()
+  })
+
+  it('renders set_content tool with content summary', () => {
+    const setContentApproval: PendingApproval = {
+      tool_call_id: 'test-456',
+      tool_name: 'set_task_specification_content',
+      tool_args: {
+        content: 'This is the initial content\nfor the task specification\nwith multiple lines',
+        reasoning: 'Setting initial content for blank document'
+      }
+    }
+
+    const mockOnApproval = vi.fn()
+
+    render(
+      <DocumentEditApproval
+        approval={setContentApproval}
+        onApproval={mockOnApproval}
+      />
+    )
+
+    expect(screen.getByText('Set Task Specification')).toBeInTheDocument()
+    expect(screen.getByText('3 lines, 74 characters')).toBeInTheDocument()
+    expect(screen.getByText('Setting initial content for blank document')).toBeInTheDocument()
+  })
+
+  it('opens modal with content view for set_content tool', () => {
+    const setContentApproval: PendingApproval = {
+      tool_call_id: 'test-789',
+      tool_name: 'set_implementation_plan_content',
+      tool_args: {
+        content: 'Implementation plan content here',
+        reasoning: 'Initial plan'
+      }
+    }
+
+    const mockOnApproval = vi.fn()
+
+    render(
+      <DocumentEditApproval
+        approval={setContentApproval}
+        onApproval={mockOnApproval}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /review/i }))
+
+    // Modal should show content view instead of changes view
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Review Content: Implementation Plan')).toBeInTheDocument()
+    expect(screen.getByText('Document Content:')).toBeInTheDocument()
   })
 })
