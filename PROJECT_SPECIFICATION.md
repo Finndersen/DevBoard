@@ -267,6 +267,21 @@ Claude Code maintains session history in JSONL files stored at:
 - Message types: `user` (prompts), `assistant` (responses), `summary` (conversation summaries)
 - DevBoard can read these sessions via `ClaudeCodeSessionService` to display conversation history
 
+**Todo List Storage**:
+Claude Code tracks task progress in JSON files stored at:
+- Location: `~/.claude/todos/<session-id>-agent-<agent-session-id>.json`
+- Format: JSON array of todo items with content, status, and optional metadata
+- Main session todos: `<session-id>-agent-<session-id>.json` (self-referencing pattern)
+- Sub-agent todos: `<parent-session-id>-agent-<sub-agent-session-id>.json` (for tasks spawned via Task tool)
+- Todo item structure:
+  - `content` (required): Task description in imperative form (e.g., "Run tests")
+  - `status` (required): One of `pending`, `in_progress`, or `completed`
+  - `active_form` (optional): Present continuous form for display during execution (e.g., "Running tests")
+  - `priority` (optional): One of `high`, `medium`, or `low`
+  - `id` (optional): Unique identifier for the task
+- DevBoard can read these via `ClaudeCodeSessionService.load_todo_list()` to display task progress
+- The `include_subagents` parameter allows loading todos from both main session and sub-agents
+
 ### Agent Interaction Patterns
 
 #### Context Assembly

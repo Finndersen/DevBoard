@@ -2,109 +2,100 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.agents.llm_service import LLMService
-from devboard.agents.types import AgentType
-from devboard.api.dependencies.services import get_llm_service
-from devboard.api.schemas import (
-    AgentModelResponse,
-    AvailableModelsResponse,
-    UpdateAgentModelRequest,
+from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.types import (
+    AgentConfiguration,
+    AgentEngineModelConfig,
+    AgentRole,
+    AvailableModelsByEngine,
 )
+from devboard.api.dependencies.services import get_agent_config_service
+from devboard.api.schemas import UpdateAgentConfigurationRequest
 
 router = APIRouter()
 
 
-@router.get("/{agent_type}/model", response_model=AgentModelResponse)
-async def get_model_for_agent(
-    agent_type: str, llm_service: LLMService = Depends(get_llm_service)
-) -> AgentModelResponse:
-    """Get the preferred model for a specific agent type.
+@router.get("/{agent_role}/configuration", response_model=AgentConfiguration)
+async def get_agent_configuration(
+    agent_role: str,
+    service: AgentConfigService = Depends(get_agent_config_service),
+) -> AgentConfiguration:
+    """Get configuration for an agent role.
+
+    Returns the effective engine and model configuration, along with
+    available engines for the role.
 
     Args:
-        agent_type: The agent type to get the preferred model for
+        agent_role: Agent role (project, task_specification, task_planning, task_implementation, investigation)
+        service: Agent configuration service
 
     Returns:
-        The preferred model ID for the agent
+        Agent configuration with effective values and available options
     """
-    # Validate agent type
     try:
-        agent_enum = AgentType(agent_type)
+        role = AgentRole(agent_role)
     except ValueError:
-        valid_types = [t.value for t in AgentType]
+        valid_roles = [r.value for r in AgentRole]
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
+            detail=f"Invalid agent role: {agent_role}. Must be one of: {', '.join(valid_roles)}",
         ) from None
 
-    # Get the preferred model for this agent type
-    model = llm_service.get_model_for_agent(agent_enum)
-
-    return AgentModelResponse(model_id=model.id)
+    return service.get_agent_configuration(role)
 
 
-@router.get("/{agent_type}/available-models", response_model=AvailableModelsResponse)
-async def get_available_models(
-    agent_type: str,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> AvailableModelsResponse:
-    """Get available models for a specific agent type.
+@router.put("/{agent_role}/configuration", response_model=AgentConfiguration)
+async def update_agent_configuration(
+    agent_role: str,
+    request: UpdateAgentConfigurationRequest,
+    service: AgentConfigService = Depends(get_agent_config_service),
+) -> AgentConfiguration:
+    """Update configuration for an agent role.
+
+    Updates both engine and model for the role. Validates that:
+    - Engine is allowed for the role
+    - Model is available for the engine (provider configured)
 
     Args:
-        agent_type: Agent type to get available models for (project, task_specification, task_planning, task_implementation, investigation)
-        llm_service: LLM service dependency
+        agent_role: Agent role to update
+        request: New engine and model configuration
+        service: Agent configuration service
 
     Returns:
-        Available models response for the specified agent type
+        Updated agent configuration
+
+    Raises:
+        HTTPException: 400 if validation fails
     """
-    # Validate agent type using AgentType enum directly
     try:
-        agent_enum = AgentType(agent_type)
-    except ValueError:
-        valid_types = [t.value for t in AgentType]
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
-        ) from None
+        role = AgentRole(agent_role)
+        config = AgentEngineModelConfig(
+            engine=AgentEngine(request.engine),
+            model_id=request.model_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
-    # Get all available models and preferred model for this agent
-    available_models = llm_service.get_available_models()
-    selected_model = llm_service.get_model_for_agent(agent_enum)
-
-    return AvailableModelsResponse(
-        agent_type=agent_type,
-        available_models=available_models,
-        preferred_model=selected_model.id,
-        total_available=len(available_models),
-    )
+    try:
+        return service.update_agent_configuration(role, config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
-@router.put("/{agent_type}/model", response_model=AgentModelResponse)
-async def update_agent_model(
-    agent_type: str,
-    request: UpdateAgentModelRequest,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> AgentModelResponse:
-    """Update the preferred model for a specific agent type.
+@router.get("/available-models", response_model=AvailableModelsByEngine)
+async def get_available_models_by_engine(
+    service: AgentConfigService = Depends(get_agent_config_service),
+) -> AvailableModelsByEngine:
+    """Get all available models grouped by engine.
+
+    Returns models from all configured providers, organized by which
+    engine supports them.
 
     Args:
-        agent_type: Agent type to update model for (project, task_specification, task_planning, task_implementation, investigation)
-        request: Model update request with selected model ID (or null to use default)
-        llm_service: LLM service dependency
+        service: Agent configuration service
 
     Returns:
-        The updated model information for the agent
+        Models grouped by engine name
     """
-    # Validate agent type using AgentType enum directly
-    try:
-        agent_enum = AgentType(agent_type)
-    except ValueError:
-        valid_types = [t.value for t in AgentType]
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown agent type: {agent_type}. Must be one of: {', '.join(valid_types)}",
-        ) from None
-
-    # Update the agent model using the service method
-    llm_service.set_agent_model(agent_enum, request.model_id)
-    agent_model = llm_service.get_model_for_agent(agent_enum)
-    return AgentModelResponse(model_id=agent_model.id)
+    return service.get_available_models_by_engine()

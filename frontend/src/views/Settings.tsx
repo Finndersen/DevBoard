@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { CogIcon, LinkIcon, CpuChipIcon } from '@heroicons/react/24/outline'
 import { ConfigurationForm } from '../components/configuration/ConfigurationForm'
 import { ConfigurationList } from '../components/configuration/ConfigurationList'
-import { AgentModelSelector } from '../components/configuration/AgentModelSelector'
+import { AgentConfigurationSelector } from '../components/configuration/AgentConfigurationSelector'
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
 import { Card } from '../components/ui'
@@ -245,11 +245,11 @@ export default function Settings() {
                   key={agent.key}
                   className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
                 >
-                  <AgentModelSelector
-                    agentType={agent.key}
+                  <AgentConfigurationSelector
+                    agentRole={agent.key}
                     agentName={agent.name}
-                    onModelChange={(agentType, modelId) => {
-                      console.log(`Agent ${agentType} model changed to:`, modelId)
+                    onConfigChange={(agentRole, engine, modelId) => {
+                      console.log(`Agent ${agentRole} config changed to engine: ${engine}, model: ${modelId}`)
                     }}
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">

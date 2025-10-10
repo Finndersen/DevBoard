@@ -17,12 +17,18 @@ from .configuration import (
 )
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
+    AgentConfigurationResponse,
+    AgentEngineInfo,
+    AgentEngineModelConfigSchema,
     AgentModelInfo,
     AgentModelResponse,
+    AvailableModelsByEngineResponse,
     AvailableModelsResponse,
     IntegrationTestResponse,
     ModelInfo,
+    UpdateAgentConfigurationRequest,
     UpdateAgentModelRequest,
+    UpdateConversationModelRequest,
 )
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .resource import (
@@ -70,12 +76,18 @@ __all__ = [
     "ResourceResponse",
     "TaskResourceCreate",
     # Integration
+    "AgentConfigurationResponse",
+    "AgentEngineInfo",
+    "AgentEngineModelConfigSchema",
     "AgentModelInfo",
     "AgentModelResponse",
+    "AvailableModelsByEngineResponse",
     "AvailableModelsResponse",
     "IntegrationTestResponse",
     "ModelInfo",
+    "UpdateAgentConfigurationRequest",
     "UpdateAgentModelRequest",
+    "UpdateConversationModelRequest",
     # Project
     "ProjectBase",
     "ProjectCreate",

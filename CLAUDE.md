@@ -3,7 +3,7 @@ We are working to develop an application as described in @PROJECT_SPECIFICATION.
 
 # Development Process
 - After making changes to the design or implementation details, ALWAYS:
-  - make appropriate corresponding updates to the Project Specification document and Implementation plan.
+  - make appropriate corresponding updates to the PROJECT_SPECIFICATION.md document, ARCHITECTURE.md document and Implementation plan.
   - Consider whether corresponding changes need to be made in the Frontend application
   - Add or update any relevant tests to cover the changes
   - Run tests to ensure everything works as expected

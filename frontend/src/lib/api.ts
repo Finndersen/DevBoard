@@ -164,10 +164,6 @@ export interface IntegrationTestResponse {
   details?: Record<string, unknown>
 }
 
-export interface AgentModelResponse {
-  model_id: string
-}
-
 export interface ModelInfo {
   id: string
   provider: string
@@ -175,15 +171,34 @@ export interface ModelInfo {
   model_type: 'reasoning' | 'fast'
 }
 
-export interface AvailableModelsForAgentResponse {
-  agent_type: string
-  available_models: ModelInfo[]
-  preferred_model: string | null
-  total_available: number
+export interface AgentEngineInfo {
+  engine: string
+  display_name: string
+  description: string
 }
 
-export interface UpdateAgentModelRequest {
-  model_id: string | null  // null means use default recommendation
+export interface AgentEngineModelConfig {
+  engine: string
+  model_id: string
+}
+
+export interface AgentConfigurationResponse {
+  agent_role: string
+  config: AgentEngineModelConfig
+  available_engines: AgentEngineInfo[]
+}
+
+export interface UpdateAgentConfigurationRequest {
+  engine: string
+  model_id: string
+}
+
+export interface AvailableModelsByEngineResponse {
+  models_by_engine: Record<string, ModelInfo[]>
+}
+
+export interface UpdateConversationModelRequest {
+  model_id: string
 }
 
 export class ApiClient {
@@ -336,16 +351,23 @@ export class ApiClient {
     })
   }
 
-  async getAgentModel(agentType: string): Promise<AgentModelResponse> {
-    return this.request<AgentModelResponse>(`/api/agents/${agentType}/model`)
+  async getAgentConfiguration(agentRole: string): Promise<AgentConfigurationResponse> {
+    return this.request<AgentConfigurationResponse>(`/api/agents/${agentRole}/configuration`)
   }
 
-  async getAvailableModelsForAgent(agentType: string): Promise<AvailableModelsForAgentResponse> {
-    return this.request<AvailableModelsForAgentResponse>(`/api/agents/${agentType}/available-models`)
+  async updateAgentConfiguration(agentRole: string, request: UpdateAgentConfigurationRequest): Promise<AgentConfigurationResponse> {
+    return this.request<AgentConfigurationResponse>(`/api/agents/${agentRole}/configuration`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    })
   }
 
-  async updateAgentModel(agentType: string, request: UpdateAgentModelRequest): Promise<AgentModelResponse> {
-    return this.request<AgentModelResponse>(`/api/agents/${agentType}/model`, {
+  async getAvailableModelsByEngine(): Promise<AvailableModelsByEngineResponse> {
+    return this.request<AvailableModelsByEngineResponse>('/api/agents/available-models')
+  }
+
+  async updateConversationModel(conversationId: number | string, request: UpdateConversationModelRequest): Promise<{ conversation_id: number; agent_role: string; engine: string; model_id: string; updated_at: string }> {
+    return this.request<{ conversation_id: number; agent_role: string; engine: string; model_id: string; updated_at: string }>(`/api/conversations/${conversationId}/model`, {
       method: 'PUT',
       body: JSON.stringify(request),
     })

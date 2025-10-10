@@ -13,7 +13,7 @@ class MessageRole(StrEnum):
 
 
 class ConversationMessage(BaseModel):
-    """Model for an project or task agent conversation message (only contains final response for agent)."""
+    """Model for a project or task agent conversation message (only contains final response for agent)."""
 
     id: int
     role: MessageRole

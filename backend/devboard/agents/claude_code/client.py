@@ -1,4 +1,4 @@
-"""Claude Code Agent using claude-agent-sdk for Claude Code CLI integration."""
+"""Claude Code client using claude-agent-sdk for Claude Code CLI integration."""
 
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -18,64 +18,96 @@ from claude_agent_sdk import (
 from pydantic.json_schema import GenerateJsonSchema
 from pydantic_ai._function_schema import function_schema
 
-from devboard.agents.types import AgentType
-
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ClaudeCodeResult:
-    """Result from a Claude Code agent run."""
+    """Result from a Claude Code client run."""
 
     text_content: str
     result_message: ResultMessage
     session_id: str
 
 
-class ClaudeCodeAgent:
-    """Agent wrapping ClaudeSDKClient for Claude Code CLI integration.
+class ClaudeClient:
+    """Low-level client wrapping ClaudeSDKClient for Claude Code CLI integration.
 
-    This agent provides access to Claude Code's full capabilities including
-    file operations, shell commands, and other developer tools through the
-    claude-agent-sdk.
+    This client provides a minimal interface to Claude Code's capabilities.
+    For application-level agents with tool handling and document editing,
+    use BaseClaudeAgent instead.
 
     Supports:
     - Session resumption for continuing previous conversations
     - Custom tool registration via Python functions
+    - Custom system prompts
+    - Tool filtering via allowed_tools
     - Streaming and non-streaming execution modes
     """
-
-    agent_type = AgentType.CLAUDE_CODE
 
     def __init__(
         self,
         session_id: str | None = None,
+        system_prompt: str | None = None,
         tools: list[Callable[[dict[str, Any]], Any]] | None = None,
+        allowed_tools: list[str] | None = None,
+        model: str | None = None,
+        cwd: str | None = None,
     ):
-        """Initialize Claude Code agent.
+        """Initialize Claude Code client.
 
         Args:
             session_id: Optional session ID to resume a previous conversation
+            system_prompt: Optional system prompt to include in all runs
             tools: Optional list of async Python functions to expose as tools.
-                   Each function should accept a dict of arguments and return
-                   a dict with 'content' key containing the response.
+                   Each function should accept keyword arguments matching its signature
+                   and return a string or dict with 'content' key containing the response.
+            allowed_tools: Optional list of allowed tool names (e.g., ["Read", "Bash", "Grep"]).
+                           If tools are provided, this will be extended with the custom tool names.
+            model: Optional model to use (e.g., "claude-sonnet-4-5-20250929")
+            cwd: Optional working directory for Claude Code operations
         """
+        # Build options with custom tools if provided
+        self.options = self._build_options(
+            tools=tools or [],
+            system_prompt=system_prompt,
+            allowed_tools=allowed_tools,
+            model=model,
+            cwd=cwd,
+            session_id=session_id,
+        )
         self.session_id = session_id
-        self.options = self._build_options(tools or [])
 
-    def _build_options(self, tools: list[Callable[[dict[str, Any]], Any]]) -> ClaudeAgentOptions:
-        """Build ClaudeAgentOptions from agent configuration."""
-        options = ClaudeAgentOptions()
+    def _build_options(
+        self,
+        tools: list[Callable[[dict[str, Any]], Any]],
+        system_prompt: str | None,
+        allowed_tools: list[str] | None,
+        model: str | None,
+        cwd: str | None,
+        session_id: str | None,
+    ) -> ClaudeAgentOptions:
+        """Build ClaudeAgentOptions from client configuration.
 
-        # Configure session resumption
-        if self.session_id:
-            options.resume = self.session_id
+        Args:
+            tools: List of Python functions to expose as custom tools
+            system_prompt: Optional system prompt suffix
+            allowed_tools: Optional list of allowed tool names
+            model: Optional model name
+            cwd: Optional working directory
+            session_id: Optional session ID for resumption
 
-        # Configure custom tools if provided
+        Returns:
+            Configured ClaudeAgentOptions instance
+        """
+        # Prepare MCP servers and tool names if custom tools are provided
+        mcp_servers = None
+        final_allowed_tools = allowed_tools
+
         if tools:
             # Wrap tools with SDK's @tool decorator
             sdk_tools = []
-            allowed_tool_names = []
+            custom_tool_names = []
 
             for tool_func in tools:
                 # Use PydanticAI's function_schema to extract metadata
@@ -97,7 +129,7 @@ class ClaudeCodeAgent:
                 # Wrap with the @tool decorator
                 sdk_tool = tool(tool_name, tool_description, input_schema)(wrapper_func)
                 sdk_tools.append(sdk_tool)
-                allowed_tool_names.append(f"mcp__devboard_tools__{tool_name}")
+                custom_tool_names.append(f"mcp__devboard_tools__{tool_name}")
 
             # Create SDK MCP server with custom tools
             mcp_server = create_sdk_mcp_server(
@@ -105,12 +137,22 @@ class ClaudeCodeAgent:
                 version="1.0.0",
                 tools=sdk_tools,
             )
+            mcp_servers = {"devboard_tools": mcp_server}
 
-            # Configure options with MCP server and allowed tools
-            options.mcp_servers = {"devboard_tools": mcp_server}
-            options.allowed_tools = allowed_tool_names
+            # Combine allowed_tools with custom tool names
+            if allowed_tools:
+                final_allowed_tools = allowed_tools + custom_tool_names
+            else:
+                final_allowed_tools = custom_tool_names
 
-        return options
+        return ClaudeAgentOptions(
+            resume=session_id,
+            system_prompt=system_prompt,
+            allowed_tools=final_allowed_tools,
+            model=model,
+            cwd=cwd,
+            mcp_servers=mcp_servers,
+        )
 
     @staticmethod
     def _create_tool_wrapper(func: Callable[..., Any], func_schema: Any) -> Callable[[dict[str, Any]], Any]:
@@ -158,12 +200,10 @@ class ClaudeCodeAgent:
             and session ID for resuming
         """
         text_parts: list[str] = []
-        final_result: ResultMessage | None = None
-        final_session_id = self.session_id or "default"
 
         async with ClaudeSDKClient(options=self.options) as client:
             # Send the query
-            await client.query(user_query, session_id=final_session_id)
+            await client.query(user_query)
 
             # Collect all messages until ResultMessage
             async for message in client.receive_response():
@@ -174,25 +214,15 @@ class ClaudeCodeAgent:
                             text_parts.append(content_block.text)
 
                 elif isinstance(message, ResultMessage):
-                    final_result = message
-                    final_session_id = message.session_id
-                    break
+                    # Combine all text parts
+                    combined_text = "\n".join(text_parts) if text_parts else ""
+                    return ClaudeCodeResult(
+                        text_content=combined_text,
+                        result_message=message,
+                        session_id=message.session_id,
+                    )
 
-        # Combine all text parts
-        combined_text = "\n".join(text_parts) if text_parts else ""
-
-        if final_result is None:
-            raise RuntimeError("No ResultMessage received from Claude Code")
-
-        # Set session ID so subsequent runs can resume the conversation
-        if not self.session_id:
-            self.session_id = final_session_id
-
-        return ClaudeCodeResult(
-            text_content=combined_text,
-            result_message=final_result,
-            session_id=final_session_id,
-        )
+        raise RuntimeError("No ResultMessage received from Claude Code")
 
     async def stream(self, user_query: str) -> AsyncIterator[Message]:
         """Execute a query and stream individual messages as they arrive.
@@ -207,15 +237,11 @@ class ClaudeCodeAgent:
             Message objects (UserMessage, AssistantMessage, SystemMessage, ResultMessage)
             as they are received from Claude Code
         """
-        session_id = self.session_id or "default"
 
         async with ClaudeSDKClient(options=self.options) as client:
             # Send the query
-            await client.query(user_query, session_id=session_id)
+            await client.query(user_query)
 
             # Stream messages as they arrive
             async for message in client.receive_response():
-                if not self.session_id and isinstance(message, ResultMessage):
-                    # Set session ID so subsequent runs can resume the conversation
-                    self.session_id = message.session_id
                 yield message

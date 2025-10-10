@@ -3,13 +3,12 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.types import AgentRole
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
-
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
-from devboard.agents.types import AgentType
 
 
 class MockDeps(BaseDeps):
@@ -21,7 +20,7 @@ class MockDeps(BaseDeps):
 class MockAgent(BaseAgent):
     """Mock implementation of BaseAgent for testing."""
 
-    agent_type = AgentType.PROJECT
+    agent_role = AgentRole.PROJECT
     deps_type = MockDeps
 
     def _get_system_prompt(self) -> str:
@@ -51,7 +50,7 @@ class TestBaseAgent:
     async def test_agent_initialization_and_context(self, mock_agent_instance):
         """Test agent initializes correctly and provides context."""
         # Test initialization
-        assert mock_agent_instance.agent_type == AgentType.PROJECT
+        assert mock_agent_instance.agent_type == AgentRole.PROJECT
         assert mock_agent_instance.deps_type == MockDeps
 
         # Test context method
@@ -67,7 +66,7 @@ class TestBaseAgent:
         model_name = mock_agent_instance._get_model()
         # The method should return the pydanticai_id property of the LanguageModel
         assert model_name == "openai:gpt-4"  # This matches the mock fixture
-        mock_llm_service.get_model_for_agent.assert_called_once_with(AgentType.PROJECT)
+        mock_llm_service.get_model_for_agent.assert_called_once_with(AgentRole.PROJECT)
 
     def test_create_agent(self, mock_agent_instance):
         """Test _create_agent creates PydanticAI Agent instance."""
@@ -161,7 +160,7 @@ class TestBaseAgent:
     def test_agent_properties_and_abstract_methods(self, mock_agent_instance):
         """Test that agent has required properties and implements abstract methods."""
         # Test properties
-        assert mock_agent_instance.agent_type == AgentType.PROJECT
+        assert mock_agent_instance.agent_type == AgentRole.PROJECT
         assert mock_agent_instance.deps_type == MockDeps
 
         # Test abstract method implementations return correct types
@@ -186,7 +185,7 @@ class TestBaseAgent:
 class ConcreteAgent(BaseAgent):
     """Concrete implementation for testing abstract class requirements."""
 
-    agent_type = AgentType.TASK_SPECIFICATION
+    agent_role = AgentRole.TASK_SPECIFICATION
     deps_type = BaseDeps
 
     def _get_system_prompt(self) -> str:
@@ -210,7 +209,7 @@ class TestBaseAgentAbstract:
     def test_concrete_implementation_works(self, mock_llm_service, mock_context_service_for_abstract):
         """Test that concrete implementation can be instantiated."""
         agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service)
-        assert agent.agent_type == AgentType.TASK_SPECIFICATION
+        assert agent.agent_type == AgentRole.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 
     def test_abstract_enforcement(self):
@@ -223,7 +222,7 @@ class TestBaseAgentAbstract:
         """Test that incomplete implementations fail."""
 
         class IncompleteAgent(BaseAgent):
-            agent_type = AgentType.PROJECT
+            agent_role = AgentRole.PROJECT
             deps_type = BaseDeps
 
             # Missing _get_system_prompt, _get_tools, _get_context_message_content

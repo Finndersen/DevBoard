@@ -9,7 +9,8 @@ from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LanguageModel
+from devboard.agents.types import LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base

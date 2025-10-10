@@ -1,4 +1,4 @@
-"""Shared service logic for agent conversations with deferred tools support."""
+"""PydanticAI agent conversation service with deferred tools support."""
 
 import logging
 
@@ -12,8 +12,9 @@ from pydantic_ai.tools import (
     ToolDenied,
 )
 
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
+from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
 from devboard.api.schemas.agent_conversation import (
     ConversationMessage,
     MessageRole,
@@ -29,7 +30,7 @@ from devboard.db.repositories.conversation import ConversationRepository
 logger = logging.getLogger(__name__)
 
 
-class AgentConversationService:
+class PydanticAIConversationService(BaseAgentConversationService):
     """Service for handling agent conversations with shared logic."""
 
     def __init__(
@@ -82,7 +83,7 @@ class AgentConversationService:
         :return:
         """
         # Load conversation history
-        existing_messages = self.get_message_history()
+        existing_messages = self._get_message_history()
         # Verify integrity of message history
         if isinstance(message_or_approvals, DeferredToolResults):
             if not existing_messages:
@@ -107,7 +108,7 @@ class AgentConversationService:
         )
 
         # Store and process results
-        saved_messages = self.store_new_messages(new_messages=result.new_messages())
+        saved_messages = self._store_new_messages(new_messages=result.new_messages())
 
         output = result.output
         if isinstance(output, DeferredToolRequests):
@@ -163,10 +164,10 @@ class AgentConversationService:
 
         return DeferredToolResults(approvals=converted_approvals)
 
-    def get_message_history(self) -> list[ConversationMessage]:
+    def _get_message_history(self) -> list[ConversationMessage]:
         return self.conversation_repo.get_messages(self.conversation_id)
 
-    def store_new_messages(self, new_messages: list[ModelMessage]) -> list[DbConversationMessage]:
+    def _store_new_messages(self, new_messages: list[ModelMessage]) -> list[DbConversationMessage]:
         """Store new messages from agent result in DB."""
         # Extract all messages from the agent result
         saved_messages = []

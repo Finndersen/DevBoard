@@ -1,6 +1,8 @@
 import pytest
 from sqlalchemy.orm import Session
 
+from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.types import AgentRole
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.repositories import ConversationRepository
 
@@ -25,39 +27,62 @@ class TestConversationRepository:
     @pytest.fixture
     def conversation(self, repo: ConversationRepository, project: Project) -> Conversation:
         """Create a test conversation."""
-        conversation = repo.get_or_create_for_entity(ParentEntityType.PROJECT, project.id)
+        conversation = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRole.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-3-5-sonnet-20241022",
+        )
         return conversation
 
-    def test_get_or_create_for_entity_creates_new(
+    def test_create_conversation(
         self,
         repo: ConversationRepository,
         project: Project,
         db_session,
     ):
-        """Test creating a new conversation for entity."""
-        conversation = repo.get_or_create_for_entity(ParentEntityType.PROJECT, project.id)
+        """Test creating a new conversation."""
+        conversation = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRole.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-3-5-sonnet-20241022",
+        )
         db_session.commit()
 
         assert conversation.id is not None
         assert conversation.parent_entity_type == ParentEntityType.PROJECT
         assert conversation.parent_entity_id == project.id
         assert conversation.parent_conversation_id is None
+        assert conversation.agent_role == AgentRole.PROJECT.value
+        assert conversation.engine == AgentEngine.INTERNAL
+        assert conversation.model_id == "anthropic:claude-3-5-sonnet-20241022"
 
-    def test_get_or_create_for_entity_returns_existing(
+    def test_get_active_for_entity(
         self,
         repo: ConversationRepository,
         project: Project,
         db_session,
     ):
-        """Test getting existing conversation for entity."""
-        # Create first conversation
-        conversation1 = repo.get_or_create_for_entity("project", project.id)
+        """Test getting active conversation for entity."""
+        # Create conversation
+        conversation1 = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRole.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-3-5-sonnet-20241022",
+        )
         db_session.commit()
 
-        # Get same conversation
-        conversation2 = repo.get_or_create_for_entity("project", project.id)
+        # Get active conversation
+        active = repo.get_active_for_entity(ParentEntityType.PROJECT, project.id)
 
-        assert conversation1.id == conversation2.id
+        assert active is not None
+        assert active.id == conversation1.id
+        assert active.is_active
 
     def test_get_by_id(
         self,

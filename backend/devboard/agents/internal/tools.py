@@ -1,6 +1,6 @@
 from pydantic_ai import ApprovalRequired, RunContext, Tool
 
-from devboard.agents.deps import BaseDeps
+from devboard.agents.internal.deps import BaseDeps
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models.document import Document
 from devboard.db.repositories.document import DocumentRepository
@@ -50,7 +50,6 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
     return Tool(
         function=edit_document_tool,
         name=f"edit_{document.document_type}",
-        requires_approval=True,
     )
 
 
@@ -95,7 +94,6 @@ def create_set_document_content_tool(document: Document, document_repo: Document
     return Tool(
         function=set_document_content_tool,
         name=f"set_{document.document_type}_content",
-        requires_approval=True,
     )
 
 

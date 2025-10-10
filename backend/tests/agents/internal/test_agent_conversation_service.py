@@ -3,6 +3,17 @@
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from devboard.agents.internal.agent_conversation import PydanticAIConversationService
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.types import AgentRole
+from devboard.api.schemas.agent_conversation import (
+    MessageRole,
+    PromptResponseType,
+    ToolApprovalDecision,
+)
+from devboard.db.models import Conversation
+from devboard.db.repositories.conversation import ConversationRepository
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -18,27 +29,15 @@ from pydantic_ai.tools import (
 )
 from sqlalchemy.orm import Session
 
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
-from devboard.agents.types import AgentType
-from devboard.api.schemas.agent_conversation import (
-    MessageRole,
-    PromptResponseType,
-    ToolApprovalDecision,
-)
-from devboard.db.models import Conversation
-from devboard.db.repositories.conversation import ConversationRepository
-from devboard.services.agent_conversation import AgentConversationService
-
 
 class MockAgent(BaseAgent):
     """Mock agent for testing."""
 
-    agent_type = AgentType.PROJECT
+    agent_role = AgentRole.PROJECT
 
-    def __init__(self, context_service, llm_service):
+    def __init__(self, context_service, agent_config_service):
         self.context_service = context_service
-        self.llm_service = llm_service
+        self.llm_service = agent_config_service
 
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         return "Test context"
@@ -85,8 +84,8 @@ class TestAgentConversationService:
 
     @pytest.fixture
     def service(self, mock_agent, conversation_repo, conversation):
-        """Create AgentConversationService instance."""
-        return AgentConversationService(
+        """Create PydanticAIConversationService instance."""
+        return PydanticAIConversationService(
             conversation_id=conversation.id, agent=mock_agent, conversation_repository=conversation_repo
         )
 
@@ -216,7 +215,7 @@ class TestAgentConversationService:
             ModelResponse(parts=[TextPart(content="Response")]),
         ]
 
-        saved = service.store_new_messages(messages)
+        saved = service._store_new_messages(messages)
         db_session.commit()
 
         assert len(saved) == 2
@@ -243,7 +242,7 @@ class TestAgentConversationService:
         assert hasattr(result, "approvals")
         assert "tool_456" in result.approvals
         assert isinstance(result.approvals["tool_456"], ToolDenied)
-        assert result.approvals["tool_456"].message == "Not allowed"
+        assert result.approvals["tool_456"].message == "Tool call DENIED with feedback: Not allowed"
 
     def test_create_deferred_results_mixed(self, service):
         """Test creating deferred results with mixed approvals."""
@@ -288,7 +287,7 @@ class TestAgentConversationService:
             mock_run.return_value = mock_result
 
             # Mock logfire.warning to verify it's called
-            with patch("devboard.services.agent_conversation.logfire.warning") as mock_warning:
+            with patch("devboard.agents.internal.agent_conversation.logfire.warning") as mock_warning:
                 response = await service.send_message(message="New message")
 
         # Verify the cleanup warning was logged

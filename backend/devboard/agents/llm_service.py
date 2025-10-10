@@ -9,8 +9,7 @@ from devboard.agents.language_models import (
     LLMRepository,
     default_llm_repository,
 )
-from devboard.agents.types import AgentType
-from devboard.api.schemas import ModelInfo
+from devboard.agents.types import AgentRole, ModelInfo
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.services.config_service import ConfigService
@@ -48,7 +47,7 @@ class LLMService:
                 available_models.append(
                     ModelInfo(
                         id=model.id,
-                        provider=model.provider.value,
+                        provider=model.provider,
                         name=model.name,
                         model_type=model.type,
                     )
@@ -56,17 +55,17 @@ class LLMService:
 
         return available_models
 
-    def get_model_for_agent(self, agent_type: AgentType) -> LanguageModel:
+    def get_model_for_agent(self, agent_role: AgentRole) -> LanguageModel:
         """Get the preferred model for an agent based on configuration and availability.
 
         Args:
-            agent_type: The agent type to get preferred model for
+            agent_role: The agent role to get preferred model for
 
         Returns:
             Model ID if available, raises ValueError if no models available
         """
         # Get agent configuration
-        config_key = f"agent.{agent_type.value}.default"
+        config_key = f"agent.{agent_role.value}.default"
         config_result = cast(
             ConfigValidationResult[AgentConfig],
             self.config_service.validate_config_by_key(config_key),
@@ -83,7 +82,7 @@ class LLMService:
                 return self.repository.get_model_by_id(selected_model_id)
 
         # Fall back to recommended model type for this agent
-        recommended_type = self.repository.get_recommended_model_type_for_agent(agent_type)
+        recommended_type = self.repository.get_recommended_model_type_for_agent(agent_role)
 
         # Get available models of the recommended type
         for model_info in available_models:
@@ -91,13 +90,13 @@ class LLMService:
             if model.type == recommended_type:
                 return model
 
-        raise ValueError(f"Could not find model configuration for agent type '{agent_type}'")
+        raise ValueError(f"Could not find model configuration for agent role '{agent_role}'")
 
-    def set_agent_model(self, agent_type: AgentType, model_id: str | None) -> str | None:
-        """Set the preferred model for an agent type.
+    def set_agent_model(self, agent_role: AgentRole, model_id: str | None) -> str | None:
+        """Set the preferred model for an agent role.
 
         Args:
-            agent_type: The agent type to update
+            agent_role: The agent role to update
             model_id: The model ID to set, or None to use default recommendations
 
         Returns:
@@ -119,7 +118,7 @@ class LLMService:
                 raise ValueError(f"Model '{model_id}' is not available (provider not configured)")
 
         # Update the agent configuration
-        config_key = f"agent.{agent_type.value}.default"
+        config_key = f"agent.{agent_role.value}.default"
         config_data = {"selected_model": model_id}
         self.config_service.update_configuration(config_key, config_data)
 

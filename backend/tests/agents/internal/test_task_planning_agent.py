@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from pydantic_ai import ApprovalRequired
 
-from devboard.agents.deps import BaseDeps
-from devboard.agents.task_agent import (
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.internal.task_agent import (
     TaskPlanningAgent,
     TaskSpecificationAgent,
 )
@@ -204,7 +204,7 @@ class TestDocumentEditTool:
 
     def test_tool_creation(self, mock_document, mock_document_repo):
         """Test document edit tool is created correctly."""
-        from devboard.agents.tools import create_document_edit_tool
+        from devboard.agents.internal.tools import create_document_edit_tool
 
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
@@ -212,7 +212,7 @@ class TestDocumentEditTool:
 
     def test_tool_pre_validation_success(self, mock_document, mock_document_repo):
         """Test tool validates edits before approval."""
-        from devboard.agents.tools import create_document_edit_tool
+        from devboard.agents.internal.tools import create_document_edit_tool
 
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
@@ -228,7 +228,7 @@ class TestDocumentEditTool:
 
     def test_tool_pre_validation_failure(self, mock_document, mock_document_repo):
         """Test tool returns error for invalid edits."""
-        from devboard.agents.tools import create_document_edit_tool
+        from devboard.agents.internal.tools import create_document_edit_tool
 
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
@@ -245,7 +245,7 @@ class TestDocumentEditTool:
 
     def test_tool_applies_approved_edits(self, mock_document, mock_document_repo):
         """Test tool applies edits when approved."""
-        from devboard.agents.tools import create_document_edit_tool
+        from devboard.agents.internal.tools import create_document_edit_tool
 
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
@@ -297,7 +297,7 @@ class TestSetDocumentContentTool:
 
     def test_tool_creation(self, mock_blank_document, mock_document_repo):
         """Test set document content tool is created correctly."""
-        from devboard.agents.tools import create_set_document_content_tool
+        from devboard.agents.internal.tools import create_set_document_content_tool
 
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
@@ -305,7 +305,7 @@ class TestSetDocumentContentTool:
 
     def test_tool_requires_approval_for_valid_content(self, mock_blank_document, mock_document_repo):
         """Test tool requests approval for valid content on blank document."""
-        from devboard.agents.tools import create_set_document_content_tool
+        from devboard.agents.internal.tools import create_set_document_content_tool
 
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
@@ -318,7 +318,7 @@ class TestSetDocumentContentTool:
 
     def test_tool_rejects_empty_content(self, mock_blank_document, mock_document_repo):
         """Test tool rejects empty or whitespace-only content."""
-        from devboard.agents.tools import create_set_document_content_tool
+        from devboard.agents.internal.tools import create_set_document_content_tool
 
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
@@ -335,7 +335,7 @@ class TestSetDocumentContentTool:
 
     def test_tool_rejects_non_blank_document(self, mock_document_with_content, mock_document_repo):
         """Test tool rejects setting content on document that already has content."""
-        from devboard.agents.tools import create_set_document_content_tool
+        from devboard.agents.internal.tools import create_set_document_content_tool
 
         tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
 
@@ -348,7 +348,7 @@ class TestSetDocumentContentTool:
 
     def test_tool_applies_approved_content(self, mock_blank_document, mock_document_repo):
         """Test tool sets content when approved."""
-        from devboard.agents.tools import create_set_document_content_tool
+        from devboard.agents.internal.tools import create_set_document_content_tool
 
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 

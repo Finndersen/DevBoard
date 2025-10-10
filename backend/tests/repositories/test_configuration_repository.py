@@ -85,3 +85,84 @@ class TestConfigurationRepository:
         """Test deleting a configuration by key when it doesn't exist."""
         result = repo.delete_by_key("nonexistent.key")
         assert result is False
+
+    def test_cache_hit_on_repeated_get_by_key(self, repo: ConfigurationRepository, sample_config: Configuration):
+        """Test that repeated calls to get_by_key use cache."""
+        repo.create(sample_config)
+
+        # Clear the cache to ensure we start fresh
+        ConfigurationRepository._cache.clear()
+
+        # First call should populate cache
+        first_result = repo.get_by_key("test.setting")
+        assert first_result is not None
+        assert "test.setting" in ConfigurationRepository._cache
+
+        # Second call should use cache (no DB query)
+        second_result = repo.get_by_key("test.setting")
+        assert second_result is not None
+        assert second_result.key == first_result.key
+
+    def test_cache_cleared_on_create(self, repo: ConfigurationRepository):
+        """Test that cache is cleared when creating a configuration with existing key in cache."""
+        # First, create and cache an initial configuration
+        initial_config = Configuration(key="test.key", value_json="initial_value")
+        repo.create(initial_config)
+
+        # Get it to populate cache
+        result = repo.get_by_key("test.key")
+        assert result is not None
+        assert "test.key" in ConfigurationRepository._cache
+
+        # Update the same configuration (simulating a re-create scenario)
+        result.value_json = "updated_value"
+        repo.create(result)
+
+        # Cache should still exist but be cleared after update
+        # Next get_by_key should fetch fresh data
+        retrieved = repo.get_by_key("test.key")
+        assert retrieved is not None
+        assert retrieved.value_json == "updated_value"
+
+    def test_cache_cleared_on_update(self, repo: ConfigurationRepository, sample_config: Configuration):
+        """Test that cache is updated when updating a configuration."""
+        created = repo.create(sample_config)
+
+        # Populate cache
+        first_result = repo.get_by_key("test.setting")
+        assert first_result is not None
+        assert "test.setting" in ConfigurationRepository._cache
+
+        # Update the configuration
+        created.value_json = "updated_value"
+        repo.update(created)
+
+        # Cache should still contain the key with updated value
+        assert "test.setting" in ConfigurationRepository._cache
+        cached_value = ConfigurationRepository._cache["test.setting"]
+        assert cached_value.value_json == "updated_value"
+
+        # Next get_by_key should return cached updated data
+        retrieved = repo.get_by_key("test.setting")
+        assert retrieved is not None
+        assert retrieved.value_json == "updated_value"
+
+    def test_cache_cleared_on_delete(self, repo: ConfigurationRepository, sample_config: Configuration):
+        """Test that cache is cleared when deleting a configuration."""
+        repo.create(sample_config)
+
+        # Populate cache
+        first_result = repo.get_by_key("test.setting")
+        assert first_result is not None
+        assert "test.setting" in ConfigurationRepository._cache
+
+        # Delete the configuration
+        result = repo.delete_by_key("test.setting")
+        assert result is True
+
+        # Cache should be cleared for this key
+        assert "test.setting" not in ConfigurationRepository._cache
+
+        # Next get_by_key should return None
+        retrieved = repo.get_by_key("test.setting")
+        assert retrieved is None

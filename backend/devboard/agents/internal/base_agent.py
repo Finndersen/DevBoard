@@ -15,19 +15,14 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
-    DeferredToolApprovalResult,
     DeferredToolRequests,
     DeferredToolResults,
-    ToolApproved,
-    ToolDenied,
     ToolFuncEither,
 )
 
-from devboard.agents.deps import BaseDeps
-from devboard.agents.language_models import LLMProvider
-from devboard.agents.llm_service import LLMService
-from devboard.agents.types import AgentType
-from devboard.api.schemas.agent_conversation import ToolApprovalDecision
+from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.types import AgentRole
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     ProjectContextData,
@@ -39,12 +34,12 @@ logger = logging.getLogger(__name__)
 class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
     """Base class for all document-editing agents using PydanticAI."""
 
-    agent_type: AgentType
+    agent_role: AgentRole
     deps_type: type[TDeps]
 
-    def __init__(self, context_service: ContextAssemblyService, llm_service: LLMService):
+    def __init__(self, context_service: ContextAssemblyService, agent_config_service: AgentConfigService):
         self.context_service = context_service
-        self.llm_service = llm_service
+        self.agent_config_service = agent_config_service
         self.agent = self._create_agent()
 
     def _create_agent(self) -> Agent[TDeps]:
@@ -62,11 +57,8 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
     def _get_model(self) -> str:
         """Get preferred model for this agent type."""
-        model = self.llm_service.get_model_for_agent(self.agent_type)
-        if model.provider == LLMProvider.GOOGLE:
-            return f"google-gla:{model.name}"
-        else:
-            return f"{model.provider.value}:{model.name}"
+        config = self.agent_config_service.get_effective_config(self.agent_role)
+        return config.model_id.replace("google", "google-gla")
 
     @abstractmethod
     def _get_system_prompt(self) -> str:
@@ -162,12 +154,3 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
             return "No context resources configured for this project."
 
         return "\n".join(summary_parts)
-
-
-def _approval_decision_to_pydantic(
-    approval: ToolApprovalDecision,
-) -> DeferredToolApprovalResult:
-    if approval.approved:
-        return ToolApproved()
-    else:
-        return ToolDenied(message=approval.feedback or "The tool call was denied.")

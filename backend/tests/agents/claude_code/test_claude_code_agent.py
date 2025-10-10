@@ -1,4 +1,4 @@
-"""Tests for ClaudeCodeAgent."""
+"""Tests for ClaudeClient."""
 
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-from devboard.agents.claude_code_agent import ClaudeCodeAgent, ClaudeCodeResult
+from devboard.agents.claude_code.client import ClaudeClient, ClaudeCodeResult
 
 
 @pytest.fixture
 def mock_sdk_client():
     """Create a mock ClaudeSDKClient."""
-    with patch("devboard.agents.claude_code_agent.ClaudeSDKClient") as mock_class:
+    with patch("devboard.agents.claude_code.client.ClaudeSDKClient") as mock_class:
         mock_instance = AsyncMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock(return_value=None)
@@ -20,24 +20,25 @@ def mock_sdk_client():
         yield mock_instance
 
 
-class TestClaudeCodeAgent:
-    """Test suite for ClaudeCodeAgent."""
+class TestClaudeClient:
+    """Test suite for ClaudeClient."""
 
     def test_init_without_session(self):
         """Test agent initialization without session ID."""
-        agent = ClaudeCodeAgent()
+        agent = ClaudeClient()
         assert agent.session_id is None
         assert agent.options.resume is None
 
     def test_init_with_session(self):
         """Test agent initialization with session ID."""
         session_id = "test-session-123"
-        agent = ClaudeCodeAgent(session_id=session_id)
+        agent = ClaudeClient(session_id=session_id)
         assert agent.session_id == session_id
         assert agent.options.resume == session_id
 
     def test_init_with_tools(self):
         """Test agent initialization with custom tools."""
+
         async def custom_tool(name: str, count: int = 1) -> str:
             """A custom test tool.
 
@@ -47,7 +48,7 @@ class TestClaudeCodeAgent:
             """
             return f"Hello {name}! " * count
 
-        agent = ClaudeCodeAgent(tools=[custom_tool])
+        agent = ClaudeClient(tools=[custom_tool])
         assert agent.options.mcp_servers is not None
         assert "devboard_tools" in agent.options.mcp_servers
         assert len(agent.options.allowed_tools) == 1
@@ -81,7 +82,7 @@ class TestClaudeCodeAgent:
         mock_sdk_client.receive_response = mock_receive_response
 
         # Execute query
-        agent = ClaudeCodeAgent()
+        agent = ClaudeClient()
         result = await agent.run("Hello Claude")
 
         # Verify result
@@ -92,7 +93,7 @@ class TestClaudeCodeAgent:
         assert result.result_message.is_error is False
 
         # Verify client was called correctly
-        mock_sdk_client.query.assert_called_once_with("Hello Claude", session_id="default")
+        mock_sdk_client.query.assert_called_once_with("Hello Claude")
 
     @pytest.mark.asyncio
     async def test_run_with_session_id(self, mock_sdk_client):
@@ -119,11 +120,11 @@ class TestClaudeCodeAgent:
         mock_sdk_client.receive_response = mock_receive_response
 
         # Execute with session ID
-        agent = ClaudeCodeAgent(session_id="existing-session")
+        agent = ClaudeClient(session_id="existing-session")
         result = await agent.run("Continue our chat")
 
         assert result.session_id == "existing-session"
-        mock_sdk_client.query.assert_called_once_with("Continue our chat", session_id="existing-session")
+        mock_sdk_client.query.assert_called_once_with("Continue our chat")
 
     @pytest.mark.asyncio
     async def test_run_multiple_text_blocks(self, mock_sdk_client):
@@ -150,7 +151,7 @@ class TestClaudeCodeAgent:
 
         mock_sdk_client.receive_response = mock_receive_response
 
-        agent = ClaudeCodeAgent()
+        agent = ClaudeClient()
         result = await agent.run("Test query")
 
         # Verify text blocks are joined
@@ -172,7 +173,7 @@ class TestClaudeCodeAgent:
 
         mock_sdk_client.receive_response = mock_receive_response
 
-        agent = ClaudeCodeAgent()
+        agent = ClaudeClient()
         with pytest.raises(RuntimeError, match="No ResultMessage received"):
             await agent.run("Test query")
 
@@ -201,7 +202,7 @@ class TestClaudeCodeAgent:
         mock_sdk_client.receive_response = mock_receive_response
 
         # Collect streamed messages
-        agent = ClaudeCodeAgent()
+        agent = ClaudeClient()
         messages = []
         async for message in agent.stream("Stream test"):
             messages.append(message)
@@ -212,7 +213,7 @@ class TestClaudeCodeAgent:
         assert isinstance(messages[1], ResultMessage)
         assert messages[1].session_id == "stream-session"
 
-        mock_sdk_client.query.assert_called_once_with("Stream test", session_id="default")
+        mock_sdk_client.query.assert_called_once_with("Stream test")
 
     @pytest.mark.asyncio
     async def test_stream_with_session_id(self, mock_sdk_client):
@@ -231,17 +232,18 @@ class TestClaudeCodeAgent:
 
         mock_sdk_client.receive_response = mock_receive_response
 
-        agent = ClaudeCodeAgent(session_id="stream-session-2")
+        agent = ClaudeClient(session_id="stream-session-2")
         messages = []
         async for message in agent.stream("Stream with session"):
             messages.append(message)
 
         assert len(messages) == 1
-        mock_sdk_client.query.assert_called_once_with("Stream with session", session_id="stream-session-2")
+        mock_sdk_client.query.assert_called_once_with("Stream with session")
 
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_string_return(self):
         """Test that tool wrapper correctly handles string returns."""
+
         def simple_tool(text: str) -> str:
             """A simple tool that returns a string.
 
@@ -259,7 +261,7 @@ class TestClaudeCodeAgent:
             schema_generator=GenerateJsonSchema,
             takes_ctx=False,
         )
-        wrapper = ClaudeCodeAgent._create_tool_wrapper(simple_tool, schema)
+        wrapper = ClaudeClient._create_tool_wrapper(simple_tool, schema)
 
         # Test the wrapper
         result = await wrapper({"text": "hello"})
@@ -270,6 +272,7 @@ class TestClaudeCodeAgent:
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_dict_return(self):
         """Test that tool wrapper correctly handles dict returns with content."""
+
         async def dict_tool(value: int) -> dict[str, Any]:
             """A tool that returns a dict.
 
@@ -287,7 +290,7 @@ class TestClaudeCodeAgent:
             schema_generator=GenerateJsonSchema,
             takes_ctx=False,
         )
-        wrapper = ClaudeCodeAgent._create_tool_wrapper(dict_tool, schema)
+        wrapper = ClaudeClient._create_tool_wrapper(dict_tool, schema)
 
         # Test the wrapper
         result = await wrapper({"value": 42})
@@ -296,6 +299,7 @@ class TestClaudeCodeAgent:
     @pytest.mark.asyncio
     async def test_tool_wrapper_validates_arguments(self):
         """Test that tool wrapper validates arguments using schema."""
+
         def typed_tool(count: int, name: str) -> str:
             """A tool with typed parameters.
 
@@ -315,7 +319,7 @@ class TestClaudeCodeAgent:
             schema_generator=GenerateJsonSchema,
             takes_ctx=False,
         )
-        wrapper = ClaudeCodeAgent._create_tool_wrapper(typed_tool, schema)
+        wrapper = ClaudeClient._create_tool_wrapper(typed_tool, schema)
 
         # Test with valid arguments
         result = await wrapper({"count": 5, "name": "test"})

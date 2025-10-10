@@ -2,12 +2,14 @@ from fastapi import Depends, HTTPException
 
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
+    get_conversation_repository,
     get_project_repository,
     get_task_repository,
 )
-from devboard.db.models import Codebase, Project, Task
+from devboard.db.models import Codebase, Conversation, Project, Task
 from devboard.db.repositories import (
     CodebaseRepository,
+    ConversationRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -44,3 +46,14 @@ def get_verified_codebase(
     if not codebase:
         raise HTTPException(status_code=404, detail="Codebase not found")
     return codebase
+
+
+def get_verified_conversation(
+    conversation_id: int,
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> Conversation:
+    """Get a conversation by ID, raising 404 if not found."""
+    conversation = conversation_repo.get_by_id(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation

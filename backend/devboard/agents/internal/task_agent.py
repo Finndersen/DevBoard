@@ -7,10 +7,10 @@ from enum import Enum
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
-from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
-from devboard.agents.types import AgentType
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.internal.tools import create_document_edit_tool, create_set_document_content_tool
+from devboard.agents.types import AgentRole
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
 
@@ -73,7 +73,7 @@ Your responses should be concise, helpful, accurate, and focused on creating a c
 class TaskSpecificationAgent(BaseTaskAgent):
     """Service for task planning using AI with deferred document editing tools."""
 
-    agent_type = AgentType.TASK_SPECIFICATION
+    agent_role = AgentRole.TASK_SPECIFICATION
 
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         """Construct the first user message that contains context information for the agent."""
@@ -132,7 +132,7 @@ Your responses should be technical, detailed, and focused on creating actionable
 class TaskPlanningAgent(BaseTaskAgent):
     """Service for task planning using AI with deferred document editing tools."""
 
-    agent_type = AgentType.TASK_PLANNING
+    agent_role = AgentRole.TASK_PLANNING
 
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         """Construct the first user message that contains context information for the agent."""

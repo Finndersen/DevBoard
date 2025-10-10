@@ -5,10 +5,10 @@ import logging
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.base_agent import BaseAgent
-from devboard.agents.deps import BaseDeps
-from devboard.agents.tools import create_document_edit_tool
-from devboard.agents.types import AgentType
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.internal.tools import create_document_edit_tool
+from devboard.agents.types import AgentRole
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
 from devboard.services.context_assembly import (
@@ -61,7 +61,7 @@ class ProjectAgent(BaseAgent[BaseDeps]):
     """Agent for managing and answering queries about a Project."""
 
     deps_type = BaseDeps
-    agent_type = AgentType.PROJECT
+    agent_role = AgentRole.PROJECT
 
     def __init__(self, project: Project, document_repository: DocumentRepository, **kwargs):
         self.project = project

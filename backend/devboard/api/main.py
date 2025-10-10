@@ -14,6 +14,7 @@ from devboard.api.routers import (
     projects,
     settings,
     tasks,
+    tool_approvals,
 )
 from devboard.config.logfire_config import setup_logfire
 
@@ -47,7 +48,8 @@ app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"]
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
-app.include_router(conversations.router, prefix="/api", tags=["conversations"])
+app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
+app.include_router(tool_approvals.router, prefix="/api")
 
 
 @app.get("/")

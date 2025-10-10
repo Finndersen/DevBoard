@@ -2,15 +2,23 @@
 
 from typing import ClassVar
 
-from devboard.agents.types import AgentType
+from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.types import AgentRole
 from devboard.config.base import BaseConfig
 
 
 class AgentConfig(BaseConfig):
-    """Base configuration for AI agents."""
+    """Base configuration for AI agents.
 
-    agent_type: ClassVar[AgentType]
+    Attributes:
+        agent_type: Type/role of the agent (PROJECT, TASK_SPECIFICATION, etc.)
+        selected_engine: User's preferred agent engine override (PydanticAI, Claude Code, etc.)
+        selected_model: User's preferred model override (provider:model format)
+    """
 
+    agent_type: ClassVar[AgentRole]
+
+    selected_engine: AgentEngine | None = None  # User's preferred engine override
     selected_model: str | None = None  # User's preferred model override
 
     @classmethod
@@ -22,29 +30,29 @@ class AgentConfig(BaseConfig):
 class ProjectAgentConfig(AgentConfig):
     """Configuration for Project Q&A Agent."""
 
-    agent_type = AgentType.PROJECT
+    agent_type = AgentRole.PROJECT
 
 
 # TODO: Keep these two task agents seperate or combine?
 class TaskSpecificationAgentConfig(AgentConfig):
     """Configuration for Task Planning Agent."""
 
-    agent_type = AgentType.TASK_SPECIFICATION
+    agent_type = AgentRole.TASK_SPECIFICATION
 
 
 class TaskPlanningAgentConfig(AgentConfig):
     """Configuration for Task Planning Agent."""
 
-    agent_type = AgentType.TASK_PLANNING
+    agent_type = AgentRole.TASK_PLANNING
 
 
 class TaskImplementationAgentConfig(AgentConfig):
     """Configuration for Task Implementation Agent."""
 
-    agent_type = AgentType.TASK_IMPLEMENTATION
+    agent_type = AgentRole.TASK_IMPLEMENTATION
 
 
 class InvestigationAgentConfig(AgentConfig):
     """Configuration for Context Investigation/Gathering Agent."""
 
-    agent_type = AgentType.INVESTIGATION
+    agent_type = AgentRole.INVESTIGATION
