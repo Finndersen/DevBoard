@@ -15,6 +15,7 @@ from .configuration import (
     ConfigurationDetailResponse,
     ConfigurationFieldInfo,
 )
+from .conversation import ConversationResponse
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
     AgentConfigurationResponse,
@@ -61,6 +62,8 @@ __all__ = [
     "CodebaseUpdate",
     # Common
     "DeleteResponse",
+    # Conversation
+    "ConversationResponse",
     # Document
     "DocumentCreate",
     "DocumentResponse",

@@ -20,12 +20,17 @@ from devboard.services.context_assembly import (
 def sample_project(db_session):
     """Sample project for testing."""
     # Use repository to create project properly
-    from devboard.db.repositories import ProjectRepository
+    from devboard.db.models.document import DocumentType
+    from devboard.db.repositories import DocumentRepository, ProjectRepository
 
+    document_repo = DocumentRepository(db_session)
     project_repo = ProjectRepository(db_session)
+
+    spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
     return project_repo.create(
         name="Test Project",
         description="Test project description with https://github.com/owner/repo/pull/123",
+        specification=spec_doc,
     )
 
 

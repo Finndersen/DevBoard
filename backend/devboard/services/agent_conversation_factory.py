@@ -44,8 +44,13 @@ def create_task_conversation_service(
         Configured conversation service instance
 
     Raises:
-        ValueError: If role/engine combination is not supported
+        ValueError: If role/engine combination is not supported or conversation not found
     """
+    # Fetch conversation instance (required by all implementations)
+    conversation = conversation_repo.get_by_id(conversation_id)
+    if not conversation:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
     if agent_engine == AgentEngine.INTERNAL:
         # Create PydanticAI agent based on role
         if agent_role == AgentRole.TASK_SPECIFICATION:
@@ -66,17 +71,12 @@ def create_task_conversation_service(
             raise ValueError(f"Unsupported agent role for PydanticAI: {agent_role}")
 
         return PydanticAIConversationService(
-            conversation_id=conversation_id,
+            conversation=conversation,
             agent=agent,
             conversation_repository=conversation_repo,
         )
 
     elif agent_engine == AgentEngine.CLAUDE_CODE:
-        # Fetch conversation instance for session tracking
-        conversation = conversation_repo.get_by_id(conversation_id)
-        if not conversation:
-            raise ValueError(f"Conversation {conversation_id} not found")
-
         # Create Claude Code agent based on role
         if agent_role == AgentRole.TASK_SPECIFICATION:
             agent = ClaudeTaskSpecificationAgent(

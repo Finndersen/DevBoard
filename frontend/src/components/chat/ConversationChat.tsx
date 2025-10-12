@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
@@ -36,29 +36,22 @@ export default function ConversationChat({
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
-  const approvalKey = createConversationApprovalKey(conversationId)
-  const pendingApprovals = getApprovals(approvalKey)
+  const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
+  const pendingApprovals = useMemo(() => getApprovals(approvalKey), [getApprovals, approvalKey])
 
   // Get UIStore methods for updating tab activity status
   const { setTabActivityStatus, getActiveTab } = useUIStore()
-  
-  const { 
-    addPendingMessage, 
-    updateMessageStatus, 
-    removeMessage, 
-    getPendingMessages, 
+
+  const {
+    addPendingMessage,
+    updateMessageStatus,
+    removeMessage,
+    getPendingMessages,
     retryMessage,
     clearConversationMessages
   } = usePendingMessages()
-  const pendingKey = createConversationPendingKey(conversationId)
-  const pendingMessages = getPendingMessages(pendingKey)
-  
-  // Debug logging
-  useEffect(() => {
-    console.log('ConversationChat: approvalKey:', approvalKey)
-    console.log('ConversationChat: pendingApprovals:', pendingApprovals)
-    console.log('ConversationChat: pendingMessages:', pendingMessages)
-  }, [approvalKey, pendingApprovals, pendingMessages])
+  const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
+  const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
 
   // Get single pending message (only support one at a time)
   const pendingMessage = pendingMessages[0] || null
@@ -133,7 +126,7 @@ export default function ConversationChat({
         removeMessage(pendingKey, pendingMessageId)
         // Add both the user message and agent response to confirmed messages
         const userMessage: ConversationMessage = {
-          id: `user_${Date.now()}`,
+          id: Date.now(),
           role: 'user',
           text_content: messageText,
           timestamp: new Date().toISOString()
@@ -143,7 +136,6 @@ export default function ConversationChat({
         // Tool request: update status to awaiting_approval, DON'T remove from pending
         updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
         const approvals = await convertToolRequestsToApprovals(response.tool_requests)
-        console.log('ConversationChat: Setting approvals:', approvals)
         setApprovals(approvalKey, approvals)
       }
     } catch (error) {
@@ -181,7 +173,7 @@ export default function ConversationChat({
         // Success: remove from pending and add both user and agent messages
         removeMessage(pendingKey, pendingMessage.id)
         const userMessage: ConversationMessage = {
-          id: `user_${Date.now()}`,
+          id: Date.now(),
           role: 'user',
           text_content: pendingMessage.text_content,
           timestamp: pendingMessage.timestamp
@@ -204,10 +196,6 @@ export default function ConversationChat({
 
   const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApprovalWithContext[]> => {
     return toolRequests.map((request) => {
-      console.log('ConversationChat: Converting tool request:', request)
-      console.log('ConversationChat: tool_args type:', typeof request.tool_args)
-      console.log('ConversationChat: tool_args content:', request.tool_args)
-
       // Parse tool_args if it's a string
       let toolArgs: Record<string, unknown> | null = null
       if (typeof request.tool_args === 'object' && request.tool_args !== null) {
@@ -215,7 +203,6 @@ export default function ConversationChat({
       } else if (typeof request.tool_args === 'string') {
         try {
           toolArgs = JSON.parse(request.tool_args)
-          console.log("ConversationChat: Parsed JSON successfully:", toolArgs)
         } catch (e) {
           console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
         }
@@ -228,7 +215,6 @@ export default function ConversationChat({
         conversationId: conversationId // Add conversation context
       }
 
-      console.log("ConversationChat: Final approval object with conversation context:", approvalObject)
       return approvalObject
     })
   }
@@ -268,7 +254,7 @@ export default function ConversationChat({
         if (pendingMessage && pendingMessage.status === 'awaiting_approval') {
           removeMessage(pendingKey, pendingMessage.id)
           const userMessage: ConversationMessage = {
-            id: `user_${Date.now()}`,
+            id: Date.now(),
             role: 'user',
             text_content: pendingMessage.text_content,
             timestamp: pendingMessage.timestamp

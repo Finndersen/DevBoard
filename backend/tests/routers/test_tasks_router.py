@@ -2,9 +2,14 @@
 
 import pytest
 
+from devboard.agents.types import AgentEngine, AgentRole
+from devboard.db.models import ParentEntityType
+from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
+    ConversationRepository,
+    DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -32,99 +37,62 @@ def test_resource_data():
 class TestTasksRouter:
     """Test tasks router endpoints."""
 
-    def test_list_tasks_empty(self, client):
-        """Test listing tasks when none exist."""
-        response = client.get("/api/tasks/")
-        assert response.status_code == 200
-        assert response.json() == []
-
-    def test_list_tasks_with_data(self, client, db_session, test_task_data):
-        """Test listing tasks with existing data."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-        )
-        db_session.commit()
-
-        response = client.get("/api/tasks/")
-        assert response.status_code == 200
-        tasks = response.json()
-        assert len(tasks) == 1
-        assert tasks[0]["title"] == test_task_data["title"]
-        assert tasks[0]["id"] == created_task.id
-
-    def test_list_tasks_filtered_by_project(self, client, db_session):
-        """Test listing tasks filtered by project ID."""
-        # Create test projects using repository
-        project_repo = ProjectRepository(db_session)
-        created_project1 = project_repo.create(name="Test Project 1", description="A test project for development")
-        created_project2 = project_repo.create(name="Test Project 2", description="A test project for development")
-
-        # Create tasks for different projects using repository
-        task_repo = TaskRepository(db_session)
-        task_repo.create(project_id=created_project1.id, title="Task 1", status=TaskStatus.DEFINING)
-        task_repo.create(project_id=created_project2.id, title="Task 2", status=TaskStatus.DEFINING)
-        task_repo.create(project_id=created_project1.id, title="Task 3", status=TaskStatus.DEFINING)
-        db_session.commit()
-
-        # Test filtering by project 1
-        response = client.get(f"/api/tasks/?project_id={created_project1.id}")
-        assert response.status_code == 200
-        tasks = response.json()
-        assert len(tasks) == 2
-        assert all(task["project_id"] == created_project1.id for task in tasks)
-
-        # Test filtering by project 2
-        response = client.get(f"/api/tasks/?project_id={created_project2.id}")
-        assert response.status_code == 200
-        tasks = response.json()
-        assert len(tasks) == 1
-        assert tasks[0]["project_id"] == created_project2.id
-
     def test_create_task(self, client, db_session, test_task_data):
         """Test creating a new task."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
         db_session.commit()
 
-        # Update task data with actual project ID
-        test_task_data["project_id"] = created_project.id
-        # Use the schema structure
+        # Use the nested schema structure (no project_id in body)
         api_task_data = {
             "title": test_task_data["title"],
             "status": test_task_data["status"].value,  # Convert enum to string
-            "project_id": test_task_data["project_id"],
         }
 
-        response = client.post("/api/tasks/", json=api_task_data)
+        # POST to the new nested endpoint
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
         assert response.status_code == 200
 
         task_data = response.json()
         assert task_data["title"] == test_task_data["title"]
         assert task_data["status"] == test_task_data["status"].value
-        assert task_data["project_id"] == test_task_data["project_id"]
+        assert task_data["project_id"] == created_project.id
         assert "id" in task_data
+        assert "conversation_id" in task_data
+        assert isinstance(task_data["conversation_id"], int)
 
     def test_get_task_success(self, client, db_session, test_task_data):
         """Test getting a specific task."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
+        db_session.commit()
+
+        # Create conversation for task (required by get_task endpoint)
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
         )
         db_session.commit()
 
@@ -146,14 +114,30 @@ class TestTasksRouter:
         """Test updating a task."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
+
+        # Create conversation for task
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
         )
         db_session.commit()
 
@@ -178,14 +162,20 @@ class TestTasksRouter:
         """Test deleting a task."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -212,14 +202,20 @@ class TestTaskResourcesRouter:
         """Test listing task resources when none exist."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -231,14 +227,20 @@ class TestTaskResourcesRouter:
         """Test listing task resources with existing data."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -271,14 +273,20 @@ class TestTaskResourcesRouter:
         """Test creating a new task resource."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -300,14 +308,20 @@ class TestTaskResourcesRouter:
         """Test deleting a task resource."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -335,14 +349,20 @@ class TestTaskResourcesRouter:
         """Test deleting a non-existent task resource."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
             status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
         )
         db_session.commit()
 
@@ -359,11 +379,25 @@ class TestTaskStateTransition:
         """Create a test task with project for state transition tests."""
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
-        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status=TaskStatus.DEFINING)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status=TaskStatus.DEFINING, specification=task_spec_doc, implementation_plan=task_plan_doc)
+
+        # Create conversation for task
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
         db_session.commit()
 
         return created_task

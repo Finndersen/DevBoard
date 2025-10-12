@@ -34,8 +34,8 @@ class TaskCreateNested(BaseModel):
 
     title: str
     codebase_id: int | None = None
-    status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
+    specification_content: str | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -53,8 +53,7 @@ class TaskResponse(TaskBase):
     """Schema for task responses."""
 
     id: int
-    conversation_id: str | None = None
-    default_conversation_id: int | None = None
+    conversation_id: int
     created_at: datetime.datetime
 
     # Document relationships - automatically loaded

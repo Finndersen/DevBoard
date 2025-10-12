@@ -43,7 +43,7 @@ const mockTasks: Task[] = [
     status: 'Designing',
     codebase_id: null,
     remote_task_id: null,
-    default_conversation_id: 3,
+    conversation_id: 3,
     specification: {
       id: 3,
       document_type: 'task_specification',
@@ -69,7 +69,7 @@ const mockTasks: Task[] = [
     status: 'Planning',
     codebase_id: null,
     remote_task_id: 'PROJ-123',
-    default_conversation_id: 4,
+    conversation_id: 4,
     specification: {
       id: 5,
       document_type: 'task_specification',
@@ -277,6 +277,20 @@ export const handlers = [
   }),
 
   // Unified conversation endpoints
+  http.get('*/api/conversations/:conversationId', ({ params }) => {
+    return HttpResponse.json({
+      id: Number(params.conversationId),
+      parent_entity_type: 'project',
+      parent_entity_id: 1,
+      agent_role: 'project',
+      engine: 'internal',
+      model_id: 'openai:gpt-4',
+      model_name: 'OpenAI GPT-4',
+      is_active: true,
+      created_at: new Date().toISOString(),
+    })
+  }),
+
   http.get('*/api/conversations/:conversationId/messages', () => {
     return HttpResponse.json([])
   }),
@@ -315,18 +329,71 @@ export const handlers = [
     })
   }),
 
-  http.get('*/api/agents/:agentType/model', () => {
+  http.put('*/api/conversations/:conversationId/model', async ({ params, request }) => {
+    const body = await request.json() as { model_id: string }
     return HttpResponse.json({
-      model_id: 'openai:gpt-4'
+      conversation_id: Number(params.conversationId),
+      agent_role: 'project',
+      engine: 'internal',
+      model_id: body.model_id,
+      updated_at: new Date().toISOString(),
     })
   }),
 
-  http.get('*/api/agents/:agentType/available-models', () => {
-    return HttpResponse.json([
-      { id: 'openai:gpt-4', name: 'OpenAI GPT-4', provider: 'OpenAI' },
-      { id: 'openai:gpt-3.5-turbo', name: 'OpenAI GPT-3.5 Turbo', provider: 'OpenAI' },
-      { id: 'anthropic:claude-3', name: 'Anthropic Claude 3', provider: 'Anthropic' },
-    ])
+  // Agent configuration endpoints
+  http.get('*/api/agents/:agentRole/configuration', () => {
+    return HttpResponse.json({
+      agent_role: 'project',
+      config: {
+        engine: 'internal',
+        model_id: 'openai:gpt-4'
+      },
+      available_engines: [
+        {
+          engine: 'internal',
+          display_name: 'Internal',
+          description: 'Internal agent framework'
+        }
+      ]
+    })
+  }),
+
+  http.put('*/api/agents/:agentRole/configuration', async ({ request }) => {
+    const config = await request.json() as { engine: string; model_id: string }
+    return HttpResponse.json({
+      agent_role: 'project',
+      config: {
+        engine: config.engine,
+        model_id: config.model_id
+      },
+      available_engines: [
+        {
+          engine: 'internal',
+          display_name: 'Internal',
+          description: 'Internal agent framework'
+        }
+      ]
+    })
+  }),
+
+  http.get('*/api/agents/available-models', () => {
+    return HttpResponse.json({
+      models_by_engine: {
+        'internal': [
+          { id: 'openai:gpt-4', name: 'OpenAI GPT-4', provider: 'openai', model_type: 'reasoning' },
+          { id: 'openai:gpt-3.5-turbo', name: 'OpenAI GPT-3.5 Turbo', provider: 'openai', model_type: 'fast' },
+          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'reasoning' },
+        ],
+        'claude_code': [
+          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'reasoning' },
+          { id: 'anthropic:claude-opus-4.1', name: 'Claude Opus 4.1', provider: 'anthropic', model_type: 'reasoning' },
+        ],
+        'gemini_cli': [
+          { id: 'google:gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', model_type: 'reasoning' },
+          { id: 'google:gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', model_type: 'fast' },
+        ]
+      }
+    })
   }),
 
   // Codebases endpoints

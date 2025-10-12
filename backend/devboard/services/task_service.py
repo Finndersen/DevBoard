@@ -1,36 +1,101 @@
-"""Service for managing task phase transitions and validation.
+"""Service for managing task lifecycle operations.
 
-Handles validation rules for transitioning between task lifecycle phases
-and ensures required content exists before proceeding to the next phase.
-Also manages conversation lifecycle during phase transitions.
+Handles task creation, phase transitions, and conversation lifecycle management.
+Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
-import uuid
-
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_engines import AgentEngine
 from devboard.agents.types import AgentEngineModelConfig, AgentRole
 from devboard.db.models import ParentEntityType
+from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories.conversation import ConversationRepository
+from devboard.db.repositories.document import DocumentRepository
+from devboard.db.repositories.task import TaskRepository
 
 
-class TaskPhaseTransitionService:
-    """Service for managing task phase transitions and conversation lifecycle."""
+class TaskService:
+    """Service for task lifecycle operations including creation and phase transitions."""
 
     def __init__(
         self,
         conversation_repo: ConversationRepository,
+        document_repo: DocumentRepository,
+        task_repo: TaskRepository,
         agent_config_service: AgentConfigService,
     ):
         """Initialize service.
 
         Args:
             conversation_repo: Repository for conversation operations
+            document_repo: Repository for document operations
+            task_repo: Repository for task operations
             agent_config_service: Service for agent configuration
         """
         self.conversation_repo = conversation_repo
+        self.document_repo = document_repo
+        self.task_repo = task_repo
         self.agent_config_service = agent_config_service
+
+    def create_task(
+        self,
+        project_id: int,
+        title: str,
+        status: TaskStatus = TaskStatus.DEFINING,
+        codebase_id: int | None = None,
+        remote_task_id: str | None = None,
+        specification_content: str = "",
+    ) -> Task:
+        """Create a new task with initial conversation.
+
+        Creates the task entity, required documents, and an initial active conversation
+        configured with the appropriate agent role, engine, and model based on the
+        task's initial status.
+
+        Args:
+            project_id: ID of the project this task belongs to
+            title: Task title
+            status: Initial task status (defaults to DEFINING)
+            codebase_id: Optional codebase ID
+            remote_task_id: Optional remote task identifier (e.g., Jira issue key)
+            specification_content: Initial content for the specification document (defaults to empty string)
+
+        Returns:
+            Created Task instance with active conversation
+        """
+        # Create documents
+        specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, specification_content)
+        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+
+        # Create task using repository
+        task = self.task_repo.create(
+            project_id=project_id,
+            title=title,
+            specification=specification_doc,
+            implementation_plan=implementation_plan_doc,
+            status=status,
+            codebase_id=codebase_id,
+            remote_task_id=remote_task_id,
+        )
+
+        # Determine agent role from status
+        agent_role = self._get_agent_role_for_status(status)
+
+        # Get effective config for role
+        config = self.agent_config_service.get_effective_config(agent_role)
+
+        # Create initial conversation (external_session_id will be set later if needed)
+        self.conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=agent_role,
+            engine=config.engine,
+            model_id=config.model_id,
+            external_session_id=None,
+            is_active=True,
+        )
+
+        return task
 
     @staticmethod
     def can_transition_to_phase(task: Task, target_status: TaskStatus) -> tuple[bool, str]:
@@ -130,19 +195,14 @@ class TaskPhaseTransitionService:
         config_dict = self.agent_config_service.get_agent_configuration(agent_role)
         config = AgentEngineModelConfig.from_dict(config_dict["config"])
 
-        # Generate external session ID if needed
-        external_session_id = None
-        if config.engine in [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI]:
-            external_session_id = str(uuid.uuid4())
-
-        # Create conversation with config snapshot
+        # Create conversation with config snapshot (external_session_id will be set later if needed)
         return self.conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
             agent_role=agent_role,
             engine=config.engine,
             model_id=config.model_id,
-            external_session_id=external_session_id,
+            external_session_id=None,
         )
 
     @staticmethod

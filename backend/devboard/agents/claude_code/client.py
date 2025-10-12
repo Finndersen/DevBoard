@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
+import logfire
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -53,6 +54,7 @@ class ClaudeClient:
         allowed_tools: list[str] | None = None,
         model: str | None = None,
         cwd: str | None = None,
+        plan_mode: bool = False,
     ):
         """Initialize Claude Code client.
 
@@ -75,6 +77,7 @@ class ClaudeClient:
             model=model,
             cwd=cwd,
             session_id=session_id,
+            plan_mode=plan_mode,
         )
         self.session_id = session_id
 
@@ -86,6 +89,7 @@ class ClaudeClient:
         model: str | None,
         cwd: str | None,
         session_id: str | None,
+        plan_mode: bool = False,
     ) -> ClaudeAgentOptions:
         """Build ClaudeAgentOptions from client configuration.
 
@@ -152,6 +156,7 @@ class ClaudeClient:
             model=model,
             cwd=cwd,
             mcp_servers=mcp_servers,
+            permission_mode="plan" if plan_mode else "acceptEdits",
         )
 
     @staticmethod
@@ -200,29 +205,29 @@ class ClaudeClient:
             and session ID for resuming
         """
         text_parts: list[str] = []
+        result_message = None
 
-        async with ClaudeSDKClient(options=self.options) as client:
-            # Send the query
-            await client.query(user_query)
+        # Collect all messages. The stream automatically terminates after ResultMessage.
+        async for message in self.stream(user_query):
+            if isinstance(message, AssistantMessage):
+                # Extract text content from assistant messages
+                for content_block in message.content:
+                    if isinstance(content_block, TextBlock):
+                        text_parts.append(content_block.text)
 
-            # Collect all messages until ResultMessage
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    # Extract text content from assistant messages
-                    for content_block in message.content:
-                        if isinstance(content_block, TextBlock):
-                            text_parts.append(content_block.text)
+            elif isinstance(message, ResultMessage):
+                result_message = message
+                # Continue to let iterator finish naturally and ensure cleanup
 
-                elif isinstance(message, ResultMessage):
-                    # Combine all text parts
-                    combined_text = "\n".join(text_parts) if text_parts else ""
-                    return ClaudeCodeResult(
-                        text_content=combined_text,
-                        result_message=message,
-                        session_id=message.session_id,
-                    )
+        if not result_message:
+            raise RuntimeError("No ResultMessage received from Claude Code")
 
-        raise RuntimeError("No ResultMessage received from Claude Code")
+        combined_text = "\n".join(text_parts) if text_parts else ""
+        return ClaudeCodeResult(
+            text_content=combined_text,
+            result_message=result_message,
+            session_id=result_message.session_id,
+        )
 
     async def stream(self, user_query: str) -> AsyncIterator[Message]:
         """Execute a query and stream individual messages as they arrive.
@@ -237,11 +242,17 @@ class ClaudeClient:
             Message objects (UserMessage, AssistantMessage, SystemMessage, ResultMessage)
             as they are received from Claude Code
         """
+        with logfire.span(
+            "claude_client.stream",
+            session_id=self.session_id,
+            model=self.options.model,
+            query_preview=user_query[:100] if len(user_query) > 100 else user_query,
+        ):
+            async with ClaudeSDKClient(options=self.options) as client:
+                # Send the query
+                with logfire.span("claude_client.send_query"):
+                    await client.query(user_query)
 
-        async with ClaudeSDKClient(options=self.options) as client:
-            # Send the query
-            await client.query(user_query)
-
-            # Stream messages as they arrive
-            async for message in client.receive_response():
-                yield message
+                async for message in client.receive_response():
+                    with logfire.span("Received assistant message", message=message):
+                        yield message

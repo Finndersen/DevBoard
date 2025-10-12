@@ -15,37 +15,6 @@ class ConversationRepository(BaseRepository[Conversation]):
     """Repository handling both conversations and messages."""
 
     # Conversation methods
-    def get_or_create_for_entity(
-        self,
-        entity_type: ParentEntityType,
-        entity_id: int,
-        parent_conversation_id: int | None = None,
-    ) -> Conversation:
-        """Get existing or create new conversation for entity."""
-        stmt = select(Conversation).where(
-            Conversation.parent_entity_type == entity_type,
-            Conversation.parent_entity_id == entity_id,
-        )
-
-        # Handle both main conversations and sub-conversations
-        if parent_conversation_id is None:
-            stmt = stmt.where(Conversation.parent_conversation_id.is_(None))
-        else:
-            stmt = stmt.where(Conversation.parent_conversation_id == parent_conversation_id)
-
-        conversation = self.db.execute(stmt).scalar_one_or_none()
-
-        if not conversation:
-            conversation = Conversation(
-                parent_entity_type=entity_type,
-                parent_entity_id=entity_id,
-                parent_conversation_id=parent_conversation_id,
-            )
-            self.db.add(conversation)
-            self.db.flush()
-
-        return conversation
-
     def get_by_id(self, conversation_id: int) -> Conversation | None:
         """Get conversation by ID."""
         stmt = select(Conversation).where(Conversation.id == conversation_id)
@@ -93,7 +62,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         """Create a conversation with all parameters specified (low-level method).
 
         This is the primary low-level method for creating conversations. Higher-level
-        services (like TaskPhaseTransitionService) should use this instead of
+        services (like TaskService, ProjectService) should use this instead of
         constructing Conversation objects directly.
 
         Args:
@@ -111,7 +80,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         conversation = Conversation(
             parent_entity_type=parent_entity_type,
             parent_entity_id=parent_entity_id,
-            agent_role=agent_role.value,
+            agent_role=agent_role,
             engine=engine,
             model_id=model_id,
             external_session_id=external_session_id,
@@ -123,25 +92,18 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
-    def update_model(self, conversation_id: int, model_id: str) -> Conversation:
+    def update_model(self, conversation: Conversation, model_id: str) -> Conversation:
         """Update the model for a conversation.
 
         Model can be changed within the same engine (e.g., Opus → Sonnet in Claude Code).
 
         Args:
-            conversation_id: ID of conversation to update
+            conversation: Conversation instance to update
             model_id: New model identifier
 
         Returns:
             Updated Conversation instance
-
-        Raises:
-            ValueError: If conversation not found
         """
-        conversation = self.get_by_id(conversation_id)
-        if not conversation:
-            raise ValueError(f"Conversation {conversation_id} not found")
-
         conversation.model_id = model_id
         self.db.flush()
 
@@ -185,21 +147,19 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation.archived_at = datetime.datetime.now(datetime.UTC)
             self.db.flush()
 
-    def update_external_session_id(self, conversation_id: int, session_id: str) -> None:
+    def update_external_session_id(self, conversation: Conversation, session_id: str) -> None:
         """Update the external session ID for a conversation.
 
         Used by Claude Code and other external engines to persist session continuity.
 
         Args:
-            conversation_id: ID of conversation to update
+            conversation: Conversation instance to update
             session_id: New session ID from external engine
         """
-        conversation = self.get_by_id(conversation_id)
-        if conversation:
-            conversation.external_session_id = session_id
-            self.db.flush()
+        conversation.external_session_id = session_id
+        self.db.flush()
 
-    # Message methods
+    # Message methods (for internal agent messages)
     def get_messages(
         self,
         conversation_id: int,

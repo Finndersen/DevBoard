@@ -90,7 +90,7 @@ class TestToolApprovalManager:
             conversation_id=1,
             tool_name="Bash",
             tool_args={"command": "ls"},
-            timeout=0.5,
+            timeout=0.1,  # Minimal timeout for fast tests
         )
 
         # Should auto-deny on timeout
@@ -189,11 +189,11 @@ class TestToolApprovalManager:
                 conversation_id=conv_id,
                 tool_name="Read",
                 tool_args={},
-                timeout=5.0,  # Longer timeout to prevent race condition
+                timeout=0.3,  # Minimal timeout for fast tests
             )
 
         async def cancel_task():
-            await asyncio.sleep(0.2)  # Wait longer for requests to register
+            await asyncio.sleep(0.05)  # Minimal wait for requests to register
 
             # Cancel conversation 1
             cancelled = await approval_manager.cancel_pending_approvals(1)
@@ -226,7 +226,7 @@ class TestToolApprovalManager:
                     conversation_id=n,
                     tool_name="Read",
                     tool_args={},
-                    timeout=2.0,
+                    timeout=0.2,  # Minimal timeout for fast tests
                 )
             except RuntimeError as e:
                 return str(e)
@@ -255,13 +255,13 @@ class TestToolApprovalManager:
                     conversation_id=conv_id,
                     tool_name="Read",
                     tool_args={},
-                    timeout=2.0,
+                    timeout=0.2,  # Minimal timeout for fast tests
                 )
             except TimeoutError:
                 pass
 
         async def check_filter_task():
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)  # Minimal wait for registration
 
             # Get all pending
             all_pending = await approval_manager.get_pending_approvals()

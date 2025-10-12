@@ -14,7 +14,9 @@ from devboard.api.dependencies.repositories import (
 )
 from devboard.api.dependencies.services import (
     get_context_assembly_service,
+    get_project_service,
     get_resource_service,
+    get_task_service,
 )
 from devboard.api.schemas import (
     DeleteResponse,
@@ -23,7 +25,7 @@ from devboard.api.schemas import (
     ProjectResponse,
     ProjectUpdate,
     ResourceResponse,
-    TaskCreate,
+    TaskCreateNested,
     TaskResponse,
 )
 from devboard.context_providers import ContextProviderUnavailable
@@ -39,10 +41,12 @@ from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
 )
+from devboard.services.project_service import ProjectService
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
+from devboard.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -60,11 +64,30 @@ async def list_projects(
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
     project: ProjectCreate,
+    project_service: ProjectService = Depends(get_project_service),
     project_repo: ProjectRepository = Depends(get_project_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
-    """Create a new project."""
-    created_project = project_repo.create(name=project.name, description=project.description)
-    return created_project
+    """Create a new project with initial conversation."""
+    # Create project using service (creates project + document + conversation)
+    created_project = project_service.create_project(
+        name=project.name,
+        description=project.description,
+    )
+    project_repo.db.commit()
+    project_repo.db.refresh(created_project)
+
+    # Get the active conversation that was just created
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.PROJECT, created_project.id)
+
+    return ProjectResponse(
+        id=created_project.id,
+        name=created_project.name,
+        description=created_project.description,
+        created_at=created_project.created_at,
+        specification=created_project.specification,
+        default_conversation_id=conversation.id if conversation else None,
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -73,9 +96,17 @@ async def get_project(
     project: Project = Depends(get_verified_project),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> ProjectResponse:
-    """Get a specific project with conversation_id."""
-    # Get or create conversation for project
-    conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.PROJECT, project_id)
+    """Get a specific project with active conversation_id."""
+    # Get active conversation (should always exist since created at project creation)
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.PROJECT, project_id)
+
+    if not conversation:
+        # This should never happen for projects created after this change
+        # For legacy projects without conversations, this is a data integrity issue
+        raise HTTPException(
+            status_code=500,
+            detail="Project has no active conversation. Data integrity issue.",
+        )
 
     return ProjectResponse(
         id=project.id,
@@ -130,35 +161,81 @@ async def list_project_tasks(
     project_id: int,
     project: Project = Depends(get_verified_project),
     task_repo: TaskRepository = Depends(get_task_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
     """List all tasks for a project."""
     tasks = task_repo.get_for_project(project_id)
-    return tasks
+
+    # Get conversations for all tasks
+    task_responses = []
+    for task in tasks:
+        conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
+        if not conversation:
+            # Skip tasks without conversations (should not happen for properly created tasks)
+            continue
+
+        task_responses.append(
+            TaskResponse(
+                id=task.id,
+                title=task.title,
+                project_id=task.project_id,
+                codebase_id=task.codebase_id,
+                status=task.status,
+                remote_task_id=task.remote_task_id,
+                conversation_id=conversation.id,
+                created_at=task.created_at,
+                specification=task.specification,
+                implementation_plan=task.implementation_plan,
+            )
+        )
+
+    return task_responses
 
 
 @router.post("/{project_id}/tasks", response_model=TaskResponse)
 async def create_project_task(
     project_id: int,
-    task: TaskCreate,
+    task: TaskCreateNested,
     project: Project = Depends(get_verified_project),
+    task_service: TaskService = Depends(get_task_service),
     task_repo: TaskRepository = Depends(get_task_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
-    """Create a new task for a specific project."""
-    # Ensure the task is being created for the correct project
-    if task.project_id != project_id:
-        raise HTTPException(status_code=400, detail="Task project_id must match URL project_id")
-
-    # Create task using repository
-    created_task = task_repo.create(
-        project_id=task.project_id,
+    """Create a new task under a project with initial conversation."""
+    # Create task using service (creates task + documents + conversation)
+    # Tasks always start in DEFINING status
+    created_task = task_service.create_task(
+        project_id=project_id,
         title=task.title,
-        status=task.status,
         codebase_id=task.codebase_id,
         remote_task_id=task.remote_task_id,
+        specification_content=task.specification_content or "",
     )
+
     task_repo.db.commit()
     task_repo.db.refresh(created_task)
-    return created_task
+
+    # Get the active conversation that was just created
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, created_task.id)
+
+    if not conversation:
+        raise HTTPException(
+            status_code=500,
+            detail="Task conversation was not created. Data integrity issue.",
+        )
+
+    return TaskResponse(
+        id=created_task.id,
+        title=created_task.title,
+        project_id=created_task.project_id,
+        codebase_id=created_task.codebase_id,
+        status=created_task.status,
+        remote_task_id=created_task.remote_task_id,
+        conversation_id=conversation.id,
+        created_at=created_task.created_at,
+        specification=created_task.specification,
+        implementation_plan=created_task.implementation_plan,
+    )
 
 
 # Project Resource Endpoints

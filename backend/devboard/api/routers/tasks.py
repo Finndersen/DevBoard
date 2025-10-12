@@ -6,17 +6,13 @@ from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_document_repository,
-    get_project_repository,
     get_task_repository,
 )
-from devboard.api.dependencies.services import (
-    get_resource_service,
-)
+from devboard.api.dependencies.services import get_resource_service
 from devboard.api.schemas import (
     DeleteResponse,
     ResourceResponse,
     StateTransitionRequest,
-    TaskCreate,
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
@@ -26,7 +22,6 @@ from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     ConversationRepository,
     DocumentRepository,
-    ProjectRepository,
     TaskRepository,
 )
 from devboard.services.resource_service import (
@@ -37,53 +32,23 @@ from devboard.services.resource_service import (
 router = APIRouter()
 
 
-@router.get("/", response_model=list[TaskResponse])
-async def list_tasks(
-    project_id: int | None = None,
-    task_repo: TaskRepository = Depends(get_task_repository),
-):
-    """List all tasks, optionally filtered by project."""
-    if project_id:
-        tasks = task_repo.get_for_project(project_id)
-    else:
-        tasks = task_repo.get_all()
-    return tasks
-
-
-@router.post("/", response_model=TaskResponse)
-async def create_task(
-    task: TaskCreate,
-    project_repo: ProjectRepository = Depends(get_project_repository),
-    task_repo: TaskRepository = Depends(get_task_repository),
-):
-    """Create a new task."""
-    # Verify project exists
-    project = project_repo.get_by_id(task.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Create task using repository
-    created_task = task_repo.create(
-        project_id=task.project_id,
-        title=task.title,
-        status=task.status,
-        codebase_id=task.codebase_id,
-        remote_task_id=task.remote_task_id,
-    )
-    task_repo.db.commit()
-    task_repo.db.refresh(created_task)
-    return created_task
-
-
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: int,
     task: Task = Depends(get_verified_task),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> TaskResponse:
-    """Get a specific task with conversation_id."""
-    # Get or create conversation for task
-    conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.TASK, task_id)
+    """Get a specific task with active conversation_id."""
+    # Get active conversation (should always exist since created at task creation)
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+
+    if not conversation:
+        # This should never happen for tasks created after this change
+        # For legacy tasks without conversations, this is a data integrity issue
+        raise HTTPException(
+            status_code=500,
+            detail="Task has no active conversation. Data integrity issue.",
+        )
 
     return TaskResponse(
         id=task.id,
@@ -92,8 +57,7 @@ async def get_task(
         codebase_id=task.codebase_id,
         status=task.status,
         remote_task_id=task.remote_task_id,
-        conversation_id=task.remote_task_id,  # Keep this for backward compatibility
-        default_conversation_id=conversation.id,
+        conversation_id=conversation.id,
         created_at=task.created_at,
         specification=task.specification,
         implementation_plan=task.implementation_plan,
@@ -107,6 +71,7 @@ async def update_task(
     task: Task = Depends(get_verified_task),
     task_repo: TaskRepository = Depends(get_task_repository),
     document_repo: DocumentRepository = Depends(get_document_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
     """Update a task and its document content."""
 
@@ -121,8 +86,8 @@ async def update_task(
     # Handle implementation plan content update separately
     implementation_plan = update_data.pop("implementation_plan", None)
     if implementation_plan is not None:
-        # Create or update implementation plan document
-        task_repo.set_task_implementation_plan(task, implementation_plan)
+        # Update the implementation plan document content
+        document_repo.update_content(task.implementation_plan, implementation_plan)
 
     # Update other task fields
     for field, value in update_data.items():
@@ -131,7 +96,24 @@ async def update_task(
     updated_task = task_repo.update(task)
     task_repo.db.commit()
     task_repo.db.refresh(updated_task)
-    return updated_task
+
+    # Get active conversation
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+    if not conversation:
+        raise HTTPException(status_code=500, detail="Task has no active conversation. Data integrity issue.")
+
+    return TaskResponse(
+        id=updated_task.id,
+        title=updated_task.title,
+        project_id=updated_task.project_id,
+        codebase_id=updated_task.codebase_id,
+        status=updated_task.status,
+        remote_task_id=updated_task.remote_task_id,
+        conversation_id=conversation.id,
+        created_at=updated_task.created_at,
+        specification=updated_task.specification,
+        implementation_plan=updated_task.implementation_plan,
+    )
 
 
 @router.delete("/{task_id}", response_model=DeleteResponse)
@@ -210,6 +192,7 @@ async def transition_task_state(
     request: StateTransitionRequest,
     task: Task = Depends(get_verified_task),
     task_repo: TaskRepository = Depends(get_task_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
     """Manually transition task to a new state."""
 
@@ -221,4 +204,21 @@ async def transition_task_state(
     updated_task = task_repo.update(task)
     task_repo.db.commit()
     task_repo.db.refresh(updated_task)
-    return updated_task
+
+    # Get active conversation
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+    if not conversation:
+        raise HTTPException(status_code=500, detail="Task has no active conversation. Data integrity issue.")
+
+    return TaskResponse(
+        id=updated_task.id,
+        title=updated_task.title,
+        project_id=updated_task.project_id,
+        codebase_id=updated_task.codebase_id,
+        status=updated_task.status,
+        remote_task_id=updated_task.remote_task_id,
+        conversation_id=conversation.id,
+        created_at=updated_task.created_at,
+        specification=updated_task.specification,
+        implementation_plan=updated_task.implementation_plan,
+    )

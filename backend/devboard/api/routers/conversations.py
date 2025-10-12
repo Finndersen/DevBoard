@@ -3,11 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.api.dependencies.agents import get_conversation_agent
+from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
-from devboard.api.dependencies.services import get_agent_config_service, get_conversation_service
+from devboard.api.dependencies.services import get_agent_config_service, get_agent_conversation_service
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ConversationMessage,
@@ -15,52 +14,80 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalRequest,
 )
 from devboard.api.schemas.common import DeleteResponse
+from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation
 from devboard.db.repositories.conversation import ConversationRepository
-from devboard.services.conversation_service import ConversationService
 
 router = APIRouter()
 
 
+@router.get("/{conversation_id}", response_model=ConversationResponse)
+async def get_conversation(
+    conversation: Conversation = Depends(get_verified_conversation),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
+) -> ConversationResponse:
+    """Get conversation details including model display name.
+
+    Returns conversation configuration and metadata. The model_name field provides
+    a human-readable display name derived from the model_id.
+    """
+    # Get model info for display name
+    try:
+        model = agent_config_service.llm_repository.get_model_by_id(conversation.model_id)
+        model_name = model.name
+    except ValueError:
+        # Model not found in repository (shouldn't happen but handle gracefully)
+        model_name = conversation.model_id
+
+    return ConversationResponse(
+        id=conversation.id,
+        parent_entity_type=conversation.parent_entity_type.value,
+        parent_entity_id=conversation.parent_entity_id,
+        agent_role=conversation.agent_role,
+        engine=conversation.engine.value,
+        model_id=conversation.model_id,
+        model_name=model_name,
+        is_active=conversation.is_active,
+        created_at=conversation.created_at,
+    )
+
+
 @router.get("/{conversation_id}/messages", response_model=list[ConversationMessage])
 async def get_conversation_messages(
-    conversation: Conversation = Depends(get_verified_conversation),
-    conversation_service: ConversationService = Depends(get_conversation_service),
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
 ) -> list[ConversationMessage]:
-    """Get all messages for a conversation."""
-    return await conversation_service.get_conversation_messages(conversation=conversation)
+    """Get all messages for a conversation.
+
+    Retrieves messages from database (PydanticAI) or session files (Claude Code)
+    depending on the conversation's engine configuration.
+    """
+    return await conversation_service.get_conversation_messages()
 
 
 @router.post("/{conversation_id}/messages", response_model=PromptResponse)
 async def send_conversation_message(
-    conversation_id: int,
     request: ChatRequest,
-    agent=Depends(get_conversation_agent),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
 ) -> PromptResponse:
-    """Send message to any conversation."""
-    # Create service manually with the resolved dependencies
-    conversation_service = PydanticAIConversationService(
-        conversation_id=conversation_id, agent=agent, conversation_repository=conversation_repo
-    )
+    """Send message to any conversation.
 
+    Uses the appropriate agent engine (PydanticAI or Claude Code) based on
+    the conversation's configuration.
+    """
     return await conversation_service.send_message(message=request.message)
 
 
 @router.post("/{conversation_id}/approve-tools", response_model=PromptResponse)
 async def approve_conversation_tools(
-    conversation_id: int,
     request: ToolApprovalRequest,
-    agent=Depends(get_conversation_agent),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
 ) -> PromptResponse:
-    """Approve tools for any conversation."""
-    # Create service manually with the resolved dependencies
-    conversation_service = PydanticAIConversationService(
-        conversation_id=conversation_id, agent=agent, conversation_repository=conversation_repo
-    )
+    """Approve or deny tool calls for any conversation.
 
+    Processes tool approval decisions and continues agent execution
+    with the appropriate engine (PydanticAI or Claude Code).
+    """
     return await conversation_service.process_tool_approvals(approvals=request.approvals)
 
 
@@ -114,38 +141,23 @@ async def update_conversation_model(
     if not conversation.is_active:
         raise HTTPException(status_code=400, detail="Cannot update model for archived conversation")
 
-    # Validate model compatible with conversation's engine
-    engine_def = agent_config_service.engine_repository.get_engine_definition(conversation.engine)
-    if request.model_id not in engine_def.available_models:
+    # Validate model is available for the conversation's engine (provider configured)
+    available_models_by_engine = agent_config_service.get_available_models_by_engine()
+    engine_models = available_models_by_engine.models_by_engine.get(conversation.engine.value, [])
+
+    if not any(m.id == request.model_id for m in engine_models):
         raise HTTPException(
             status_code=400,
-            detail=f"Model '{request.model_id}' not compatible with engine '{conversation.engine.value}'. "
-            f"Available models: {', '.join(engine_def.available_models)}",
+            detail=f"Model '{request.model_id}' not available for engine '{conversation.engine.value}'. "
+            f"Ensure the provider is configured with valid API credentials.",
         )
 
-    # Validate model is available (provider configured)
-    try:
-        available_models = agent_config_service._get_available_models_for_engine(conversation.engine)
-        if not any(m.id == request.model_id for m in available_models):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model '{request.model_id}' not available. "
-                f"Ensure the provider is configured with valid API credentials.",
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
-
     # Update model
-    try:
-        updated = conversation_repo.update_model(conversation_id, request.model_id)
-        conversation_repo.db.commit()
+    updated = conversation_repo.update_model(conversation, request.model_id)
 
-        return {
-            "conversation_id": updated.id,
-            "agent_role": updated.agent_role,
-            "engine": updated.engine.value,
-            "model_id": updated.model_id,
-            "updated_at": updated.updated_at.isoformat(),
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    return {
+        "conversation_id": updated.id,
+        "agent_role": updated.agent_role,
+        "engine": updated.engine.value,
+        "model_id": updated.model_id,
+    }

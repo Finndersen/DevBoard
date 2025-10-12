@@ -3,18 +3,15 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devboard.db.models import Project
-from devboard.db.models.document import DocumentType
+from devboard.db.models import Document, Project
 from devboard.db.repositories.base import BaseRepository
-from devboard.db.repositories.document import DocumentRepository
 
 
 class ProjectRepository(BaseRepository[Project]):
-    """Repository for project data access operations with document management."""
+    """Repository for project data access operations."""
 
     def __init__(self, db_session: Session):
         super().__init__(db_session)
-        self.document_repo = DocumentRepository(db_session)
 
     def get_by_id(self, project_id: int) -> Project | None:
         """Get a project by its ID.
@@ -37,26 +34,21 @@ class ProjectRepository(BaseRepository[Project]):
         stmt = select(Project)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, name: str, description: str, **kwargs) -> Project:
-        """Create a new project with required documents.
+    def create(self, name: str, description: str | None, specification: "Document") -> Project:
+        """Create a new project.
 
         Args:
             name: Project name
-            description: Project description
-            **kwargs: Additional project fields
+            description: Project description (optional)
+            specification: Specification document instance
 
         Returns:
-            Created project with assigned ID and documents
+            Created project with assigned ID
         """
-        # Create required specification document
-        specification_doc = self.document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-
-        # Create project with document reference
         project = Project(
             name=name,
             description=description,
-            specification_document_id=specification_doc.id,
-            **kwargs,
+            specification_document_id=specification.id,
         )
 
         self.db.add(project)
@@ -75,19 +67,6 @@ class ProjectRepository(BaseRepository[Project]):
         self.db.merge(project)
         self.db.flush()
         self.db.refresh(project)
-        return project
-
-    def update_details_content(self, project: Project, content: str) -> Project:
-        """Update project details content.
-
-        Args:
-            project: Project instance
-            content: New details content
-
-        Returns:
-            Updated project
-        """
-        self.document_repo.update_content(project.specification, content)
         return project
 
     def delete_by_id(self, project_id: int) -> bool:

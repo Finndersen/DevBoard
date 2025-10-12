@@ -51,21 +51,15 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             agent: Claude Code agent (TaskSpecificationAgent, TaskPlanningAgent, etc.)
             conversation_repository: Repository for conversation operations (saving session ID)
         """
-        self.conversation = conversation
+        super().__init__(conversation)
         self.agent = agent
         self.conversation_repo = conversation_repository
-        self.session_service = ClaudeCodeSessionService()
+        self.claude_session_service = ClaudeCodeSessionService()
 
     @property
     def session_id(self) -> str | None:
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
-
-    def _save_session_id(self, session_id: str):
-        """Save the Claude session ID to the conversation and persist to database."""
-        self.conversation_repo.update_external_session_id(self.conversation.id, session_id)
-        # Also update the local instance for consistency
-        self.conversation.external_session_id = session_id
 
     async def send_message(self, message: str) -> PromptResponse:
         """Send a message to the Claude Code agent and get a response.
@@ -78,51 +72,46 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         Returns:
             PromptResponse containing either a message or tool approval requests
         """
-        with logfire.span(
-            "claude_code_conversation.send_message",
-            conversation_id=self.conversation.id,
-            message_length=len(message),
-        ):
-            # Run the agent with current session_id
-            # Agent stores messages in Claude Code session files
-            result = await self.agent.run(user_message=message, session_id=self.session_id)
+        # Run the agent with current session_id
+        # Agent stores messages in Claude Code session files
+        result = await self.agent.run(user_message=message, session_id=self.session_id)
 
-            # Update session_id if it changed (e.g., first run creates new session)
-            if result.session_id != self.session_id:
-                self._save_session_id(result.session_id)
+        # Update session_id if it changed (e.g., first run creates new session)
+        if result.session_id != self.session_id:
+            self.conversation_repo.update_external_session_id(self.conversation, result.session_id)
 
-            if isinstance(result, VirtualToolRequests):
-                # Convert to API schema format
-                # Use tool_name as tool_call_id (only one tool call allowed at a time)
-                tool_requests = [
-                    ToolCallRequest(
-                        tool_call_id=call.tool_name,  # Use tool_name as ID
-                        tool_name=call.tool_name,
-                        tool_args=call.arguments,
-                    )
-                    for call in result.calls
-                ]
-
-                return PromptResponse(
-                    type=PromptResponseType.TOOL_REQUEST,
-                    message=None,
-                    tool_requests=tool_requests,
+        if isinstance(result, VirtualToolRequests):
+            # Convert to API schema format
+            # Use tool_name as tool_call_id (only one tool call allowed at a time)
+            tool_requests = [
+                ToolCallRequest(
+                    tool_call_id=call.tool_name,  # Use tool_name as ID
+                    tool_name=call.tool_name,
+                    tool_args=call.arguments,
                 )
+                for call in result.calls
+            ]
 
-            else:
-                # Normal text response (MessageResponse)
-                message = ConversationMessage(
-                    id=0,
-                    role=MessageRole.AGENT,
-                    text_content=result.content,
-                    timestamp=datetime.now(),
-                )
+            return PromptResponse(
+                type=PromptResponseType.TOOL_REQUEST,
+                message=None,
+                tool_requests=tool_requests,
+            )
 
-                return PromptResponse(
-                    type=PromptResponseType.MESSAGE,
-                    message=message,
-                    tool_requests=None,
-                )
+        else:
+            # Normal text response (MessageResponse)
+            message = ConversationMessage(
+                id=0,
+                role=MessageRole.AGENT,
+                text_content=result.content,
+                timestamp=datetime.now(),
+            )
+
+            return PromptResponse(
+                type=PromptResponseType.MESSAGE,
+                message=message,
+                tool_requests=None,
+            )
 
     async def process_tool_approvals(self, approvals: dict[str, ToolApprovalDecision]) -> PromptResponse:
         """Process user's tool approval decisions and execute approved tools.
@@ -145,7 +134,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             if not self.session_id:
                 raise ValueError("No session ID available - cannot process tool approvals")
 
-            last_message = self.session_service.get_last_session_message(self.session_id)
+            last_message = self.claude_session_service.get_last_session_message(self.session_id)
             if not last_message:
                 raise ValueError("No messages in session - cannot process tool approvals")
 
@@ -215,3 +204,21 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             pass
 
         return None
+
+    async def get_conversation_messages(self) -> list[ConversationMessage]:
+        """Retrieve all messages for the Claude Code conversation.
+
+        Messages are loaded from Claude Code session files, not from the database.
+        Claude Code manages its own session storage in ~/.claude/projects.
+
+        Returns:
+            List of ConversationMessage instances in chronological order
+
+        Raises:
+            ValueError: If conversation is missing external_session_id
+        """
+        if not self.session_id:
+            raise ValueError("Claude Code conversation missing external_session_id")
+
+        # Service searches across all project directories in ~/.claude/projects
+        return self.claude_session_service.load_conversation_history(self.session_id)

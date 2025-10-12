@@ -7,26 +7,50 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
 
-from devboard.api.dependencies.agents import get_conversation_agent
+from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.internal.agent_conversation import PydanticAIConversationService
+from devboard.agents.types import AgentRole
+from devboard.api.dependencies.services import get_agent_conversation_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.repositories import ConversationRepository, ProjectRepository
 
 
 @pytest.fixture
-def client_with_mock_agent(client, mock_agent):
-    """Client with mocked conversation agent."""
-    app.dependency_overrides[get_conversation_agent] = lambda: mock_agent
+def mock_agent_conversation_service(mock_agent, test_conversation, db_session):
+    """Create a mock conversation service wrapping the mock agent."""
+    conversation_repo = ConversationRepository(db_session)
+    return PydanticAIConversationService(
+        conversation=test_conversation,
+        agent=mock_agent,
+        conversation_repository=conversation_repo,
+    )
+
+
+@pytest.fixture
+def client_with_mock_agent(client, mock_agent_conversation_service):
+    """Client with mocked conversation service."""
+    app.dependency_overrides[get_agent_conversation_service] = lambda: mock_agent_conversation_service
     yield client
-    if get_conversation_agent in app.dependency_overrides:
-        del app.dependency_overrides[get_conversation_agent]
+    if get_agent_conversation_service in app.dependency_overrides:
+        del app.dependency_overrides[get_agent_conversation_service]
 
 
 @pytest.fixture
 def test_project(db_session) -> Project:
     """Create a test project."""
+    from devboard.db.models.document import DocumentType
+    from devboard.db.repositories.document import DocumentRepository
+
+    document_repo = DocumentRepository(db_session)
+    specification_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+
     project_repo = ProjectRepository(db_session)
-    project = project_repo.create(name="Test Project", description="A test project for development")
+    project = project_repo.create(
+        name="Test Project",
+        description="A test project for development",
+        specification=specification_doc,
+    )
     db_session.commit()
     return project
 
@@ -35,7 +59,14 @@ def test_project(db_session) -> Project:
 def test_conversation(db_session, test_project) -> Conversation:
     """Create a test conversation for a project."""
     conversation_repo = ConversationRepository(db_session)
-    conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.PROJECT, test_project.id)
+    conversation = conversation_repo.create(
+        parent_entity_type=ParentEntityType.PROJECT,
+        parent_entity_id=test_project.id,
+        agent_role=AgentRole.PROJECT,
+        engine=AgentEngine.INTERNAL,
+        model_id="anthropic:claude-sonnet-4.5",
+        is_active=True,
+    )
     db_session.commit()
     return conversation
 

@@ -6,18 +6,13 @@ from typing import Annotated
 from pydantic import BaseModel, Field
 
 
-class DocumentBase(BaseModel):
-    """Base document schema."""
-
-    document_type: str
-    content: str
-    content_hash: str
-
-
-class DocumentResponse(DocumentBase):
+class DocumentResponse(BaseModel):
     """Schema for document responses."""
 
     id: int
+    document_type: str
+    content: str
+    content_hash: str
     created_at: datetime.datetime
     updated_at: datetime.datetime
 

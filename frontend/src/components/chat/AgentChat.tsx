@@ -1,5 +1,6 @@
 import { ChatBubbleLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
 import ConversationChat from './ConversationChat'
+import ConversationModelSelector from './ConversationModelSelector'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
 import Modal from '../ui/Modal'
@@ -14,7 +15,6 @@ interface AgentChatProps {
   conversationId: number | null
   placeholder?: string
   emptyStateMessage?: string
-  rightHeaderContent?: React.ReactNode
   className?: string
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
 }
@@ -24,7 +24,6 @@ export default function AgentChat({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
-  rightHeaderContent,
   className = "flex flex-col overflow-hidden",
   padding = "xs"
 }: AgentChatProps) {
@@ -55,10 +54,17 @@ export default function AgentChat({
             <h3 className={`text-lg font-medium ${textColors.primary}`}>{title}</h3>
           </div>
           <div className="flex items-center space-x-3">
-            {rightHeaderContent}
             {conversationId && (
-              <Button 
-                variant="ghost" 
+              <ConversationModelSelector
+                conversationId={conversationId}
+                onModelChange={(engine, modelId, modelName) => {
+                  console.log(`Model changed: ${engine} / ${modelName} (${modelId})`)
+                }}
+              />
+            )}
+            {conversationId && (
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={clearChatModal.open}
                 disabled={clearChatOperation.loading}

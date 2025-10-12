@@ -1,19 +1,19 @@
 """Conversation model for managing agent conversations."""
 
 import datetime
-import enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.types import AgentRole
 
 from .base import Base
 
 
-class ParentEntityType(str, enum.Enum):
+class ParentEntityType(StrEnum):
     """Enum for conversation parent entity types."""
 
     PROJECT = "project"
@@ -48,7 +48,6 @@ class Conversation(Base):
         is_active: Whether this is the current active conversation for the entity
         archived_at: When conversation was archived (phase transition)
         created_at: When conversation was created
-        updated_at: When conversation was last updated
     """
 
     __tablename__ = "conversations"
@@ -63,10 +62,8 @@ class Conversation(Base):
     parent_conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"), nullable=True)
 
     # Agent configuration snapshot (immutable after creation, except model_id)
-    agent_role: Mapped[str] = mapped_column(nullable=False)  # AgentRole enum value
-    engine: Mapped[AgentEngine] = mapped_column(
-        SQLEnum(AgentEngine, values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
+    agent_role: Mapped[AgentRole] = mapped_column(Enum(AgentRole), nullable=False)
+    engine: Mapped[AgentEngine] = mapped_column(Enum(AgentEngine), nullable=False)
     model_id: Mapped[str] = mapped_column(nullable=False)  # e.g., "anthropic:claude-sonnet-4"
 
     # External session management
@@ -77,10 +74,6 @@ class Conversation(Base):
     archived_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=lambda: datetime.datetime.now(datetime.UTC),
-        onupdate=lambda: datetime.datetime.now(datetime.UTC),
-    )
 
     # Relationships
     messages: Mapped[list["ConversationMessage"]] = relationship(

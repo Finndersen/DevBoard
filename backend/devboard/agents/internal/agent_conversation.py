@@ -23,6 +23,7 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
     ToolCallRequest,
 )
+from devboard.db.models import Conversation
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
 from devboard.db.models.messages import MessageType
 from devboard.db.repositories.conversation import ConversationRepository
@@ -31,17 +32,38 @@ logger = logging.getLogger(__name__)
 
 
 class PydanticAIConversationService(BaseAgentConversationService):
-    """Service for handling agent conversations with shared logic."""
+    """Service for handling internal PydanticAI agent conversations.
+
+    This service manages conversations for PydanticAI-based agents, storing
+    messages in the database and handling tool approval workflows.
+
+    Attributes:
+        conversation: The conversation instance (from base class)
+        agent: The PydanticAI agent instance
+        conversation_repo: Repository for database operations
+    """
 
     def __init__(
         self,
-        conversation_id: int,
+        conversation: Conversation,
         agent: BaseAgent,
         conversation_repository: ConversationRepository,
     ):
-        self.conversation_id = conversation_id
+        """Initialize PydanticAI conversation service.
+
+        Args:
+            conversation: The conversation instance to manage
+            agent: The PydanticAI agent instance
+            conversation_repository: Repository for conversation database operations
+        """
+        super().__init__(conversation)
         self.agent = agent
         self.conversation_repo = conversation_repository
+
+    @property
+    def conversation_id(self) -> int:
+        """Get the conversation ID from the conversation instance."""
+        return self.conversation.id
 
     async def send_message(
         self,
@@ -54,7 +76,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
         """
         with logfire.span(
             "agent_conversation.send_message",
-            conversation_id=self.conversation_id,
+            conversation_id=self.conversation.id,
             message_length=len(message),
         ):
             return await self._handle_message_or_approval(message_or_approvals=message)
@@ -70,7 +92,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
         """
         with logfire.span(
             "agent_conversation.process_tool_approval",
-            conversation_id=self.conversation_id,
+            conversation_id=self.conversation.id,
             approval_count=len(approvals),
         ):
             tool_approval_results = self._create_deferred_results(approvals)
@@ -94,7 +116,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
             if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
                 # If there was an issue processing tool approvals or they were never provided,
                 # need to clear the message history until previous message
-                delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation_id)
+                delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation.id)
                 existing_messages = existing_messages[:-delete_count]
                 logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
 
@@ -164,13 +186,36 @@ class PydanticAIConversationService(BaseAgentConversationService):
 
         return DeferredToolResults(approvals=converted_approvals)
 
-    def _get_message_history(self) -> list[ConversationMessage]:
-        return self.conversation_repo.get_messages(self.conversation_id)
+    def _get_message_history(self) -> list[DbConversationMessage]:
+        return self.conversation_repo.get_messages(self.conversation.id)
 
     def _store_new_messages(self, new_messages: list[ModelMessage]) -> list[DbConversationMessage]:
         """Store new messages from agent result in DB."""
         # Extract all messages from the agent result
         saved_messages = []
         for message in new_messages:
-            saved_messages.append(self.conversation_repo.create_message(self.conversation_id, message))
+            saved_messages.append(self.conversation_repo.create_message(self.conversation.id, message))
         return saved_messages
+
+    async def get_conversation_messages(self) -> list[ConversationMessage]:
+        """Retrieve all messages for the PydanticAI conversation.
+
+        Messages are queried from the database and exclude tool call messages
+        (only user prompts and agent responses are returned).
+
+        Returns:
+            List of ConversationMessage instances in chronological order
+        """
+        db_messages = self.conversation_repo.get_messages(
+            self.conversation.id,
+            exclude_tool_calls=True,  # Only return user/agent text messages
+        )
+        return [
+            ConversationMessage(
+                id=msg.id,
+                role=MessageRole.USER if msg.message_type == MessageType.USER_PROMPT else MessageRole.AGENT,
+                text_content=msg.text_content,
+                timestamp=msg.timestamp,
+            )
+            for msg in db_messages
+        ]

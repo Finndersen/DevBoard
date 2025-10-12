@@ -4,7 +4,6 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -37,12 +36,10 @@ class MessageResponseFormat(BaseModel):
     content: str = Field(description="The message content")
 
 
-class ToolCallResponseFormat(BaseModel):
+class ToolCallResponseFormat(VirtualToolCall):
     """Pydantic model for tool call responses."""
 
     type: str = Field(pattern="^tool_call$", description="Response type must be 'tool_call'")
-    tool_name: str = Field(description="Name of the tool to call")
-    arguments: dict[str, Any] = Field(description="Arguments for the tool")
 
 
 class BaseClaudeAgent(ABC):
@@ -56,7 +53,7 @@ class BaseClaudeAgent(ABC):
     - _get_virtual_tools(): Return list of VirtualTool instances for this agent
     """
 
-    def __init__(self, task: Task, document_repository: DocumentRepository):
+    def __init__(self, task: Task, document_repository: DocumentRepository, plan_mode: bool = True):
         """Initialize the base Claude agent.
 
         Args:
@@ -66,6 +63,7 @@ class BaseClaudeAgent(ABC):
         self.task = task
         self.document_repo = document_repository
         self._virtual_tools: dict[str, VirtualTool] | None = None
+        self.plan_mode = plan_mode
 
     def _create_client(self, session_id: str | None = None) -> ClaudeClient:
         """Create a Claude client with the current system prompt and session ID.
@@ -87,6 +85,7 @@ class BaseClaudeAgent(ABC):
             allowed_tools=self._get_allowed_tools(),
             model=self._get_model(),
             cwd=self._get_cwd(),
+            plan_mode=self.plan_mode,
         )
 
     @abstractmethod
@@ -250,7 +249,7 @@ class BaseClaudeAgent(ABC):
 
         # Validate response format using Pydantic models
         if response_type == "tool_call":
-            return await self._handle_tool_call_response(response_data, result.session_id, retry_count)
+            return await self._handle_virtual_tool_call_response(response_data, result.session_id, retry_count)
         elif response_type == "message":
             return await self._handle_message_response(response_data, result.session_id, retry_count)
         else:
@@ -306,7 +305,7 @@ class BaseClaudeAgent(ABC):
                 # Fallback to raw content
                 return MessageResponse(content=response_data.get("content", str(response_data)), session_id=session_id)
 
-    async def _handle_tool_call_response(
+    async def _handle_virtual_tool_call_response(
         self,
         response_data: dict,
         session_id: str,

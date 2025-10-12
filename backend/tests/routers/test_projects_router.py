@@ -1,14 +1,12 @@
 """Tests for projects router."""
 
-from unittest.mock import Mock
-
 import pytest
-from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.run import AgentRunResult
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
+from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
+    DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -52,8 +50,10 @@ class TestProjectsRouter:
         """Test listing projects with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -76,10 +76,28 @@ class TestProjectsRouter:
 
     def test_get_project_success(self, client, db_session, test_project_data):
         """Test getting a specific project."""
+        from devboard.agents.agent_engines import AgentEngine
+        from devboard.agents.types import AgentRole
+        from devboard.db.models import ParentEntityType
+        from devboard.db.repositories import ConversationRepository
+
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+
+        # Create active conversation for the project (required by get_project endpoint)
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=created_project.id,
+            agent_role=AgentRole.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+            is_active=True,
         )
         db_session.commit()
 
@@ -100,8 +118,10 @@ class TestProjectsRouter:
         """Test updating a project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -124,8 +144,10 @@ class TestProjectsRouter:
         """Test updating project specification content."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
         db_session.refresh(created_project)
@@ -146,8 +168,10 @@ class TestProjectsRouter:
         """Test deleting a project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -173,8 +197,10 @@ class TestProjectResourcesRouter:
         """Test listing project resources when none exist."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -186,8 +212,10 @@ class TestProjectResourcesRouter:
         """Test listing project resources with existing data."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -220,8 +248,10 @@ class TestProjectResourcesRouter:
         """Test creating a new project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -243,8 +273,10 @@ class TestProjectResourcesRouter:
         """Test deleting a project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -272,8 +304,10 @@ class TestProjectResourcesRouter:
         """Test deleting a non-existent project resource."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -289,8 +323,10 @@ class TestProjectTasksRouter:
         """Test listing project tasks when none exist."""
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
@@ -300,17 +336,57 @@ class TestProjectTasksRouter:
 
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
+        from devboard.agents.agent_engines import AgentEngine
+        from devboard.agents.types import AgentRole
+        from devboard.db.models import ParentEntityType
+        from devboard.db.repositories import ConversationRepository
+
         # Create test project
         project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
         created_project = project_repo.create(
-            name=test_project_data["name"], description=test_project_data["description"]
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
         db_session.commit()
 
         # Create test tasks
         task_repo = TaskRepository(db_session)
-        task_repo.create(project_id=created_project.id, title="Task 1", status=test_task_data["status"])
-        task_repo.create(project_id=created_project.id, title="Task 2", status=test_task_data["status"])
+        task1_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task1_plan = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        task1 = task_repo.create(
+            project_id=created_project.id,
+            title="Task 1",
+            status=test_task_data["status"],
+            specification=task1_spec,
+            implementation_plan=task1_plan,
+        )
+        task2_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task2_plan = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        task2 = task_repo.create(
+            project_id=created_project.id,
+            title="Task 2",
+            status=test_task_data["status"],
+            specification=task2_spec,
+            implementation_plan=task2_plan,
+        )
+
+        # Create conversations for tasks
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task1.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task2.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
         db_session.commit()
 
         response = client.get(f"/api/projects/{created_project.id}/tasks")
@@ -326,135 +402,140 @@ class TestProjectTasksRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
-
-class TestProjectAgentEndpoints:
-    """Test project agent API endpoints - DISABLED due to refactor."""
-
-    @pytest.fixture
-    def test_project_with_data(self, db_session):
-        """Create a test project for agent tests."""
+    def test_create_project_task(self, client, db_session, test_project_data, test_task_data):
+        """Test creating a new task under a project."""
+        # Create test project
         project_repo = ProjectRepository(db_session)
-        created_project = project_repo.create(name="Test Project", description="A test project for development")
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
         db_session.commit()
-        return created_project
 
-    @pytest.mark.skip("Agent endpoints refactored to unified conversation API")
-    def test_send_project_conversation_message(
-        self, client_with_mock_project_agent, test_project_with_data, mock_agent
-    ):
-        """Test sending a message to the project agent."""
-        project = test_project_with_data
-
-        message_request = {"message": "What GitHub repositories are connected to this project?"}
-
-        response = client_with_mock_project_agent.post(
-            f"/api/projects/{project.id}/agent/messages", json=message_request
-        )
-        assert response.status_code == 200
-
-        conversation_response = response.json()
-        assert "type" in conversation_response
-        assert conversation_response["type"] == "message"
-        assert "message" in conversation_response
-        assert conversation_response["message"]["role"] == "agent"
-        assert "project" in conversation_response["message"]["text_content"]
-
-        # Verify the mock agent was called correctly
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
-        assert kwargs["prompt_or_approvals"] == "What GitHub repositories are connected to this project?"
-
-    @pytest.mark.skip("Agent endpoints refactored to unified conversation API")
-    def test_send_project_conversation_message_project_not_found(self, client):
-        """Test sending a message for non-existent project."""
-        message_request = {"message": "Test message"}
-        response = client.post("/api/projects/999/agent/messages", json=message_request)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Project not found"
-
-    @pytest.mark.skip("Agent endpoints refactored to unified conversation API")
-    def test_approve_project_tools(self, client_with_mock_project_agent, test_project_with_data, mock_agent):
-        """Test approving tool calls from the project agent."""
-        project = test_project_with_data
-
-        # First, send a message that would trigger a tool call to create conversation history
-
-        from pydantic_ai.messages import ModelRequest, ToolCallPart, UserPromptPart
-        from pydantic_ai.tools import DeferredToolRequests
-
-        # Mock the agent to return a tool request first, then tool approval result
-        def mock_run_side_effect(*args, **kwargs):
-            prompt_or_approvals = kwargs.get("prompt_or_approvals")
-            if isinstance(prompt_or_approvals, str):
-                # First call - return tool request
-                tool_call_part = ToolCallPart(tool_name="fetch_github_issues", tool_call_id="test_call_1", args={})
-
-                mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = DeferredToolRequests(approvals=[tool_call_part])
-                mock_result.new_messages = Mock(
-                    return_value=[
-                        ModelRequest(parts=[UserPromptPart(content="Fetch GitHub issues")]),
-                        ModelResponse(parts=[tool_call_part]),
-                    ]
-                )
-                return mock_result
-            else:
-                # Second call - return approval result
-                mock_result = Mock(spec=AgentRunResult)
-                mock_result.output = (
-                    "Great! I've processed your tool approvals and retrieved the requested information."
-                )
-                mock_result.new_messages = Mock(
-                    return_value=[
-                        ModelResponse(
-                            parts=[
-                                TextPart(
-                                    content="Great! I've processed your tool approvals and retrieved the requested information."
-                                )
-                            ]
-                        )
-                    ]
-                )
-                return mock_result
-
-        mock_agent.run.side_effect = mock_run_side_effect
-
-        # Step 1: Send a message that triggers a tool call
-        message_request = {"message": "Can you fetch the GitHub issues for this project?"}
-        response1 = client_with_mock_project_agent.post(
-            f"/api/projects/{project.id}/agent/messages", json=message_request
-        )
-        assert response1.status_code == 200
-        assert response1.json()["type"] == "tool_request"
-
-        # Step 2: Now approve the tool call
-        approval_request = {
-            "approvals": {"test_call_1": {"approved": True, "feedback": "Go ahead and fetch the GitHub issues"}}
+        # Create task under project (no project_id or status in body - status always defaults to DEFINING)
+        api_task_data = {
+            "title": test_task_data["title"],
         }
 
-        response = client_with_mock_project_agent.post(
-            f"/api/projects/{project.id}/agent/approve-tools", json=approval_request
-        )
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
         assert response.status_code == 200
 
-        conversation_response = response.json()
-        assert "type" in conversation_response
-        assert conversation_response["type"] == "message"
-        assert "message" in conversation_response
-        assert conversation_response["message"]["role"] == "agent"
-        assert "tool approvals" in conversation_response["message"]["text_content"]
+        task_data = response.json()
+        assert task_data["title"] == test_task_data["title"]
+        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["project_id"] == created_project.id
+        assert "id" in task_data
+        assert "conversation_id" in task_data
+        assert isinstance(task_data["conversation_id"], int)
 
-        # Verify the mock agent was called twice (message + approval)
-        assert mock_agent.run.call_count == 2
+    def test_create_project_task_with_specification_content(self, client, db_session, test_project_data):
+        """Test creating a task with initial specification content."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
 
-        # Check the second call was with tool approvals
-        second_call_kwargs = mock_agent.run.call_args_list[1][1]
-        assert not isinstance(second_call_kwargs["prompt_or_approvals"], str)
+        # Create task with specification content (status not provided, defaults to DEFINING)
+        api_task_data = {
+            "title": "Task with Specification",
+            "specification_content": "This is the initial task specification content.",
+        }
 
-    @pytest.mark.skip("Agent endpoints refactored to unified conversation API")
-    def test_approve_project_tools_project_not_found(self, client):
-        """Test tool approval for non-existent project."""
-        approval_request = {"approvals": {"test_call_1": {"approved": True}}}
-        response = client.post("/api/projects/999/agent/approve-tools", json=approval_request)
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == api_task_data["title"]
+        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["specification"]["content"] == api_task_data["specification_content"]
+        assert task_data["implementation_plan"]["content"] == ""  # Should be empty
+
+    def test_create_project_task_with_codebase(self, client, db_session, test_project_data):
+        """Test creating a task with a codebase association."""
+        from devboard.db.models.codebase import Codebase
+        from devboard.db.repositories import CodebaseRepository
+
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/path/to/codebase",
+        )
+        codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create task with codebase (status not provided, defaults to DEFINING)
+        api_task_data = {
+            "title": "Task with Codebase",
+            "codebase_id": codebase.id,
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == api_task_data["title"]
+        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["codebase_id"] == codebase.id
+
+    def test_create_project_task_with_specification_and_codebase(self, client, db_session, test_project_data):
+        """Test creating a task with both specification content and codebase."""
+        from devboard.db.models.codebase import Codebase
+        from devboard.db.repositories import CodebaseRepository
+
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/path/to/codebase",
+        )
+        codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
+        # Create task with both (status not provided, defaults to DEFINING)
+        api_task_data = {
+            "title": "Task with Both",
+            "specification_content": "Task specification for the codebase work.",
+            "codebase_id": codebase.id,
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == api_task_data["title"]
+        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["specification"]["content"] == api_task_data["specification_content"]
+        assert task_data["codebase_id"] == codebase.id
+
+    def test_create_project_task_project_not_found(self, client, test_task_data):
+        """Test creating a task for non-existent project."""
+        api_task_data = {
+            "title": test_task_data["title"],
+        }
+        response = client.post("/api/projects/999/tasks", json=api_task_data)
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"

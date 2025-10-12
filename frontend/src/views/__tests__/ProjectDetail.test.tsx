@@ -54,8 +54,21 @@ describe('ProjectDetail', () => {
       http.get('*/api/projects/1/qa/history', () => {
         return HttpResponse.json([])
       }),
-      http.get('*/api/settings/agents/project/model', () => {
-        return HttpResponse.json({ model_id: 'openai:gpt-4' })
+      http.get('*/api/agents/project/configuration', () => {
+        return HttpResponse.json({
+          agent_role: 'project',
+          config: {
+            engine: 'internal',
+            model_id: 'openai:gpt-4'
+          },
+          available_engines: [
+            {
+              engine: 'internal',
+              display_name: 'Internal',
+              description: 'Internal agent framework'
+            }
+          ]
+        })
       })
     )
   })

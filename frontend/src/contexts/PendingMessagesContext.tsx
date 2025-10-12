@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useReducer, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 
 export interface PendingMessage {
   id: string // unique client-generated ID
@@ -54,11 +54,11 @@ function pendingMessagesReducer(state: PendingMessagesState, action: PendingMess
   switch (action.type) {
     case 'ADD_PENDING_MESSAGE': {
       const messageWithDefaults: PendingMessage = {
+        ...action.payload.message,
         id: generateMessageId(),
         timestamp: new Date().toISOString(),
         status: 'pending',
-        retryCount: 0,
-        ...action.payload.message
+        retryCount: 0
       }
       
       return {
@@ -186,7 +186,7 @@ export function PendingMessagesProvider({ children }: PendingMessagesProviderPro
     return () => clearInterval(cleanupInterval)
   }, [])
 
-  const addPendingMessage = (key: string, message: Omit<PendingMessage, 'id' | 'timestamp' | 'status' | 'retryCount'>): string => {
+  const addPendingMessage = useCallback((key: string, message: Omit<PendingMessage, 'id' | 'timestamp' | 'status' | 'retryCount'>): string => {
     const fullMessage: PendingMessage = {
       id: generateMessageId(),
       timestamp: new Date().toISOString(),
@@ -194,37 +194,37 @@ export function PendingMessagesProvider({ children }: PendingMessagesProviderPro
       retryCount: 0,
       ...message
     }
-    
+
     dispatch({ type: 'ADD_PENDING_MESSAGE', payload: { key, message: fullMessage } })
     return fullMessage.id
-  }
+  }, [])
 
-  const updateMessageStatus = (key: string, messageId: string, status: PendingMessage['status'], error?: string) => {
+  const updateMessageStatus = useCallback((key: string, messageId: string, status: PendingMessage['status'], error?: string) => {
     dispatch({ type: 'UPDATE_MESSAGE_STATUS', payload: { key, messageId, status, error } })
-  }
+  }, [])
 
-  const removeMessage = (key: string, messageId: string) => {
+  const removeMessage = useCallback((key: string, messageId: string) => {
     dispatch({ type: 'REMOVE_MESSAGE', payload: { key, messageId } })
-  }
+  }, [])
 
-  const clearConversationMessages = (key: string) => {
+  const clearConversationMessages = useCallback((key: string) => {
     dispatch({ type: 'CLEAR_CONVERSATION_MESSAGES', payload: { key } })
-  }
+  }, [])
 
-  const getPendingMessages = (key: string): PendingMessage[] => {
+  const getPendingMessages = useCallback((key: string): PendingMessage[] => {
     return state.messages[key] || []
-  }
+  }, [state.messages])
 
-  const hasPendingMessages = (key: string): boolean => {
+  const hasPendingMessages = useCallback((key: string): boolean => {
     const messages = state.messages[key]
     return messages && messages.length > 0
-  }
+  }, [state.messages])
 
-  const retryMessage = (key: string, messageId: string) => {
+  const retryMessage = useCallback((key: string, messageId: string) => {
     updateMessageStatus(key, messageId, 'pending')
-  }
+  }, [updateMessageStatus])
 
-  const contextValue: PendingMessagesContextType = {
+  const contextValue: PendingMessagesContextType = useMemo(() => ({
     state,
     addPendingMessage,
     updateMessageStatus,
@@ -233,7 +233,16 @@ export function PendingMessagesProvider({ children }: PendingMessagesProviderPro
     getPendingMessages,
     hasPendingMessages,
     retryMessage
-  }
+  }), [
+    state,
+    addPendingMessage,
+    updateMessageStatus,
+    removeMessage,
+    clearConversationMessages,
+    getPendingMessages,
+    hasPendingMessages,
+    retryMessage
+  ])
 
   return (
     <PendingMessagesContext.Provider value={contextValue}>

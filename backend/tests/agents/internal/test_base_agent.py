@@ -3,12 +3,13 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from devboard.agents.internal.base_agent import BaseAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.types import AgentRole
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
+
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.types import AgentRole
 
 
 class MockDeps(BaseDeps):
@@ -50,7 +51,7 @@ class TestBaseAgent:
     async def test_agent_initialization_and_context(self, mock_agent_instance):
         """Test agent initializes correctly and provides context."""
         # Test initialization
-        assert mock_agent_instance.agent_type == AgentRole.PROJECT
+        assert mock_agent_instance.agent_role == AgentRole.PROJECT
         assert mock_agent_instance.deps_type == MockDeps
 
         # Test context method
@@ -59,14 +60,14 @@ class TestBaseAgent:
         assert content == "Test context"
 
     def test_get_preferred_model(self, mock_agent_instance, mock_llm_service):
-        """Test _get_preferred_model returns model from LLM service."""
+        """Test _get_model returns model from AgentConfigService."""
         # Reset the mock call count since it was called during initialization
-        mock_llm_service.get_model_for_agent.reset_mock()
-        # The mock_llm_service fixture already returns a proper LanguageModel instance
-        model_name = mock_agent_instance._get_model()
-        # The method should return the pydanticai_id property of the LanguageModel
-        assert model_name == "openai:gpt-4"  # This matches the mock fixture
-        mock_llm_service.get_model_for_agent.assert_called_once_with(AgentRole.PROJECT)
+        mock_llm_service.get_effective_config.reset_mock()
+        # The mock_agent_config_service fixture returns an AgentEngineModelConfig
+        model_id = mock_agent_instance._get_model()
+        # The method should return the model_id
+        assert model_id == "openai:gpt-4"  # This matches the mock fixture
+        mock_llm_service.get_effective_config.assert_called_once_with(AgentRole.PROJECT)
 
     def test_create_agent(self, mock_agent_instance):
         """Test _create_agent creates PydanticAI Agent instance."""
@@ -160,7 +161,7 @@ class TestBaseAgent:
     def test_agent_properties_and_abstract_methods(self, mock_agent_instance):
         """Test that agent has required properties and implements abstract methods."""
         # Test properties
-        assert mock_agent_instance.agent_type == AgentRole.PROJECT
+        assert mock_agent_instance.agent_role == AgentRole.PROJECT
         assert mock_agent_instance.deps_type == MockDeps
 
         # Test abstract method implementations return correct types
@@ -209,7 +210,7 @@ class TestBaseAgentAbstract:
     def test_concrete_implementation_works(self, mock_llm_service, mock_context_service_for_abstract):
         """Test that concrete implementation can be instantiated."""
         agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service)
-        assert agent.agent_type == AgentRole.TASK_SPECIFICATION
+        assert agent.agent_role == AgentRole.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 
     def test_abstract_enforcement(self):

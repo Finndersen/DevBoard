@@ -2,8 +2,10 @@
 
 import pytest
 
+from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
     ContextProviderResourceRepository,
+    DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -48,9 +50,14 @@ class TestResourceSharing:
     def test_resource_sharing_across_projects(self, client, db_session, test_projects_data):
         """Test that the same resource can be shared across multiple projects."""
         # Create two projects
+        document_repo = DocumentRepository(db_session)
         project_repo = ProjectRepository(db_session)
-        project1 = project_repo.create(**test_projects_data[0])
-        project2 = project_repo.create(**test_projects_data[1])
+
+        spec_doc1 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project1 = project_repo.create(**test_projects_data[0], specification=spec_doc1)
+
+        spec_doc2 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project2 = project_repo.create(**test_projects_data[1], specification=spec_doc2)
         db_session.commit()
 
         # Add the same GitHub repo to both projects
@@ -88,15 +95,25 @@ class TestResourceSharing:
     def test_resource_sharing_across_projects_and_tasks(self, client, db_session, test_projects_data, test_tasks_data):
         """Test that resources can be shared between projects and tasks."""
         # Create projects and tasks
+        document_repo = DocumentRepository(db_session)
         project_repo = ProjectRepository(db_session)
         task_repo = TaskRepository(db_session)
 
-        project = project_repo.create(**test_projects_data[0])
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(**test_projects_data[0], specification=spec_doc)
         db_session.flush()
 
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project.id
-        task = task_repo.create(**task_data)
+        # Remove status from task_data as it will be passed separately
+        status = task_data.pop("status", "DEFINING")
+        task = task_repo.create(
+            **task_data,
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
         db_session.commit()
 
         # Add same resource to project and task
@@ -124,9 +141,14 @@ class TestResourceSharing:
     def test_cascade_deletion_with_shared_resources(self, client, db_session, test_projects_data):
         """Test cascade deletion: resource is deleted only when all links are removed."""
         # Create two projects
+        document_repo = DocumentRepository(db_session)
         project_repo = ProjectRepository(db_session)
-        project1 = project_repo.create(**test_projects_data[0])
-        project2 = project_repo.create(**test_projects_data[1])
+
+        spec_doc1 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project1 = project_repo.create(**test_projects_data[0], specification=spec_doc1)
+
+        spec_doc2 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project2 = project_repo.create(**test_projects_data[1], specification=spec_doc2)
         db_session.commit()
 
         # Add shared resource to both projects
@@ -192,17 +214,29 @@ class TestResourceSharing:
     def test_resource_usage_count(self, client, db_session, test_projects_data, test_tasks_data):
         """Test getting usage count for a shared resource."""
         # Create repositories
+        document_repo = DocumentRepository(db_session)
         project_repo = ProjectRepository(db_session)
         resource_repo = ContextProviderResourceRepository(db_session)
         task_repo = TaskRepository(db_session)
 
-        project1 = project_repo.create(**test_projects_data[0])
-        project2 = project_repo.create(**test_projects_data[1])
+        spec_doc1 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project1 = project_repo.create(**test_projects_data[0], specification=spec_doc1)
+
+        spec_doc2 = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project2 = project_repo.create(**test_projects_data[1], specification=spec_doc2)
         db_session.flush()
 
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project1.id
-        task = task_repo.create(**task_data)
+        # Remove status from task_data as it will be passed separately
+        task_data.pop("status", None)
+        task = task_repo.create(
+            **task_data,
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
         db_session.commit()
 
         # Add same resource to both projects and one task

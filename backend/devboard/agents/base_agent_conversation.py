@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from devboard.api.schemas.agent_conversation import PromptResponse, ToolApprovalDecision
+from devboard.api.schemas.agent_conversation import ConversationMessage, PromptResponse, ToolApprovalDecision
+from devboard.db.models import Conversation
 
 
 class BaseAgentConversationService(ABC):
@@ -16,7 +17,19 @@ class BaseAgentConversationService(ABC):
     - Conversation state management (message history or session ID)
     - Tool approval workflows
     - Response formatting
+    - Message retrieval
+
+    Attributes:
+        conversation: The conversation instance this service manages
     """
+
+    def __init__(self, conversation: Conversation):
+        """Initialize the conversation service with a conversation instance.
+
+        Args:
+            conversation: The conversation instance to manage
+        """
+        self.conversation = conversation
 
     @abstractmethod
     async def send_message(self, message: str) -> PromptResponse:
@@ -39,5 +52,18 @@ class BaseAgentConversationService(ABC):
 
         Returns:
             PromptResponse with agent's next message or additional tool requests
+        """
+        pass
+
+    @abstractmethod
+    async def get_conversation_messages(self) -> list[ConversationMessage]:
+        """Retrieve all messages for the conversation.
+
+        For PydanticAI conversations, messages are queried from the database.
+        For external engines (Claude Code, Gemini CLI), messages are loaded
+        from their respective session storage.
+
+        Returns:
+            List of ConversationMessage instances in chronological order
         """
         pass

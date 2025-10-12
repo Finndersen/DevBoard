@@ -126,6 +126,12 @@ def document_repository(db_session):
     return DocumentRepository(db_session)
 
 
+@fixture
+def conversation_repository(db_session):
+    """Conversation repository instance for testing."""
+    return ConversationRepository(db_session)
+
+
 # Service fixtures with real repositories (no mocking at service level)
 @fixture
 def config_service(configuration_repository):
@@ -141,13 +147,25 @@ def integration_service(configuration_repository):
 
 # Mock fixtures
 @fixture
-def mock_llm_service():
-    """Mock LLM service to avoid database dependencies."""
+def mock_agent_config_service():
+    """Mock AgentConfigService to avoid database dependencies."""
+    from devboard.agents.agent_engines import AgentEngine
+    from devboard.agents.types import AgentEngineModelConfig
+
     mock_service = Mock()
-    # Return a LanguageModel instance instead of a string
-    default_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.REASONING)
-    mock_service.get_model_for_agent.return_value = default_model
+    # Return an AgentEngineModelConfig with model_id
+    default_config = AgentEngineModelConfig(
+        engine=AgentEngine.INTERNAL,
+        model_id="openai:gpt-4"
+    )
+    mock_service.get_effective_config.return_value = default_config
     return mock_service
+
+
+@fixture
+def mock_llm_service(mock_agent_config_service):
+    """Alias for mock_agent_config_service for backward compatibility."""
+    return mock_agent_config_service
 
 
 @fixture

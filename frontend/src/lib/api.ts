@@ -14,10 +14,17 @@ export interface Task {
   project_id: number
   codebase_id: number | null
   remote_task_id: string | null
-  default_conversation_id: number | null
+  conversation_id: number
   created_at: string
   specification: DocumentResponse
   implementation_plan: DocumentResponse
+}
+
+export interface TaskCreate {
+  title: string
+  codebase_id: number | null
+  remote_task_id: string | null
+  specification_content: string | null
 }
 
 export interface DocumentResponse {
@@ -201,6 +208,18 @@ export interface UpdateConversationModelRequest {
   model_id: string
 }
 
+export interface ConversationResponse {
+  id: number
+  parent_entity_type: string
+  parent_entity_id: number
+  agent_role: string
+  engine: string
+  model_id: string
+  model_name: string
+  is_active: boolean
+  created_at: string
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -253,7 +272,7 @@ export class ApiClient {
     return this.request<Task[]>(`/api/projects/${projectId}/tasks`)
   }
 
-  async createTask(projectId: number | string, task: Omit<Task, 'id' | 'project_id' | 'created_at' | 'updated_at'>): Promise<Task> {
+  async createTask(projectId: number | string, task: TaskCreate): Promise<Task> {
     return this.request<Task>(`/api/projects/${projectId}/tasks`, {
       method: 'POST',
       body: JSON.stringify(task),
@@ -284,6 +303,10 @@ export class ApiClient {
   }
 
   // Unified Conversation API
+  async getConversation(conversationId: number | string): Promise<ConversationResponse> {
+    return this.request<ConversationResponse>(`/api/conversations/${conversationId}`)
+  }
+
   async getConversationMessages(conversationId: number | string): Promise<ConversationMessage[]> {
     return this.request<ConversationMessage[]>(`/api/conversations/${conversationId}/messages`)
   }

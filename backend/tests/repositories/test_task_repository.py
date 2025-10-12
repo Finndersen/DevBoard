@@ -2,7 +2,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from devboard.db.models import Project
-from devboard.db.repositories import TaskRepository
+from devboard.db.models.document import DocumentType
+from devboard.db.repositories import DocumentRepository, TaskRepository
 
 
 class TestTaskRepository:
@@ -13,20 +14,25 @@ class TestTaskRepository:
         return TaskRepository(db_session)
 
     @pytest.fixture
-    def project(self, db_session: Session) -> Project:
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
         """Create a test project for task relationships."""
         from devboard.db.repositories.project import ProjectRepository
 
         project_repo = ProjectRepository(db_session)
-        project = project_repo.create(name="Test Project", description="")
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
         db_session.flush()
         return project
 
     @pytest.fixture
-    def sample_task_data(self, project: Project) -> dict:
+    def sample_task_data(self, project: Project, document_repository: DocumentRepository) -> dict:
+        spec_doc = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         return {
             "title": "Test Task",
             "project_id": project.id,
+            "specification": spec_doc,
+            "implementation_plan": plan_doc,
         }
 
     def test_create_task(self, repo: TaskRepository, sample_task_data: dict, db_session):
@@ -52,12 +58,27 @@ class TestTaskRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all_without_filter(self, repo: TaskRepository, project: Project, db_session):
+    def test_get_all_without_filter(
+        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
+    ):
         """Test getting all tasks without project filter."""
         from devboard.db.models.task import TaskStatus
 
-        repo.create(project_id=project.id, title="Task 1")
-        repo.create(project_id=project.id, title="Task 2", status=TaskStatus.COMPLETE)
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(
+            project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1
+        )
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(
+            project_id=project.id,
+            title="Task 2",
+            specification=spec_doc2,
+            implementation_plan=plan_doc2,
+            status=TaskStatus.COMPLETE,
+        )
         db_session.commit()
 
         all_tasks = repo.get_all()
@@ -66,17 +87,25 @@ class TestTaskRepository:
         assert "Task 1" in task_titles
         assert "Task 2" in task_titles
 
-    def test_get_all_with_project_filter(self, repo: TaskRepository, project: Project, db_session: Session):
+    def test_get_all_with_project_filter(
+        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session: Session
+    ):
         """Test getting all tasks filtered by project."""
         from devboard.db.repositories.project import ProjectRepository
 
         # Create another project
         project_repo = ProjectRepository(db_session)
-        project2 = project_repo.create(name="Project 2", description="")
+        spec_doc_p2 = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project2 = project_repo.create(name="Project 2", description="", specification=spec_doc_p2)
         db_session.flush()
 
-        repo.create(project_id=project.id, title="Task 1")
-        repo.create(project_id=project2.id, title="Task 2")
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(project_id=project2.id, title="Task 2", specification=spec_doc2, implementation_plan=plan_doc2)
         db_session.commit()
 
         project_tasks = repo.get_for_project(project.id)
@@ -84,12 +113,25 @@ class TestTaskRepository:
         assert project_tasks[0].title == "Task 1"
         assert project_tasks[0].project_id == project.id
 
-    def test_get_by_project(self, repo: TaskRepository, project: Project, db_session):
+    def test_get_by_project(
+        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
+    ):
         """Test getting tasks by project."""
         from devboard.db.models.task import TaskStatus
 
-        repo.create(project_id=project.id, title="Task 1")
-        repo.create(project_id=project.id, title="Task 2", status=TaskStatus.COMPLETE)
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        repo.create(
+            project_id=project.id,
+            title="Task 2",
+            specification=spec_doc2,
+            implementation_plan=plan_doc2,
+            status=TaskStatus.COMPLETE,
+        )
         db_session.commit()
 
         project_tasks = repo.get_for_project(project.id)

@@ -3,7 +3,9 @@
 import pytest
 from sqlalchemy.orm import Session
 
+from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
+    DocumentRepository,
     ProjectRepository,
 )
 
@@ -16,8 +18,9 @@ class TestProjectRepository:
         return ProjectRepository(db_session)
 
     @pytest.fixture
-    def sample_project_data(self) -> dict:
-        return {"name": "Test Project", "description": "A test project"}
+    def sample_project_data(self, document_repository) -> dict:
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        return {"name": "Test Project", "description": "A test project", "specification": spec_doc}
 
     def test_create_project(self, repo: ProjectRepository, sample_project_data: dict, db_session):
         """Test creating a new project."""
@@ -42,10 +45,12 @@ class TestProjectRepository:
         result = repo.get_by_id(999)
         assert result is None
 
-    def test_get_all(self, repo: ProjectRepository, db_session):
+    def test_get_all(self, repo: ProjectRepository, document_repository, db_session):
         """Test getting all projects."""
-        repo.create(name="Project 1", description="")
-        repo.create(name="Project 2", description="")
+        spec_doc1 = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        spec_doc2 = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        repo.create(name="Project 1", description="", specification=spec_doc1)
+        repo.create(name="Project 2", description="", specification=spec_doc2)
         db_session.commit()
 
         all_projects = repo.get_all()

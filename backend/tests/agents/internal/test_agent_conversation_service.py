@@ -3,17 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.internal.base_agent import BaseAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.types import AgentRole
-from devboard.api.schemas.agent_conversation import (
-    MessageRole,
-    PromptResponseType,
-    ToolApprovalDecision,
-)
-from devboard.db.models import Conversation
-from devboard.db.repositories.conversation import ConversationRepository
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -28,6 +17,18 @@ from pydantic_ai.tools import (
     ToolDenied,
 )
 from sqlalchemy.orm import Session
+
+from devboard.agents.internal.agent_conversation import PydanticAIConversationService
+from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.types import AgentRole
+from devboard.api.schemas.agent_conversation import (
+    MessageRole,
+    PromptResponseType,
+    ToolApprovalDecision,
+)
+from devboard.db.models import Conversation
+from devboard.db.repositories.conversation import ConversationRepository
 
 
 class MockAgent(BaseAgent):
@@ -71,9 +72,17 @@ class TestAgentConversationService:
     def conversation(self, db_session: Session) -> Conversation:
         """Create a test conversation."""
         conversation_repo = ConversationRepository(db_session)
+        from devboard.agents.agent_engines import AgentEngine
         from devboard.db.models import ParentEntityType
 
-        conversation = conversation_repo.get_or_create_for_entity(ParentEntityType.PROJECT, entity_id=1)
+        conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=1,
+            agent_role=AgentRole.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-sonnet-4.5",
+            is_active=True,
+        )
         db_session.commit()
         return conversation
 
@@ -86,7 +95,7 @@ class TestAgentConversationService:
     def service(self, mock_agent, conversation_repo, conversation):
         """Create PydanticAIConversationService instance."""
         return PydanticAIConversationService(
-            conversation_id=conversation.id, agent=mock_agent, conversation_repository=conversation_repo
+            conversation=conversation, agent=mock_agent, conversation_repository=conversation_repo
         )
 
     @pytest.mark.asyncio

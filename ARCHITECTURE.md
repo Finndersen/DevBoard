@@ -694,6 +694,215 @@ Handles collaborative document editing with conflict detection using content has
 **Agent Tools (`devboard/agents/tools.py`)**:
 Specialized PydanticAI tools providing agent capabilities including document content editing, context resource research, and codebase structure analysis. Tools are decorated with PydanticAI's `@tool` decorator and provide structured interfaces for agent interactions with external systems and document modification workflows.
 
+## Agent Engine & Model Configuration System
+
+### Configuration Architecture Philosophy
+
+DevBoard implements a **flexible multi-engine agent configuration system** that separates agent roles from their execution engines, enabling different agent types to use the most appropriate AI infrastructure while maintaining consistent configuration patterns.
+
+#### Core Configuration Concepts
+
+**Agent Roles vs Agent Engines**:
+- **Agent Roles** define the functional responsibility (PROJECT, TASK_SPECIFICATION, TASK_PLANNING, TASK_IMPLEMENTATION, INVESTIGATION)
+- **Agent Engines** define the execution framework (INTERNAL with PydanticAI, CLAUDE_CODE CLI, GEMINI_CLI)
+- Each agent role can use multiple engines, with role-specific restrictions enforcing architectural boundaries
+
+**Type-Safe Configuration Model**:
+All core configuration types consolidated in `devboard/agents/types.py` module to prevent circular dependencies and provide single source of truth for agent configuration structures.
+
+### Type System Implementation
+
+#### Core Enums (`devboard/agents/types.py`)
+
+**LLMProvider Enum**:
+String-based enum defining supported LLM providers (OPENAI, ANTHROPIC, GOOGLE) with automatic JSON serialization support via StrEnum base class.
+
+**ModelType Enum**:
+Categorizes models by performance characteristics (REASONING for complex tasks, FAST for quick operations) enabling intelligent default model selection based on agent role requirements.
+
+**AgentEngine Enum**:
+Defines available execution engines (INTERNAL, CLAUDE_CODE, GEMINI_CLI) with string values matching API representation for consistent serialization.
+
+**AgentRole Enum**:
+Represents functional agent responsibilities with defined lifecycle roles (PROJECT, TASK_SPECIFICATION, TASK_PLANNING, TASK_IMPLEMENTATION, INVESTIGATION).
+
+#### Configuration Structures
+
+**AgentEngineModelConfig Pydantic Model**:
+Combined engine and model configuration structure representing the atomic unit of agent configuration. Fields include `engine` (AgentEngine enum) and `model_id` (string in "provider:model" format). Used throughout system for type-safe configuration passing, validation, and persistence. Replaces previous dictionary-based configuration with proper type checking.
+
+**AgentConfiguration Pydantic Model**:
+Complete agent configuration response structure containing `agent_role` (AgentRole enum), `config` (AgentEngineModelConfig), and `available_engines` (list of AgentEngineInfo). Provides complete configuration context including current settings and available options for UI rendering.
+
+**ModelInfo Pydantic Model**:
+Language model metadata structure with `id` (provider:model format), `provider` (LLMProvider enum), `name` (human-readable), and `model_type` (ModelType enum). Consolidated from duplicate definitions in multiple modules into single types.py location.
+
+### Agent Engine Repository
+
+#### Engine Definition System (`devboard/agents/agent_engines.py`)
+
+**AgentEngineDefinition Dataclass**:
+Defines engine capabilities with `engine` (identifier), `display_name` (UI label), `description` (purpose explanation), and `available_provider` (supported LLM provider or None for all). Provides metadata for UI rendering and validation logic.
+
+**Engine Registry**:
+Global `ALL_ENGINES` list defines all available engines:
+- **INTERNAL**: PydanticAI-based engine supporting all configured providers with tool approval workflows
+- **CLAUDE_CODE**: Anthropic CLI integration supporting only Anthropic models with native tool capabilities
+- **GEMINI_CLI**: Google CLI integration supporting only Google models with specialized command execution
+
+**Role-Based Engine Restrictions**:
+`ALLOWED_ENGINES_BY_AGENT_ROLE` dictionary enforces architectural boundaries:
+- **PROJECT**: INTERNAL only (requires tool approval for safety)
+- **TASK_SPECIFICATION**: INTERNAL, CLAUDE_CODE (document collaboration)
+- **TASK_PLANNING**: INTERNAL, CLAUDE_CODE (strategic planning)
+- **TASK_IMPLEMENTATION**: CLAUDE_CODE, GEMINI_CLI (full CLI capabilities)
+- **INVESTIGATION**: INTERNAL only (controlled codebase analysis)
+
+First engine in each list serves as recommended default for that role.
+
+#### AgentEngineRepository Class
+
+**Engine Query Methods**:
+- `get_engine_definition(engine)`: Retrieve full engine definition with validation
+- `get_available_engines_for_agent_role(agent_role)`: Filter engines allowed for specific role
+- `get_default_engine_for_agent_role(agent_role)`: Return recommended engine for role
+- `validate_engine_for_agent_role(engine, agent_role)`: Check engine compatibility with role
+- `get_available_provider_for_engine(engine)`: Determine provider filtering for engine
+- `get_all_engines()`: List all registered engine definitions
+
+### Language Model Repository
+
+#### Model Definition System (`devboard/agents/language_models.py`)
+
+**LanguageModel Dataclass**:
+Comprehensive model metadata including `id` (provider:model format), `provider` (LLMProvider enum), `name` (display name), `type` (ModelType enum), `full_name` (optional complete identifier), and `display_full_name` (computed property defaulting to name if full_name not provided).
+
+**Model Registry**:
+Global model catalog organized by provider with reasoning and fast model classifications. Includes comprehensive Anthropic model set (Claude Sonnet 4.5, Opus 4.1, etc.), OpenAI models (GPT-5, o-series), and Google Gemini models (2.5 Pro, Flash variants).
+
+**Role-Based Model Recommendations**:
+`RECOMMENDED_MODEL_TYPE_BY_AGENT_ROLE` dictionary maps agent roles to preferred model types. PROJECT and TASK_PLANNING roles recommend REASONING models for complex decision-making. INVESTIGATION recommends FAST models for quick analysis operations.
+
+#### LLMRepository Class
+
+**Model Query Methods**:
+- `get_all_models()`: Return complete model catalog
+- `get_models_for_provider(provider)`: Filter models by LLM provider
+- `get_model_by_id(model_id)`: Lookup specific model with validation
+- `get_recommended_model_type_for_agent(agent_role)`: Determine optimal model type for role
+
+### Agent Configuration Service
+
+#### Configuration Management (`devboard/agents/agent_config_service.py`)
+
+**AgentConfigService Class**:
+Central service orchestrating agent configuration with `config_service` (configuration persistence), `llm_repository` (model catalog), and `engine_repository` (engine definitions) dependencies.
+
+**Configuration Resolution Logic**:
+
+**get_agent_configuration(agent_role)**:
+Retrieves complete configuration for agent role including effective engine/model config, available engines list, and role metadata. Combines stored configuration with defaults and available options for comprehensive configuration context.
+
+**get_effective_config(agent_role)**:
+Resolves effective configuration through hierarchy:
+1. Check stored configuration in database (via ConfigService)
+2. Fall back to default engine for role if no stored engine
+3. Fall back to default model for role+engine if no stored model
+4. Return resolved AgentEngineModelConfig
+
+Returns active configuration even when stored config is invalid, ensuring agents always have valid configuration.
+
+**update_agent_configuration(agent_role, config)**:
+Updates role-level configuration with validation:
+1. Validate engine allowed for agent role (via engine repository)
+2. Validate model available for engine (via available models list)
+3. Store configuration to database (via ConfigService)
+4. Return updated AgentConfiguration
+
+Raises ValueError for validation failures with detailed error messages.
+
+**Model Availability Filtering**:
+
+**_get_available_models_for_engine(engine)**:
+Returns models available for specific engine with provider-based filtering:
+- **INTERNAL engine**: Returns models from all configured providers (checks API keys via ConfigService)
+- **External engines**: Returns all models from engine's supported provider without API key filtering (engines manage auth themselves)
+
+Implementation enables Claude Code to show all Anthropic models regardless of API key configuration, while INTERNAL engine only shows models from configured providers.
+
+**_get_all_available_models()**:
+Helper method for INTERNAL engine returning models from configured providers. Iterates through all LLMProvider values, checks configuration validity, and filters model catalog to working providers only.
+
+**Default Model Selection**:
+
+**_get_default_model_for_agent_role_and_engine(agent_role, engine)**:
+Intelligent model selection based on agent role's recommended model type:
+1. Get available models for engine (respecting provider filtering)
+2. Get recommended model type for agent role (REASONING or FAST)
+3. Search available models for match on recommended type
+4. Fall back to first available model if no type match found
+
+Raises ValueError if no models available for engine, ensuring configuration always valid.
+
+**get_available_models_by_engine()**:
+Returns complete mapping of engines to their available models for UI rendering. Structures as AvailableModelsByEngine Pydantic model with `models_by_engine` dictionary. Enables frontend to display appropriate model choices filtered by selected engine.
+
+### API Integration
+
+#### Agent Configuration Endpoints (`devboard/api/routers/agents.py`)
+
+**GET /api/agents/{agent_role}/configuration**:
+Retrieves current configuration for agent role including effective config, available engines, and role metadata. Returns AgentConfiguration schema with complete configuration context for UI rendering.
+
+**PUT /api/agents/{agent_role}/configuration**:
+Updates configuration for agent role with validation. Accepts AgentEngineModelConfig with engine and model_id fields. Returns updated AgentConfiguration on success or HTTP 400 with detailed error message on validation failure.
+
+**GET /api/agents/available-models**:
+Returns all available models grouped by engine for UI selector rendering. Response structured as AvailableModelsByEngine with models organized by engine key. Enables dynamic model selection based on engine choice.
+
+#### Configuration Dependencies (`devboard/api/dependencies/services.py`)
+
+**get_agent_config_service()**:
+FastAPI dependency providing AgentConfigService with required dependencies (ConfigService, LLMRepository, AgentEngineRepository). Enables dependency injection of configuration service throughout API layer.
+
+### Database Persistence
+
+#### Configuration Storage
+
+**Configuration Model** (`devboard/db/models/configuration.py`):
+Stores agent configuration with key-based lookup (e.g., "agent.project.default") and JSON serialization of configuration values. Supports schema versioning for configuration evolution and includes automatic timestamp tracking.
+
+**AgentConfig Pydantic Schema** (`devboard/config/agent_config.py`):
+Defines structure for agent-specific configuration with `selected_engine` (optional string) and `selected_model` (optional string) fields. Provides default values and validation rules for configuration persistence.
+
+#### Configuration Hierarchy
+
+**Multi-Source Resolution** (`devboard/services/config_service.py`):
+ConfigService implements precedence hierarchy:
+1. **Environment Variables**: Highest priority (e.g., AGENT_PROJECT_DEFAULT_ENGINE)
+2. **Database Configuration**: Stored via ConfigService.update_configuration()
+3. **Code Defaults**: Fallback values from engine/model repositories
+
+Dot notation keys (e.g., "agent.project.default") automatically map to environment variables with uppercase and underscores.
+
+### Frontend Integration
+
+#### Agent Configuration UI (`frontend/src/components/configuration/AgentConfigurationSelector.tsx`)
+
+**Configuration Selection Interface**:
+React component providing agent configuration selection with role-based engine filtering and dynamic model selection. Displays available engines for selected role with descriptions and filters model list based on selected engine's supported provider.
+
+**Configuration Flow**:
+1. User selects agent role (PROJECT, TASK_SPECIFICATION, etc.)
+2. Component fetches available engines for role via GET /api/agents/{role}/configuration
+3. User selects engine from filtered list
+4. Component fetches available models for engine via GET /api/agents/available-models
+5. User selects model from provider-filtered list
+6. Component saves configuration via PUT /api/agents/{role}/configuration
+
+**Real-Time Validation**:
+UI provides immediate feedback for invalid selections using TypeScript type guards and API validation responses. Prevents submission of invalid configurations with clear error messaging.
+
 ## Database Schema & Models Implementation
 
 ### SQLAlchemy Model Architecture

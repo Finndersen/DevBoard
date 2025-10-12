@@ -32,8 +32,6 @@ export default function TaskDetail() {
   useTabTitle('task', id)
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
-  const [agentModel, setAgentModel] = useState<string | null>(null)
-  const [modelLoading, setModelLoading] = useState(true)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
   
   // Use ref to store refetch function to avoid dependency issues
@@ -82,33 +80,6 @@ export default function TaskDetail() {
     if (task) {
       // Fetch project details
       fetchProject(task.project_id)
-      
-      // Fetch agent model for task agent
-      const fetchAgentModel = async () => {
-        try {
-          // Determine agent type based on task status
-          let agentType: string
-          const status = task.status.toLowerCase()
-          
-          if (status === 'defining') {
-            agentType = 'task_specification'
-          } else if (status === 'planning') {
-            agentType = 'task_planning'
-          } else {
-            // For other statuses, default to task_specification
-            agentType = 'task_specification'
-          }
-          
-          const data = await apiClient.getAgentModel(agentType)
-          setAgentModel(data.model_id)
-        } catch (error) {
-          console.error('Failed to fetch agent model:', error)
-        } finally {
-          setModelLoading(false)
-        }
-      }
-      
-      fetchAgentModel()
     }
   }, [task])
 
@@ -120,11 +91,11 @@ export default function TaskDetail() {
 
   // Register refresh handlers for task document updates
   useEffect(() => {
-    if (task?.default_conversation_id) {
-      const conversationId = task.default_conversation_id
-      
+    if (task?.conversation_id) {
+      const conversationId = task.conversation_id
+
       console.log('TaskDetail: Registering refresh handlers for conversation:', conversationId)
-      
+
       // Register refresh handler for task-related approvals
       registerRefreshHandler(conversationId, 'refresh_task', refreshHandler)
 
@@ -134,7 +105,7 @@ export default function TaskDetail() {
         unregisterRefreshHandlers(conversationId)
       }
     }
-  }, [task?.default_conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
+  }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
 
   const handleStateTransition = async (newState: string) => {
     try {
@@ -475,20 +446,9 @@ export default function TaskDetail() {
         <div>
           <AgentChat
             title="Task Agent"
-            conversationId={task.default_conversation_id}
+            conversationId={task.conversation_id}
             placeholder="Ask me to help with task specification or implementation planning..."
             emptyStateMessage="Welcome to the Task Agent!"
-            rightHeaderContent={
-              <div className={`text-sm ${textColors.secondary}`}>
-                {modelLoading ? (
-                  <span>Loading...</span>
-                ) : agentModel ? (
-                  <span>Model: {agentModel}</span>
-                ) : (
-                  <span>Model: Unknown</span>
-                )}
-              </div>
-            }
             className="h-[600px] flex flex-col overflow-hidden"
             padding="xs"
           />

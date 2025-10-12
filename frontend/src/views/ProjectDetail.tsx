@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
 import { Button, Card, Input, Textarea, Modal, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
-import type { Project, Task } from '../lib/api'
+import type { Project, Task, Codebase } from '../lib/api'
 import { useModal, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
@@ -34,14 +34,13 @@ export default function ProjectDetail() {
     const tab = getTabFromUrl()
     return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
   })
+  const [codebases, setCodebases] = useState<Codebase[]>([])
   const [newTask, setNewTask] = useState({
     title: '',
-    status: 'defining',
-    codebase_id: null,
-    remote_task_id: null
+    codebase_id: null as number | null,
+    remote_task_id: null as string | null,
+    specification_content: ''
   })
-  const [agentModel, setAgentModel] = useState<string | null>(null)
-  const [modelLoading, setModelLoading] = useState(true)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
   // Use new custom hooks
@@ -93,11 +92,20 @@ export default function ProjectDetail() {
     }
   }, [id])
 
+  const fetchCodebases = useCallback(async () => {
+    try {
+      const data = await apiClient.getCodebases()
+      setCodebases(data)
+    } catch (error) {
+      console.error('Failed to fetch codebases:', error)
+    }
+  }, [])
+
   useEffect(() => {
     fetchProject()
     fetchTasks()
-    fetchAgentModel()
-  }, [fetchProject, fetchTasks])
+    fetchCodebases()
+  }, [fetchProject, fetchTasks, fetchCodebases])
 
   // Register refresh handlers for project document updates
   useEffect(() => {
@@ -120,56 +128,42 @@ export default function ProjectDetail() {
     }
   }, [project?.default_conversation_id, fetchProject, registerRefreshHandler, unregisterRefreshHandlers])
 
-  const fetchAgentModel = async () => {
-    try {
-      const data = await apiClient.getAgentModel('project')
-      setAgentModel(data.model_id)
-    } catch (error) {
-      console.error('Failed to fetch agent model:', error)
-    } finally {
-      setModelLoading(false)
-    }
-  }
+  // Individual change handlers to avoid object spread on every keystroke
+  const handleTaskTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewTask(prev => ({ ...prev, title: e.target.value }))
+  }, [])
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  const handleTaskCodebaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setNewTask(prev => ({ ...prev, codebase_id: e.target.value ? Number(e.target.value) : null }))
+  }, [])
+
+  const handleTaskSpecificationChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewTask(prev => ({ ...prev, specification_content: e.target.value }))
+  }, [])
+
+  const handleCreateTask = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const taskData = {
         title: newTask.title,
-        status: newTask.status,
         codebase_id: newTask.codebase_id,
         remote_task_id: newTask.remote_task_id,
-        default_conversation_id: null,
-        specification: {
-          id: 0, // Will be set by backend
-          document_type: 'task_specification',
-          content: '',
-          content_hash: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        implementation_plan: {
-          id: 0, // Will be set by backend
-          document_type: 'implementation_plan',
-          content: '',
-          content_hash: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
+        specification_content: newTask.specification_content
       }
-      await apiClient.createTask(id!, taskData)
-      await fetchTasks()
+      const createdTask = await apiClient.createTask(id!, taskData)
       createTaskModal.close()
-      setNewTask({ 
-        title: '', 
-        status: 'defining',
+      setNewTask({
+        title: '',
         codebase_id: null,
-        remote_task_id: null
+        remote_task_id: null,
+        specification_content: ''
       })
+      // Navigate to the newly created task
+      navigate(`/tasks/${createdTask.id}`)
     } catch (error) {
       console.error('Failed to create task:', error)
     }
-  }
+  }, [newTask, id, createTaskModal, navigate])
 
 
   const getStatusColor = (status: string) => {
@@ -189,7 +183,8 @@ export default function ProjectDetail() {
     }
   }
 
-  const groupTasksByStatus = (tasks: Task[]) => {
+  // Memoize task grouping to avoid recalculation on every render
+  const taskGroups = useMemo(() => {
     return tasks.reduce((groups, task) => {
       const status = task.status
       if (!groups[status]) {
@@ -198,7 +193,7 @@ export default function ProjectDetail() {
       groups[status].push(task)
       return groups
     }, {} as Record<string, Task[]>)
-  }
+  }, [tasks])
 
   if (loading) {
     return (
@@ -220,7 +215,6 @@ export default function ProjectDetail() {
     )
   }
 
-  const taskGroups = groupTasksByStatus(tasks)
   const statusColumns = ['defining', 'planning', 'implementing', 'reviewing', 'complete']
 
   return (
@@ -373,17 +367,6 @@ export default function ProjectDetail() {
             conversationId={project.default_conversation_id}
             placeholder="Ask a question about this project..."
             emptyStateMessage="Ask me anything about this project!"
-            rightHeaderContent={
-              <div className={`text-sm ${textColors.secondary}`}>
-                {modelLoading ? (
-                  <span>Loading...</span>
-                ) : agentModel ? (
-                  <span>Model: {agentModel}</span>
-                ) : (
-                  <span>Model: Unknown</span>
-                )}
-              </div>
-            }
             className="h-full flex flex-col overflow-hidden"
           />
         </div>
@@ -397,11 +380,11 @@ export default function ProjectDetail() {
       )}
 
       {/* Create Task Modal */}
-      <Modal 
+      <Modal
         isOpen={createTaskModal.isOpen}
         onClose={createTaskModal.close}
         title="Create New Task"
-        maxWidth="md"
+        maxWidth="xl"
       >
         <form onSubmit={handleCreateTask}>
           <div className="space-y-4">
@@ -413,29 +396,43 @@ export default function ProjectDetail() {
                 type="text"
                 required
                 value={newTask.title}
-                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                onChange={handleTaskTitleChange}
                 placeholder="Enter task title"
+                className="w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Status
+                Codebase (Optional)
               </label>
               <select
-                value={newTask.status}
-                onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+                value={newTask.codebase_id ?? ''}
+                onChange={handleTaskCodebaseChange}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               >
-                <option value="defining">Defining</option>
-                <option value="planning">Planning</option>
-                <option value="implementing">Implementing</option>
-                <option value="reviewing">Reviewing</option>
-                <option value="complete">Complete</option>
+                <option value="">None</option>
+                {codebases.map((codebase) => (
+                  <option key={codebase.id} value={codebase.id}>
+                    {codebase.name}
+                  </option>
+                ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Task Specification (Optional)
+              </label>
+              <Textarea
+                value={newTask.specification_content}
+                onChange={handleTaskSpecificationChange}
+                placeholder="Enter task specification in Markdown format..."
+                className="w-full h-40 font-mono text-sm"
+              />
+            </div>
           </div>
-          
+
           <div className="flex justify-end space-x-3 mt-6">
             <Button
               type="button"

@@ -120,7 +120,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
   }
 
   const getModelDisplayName = (model: ModelInfo): string => {
-    return `${model.provider}/${model.name}`
+    return model.name
   }
 
   const getSelectedEngineInfo = (): AgentEngineInfo | null => {
@@ -170,10 +170,14 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
           </h4>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-4">
           {/* Engine Selector */}
-          <div className="relative" ref={engineDropdownRef}>
-            <button
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              Engine
+            </label>
+            <div className="relative" ref={engineDropdownRef}>
+              <button
               type="button"
               onClick={() => setIsEngineOpen(!isEngineOpen)}
               disabled={saving}
@@ -216,11 +220,16 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
                 ))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Model Selector */}
-          <div className="relative" ref={modelDropdownRef}>
-            <button
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              Model
+            </label>
+            <div className="relative" ref={modelDropdownRef}>
+              <button
               type="button"
               onClick={() => setIsModelOpen(!isModelOpen)}
               disabled={saving || availableModelsForEngine.length === 0}
@@ -256,13 +265,14 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
                     <div>
                       <div className="font-medium">{getModelDisplayName(model)}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                        {model.provider} provider
+                        {model.model_type}
                       </div>
                     </div>
                   </button>
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

@@ -128,7 +128,12 @@ A **reference to external content** that can be shared across multiple projects 
 **Core Requirements**:
 - **Integration Management**: Configure and test connections to external services (GitHub, Jira, Slack, AI providers)
 - **Codebase Management**: Register local and remote repositories with validation
-- **Agent Configuration**: Select AI models and behavior settings for different agent types
+- **Agent Configuration**: Select execution engines and AI models for different agent roles with intelligent model selection
+  - **Agent Roles**: PROJECT, TASK_SPECIFICATION, TASK_PLANNING, TASK_IMPLEMENTATION, INVESTIGATION
+  - **Execution Engines**: INTERNAL (PydanticAI), CLAUDE_CODE (Anthropic CLI), GEMINI_CLI (Google CLI)
+  - **Model Selection**: Provider-filtered model lists (e.g., Claude Code supports only Anthropic models)
+  - **Intelligent Defaults**: Automatic selection of REASONING models for planning roles, FAST models for quick tasks
+  - **Role-Based Restrictions**: Each agent role has allowed engines (e.g., PROJECT role requires INTERNAL engine for tool approval)
 - **Resource Management**: Add and organize context provider links across projects and tasks
 - **Environment Integration**: Support for environment variables and configuration files
 
@@ -405,7 +410,10 @@ The **Home view** serves as the central command center displaying all projects a
 
 **Settings View**: Unified configuration management
 - Integration setup and testing
-- Agent model selection per agent type
+- Agent configuration per role with engine and model selection
+  - View available engines for each agent role
+  - Select models filtered by engine's supported provider
+  - See current effective configuration with defaults
 - Codebase registration and management
 - Environment variable display and override
 

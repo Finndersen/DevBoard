@@ -58,7 +58,7 @@ export const createMockTask = (overrides = {}) => ({
   status: 'Pending',
   codebase_id: null,
   remote_task_id: null,
-  default_conversation_id: 3,
+  conversation_id: 3,
   specification: {
     id: 3,
     document_type: 'task_specification',

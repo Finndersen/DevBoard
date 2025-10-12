@@ -78,7 +78,7 @@ class ClaudeTaskSpecificationAgent(BaseClaudeAgent):
             task: The task to work on
             document_repository: Repository for document operations
         """
-        super().__init__(task, document_repository)
+        super().__init__(task, document_repository, plan_mode=True)
 
     def _get_virtual_tools(self) -> list[VirtualTool]:
         """Get the list of virtual tools for task specification agent.
@@ -146,7 +146,7 @@ class ClaudeTaskPlanningAgent(BaseClaudeAgent):
             task: The task to work on
             document_repository: Repository for document operations
         """
-        super().__init__(task, document_repository)
+        super().__init__(task, document_repository, plan_mode=True)
 
     def _get_virtual_tools(self) -> list[VirtualTool]:
         """Get the list of virtual tools for task planning agent.

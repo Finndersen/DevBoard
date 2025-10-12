@@ -3,18 +3,53 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devboard.db.models import Task
-from devboard.db.models.document import DocumentType
+from devboard.db.models import Document, Task
+from devboard.db.models.task import TaskStatus
 from devboard.db.repositories.base import BaseRepository
-from devboard.db.repositories.document import DocumentRepository
 
 
 class TaskRepository(BaseRepository[Task]):
-    """Repository for task data access operations with document management."""
+    """Repository for task data access operations."""
 
     def __init__(self, db_session: Session):
         super().__init__(db_session)
-        self.document_repo = DocumentRepository(db_session)
+
+    def create(
+        self,
+        project_id: int,
+        title: str,
+        specification: "Document",
+        implementation_plan: "Document",
+        status: TaskStatus = TaskStatus.DEFINING,
+        codebase_id: int | None = None,
+        remote_task_id: str | None = None,
+    ) -> Task:
+        """Create a new task.
+
+        Args:
+            project_id: ID of the parent project
+            title: Task title
+            specification: Specification document instance
+            implementation_plan: Implementation plan document instance
+            status: Initial task status (defaults to DEFINING)
+            codebase_id: Optional codebase ID
+            remote_task_id: Optional remote task identifier
+
+        Returns:
+            Created Task instance
+        """
+        task = Task(
+            project_id=project_id,
+            title=title,
+            specification_id=specification.id,
+            implementation_plan_id=implementation_plan.id,
+            status=status,
+            codebase_id=codebase_id,
+            remote_task_id=remote_task_id,
+        )
+        self.db.add(task)
+        self.db.flush()
+        return task
 
     def get_by_id(self, task_id: int) -> Task | None:
         """Get a task by its ID.
@@ -49,50 +84,6 @@ class TaskRepository(BaseRepository[Task]):
         stmt = select(Task).where(Task.project_id == project_id)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, project_id: int, title: str, **kwargs) -> Task:
-        """Create a new task with required documents.
-
-        Args:
-            project_id: ID of the project this task belongs to
-            title: Task title
-            **kwargs: Additional task fields
-
-        Returns:
-            Created task with assigned ID and documents
-        """
-        # Create required specification document
-        specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-
-        # Create implementation plan document (always created upfront)
-        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-
-        # Create task with document references
-        task = Task(
-            project_id=project_id,
-            title=title,
-            specification_id=specification_doc.id,
-            implementation_plan_id=implementation_plan_doc.id,
-            **kwargs,
-        )
-
-        self.db.add(task)
-        self.db.flush()  # Get the ID without committing
-        return task
-
-    def set_task_implementation_plan(self, task: Task, content: str) -> Task:
-        """Update implementation plan document content for a task.
-
-        Args:
-            task: Task instance to set implementation plan for
-            content: Implementation plan content
-
-        Returns:
-            Updated task with implementation plan
-        """
-        # Update implementation plan content (document always exists)
-        self.document_repo.update_content(task.implementation_plan, content)
-        return task
-
     def update(self, task: Task) -> Task:
         """Update an existing task.
 
@@ -103,32 +94,6 @@ class TaskRepository(BaseRepository[Task]):
             Updated task
         """
         self.db.merge(task)
-        return task
-
-    def update_specification_content(self, task: Task, content: str) -> Task:
-        """Update task specification content.
-
-        Args:
-            task: Task instance
-            content: New specification content
-
-        Returns:
-            Updated task
-        """
-        self.document_repo.update_content(task.specification, content)
-        return task
-
-    def update_implementation_plan_content(self, task: Task, content: str) -> Task:
-        """Update task implementation plan content.
-
-        Args:
-            task: Task instance
-            content: New implementation plan content
-
-        Returns:
-            Updated task
-        """
-        self.document_repo.update_content(task.implementation_plan, content)
         return task
 
     def delete_by_id(self, task_id: int) -> bool:

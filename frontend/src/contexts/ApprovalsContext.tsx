@@ -293,8 +293,7 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
     addApproval,
     removeApproval,
     clearApprovals,
-    getApprovals,
-    hasApprovals,
+    // getApprovals and hasApprovals omitted - they're stable functions that only read from state
     processApprovalDecision,
     registerRefreshHandler,
     unregisterRefreshHandlers,

@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from devboard.agents.agent_engines import AgentEngine
 from devboard.agents.types import AgentRole
 from devboard.db.models import Conversation, ParentEntityType, Project
-from devboard.db.repositories import ConversationRepository
+from devboard.db.models.document import DocumentType
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 
 
 class TestConversationRepository:
@@ -15,12 +16,13 @@ class TestConversationRepository:
         return ConversationRepository(db_session)
 
     @pytest.fixture
-    def project(self, db_session: Session) -> Project:
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
         """Create a test project for conversation relationships."""
         from devboard.db.repositories.project import ProjectRepository
 
         project_repo = ProjectRepository(db_session)
-        project = project_repo.create(name="Test Project", description="")
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
         db_session.flush()
         return project
 
