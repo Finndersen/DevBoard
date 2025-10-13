@@ -9,6 +9,18 @@ from logfire import ConsoleOptions
 from devboard.db.database import engine
 
 
+def scrubbing_callback(m: logfire.ScrubMatch):
+    # Dont scrub Claude Code message content
+    if m.path == ("attributes", "message", "session_id"):
+        return m.value
+
+    if m.path == ("attributes", "message", "result") and m.pattern_match.group(0) == "session":
+        return m.value
+
+    if m.path == ("attributes", "message", "content", 0, "text") and m.pattern_match.group(0) == "Session":
+        return m.value
+
+
 def setup_logfire(app: FastAPI) -> None:
     """Setup Logfire configuration. Call this once at application startup."""
 
@@ -23,6 +35,7 @@ def setup_logfire(app: FastAPI) -> None:
         console=ConsoleOptions(verbose=True) if environment == "development" else False,
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
         send_to_logfire=bool(token),
+        scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback),
     )
 
     # Enable instrumentation that doesn't require parameters

@@ -17,7 +17,7 @@ from devboard.agents.claude_code.virtual_tools import VirtualToolCall
 logger = logging.getLogger(__name__)
 
 
-class MessageType(StrEnum):
+class ClaudeMessageType(StrEnum):
     """Types of messages that can appear in Claude Code conversations."""
 
     MESSAGE = "message"  # Normal conversational message
@@ -81,7 +81,7 @@ class ClaudeResponseParser:
         return None
 
     @classmethod
-    def detect_message_type(cls, text: str) -> MessageType:
+    def detect_message_type(cls, text: str) -> ClaudeMessageType:
         """Detect the type of message based on content and markers.
 
         Args:
@@ -92,22 +92,22 @@ class ClaudeResponseParser:
         """
         # Check for XML markers first
         if cls.VALIDATION_ERROR_PATTERN.search(text):
-            return MessageType.VALIDATION_ERROR
+            return ClaudeMessageType.VALIDATION_ERROR
 
         if cls.TOOL_RESULT_PATTERN.search(text):
-            return MessageType.TOOL_RESULT
+            return ClaudeMessageType.TOOL_RESULT
 
         # Use parse_message to detect tool calls
         try:
             parsed = cls.parse_message(text)
             if isinstance(parsed, VirtualToolCall):
-                return MessageType.TOOL_CALL
+                return ClaudeMessageType.TOOL_CALL
         except ValidationError:
             # JSON that fails tool call validation
-            return MessageType.INVALID_TOOL_CALL
+            return ClaudeMessageType.INVALID_TOOL_CALL
 
         # Default to normal message
-        return MessageType.MESSAGE
+        return ClaudeMessageType.MESSAGE
 
     @classmethod
     def parse_message(cls, text: str) -> str | VirtualToolCall:
@@ -181,23 +181,3 @@ class ClaudeResponseParser:
             result_text = match.group(2).strip()
             return (tool_name, result_text)
         return None
-
-    @classmethod
-    def should_include_in_conversation(cls, text: str) -> bool:
-        """Determine if a message should be included in conversation history.
-
-        Messages with validation errors, invalid tool calls, or tool results should
-        be excluded as they are internal agent communication.
-
-        Args:
-            text: Message text to check
-
-        Returns:
-            True if message should be included in conversation history
-        """
-        message_type = cls.detect_message_type(text)
-        return message_type not in (
-            MessageType.VALIDATION_ERROR,
-            MessageType.TOOL_RESULT,
-            MessageType.INVALID_TOOL_CALL,
-        )

@@ -27,12 +27,13 @@ class TestClaudeCodeSessionService:
             "message": {"role": "user", "content": "What is the current directory?"},
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=1)
 
         assert session_msg is not None
         assert session_msg.role == SessionMessageRole.USER
         assert session_msg.text_content == "What is the current directory?"
         assert session_msg.timestamp.year == 2025
+        assert session_msg.line_num == 1
 
     def test_parse_assistant_text_message(self, service):
         """Test parsing an assistant message with text content."""
@@ -46,11 +47,12 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=2)
 
         assert session_msg is not None
         assert session_msg.role == SessionMessageRole.ASSISTANT
         assert session_msg.text_content == "/Users/test/projects/TestProject"
+        assert session_msg.line_num == 2
 
     def test_parse_assistant_multiple_text_blocks(self, service):
         """Test parsing assistant message with multiple text blocks."""
@@ -67,10 +69,11 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=3)
 
         assert session_msg is not None
         assert session_msg.text_content == "First part.\nSecond part."
+        assert session_msg.line_num == 3
 
     def test_parse_assistant_with_tool_call(self, service):
         """Test parsing assistant message with only tool calls (no text content)."""
@@ -91,11 +94,12 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=4)
         # Session message should exist but have empty text_content
         assert session_msg is not None
         assert session_msg.text_content == ""
         assert len(session_msg.tool_calls) == 1
+        assert session_msg.line_num == 4
 
     def test_parse_assistant_mixed_text_and_tool(self, service):
         """Test parsing assistant message with both text and tool calls."""
@@ -117,11 +121,12 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=5)
 
         assert session_msg is not None
         assert session_msg.text_content == "Let me check that."
         assert len(session_msg.tool_calls) == 1
+        assert session_msg.line_num == 5
 
     def test_parse_summary_filtered(self, service):
         """Test that summary messages are filtered out."""
@@ -131,7 +136,7 @@ class TestClaudeCodeSessionService:
             "leafUuid": "uuid-123",
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=6)
         assert session_msg is None
 
     def test_parse_tool_result(self, service):
@@ -152,10 +157,11 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        session_msg = service._parse_session_message(entry)
+        session_msg = service._parse_session_message(entry, line_num=7)
         # Session message should exist with tool_results populated
         assert session_msg is not None
         assert len(session_msg.tool_results) == 1
+        assert session_msg.line_num == 7
 
     def test_load_session_messages(self, service):
         """Test loading full session message history from JSONL file."""
@@ -197,12 +203,16 @@ class TestClaudeCodeSessionService:
         assert len(session_messages) == 4  # 2 user + 2 assistant, summary filtered out
         assert session_messages[0].role == SessionMessageRole.USER
         assert session_messages[0].text_content == "Hello"
+        assert session_messages[0].line_num == 1
         assert session_messages[1].role == SessionMessageRole.ASSISTANT
         assert session_messages[1].text_content == "Hi there!"
+        assert session_messages[1].line_num == 2
         assert session_messages[2].role == SessionMessageRole.USER
         assert session_messages[2].text_content == "How are you?"
+        assert session_messages[2].line_num == 4  # Line 3 was summary, skipped
         assert session_messages[3].role == SessionMessageRole.ASSISTANT
         assert session_messages[3].text_content == "I'm doing well!"
+        assert session_messages[3].line_num == 5
 
     def test_load_conversation_file_not_found(self, service):
         """Test error handling when session file doesn't exist."""

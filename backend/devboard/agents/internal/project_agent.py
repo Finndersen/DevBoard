@@ -5,7 +5,7 @@ import logging
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.base_agent import InternalAgent
 from devboard.agents.internal.deps import BaseDeps
 from devboard.agents.internal.tools import create_document_edit_tool
 from devboard.agents.types import AgentRole
@@ -57,16 +57,25 @@ class ProjectDeps(BaseDeps):
     on_demand_resources: list[OnDemandResourceInfo]
 
 
-class ProjectAgent(BaseAgent[BaseDeps]):
+class ProjectAgent(InternalAgent[BaseDeps]):
     """Agent for managing and answering queries about a Project."""
 
     deps_type = BaseDeps
     agent_role = AgentRole.PROJECT
 
-    def __init__(self, project: Project, document_repository: DocumentRepository, **kwargs):
+    def __init__(
+        self,
+        project: Project,
+        document_repository: DocumentRepository,
+        context_service,
+        model_name: str,
+    ):
         self.project = project
         self.document_repository = document_repository
-        super().__init__(**kwargs)
+        super().__init__(
+            context_service=context_service,
+            model_name=model_name,
+        )
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for this agent."""

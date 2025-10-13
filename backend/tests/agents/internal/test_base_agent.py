@@ -7,7 +7,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
 
-from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.base_agent import InternalAgent
 from devboard.agents.internal.deps import BaseDeps
 from devboard.agents.types import AgentRole
 
@@ -18,7 +18,7 @@ class MockDeps(BaseDeps):
     test_field: str = "test_value"
 
 
-class MockAgent(BaseAgent):
+class MockInternalAgent(InternalAgent):
     """Mock implementation of BaseAgent for testing."""
 
     agent_role = AgentRole.PROJECT
@@ -34,6 +34,11 @@ class MockAgent(BaseAgent):
         return "Test context"
 
 
+class MockPydanticAgent:
+    def __init__(self, run_result):
+        self.run = AsyncMock(return_value=run_result)
+
+
 class TestBaseAgent:
     """Test BaseAgent abstract class functionality."""
 
@@ -43,9 +48,9 @@ class TestBaseAgent:
         return Mock()
 
     @pytest.fixture
-    def mock_agent_instance(self, mock_llm_service, mock_context_service):
+    def mock_agent_instance(self, mock_context_service):
         """Create mock agent instance with mocked dependencies."""
-        return MockAgent(mock_context_service, mock_llm_service)
+        return MockInternalAgent(mock_context_service, model_name="openai:gpt-4")
 
     @pytest.mark.asyncio
     async def test_agent_initialization_and_context(self, mock_agent_instance):
@@ -59,15 +64,11 @@ class TestBaseAgent:
         content = await mock_agent_instance._get_context_message_content(deps)
         assert content == "Test context"
 
-    def test_get_preferred_model(self, mock_agent_instance, mock_llm_service):
-        """Test _get_model returns model from AgentConfigService."""
-        # Reset the mock call count since it was called during initialization
-        mock_llm_service.get_effective_config.reset_mock()
-        # The mock_agent_config_service fixture returns an AgentEngineModelConfig
+    def test_get_model(self, mock_agent_instance):
+        """Test _get_model returns the configured model name."""
         model_id = mock_agent_instance._get_model()
-        # The method should return the model_id
-        assert model_id == "openai:gpt-4"  # This matches the mock fixture
-        mock_llm_service.get_effective_config.assert_called_once_with(AgentRole.PROJECT)
+        # The method should return the model_name passed during initialization
+        assert model_id == "openai:gpt-4"
 
     def test_create_agent(self, mock_agent_instance):
         """Test _create_agent creates PydanticAI Agent instance."""
@@ -83,7 +84,8 @@ class TestBaseAgent:
         # Mock the internal agent and result
         mock_result = Mock()
         mock_result.output = "Test response"
-        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        mock_pydantic_agent = MockPydanticAgent(run_result=mock_result)
+        mock_agent_instance._create_agent = Mock(return_value=mock_pydantic_agent)
 
         # Mock deps
         deps = MockDeps()
@@ -96,10 +98,10 @@ class TestBaseAgent:
         )
 
         assert result == mock_result
-        mock_agent_instance.agent.run.assert_called_once()
+        mock_pydantic_agent.run.assert_called_once()
 
         # Check that deps and message history were passed
-        call_args = mock_agent_instance.agent.run.call_args
+        call_args = mock_pydantic_agent.run.call_args
         assert call_args.kwargs["deps"] == deps
 
     @pytest.mark.asyncio
@@ -111,7 +113,8 @@ class TestBaseAgent:
         # Mock the internal agent and result
         mock_result = Mock()
         mock_result.output = "Continued response"
-        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        mock_pydantic_agent = MockPydanticAgent(run_result=mock_result)
+        mock_agent_instance._create_agent = Mock(return_value=mock_pydantic_agent)
 
         # Mock deps
         deps = MockDeps()
@@ -124,7 +127,7 @@ class TestBaseAgent:
         )
 
         assert result == mock_result
-        mock_agent_instance.agent.run.assert_called_once()
+        mock_pydantic_agent.run.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_with_message_history(self, mock_agent_instance):
@@ -138,7 +141,8 @@ class TestBaseAgent:
         # Mock the internal agent and result
         mock_result = Mock()
         mock_result.output = "Response with history"
-        mock_agent_instance.agent.run = AsyncMock(return_value=mock_result)
+        mock_pydantic_agent = MockPydanticAgent(run_result=mock_result)
+        mock_agent_instance._create_agent = Mock(return_value=mock_pydantic_agent)
 
         # Mock deps
         deps = MockDeps()
@@ -150,10 +154,10 @@ class TestBaseAgent:
         )
 
         assert result == mock_result
-        mock_agent_instance.agent.run.assert_called_once()
+        mock_pydantic_agent.run.assert_called_once()
 
         # Verify message history was included (should be appended after initial context)
-        call_args = mock_agent_instance.agent.run.call_args
+        call_args = mock_pydantic_agent.run.call_args
         message_history_arg = call_args.kwargs.get("message_history", [])
         # Should have initial context messages + our mock messages
         assert len(message_history_arg) >= len(mock_messages)
@@ -183,7 +187,7 @@ class TestBaseAgent:
         assert len(result.parts) >= 2  # At least system prompt and context message
 
 
-class ConcreteAgent(BaseAgent):
+class ConcreteAgent(InternalAgent):
     """Concrete implementation for testing abstract class requirements."""
 
     agent_role = AgentRole.TASK_SPECIFICATION
@@ -207,9 +211,9 @@ class TestBaseAgentAbstract:
         """Mock context assembly service for abstract tests."""
         return Mock()
 
-    def test_concrete_implementation_works(self, mock_llm_service, mock_context_service_for_abstract):
+    def test_concrete_implementation_works(self, mock_context_service_for_abstract):
         """Test that concrete implementation can be instantiated."""
-        agent = ConcreteAgent(mock_context_service_for_abstract, mock_llm_service)
+        agent = ConcreteAgent(mock_context_service_for_abstract, model_name="openai:gpt-4")
         assert agent.agent_role == AgentRole.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 
@@ -217,12 +221,12 @@ class TestBaseAgentAbstract:
         """Test that BaseAgent cannot be instantiated directly."""
         with pytest.raises(TypeError):
             # This should fail because BaseAgent has abstract methods
-            BaseAgent()  # type: ignore
+            InternalAgent()  # type: ignore
 
     def test_incomplete_implementation_fails(self):
         """Test that incomplete implementations fail."""
 
-        class IncompleteAgent(BaseAgent):
+        class IncompleteAgent(InternalAgent):
             agent_role = AgentRole.PROJECT
             deps_type = BaseDeps
 

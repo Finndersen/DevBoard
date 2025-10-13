@@ -15,6 +15,7 @@ from devboard.db.models import Base
 from devboard.db.repositories import (
     ConfigurationRepository,
     ContextProviderResourceRepository,
+    ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,

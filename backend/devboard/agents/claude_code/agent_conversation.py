@@ -6,8 +6,8 @@ from datetime import datetime
 import logfire
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.claude_code.base_agent import BaseClaudeAgent
-from devboard.agents.claude_code.message_parser import ClaudeResponseParser
+from devboard.agents.claude_code.base_agent import ClaudeCodeAgent
+from devboard.agents.claude_code.message_parser import ClaudeMessageType, ClaudeResponseParser
 from devboard.agents.claude_code.session import ClaudeCodeSessionService, SessionMessage, SessionMessageRole
 from devboard.agents.claude_code.virtual_tools import VirtualToolRequests
 from devboard.api.schemas.agent_conversation import (
@@ -39,7 +39,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
     def __init__(
         self,
         conversation: Conversation,
-        agent: BaseClaudeAgent,
+        agent: ClaudeCodeAgent,
         conversation_repository: ConversationRepository,
     ):
         """Initialize Claude Code conversation service.
@@ -49,10 +49,8 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             agent: Claude Code agent (TaskSpecificationAgent, TaskPlanningAgent, etc.)
             conversation_repository: Repository for conversation operations (saving session ID)
         """
-        super().__init__(conversation)
+        super().__init__(conversation, conversation_repository)
         self.agent = agent
-        self.conversation_repo = conversation_repository
-        self.claude_session_service = ClaudeCodeSessionService()
 
     @property
     def session_id(self) -> str | None:
@@ -103,7 +101,6 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         else:
             # Normal text response (MessageResponse)
             message = ConversationMessage(
-                id=0,
                 role=MessageRole.AGENT,
                 text_content=result.content,
                 timestamp=datetime.now(),
@@ -157,16 +154,16 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         Claude Code manages its own session storage in ~/.claude/projects.
 
         Returns:
-            List of ConversationMessage instances in chronological order
-
-        Raises:
-            ValueError: If conversation is missing external_session_id
+            List of ConversationMessage instances in chronological order.
+            Returns empty list if no session_id (conversation hasn't started or was cleared).
         """
+        # Return empty list if no session exists yet
         if not self.session_id:
-            raise ValueError("Claude Code conversation missing external_session_id")
+            return []
 
         # Load low-level session messages
-        session_messages = self.claude_session_service.load_session_messages(self.session_id)
+        claude_session_service = ClaudeCodeSessionService()
+        session_messages = claude_session_service.load_session_messages(self.session_id)
 
         # Convert to ConversationMessage with filtering
         conversation_messages: list[ConversationMessage] = []
@@ -203,15 +200,15 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         if not text_content:
             return None
 
-        # Filter out validation errors and tool results
-        if not ClaudeResponseParser.should_include_in_conversation(text_content):
+        # Only include standard text messages (Not virtual tool calls or validation errors etc)
+        message_type = ClaudeResponseParser.detect_message_type(text_content)
+        if message_type != ClaudeMessageType.MESSAGE:
             return None
 
         # Determine role for ConversationMessage
         conv_role = MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
 
         return ConversationMessage(
-            id=0,
             role=conv_role,
             text_content=text_content,
             timestamp=session_msg.timestamp,

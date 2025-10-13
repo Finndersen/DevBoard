@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.types import AgentEngine
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import get_agent_config_service, get_agent_conversation_service
@@ -93,15 +94,23 @@ async def approve_conversation_tools(
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)
 async def clear_conversation_messages(
-    conversation_id: int,
+    conversation: Conversation = Depends(get_verified_conversation),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> DeleteResponse:
-    """Clear all messages for a conversation."""
-    deleted_count = conversation_repo.delete_messages(conversation_id)
-    conversation_repo.db.commit()
+    """Clear all messages for a conversation.
+
+    For INTERNAL engine conversations: Deletes messages from database.
+    For Claude Code conversations: Resets external_session_id to start new session.
+    """
+    if conversation.engine == AgentEngine.CLAUDE_CODE:
+        # Reset session ID for Claude Code conversations
+        conversation_repo.update_external_session_id(conversation, None)
+    else:
+        # Delete database messages for INTERNAL engine
+        conversation_repo.delete_messages(conversation.id)
 
     return DeleteResponse(
-        message=f"Cleared {deleted_count} conversation messages",
+        message="Cleared conversation history.",
         success=True,
     )
 

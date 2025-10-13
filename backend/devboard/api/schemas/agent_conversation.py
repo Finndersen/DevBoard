@@ -15,7 +15,6 @@ class MessageRole(StrEnum):
 class ConversationMessage(BaseModel):
     """Model for a project or task agent conversation message (only contains final response for agent)."""
 
-    id: int
     role: MessageRole
     text_content: str
     timestamp: datetime.datetime

@@ -13,7 +13,7 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.base_agent import InternalAgent
 from devboard.agents.internal.deps import BaseDeps
 from devboard.api.schemas.agent_conversation import (
     ConversationMessage,
@@ -46,7 +46,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
     def __init__(
         self,
         conversation: Conversation,
-        agent: BaseAgent,
+        agent: InternalAgent,
         conversation_repository: ConversationRepository,
     ):
         """Initialize PydanticAI conversation service.
@@ -56,9 +56,8 @@ class PydanticAIConversationService(BaseAgentConversationService):
             agent: The PydanticAI agent instance
             conversation_repository: Repository for conversation database operations
         """
-        super().__init__(conversation)
+        super().__init__(conversation, conversation_repository)
         self.agent = agent
-        self.conversation_repo = conversation_repository
 
     @property
     def conversation_id(self) -> int:
@@ -148,7 +147,6 @@ class PydanticAIConversationService(BaseAgentConversationService):
             response = PromptResponse(
                 type=PromptResponseType.MESSAGE,
                 message=ConversationMessage(
-                    id=agent_final_message.id,
                     role=MessageRole.AGENT,
                     text_content=output,
                     timestamp=agent_final_message.timestamp,
@@ -212,7 +210,6 @@ class PydanticAIConversationService(BaseAgentConversationService):
         )
         return [
             ConversationMessage(
-                id=msg.id,
                 role=MessageRole.USER if msg.message_type == MessageType.USER_PROMPT else MessageRole.AGENT,
                 text_content=msg.text_content,
                 timestamp=msg.timestamp,

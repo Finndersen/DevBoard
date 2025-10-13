@@ -2,7 +2,6 @@
 
 import logging
 
-from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.agent_engines import AgentEngine
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.claude_code.agent_conversation import ClaudeCodeConversationService
@@ -10,7 +9,7 @@ from devboard.agents.claude_code.task_agent import ClaudeTaskPlanningAgent, Clau
 from devboard.agents.internal.agent_conversation import PydanticAIConversationService
 from devboard.agents.internal.task_agent import TaskPlanningAgent, TaskSpecificationAgent
 from devboard.agents.types import AgentRole
-from devboard.db.models.task import Task
+from devboard.db.models import Conversation, Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.context_assembly import ContextAssemblyService
@@ -19,38 +18,33 @@ logger = logging.getLogger(__name__)
 
 
 def create_task_conversation_service(
-    conversation_id: int,
+    conversation: Conversation,
     task: Task,
-    agent_role: AgentRole,
-    agent_engine: AgentEngine,
     conversation_repo: ConversationRepository,
     document_repo: DocumentRepository,
     context_service: ContextAssemblyService,
-    agent_config_service: AgentConfigService,
 ) -> BaseAgentConversationService:
     """Create a task conversation service based on agent role and engine.
 
     Args:
-        conversation_id: ID of the conversation
+        conversation: Conversation model instance
         task: Task model instance
-        agent_role: Agent role (e.g., TASK_SPECIFICATION, TASK_PLANNING)
-        agent_engine: Agent engine to use (e.g., INTERNAL, CLAUDE_CODE)
         conversation_repo: Conversation repository
         document_repo: Document repository
         context_service: Context assembly service
-        agent_config_service: Service for agent engine and model config
 
     Returns:
         Configured conversation service instance
 
     Raises:
-        ValueError: If role/engine combination is not supported or conversation not found
+        ValueError: If role/engine combination is not supported
     """
-    # Fetch conversation instance (required by all implementations)
-    conversation = conversation_repo.get_by_id(conversation_id)
-    if not conversation:
-        raise ValueError(f"Conversation {conversation_id} not found")
-
+    # Extract agent role and engine from conversation
+    agent_role = conversation.agent_role
+    agent_engine = conversation.engine
+    model_id = conversation.model_id
+    # TODO: I think it actually makes more sense for ConversationService to construct its own agent, but not sure about
+    # a sensible way of handling dependencies. For now, we'll pass them in here.
     if agent_engine == AgentEngine.INTERNAL:
         # Create PydanticAI agent based on role
         if agent_role == AgentRole.TASK_SPECIFICATION:
@@ -58,14 +52,14 @@ def create_task_conversation_service(
                 task=task,
                 document_repository=document_repo,
                 context_service=context_service,
-                agent_config_service=agent_config_service,
+                model_name=model_id,
             )
         elif agent_role == AgentRole.TASK_PLANNING:
             agent = TaskPlanningAgent(
                 task=task,
                 document_repository=document_repo,
                 context_service=context_service,
-                agent_config_service=agent_config_service,
+                model_name=model_id,
             )
         else:
             raise ValueError(f"Unsupported agent role for PydanticAI: {agent_role}")
@@ -82,11 +76,13 @@ def create_task_conversation_service(
             agent = ClaudeTaskSpecificationAgent(
                 task=task,
                 document_repository=document_repo,
+                model_name=model_id,
             )
         elif agent_role == AgentRole.TASK_PLANNING:
             agent = ClaudeTaskPlanningAgent(
                 task=task,
                 document_repository=document_repo,
+                model_name=model_id,
             )
         else:
             raise ValueError(f"Unsupported agent role for Claude Code: {agent_role}")

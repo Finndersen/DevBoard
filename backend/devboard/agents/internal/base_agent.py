@@ -20,7 +20,6 @@ from pydantic_ai.tools import (
     ToolFuncEither,
 )
 
-from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.internal.deps import BaseDeps
 from devboard.agents.types import AgentRole
 from devboard.services.context_assembly import (
@@ -31,16 +30,19 @@ from devboard.services.context_assembly import (
 logger = logging.getLogger(__name__)
 
 
-class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
-    """Base class for all document-editing agents using PydanticAI."""
+class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
+    """Base class for all internal agent definitions using PydanticAI."""
 
     agent_role: AgentRole
     deps_type: type[TDeps]
 
-    def __init__(self, context_service: ContextAssemblyService, agent_config_service: AgentConfigService):
+    def __init__(
+        self,
+        context_service: ContextAssemblyService,
+        model_name: str,
+    ):
         self.context_service = context_service
-        self.agent_config_service = agent_config_service
-        self.agent = self._create_agent()
+        self.model_name = model_name
 
     def _create_agent(self) -> Agent[TDeps]:
         """Create the PydanticAI agent with context tools."""
@@ -56,9 +58,9 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         return agent
 
     def _get_model(self) -> str:
-        """Get preferred model for this agent type."""
-        config = self.agent_config_service.get_effective_config(self.agent_role)
-        return config.model_id.replace("google", "google-gla")
+        """Get the model name for this agent instance."""
+        # Replace google with google-gla for compatibility with PydanticAI
+        return self.model_name.replace("google", "google-gla")
 
     @abstractmethod
     def _get_system_prompt(self) -> str:
@@ -114,15 +116,17 @@ class BaseAgent[TDeps: BaseDeps](metaclass=ABCMeta):
             dummy_response,
         ] + conversation_history
 
+        agent = self._create_agent()
+
         # Run the agent with message history
         if isinstance(prompt_or_approvals, DeferredToolResults):
-            result = await self.agent.run(
+            result = await agent.run(
                 deferred_tool_results=prompt_or_approvals,
                 deps=deps,
                 message_history=total_message_history,
             )
         else:
-            result = await self.agent.run(
+            result = await agent.run(
                 user_prompt=prompt_or_approvals,
                 deps=deps,
                 message_history=total_message_history,

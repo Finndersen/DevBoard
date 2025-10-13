@@ -57,11 +57,11 @@ class TestTaskSpecificationAgent:
         return Mock()
 
     @pytest.fixture
-    def agent(self, mock_task, mock_document_repo, mock_agent_config_service, mock_context_service):
+    def agent(self, mock_task, mock_document_repo, mock_context_service):
         """Create TaskSpecificationAgent instance."""
         return TaskSpecificationAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task,
             document_repository=mock_document_repo,
         )
@@ -139,11 +139,11 @@ class TestTaskPlanningAgent:
         return Mock()
 
     @pytest.fixture
-    def agent(self, mock_task, mock_document_repo, mock_agent_config_service, mock_context_service):
+    def agent(self, mock_task, mock_document_repo, mock_context_service):
         """Create TaskPlanningAgent instance."""
         return TaskPlanningAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task,
             document_repository=mock_document_repo,
         )
@@ -425,12 +425,12 @@ class TestAgentToolSelection:
         return Mock()
 
     def test_specification_agent_uses_set_tool_for_blank_document(
-        self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service, mock_context_service
+        self, mock_task_with_blank_spec, mock_document_repo, mock_context_service
     ):
         """Test TaskSpecificationAgent uses set_content tool when document is blank."""
         agent = TaskSpecificationAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
@@ -440,12 +440,12 @@ class TestAgentToolSelection:
         assert tools[0].name == f"set_{DocumentType.TASK_SPECIFICATION}_content"
 
     def test_specification_agent_uses_edit_tool_for_document_with_content(
-        self, mock_task_with_content, mock_document_repo, mock_agent_config_service, mock_context_service
+        self, mock_task_with_content, mock_document_repo, mock_context_service
     ):
         """Test TaskSpecificationAgent uses edit tool when document has content."""
         agent = TaskSpecificationAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task_with_content,
             document_repository=mock_document_repo,
         )
@@ -455,13 +455,13 @@ class TestAgentToolSelection:
         assert tools[0].name == f"edit_{DocumentType.TASK_SPECIFICATION}"
 
     def test_planning_agent_uses_appropriate_tools_for_both_documents(
-        self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service, mock_context_service
+        self, mock_task_with_blank_spec, mock_document_repo, mock_context_service
     ):
         """Test TaskPlanningAgent uses appropriate tools based on each document's state."""
         # Modify task to have blank spec and blank plan
         agent = TaskPlanningAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
@@ -473,7 +473,7 @@ class TestAgentToolSelection:
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
 
     def test_planning_agent_mixed_document_states(
-        self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service, mock_context_service
+        self, mock_task_with_blank_spec, mock_document_repo, mock_context_service
     ):
         """Test TaskPlanningAgent handles mixed document states correctly."""
         # Set spec to have content, but plan to be blank
@@ -481,7 +481,7 @@ class TestAgentToolSelection:
 
         agent = TaskPlanningAgent(
             context_service=mock_context_service,
-            agent_config_service=mock_agent_config_service,
+            model_name="openai:gpt-4",
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )

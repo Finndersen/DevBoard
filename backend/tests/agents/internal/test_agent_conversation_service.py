@@ -19,7 +19,7 @@ from pydantic_ai.tools import (
 from sqlalchemy.orm import Session
 
 from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.internal.base_agent import BaseAgent
+from devboard.agents.internal.base_agent import InternalAgent
 from devboard.agents.internal.deps import BaseDeps
 from devboard.agents.types import AgentRole
 from devboard.api.schemas.agent_conversation import (
@@ -31,7 +31,7 @@ from devboard.db.models import Conversation
 from devboard.db.repositories.conversation import ConversationRepository
 
 
-class MockAgent(BaseAgent):
+class MockAgent(InternalAgent):
     """Mock agent for testing."""
 
     agent_role = AgentRole.PROJECT

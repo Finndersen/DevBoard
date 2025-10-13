@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from devboard.api.schemas.agent_conversation import ConversationMessage, PromptResponse, ToolApprovalDecision
 from devboard.db.models import Conversation
+from devboard.db.repositories import ConversationRepository
 
 
 class BaseAgentConversationService(ABC):
@@ -23,13 +24,15 @@ class BaseAgentConversationService(ABC):
         conversation: The conversation instance this service manages
     """
 
-    def __init__(self, conversation: Conversation):
+    def __init__(self, conversation: Conversation, conversation_repository: ConversationRepository):
         """Initialize the conversation service with a conversation instance.
 
         Args:
             conversation: The conversation instance to manage
+            conversation_repository: Repository for conversation operations
         """
         self.conversation = conversation
+        self.conversation_repo = conversation_repository
 
     @abstractmethod
     async def send_message(self, message: str) -> PromptResponse:

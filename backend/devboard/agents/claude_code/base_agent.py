@@ -33,7 +33,7 @@ class MessageResponse:
     session_id: str
 
 
-class BaseClaudeAgent(ABC):
+class ClaudeCodeAgent(ABC):
     """Base class for Claude Code agents using virtual tool calling.
 
     This class provides the foundation for application-level agents that use
@@ -44,16 +44,24 @@ class BaseClaudeAgent(ABC):
     - _get_virtual_tools(): Return list of VirtualTool instances for this agent
     """
 
-    def __init__(self, task: Task, document_repository: DocumentRepository, plan_mode: bool = True):
+    def __init__(
+        self,
+        task: Task,
+        document_repository: DocumentRepository,
+        model_name: str,
+        plan_mode: bool = False,
+    ):
         """Initialize the base Claude agent.
 
         Args:
             task: The task this agent is working on
             document_repository: Repository for document operations
+            model_name: Model ID (e.g., "anthropic:claude-sonnet-4")
             plan_mode: Whether to enable plan mode in Claude Code
         """
         self.task = task
         self.document_repo = document_repository
+        self.model_name = model_name
         self._virtual_tools = {tool.tool_name: tool for tool in self._get_virtual_tools()}
         self.plan_mode = plan_mode
         self.session_service = ClaudeCodeSessionService()
@@ -168,11 +176,15 @@ class BaseClaudeAgent(ABC):
     def _get_model(self) -> str | None:
         """Get the model to use for this agent.
 
-        Override to customize model selection.
+        Strips the "anthropic:" prefix from the model name if present,
+        as ClaudeClient expects just the model identifier.
 
         Returns:
-            Model name or None to use default
+            Model name without prefix, or None to use default
         """
+        if self.model_name:
+            # Remove "anthropic:" prefix if present
+            return self.model_name.replace("anthropic:", "")
         return None
 
     def _get_cwd(self) -> str | None:

@@ -51,7 +51,7 @@ class VirtualToolRequests(BaseModel):
 
 # Tool response format instructions for system prompts
 TOOL_RESPONSE_FORMAT = """
-TOOL USAGE INSTRUCTIONS:
+# TOOL USAGE INSTRUCTIONS:
 
 1. STANDARD READ-ONLY TOOLS (file search, codebase search, etc.):
    Use these tools NORMALLY via your built-in tool system.
@@ -60,30 +60,54 @@ TOOL USAGE INSTRUCTIONS:
 2. DOCUMENT EDITING TOOLS (edit_*, set_*_content):
    These tools require approval and must use the VIRTUAL TOOL CALLING format below.
 
-VIRTUAL TOOL CALLING FORMAT (for document editing tools only):
+## VIRTUAL TOOL CALLING FORMAT (for document editing tools only):
 
-For document editing tool calls, respond with JSON content ONLY:
+For document editing tool calls, respond with JSON content ONLY (no other text in your message):
 {
-  "tool_name": "edit_task_specification",
+  "tool_name": "<tool_name>",
   "arguments": {
-    "edits": [...],
-    "reasoning": "Brief explanation"
+    ...
   }
 }
 
-You can optionally wrap the JSON in a code block:
-```json
+## CORRECT Tool Call Example (ONLY JSON content):
+User: 'Update the task specification with the details we have discussed'
+Assistant: '
 {
   "tool_name": "edit_task_specification",
-  "arguments": {...}
-}
-```
+  "arguments": {
+    "edits": [
+      {
+        "old_string": "# Overview\\nOld content here",
+        "new_string": "# Overview\\nNew improved content"
+      }
+    ],
+    "reasoning": "Updated overview section"
+  }
+}'
+
+## INCORRECT Tool Call Example (containing other text):
+User: 'Update the task specification with the details we have discussed. Also, fix the indentation.'
+Assistant: 'I will update the task specification. Here's the updated content:
+{
+  "tool_name": "edit_task_specification",
+  "arguments": {
+    "edits": [
+      {
+        "old_string": "# Overview\\nOld content here",
+        "new_string": "# Overview\\nNew improved content"
+      }
+    ],
+    "reasoning": "Updated overview section"
+  }
+}'
 
 IMPORTANT:
 - You can only make ONE document editing tool call at a time
+- ONLY make edits to task documents when specifically asked by the user, or after asking and receiving confirmation
 - After the tool executes, you will receive the result wrapped in <tool_call_result> tags
 - Standard build-in tools can be used freely without any special format
-- For document editing tool calls, respond with JSON content ONLY.
+- For virtual tool calls, your message must contain JSON content ONLY (NO OTHER TEXT).
 - For normal messages, respond naturally with plain text. No JSON format needed.
 """
 

@@ -86,6 +86,7 @@ class SessionMessage:
     content: str | list[ContentBlock]
     tool_calls: list[ToolUseBlock] | None  # Tool use blocks if present
     tool_results: list[ToolResultBlock] | None  # Tool result blocks if present
+    line_num: int  # Line number in the JSONL file (1-indexed)
 
     @property
     def text_content(self) -> str:
@@ -191,8 +192,8 @@ class ClaudeCodeSessionService:
         # Parse the last line as JSON
         entry = json.loads(lines[-1])
 
-        # Convert to SessionMessage
-        return self._parse_session_message(entry)
+        # Convert to SessionMessage with line_num as the last line number
+        return self._parse_session_message(entry, line_num=len(lines))
 
     def load_session_messages(self, session_id: str) -> list[SessionMessage]:
         """Load complete session messages from a Claude Code session.
@@ -221,7 +222,7 @@ class ClaudeCodeSessionService:
 
                 try:
                     entry = json.loads(line)
-                    message = self._parse_session_message(entry)
+                    message = self._parse_session_message(entry, line_num=line_num)
                     if message:
                         messages.append(message)
                 except json.JSONDecodeError as e:
@@ -265,11 +266,12 @@ class ClaudeCodeSessionService:
             # Unknown block type - raise error or return a generic block
             raise ValueError(f"Unknown content block type: {block_type}")
 
-    def _parse_session_message(self, entry: dict[str, Any]) -> SessionMessage | None:
+    def _parse_session_message(self, entry: dict[str, Any], line_num: int) -> SessionMessage | None:
         """Parse a JSONL entry into a SessionMessage with full data.
 
         Args:
             entry: Dictionary parsed from a JSONL line
+            line_num: Line number in the JSONL file (1-indexed)
 
         Returns:
             SessionMessage with complete data, or None if not a message type
@@ -310,6 +312,7 @@ class ClaudeCodeSessionService:
                 content=parsed_content,
                 tool_calls=None,
                 tool_results=tool_results,
+                line_num=line_num,
             )
 
         elif msg_type == "assistant":
@@ -336,6 +339,7 @@ class ClaudeCodeSessionService:
                 content=parsed_blocks,
                 tool_calls=tool_calls,
                 tool_results=None,
+                line_num=line_num,
             )
 
         return None

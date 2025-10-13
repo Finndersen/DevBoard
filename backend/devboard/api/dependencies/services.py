@@ -99,7 +99,6 @@ def get_agent_conversation_service(
     task_repo: TaskRepository = Depends(get_task_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
     context_service: ContextAssemblyService = Depends(get_context_assembly_service),
-    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> BaseAgentConversationService:
     """Get conversation service instance using factory pattern based on conversation entity.
 
@@ -113,7 +112,6 @@ def get_agent_conversation_service(
         task_repo: Task repository
         project_repo: Project repository
         context_service: Context assembly service
-        agent_config_service: Agent configuration service
 
     Returns:
         BaseAgentConversationService instance (PydanticAI or Claude Code implementation)
@@ -129,14 +127,11 @@ def get_agent_conversation_service(
 
         # Use task factory
         return create_task_conversation_service(
-            conversation_id=conversation.id,
+            conversation=conversation,
             task=task,
-            agent_role=conversation.agent_role,
-            agent_engine=conversation.engine,
             conversation_repo=conversation_repo,
             document_repo=document_repo,
             context_service=context_service,
-            agent_config_service=agent_config_service,
         )
 
     elif conversation.parent_entity_type == ParentEntityType.PROJECT:
@@ -156,7 +151,7 @@ def get_agent_conversation_service(
             project=project,
             document_repository=document_repo,
             context_service=context_service,
-            agent_config_service=agent_config_service,
+            model_name=conversation.model_id,
         )
 
         return PydanticAIConversationService(

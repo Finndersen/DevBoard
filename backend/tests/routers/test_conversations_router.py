@@ -296,8 +296,7 @@ class TestConversationsRouter:
 
         delete_response = response.json()
         assert delete_response["success"] is True
-        assert "3" in delete_response["message"]
-        assert "Cleared" in delete_response["message"]
+        assert delete_response["message"] == "Cleared conversation history."
 
         # Verify messages are deleted
         messages = conversation_repo.get_messages(test_conversation.id)
@@ -310,4 +309,35 @@ class TestConversationsRouter:
 
         delete_response = response.json()
         assert delete_response["success"] is True
-        assert "0" in delete_response["message"]
+        assert delete_response["message"] == "Cleared conversation history."
+
+    def test_clear_claude_code_conversation_resets_session_id(self, client, db_session, test_project):
+        """Test that clearing a Claude Code conversation resets the session ID."""
+        conversation_repo = ConversationRepository(db_session)
+
+        # Create a Claude Code conversation with a session ID
+        conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=test_project.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id="anthropic:claude-sonnet-4.5",
+            is_active=True,
+        )
+        conversation_repo.update_external_session_id(conversation, "test-session-123")
+        db_session.commit()
+
+        # Verify session ID is set
+        assert conversation.external_session_id == "test-session-123"
+
+        # Clear conversation
+        response = client.delete(f"/api/conversations/{conversation.id}/messages")
+        assert response.status_code == 200
+
+        delete_response = response.json()
+        assert delete_response["success"] is True
+        assert delete_response["message"] == "Cleared conversation history."
+
+        # Verify session ID was reset
+        db_session.refresh(conversation)
+        assert conversation.external_session_id is None

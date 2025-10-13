@@ -8,7 +8,7 @@ from claude_agent_sdk import ResultMessage
 
 from devboard.agents.claude_code.base_agent import (
     MAX_RETRY_ATTEMPTS,
-    BaseClaudeAgent,
+    ClaudeCodeAgent,
     MessageResponse,
 )
 from devboard.agents.claude_code.client import ClaudeCodeResult
@@ -31,12 +31,12 @@ def create_mock_result(text_content: str, session_id: str = "test-session") -> C
     )
 
 
-class MockAgent(BaseClaudeAgent):
+class MockAgent(ClaudeCodeAgent):
     """Mock implementation of BaseClaudeAgent for testing."""
 
-    def __init__(self, task, document_repo, virtual_tools=None):
+    def __init__(self, task, document_repo, virtual_tools=None, model_name="anthropic:claude-sonnet-4"):
         self._test_virtual_tools = virtual_tools or []
-        super().__init__(task, document_repo)
+        super().__init__(task, document_repo, model_name)
 
     def _get_role_description(self) -> str:
         return "Test agent role description"
