@@ -271,6 +271,27 @@ Claude Code maintains session history in JSONL files stored at:
 - Format: One JSON object per line containing message metadata, content, and tool interactions
 - Message types: `user` (prompts), `assistant` (responses), `summary` (conversation summaries)
 - DevBoard can read these sessions via `ClaudeCodeSessionService` to display conversation history
+- **Session Service**: `ClaudeCodeSessionService` provides methods for finding, loading, and parsing session files
+  - `find_session_file(session_id)`: Searches all project directories for the session file
+  - `load_session_messages(session_id)`: Returns complete list of parsed SessionMessage objects
+  - `get_last_session_message(session_id)`: Retrieves most recent message for tool call parsing
+
+**Message Parsing**:
+DevBoard parses Claude session messages into typed structures for processing:
+- **Content Block Types**: Messages contain structured blocks parsed into dataclasses
+  - `TextBlock`: Plain text content with type="text" and text field
+  - `ToolUseBlock`: Tool call requests with type="tool_use", id, name, and input parameters
+  - `ToolResultBlock`: Tool execution results with type="tool_result", tool_use_id, content, and is_error flag
+- **SessionMessage Structure**: Complete message representation with:
+  - Role (USER or ASSISTANT), timestamp, and UUID
+  - Content as either string (user text) or list of ContentBlock instances
+  - Extracted tool_calls (ToolUseBlock instances) for agent processing
+  - Extracted tool_results (ToolResultBlock instances) for result parsing
+  - `text_content` property for extracting displayable text from message
+- **Conversation Filtering**: System automatically filters internal messages from conversation history
+  - Validation errors (marked with `<validation_error>` tags) not shown to user
+  - Tool results (marked with `<tool_call_result>` tags) not shown to user
+  - Messages with only tool calls (no text content) not shown to user
 
 **Todo List Storage**:
 Claude Code tracks task progress in JSON files stored at:
@@ -295,6 +316,38 @@ All agents receive **assembled context** that combines:
 - External resource summaries (GitHub, Jira, Slack)
 - Conversation history and state information
 - Available tools and capabilities
+
+#### Virtual Tool Calling
+Claude Code agents use a **virtual tool calling pattern** where tool requests are JSON-structured responses requiring user approval:
+
+**Tool Request Flow**:
+1. **Agent Responds with JSON**: Agent returns JSON object with `tool_name` and `arguments` fields
+2. **Parsing & Validation**: `ClaudeResponseParser.parse_message()` extracts and validates JSON
+3. **Schema Validation**: Tool arguments validated against VirtualTool's args_model (Pydantic schema)
+4. **User Approval**: Tool requests presented to user for approval/denial with optional arg modifications
+5. **Tool Execution**: Approved tools executed via `VirtualTool.execute(args)` method
+6. **Result Return**: Execution results wrapped in XML markers (`<tool_call_result tool_name="...">`) and sent back to agent
+7. **Agent Continuation**: Agent receives results and continues conversation
+
+**Validation & Retry Mechanism**:
+- **Structure Validation**: JSON must match `VirtualToolCall` schema (tool_name, arguments)
+- **Tool Validation**: Tool must exist in agent's registered virtual tools
+- **Argument Validation**: Arguments must pass tool's Pydantic schema validation
+- **Automatic Retry**: Invalid responses trigger retry with detailed error feedback wrapped in `<validation_error>` tags
+- **Max Retries**: System attempts up to 3 retries before raising error
+- **Error Messages**: Validation errors include specific field issues and expected format
+
+**Virtual Tool Definition**:
+- **VirtualTool Class**: Base class defining tool interface with `tool_name`, `description`, `args_model`, and `execute()` method
+- **Args Model**: Pydantic BaseModel defining required/optional arguments with types and descriptions
+- **Tool Schemas**: System prompt includes tool schemas in structured format for agent awareness
+- **Tool Execution**: Async `execute(args)` method performs actual tool operations (document edits, resource research, etc.)
+
+**Message Parser Integration**:
+- **Unified Parsing**: `ClaudeResponseParser.parse_message()` handles both regular messages and tool calls
+- **Type Detection**: `detect_message_type()` classifies messages as MESSAGE, TOOL_CALL, INVALID_TOOL_CALL, VALIDATION_ERROR, or TOOL_RESULT
+- **JSON Extraction**: `extract_json()` supports plain JSON and code block formats (```json ... ```)
+- **Conversation Filtering**: `should_include_in_conversation()` determines if message visible to user (filters validation errors and tool results)
 
 #### Document Collaboration
 Agents collaborate with users through **structured document editing**:

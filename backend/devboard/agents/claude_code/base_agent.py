@@ -1,14 +1,21 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
-import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 from devboard.agents.claude_code.client import ClaudeClient, ClaudeCodeResult
-from devboard.agents.claude_code.virtual_tools import VirtualTool, VirtualToolCall, VirtualToolRequests
+from devboard.agents.claude_code.message_parser import ClaudeResponseParser
+from devboard.agents.claude_code.session import ClaudeCodeSessionService
+from devboard.agents.claude_code.virtual_tools import (
+    VirtualTool,
+    VirtualToolCall,
+    VirtualToolRequests,
+    build_tool_schemas_section,
+)
+from devboard.api.schemas.agent_conversation import ToolApprovalDecision
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
 
@@ -24,22 +31,6 @@ class MessageResponse:
 
     content: str
     session_id: str
-
-
-# Response format models for Pydantic validation
-
-
-class MessageResponseFormat(BaseModel):
-    """Pydantic model for normal message responses."""
-
-    type: str = Field(pattern="^message$", description="Response type must be 'message'")
-    content: str = Field(description="The message content")
-
-
-class ToolCallResponseFormat(VirtualToolCall):
-    """Pydantic model for tool call responses."""
-
-    type: str = Field(pattern="^tool_call$", description="Response type must be 'tool_call'")
 
 
 class BaseClaudeAgent(ABC):
@@ -59,11 +50,13 @@ class BaseClaudeAgent(ABC):
         Args:
             task: The task this agent is working on
             document_repository: Repository for document operations
+            plan_mode: Whether to enable plan mode in Claude Code
         """
         self.task = task
         self.document_repo = document_repository
-        self._virtual_tools: dict[str, VirtualTool] | None = None
+        self._virtual_tools = {tool.tool_name: tool for tool in self._get_virtual_tools()}
         self.plan_mode = plan_mode
+        self.session_service = ClaudeCodeSessionService()
 
     def _create_client(self, session_id: str | None = None) -> ClaudeClient:
         """Create a Claude client with the current system prompt and session ID.
@@ -88,17 +81,52 @@ class BaseClaudeAgent(ABC):
             plan_mode=self.plan_mode,
         )
 
-    @abstractmethod
     def _build_system_prompt(self) -> str:
         """Build the system prompt for this agent.
 
-        This should include:
-        - Agent role and instructions
-        - Tool schemas and response format requirements
-        - Current document state and context
+        Combines role description, tool schemas, and state/context data.
+        Subclasses should implement _get_role_description() and _get_state_context().
 
         Returns:
             Complete system prompt string
+        """
+        # Get components from subclass
+        role_description = self._get_role_description()
+
+        # Build tool schemas from virtual tools
+        tool_schemas = build_tool_schemas_section(list(self._virtual_tools.values()))
+
+        # Get current state/context
+        state_context = self._get_state_context()
+
+        # Combine all parts
+        return f"{role_description}\n\n{tool_schemas}\n\n{state_context}"
+
+    @abstractmethod
+    def _get_role_description(self) -> str:
+        """Get the agent role description and behavioral guidelines.
+
+        This should describe:
+        - The agent's purpose and role
+        - Guidelines for behavior and interaction
+        - Any specific rules or constraints
+
+        Returns:
+            Role description string
+        """
+        pass
+
+    @abstractmethod
+    def _get_state_context(self) -> str:
+        """Get the current state and context information for the agent.
+
+        This should provide:
+        - Current task information (name, status, etc.)
+        - Document states (which documents and their content)
+        - Any other relevant context
+
+        Returns:
+            State/context string
         """
         pass
 
@@ -125,9 +153,6 @@ class BaseClaudeAgent(ABC):
         Returns:
             VirtualTool instance or None if not found
         """
-        if self._virtual_tools is None:
-            tools = self._get_virtual_tools()
-            self._virtual_tools = {tool.tool_name: tool for tool in tools}
         return self._virtual_tools.get(tool_name)
 
     def _get_allowed_tools(self) -> list[str] | None:
@@ -162,14 +187,14 @@ class BaseClaudeAgent(ABC):
 
     async def run(
         self,
-        user_message: str,
+        prompt_or_approvals: str | dict[str, ToolApprovalDecision],
         session_id: str | None = None,
         _retry_count: int = 0,
     ) -> MessageResponse | VirtualToolRequests:
-        """Run the agent with a user message.
+        """Run the agent with either a user message or tool approval results.
 
         Args:
-            user_message: The user's message/query
+            prompt_or_approvals: Either a user message string or dict of tool approval decisions
             session_id: Optional session ID to resume previous conversation
             _retry_count: Internal counter for retry attempts (not for external use)
 
@@ -177,8 +202,22 @@ class BaseClaudeAgent(ABC):
             Either a MessageResponse (normal message) or VirtualToolRequests (tool calls)
 
         Raises:
-            ValueError: If maximum retry attempts exceeded
+            ValueError: If session_id missing when processing tool approvals,
+                       or if maximum retry attempts exceeded
         """
+        # Check if this is tool approvals
+        if isinstance(prompt_or_approvals, dict):
+            if not session_id:
+                raise ValueError("session_id required when processing tool approvals")
+
+            # Execute tools and format results
+            results = await self._process_tool_approvals(prompt_or_approvals, session_id)
+
+            # Send results back to Claude wrapped in XML markers
+            user_message = results
+        else:
+            user_message = prompt_or_approvals
+
         # Create fresh client with current system prompt, document state, and session ID
         client = self._create_client(session_id=session_id)
 
@@ -188,15 +227,94 @@ class BaseClaudeAgent(ABC):
         # Parse response to detect virtual tool calls with validation
         return await self._parse_response(result, _retry_count)
 
+    async def _process_tool_approvals(
+        self,
+        approvals: dict[str, ToolApprovalDecision],
+        session_id: str,
+    ) -> str:
+        """Process tool approvals and execute approved virtual tools.
+
+        Parses the last message from session to get tool call data,
+        executes approved tools, and formats results with XML markers.
+
+        Args:
+            approvals: Map of tool_name (as tool_call_id) to approval decision
+            session_id: Claude Code session ID to retrieve tool call from
+
+        Returns:
+            Formatted result message with XML markers for sending back to Claude
+
+        Raises:
+            ValueError: If session has no messages or last message isn't a tool call
+        """
+        # Get last message from session to parse tool call
+        last_message = self.session_service.get_last_session_message(session_id)
+        if not last_message:
+            raise ValueError("No messages in session - cannot process tool approvals")
+
+        # Parse virtual tool call from message text content using centralized parser
+        parsed = ClaudeResponseParser.parse_message(last_message.text_content)
+        if not isinstance(parsed, VirtualToolCall):
+            raise ValueError("Last message does not contain a virtual tool call")
+        tool_call = parsed
+
+        # Execute approved tools and build result messages
+        result_parts: list[str] = []
+
+        for tool_call_id, decision in approvals.items():
+            # tool_call_id should match tool_name
+            if tool_call_id != tool_call.tool_name:
+                raise ValueError(
+                    f"Tool call ID mismatch: expected {tool_call.tool_name}, got {tool_call_id}. "
+                    f"Tool call ID must match the tool name from the session."
+                )
+
+            # Get the virtual tool
+            virtual_tool = self.get_virtual_tool(tool_call.tool_name)
+            if not virtual_tool:
+                raise ValueError(f"Unknown virtual tool: {tool_call.tool_name}")
+
+            if decision.approved:
+                # Execute the virtual tool
+                # Use modified args if provided, otherwise use args from session
+                args = decision.modified_args if decision.modified_args else tool_call.arguments
+
+                result = await virtual_tool.execute(args)
+                result_text = f"✓ {tool_call.tool_name}: {result}"
+
+            else:
+                # Tool denied
+                feedback = decision.feedback or "Tool execution was denied"
+                result_text = f"✗ {tool_call.tool_name} DENIED: {feedback}"
+
+            # Wrap result in XML marker
+            result_parts.append(
+                f'<tool_call_result tool_name="{tool_call.tool_name}">\n{result_text}\n</tool_call_result>'
+            )
+
+        # Return combined results
+        return "\n\n".join(result_parts)
+
+    def _wrap_validation_error(self, error_message: str) -> str:
+        """Wrap a validation error message in XML markers.
+
+        Args:
+            error_message: The error message to wrap
+
+        Returns:
+            Error message wrapped in <validation_error> tags
+        """
+        return f"<validation_error>\n{error_message}\n</validation_error>"
+
     async def _parse_response(
         self,
         result: ClaudeCodeResult,
         retry_count: int,
     ) -> MessageResponse | VirtualToolRequests:
-        """Parse the Claude response to detect virtual tool calls with validation.
+        """Parse the Claude response to detect virtual tool calls.
 
-        Validates JSON format and tool arguments. If validation fails, retries
-        with error feedback (up to MAX_RETRY_ATTEMPTS).
+        Uses the centralized parser to consistently handle both regular messages
+        and tool calls.
 
         Args:
             result: The raw ClaudeCodeResult from the client
@@ -204,146 +322,58 @@ class BaseClaudeAgent(ABC):
 
         Returns:
             Either a MessageResponse (normal message) or VirtualToolRequests
-
-        Raises:
-            ValueError: If maximum retry attempts exceeded
         """
         response_text = result.text_content.strip()
 
-        # Try to parse as JSON
+        # Use unified parser to handle both messages and tool calls
         try:
-            response_data = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            # Invalid JSON format - retry if attempts remaining
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_msg = (
-                    f"ERROR: Your response is not valid JSON. "
-                    f"JSON parsing error: {e}\n\n"
-                    f"Please respond with valid JSON in one of these formats:\n"
-                    f'1. Normal message: {{"type": "message", "content": "Your message"}}\n'
-                    f'2. Tool call: {{"type": "tool_call", "tool_name": "...", "arguments": {{...}}}}\n\n'
-                    f"Please try again with properly formatted JSON."
-                )
-                logger.warning(f"Invalid JSON response (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}")
-                return await self.run(error_msg, session_id=result.session_id, _retry_count=retry_count + 1)
-            else:
-                # Max retries exceeded - treat as plain text message
-                logger.error("Max retries exceeded for JSON parsing. Treating as plain text.")
-                return MessageResponse(content=response_text, session_id=result.session_id)
-
-        # Check if it's a dict
-        if not isinstance(response_data, dict):
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_msg = (
-                    f"ERROR: Response must be a JSON object (dict), not {type(response_data).__name__}.\n\n"
-                    f"Please respond with a JSON object in one of these formats:\n"
-                    f'1. Normal message: {{"type": "message", "content": "Your message"}}\n'
-                    f'2. Tool call: {{"type": "tool_call", "tool_name": "...", "arguments": {{...}}}}'
-                )
-                logger.warning(f"Response is not a dict (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS})")
-                return await self.run(error_msg, session_id=result.session_id, _retry_count=retry_count + 1)
-            else:
-                return MessageResponse(content=response_text, session_id=result.session_id)
-
-        response_type = response_data.get("type")
-
-        # Validate response format using Pydantic models
-        if response_type == "tool_call":
-            return await self._handle_virtual_tool_call_response(response_data, result.session_id, retry_count)
-        elif response_type == "message":
-            return await self._handle_message_response(response_data, result.session_id, retry_count)
-        else:
-            # Unknown or missing type field
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_msg = (
-                    f"ERROR: Missing or invalid 'type' field in response. "
-                    f"Got: {response_type!r}\n\n"
-                    f"Response must include a 'type' field with value 'message' or 'tool_call'.\n"
-                    f'Example: {{"type": "message", "content": "Your message"}}'
-                )
-                logger.warning(
-                    f"Invalid response type (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {response_type}"
-                )
-                return await self.run(error_msg, session_id=result.session_id, _retry_count=retry_count + 1)
-            else:
-                return MessageResponse(content=response_text, session_id=result.session_id)
-
-    async def _handle_message_response(
-        self,
-        response_data: dict,
-        session_id: str,
-        retry_count: int,
-    ) -> MessageResponse:
-        """Handle and validate a message response.
-
-        Args:
-            response_data: Raw response dict
-            session_id: Session ID from the result
-            retry_count: Current retry attempt number
-
-        Returns:
-            MessageResponse
-        """
-        try:
-            # Validate using Pydantic model
-            validated = MessageResponseFormat.model_validate(response_data)
-            return MessageResponse(content=validated.content, session_id=session_id)
-
+            parsed = ClaudeResponseParser.parse_message(response_text)
         except ValidationError as e:
+            # Invalid tool call structure - provide feedback and retry
             if retry_count < MAX_RETRY_ATTEMPTS:
                 error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-                error_msg = (
-                    f"ERROR: Invalid message response format.\n\n"
-                    f"Validation errors:\n{error_details}\n\n"
-                    f"Expected format:\n"
-                    f'{{"type": "message", "content": "Your message here"}}\n\n'
-                    f"Please correct these errors and try again."
-                )
-                logger.warning(f"Message validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}")
-                return await self.run(error_msg, session_id=session_id, _retry_count=retry_count + 1)
-            else:
-                # Fallback to raw content
-                return MessageResponse(content=response_data.get("content", str(response_data)), session_id=session_id)
-
-    async def _handle_virtual_tool_call_response(
-        self,
-        response_data: dict,
-        session_id: str,
-        retry_count: int,
-    ) -> MessageResponse | VirtualToolRequests:
-        """Handle and validate a tool call response.
-
-        Args:
-            response_data: Raw response dict
-            session_id: Session ID from the result
-            retry_count: Current retry attempt number
-
-        Returns:
-            VirtualToolRequests if valid, or MessageResponse on retry
-        """
-        # First validate the basic structure
-        try:
-            validated = ToolCallResponseFormat.model_validate(response_data)
-        except ValidationError as e:
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-                error_msg = (
+                error_msg = self._wrap_validation_error(
                     f"ERROR: Invalid tool call response format.\n\n"
                     f"Validation errors:\n{error_details}\n\n"
                     f"Expected format:\n"
-                    f'{{"type": "tool_call", "tool_name": "edit_task_specification", '
+                    f'{{"tool_name": "edit_task_specification", '
                     f'"arguments": {{"edits": [...], "reasoning": "..."}}}}\n\n'
                     f"Please correct these errors and try again."
                 )
                 logger.warning(
                     f"Tool call structure validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
                 )
-                return await self.run(error_msg, session_id=session_id, _retry_count=retry_count + 1)
+                return await self.run(
+                    prompt_or_approvals=error_msg, session_id=result.session_id, _retry_count=retry_count + 1
+                )
             else:
                 raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}") from e
 
+        if isinstance(parsed, VirtualToolCall):
+            # Tool call detected - validate and handle it
+            return await self._handle_virtual_tool_call_response(parsed, result.session_id, retry_count)
+        else:
+            # Normal message
+            return MessageResponse(content=parsed, session_id=result.session_id)
+
+    async def _handle_virtual_tool_call_response(
+        self,
+        tool_call: VirtualToolCall,
+        session_id: str,
+        retry_count: int,
+    ) -> MessageResponse | VirtualToolRequests:
+        """Handle and validate a tool call response.
+
+        Args:
+            tool_call: Parsed and structurally validated VirtualToolCall
+            session_id: Session ID from the result
+            retry_count: Current retry attempt number
+
+        Returns:
+            VirtualToolRequests if valid, or MessageResponse on retry
+        """
         # Get the virtual tool and validate arguments
-        tool_name = validated.tool_name
+        tool_name = tool_call.tool_name
         virtual_tool = self.get_virtual_tool(tool_name)
 
         if not virtual_tool:
@@ -351,24 +381,26 @@ class BaseClaudeAgent(ABC):
                 # Get available tool names for helpful error message
                 available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
                 tools_list = ", ".join(available_tools) if available_tools else "none"
-                error_msg = (
+                error_msg = self._wrap_validation_error(
                     f"ERROR: Unknown tool '{tool_name}'.\n\n"
                     f"Available tools: {tools_list}\n\n"
                     f"Please use one of the available tools."
                 )
                 logger.warning(f"Unknown tool (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {tool_name}")
-                return await self.run(error_msg, session_id=session_id, _retry_count=retry_count + 1)
+                return await self.run(
+                    prompt_or_approvals=error_msg, session_id=session_id, _retry_count=retry_count + 1
+                )
             else:
                 raise ValueError(f"Unknown tool '{tool_name}' after {MAX_RETRY_ATTEMPTS} attempts")
 
         # Validate tool arguments against the tool's schema
         try:
             # Use the tool's args_model to validate
-            virtual_tool.args_model.model_validate(validated.arguments)
+            virtual_tool.args_model.model_validate(tool_call.arguments)
         except ValidationError as e:
             if retry_count < MAX_RETRY_ATTEMPTS:
                 error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-                error_msg = (
+                error_msg = self._wrap_validation_error(
                     f"ERROR: Invalid arguments for tool '{tool_name}'.\n\n"
                     f"Validation errors:\n{error_details}\n\n"
                     f"Please check the tool schema and provide valid arguments."
@@ -376,12 +408,13 @@ class BaseClaudeAgent(ABC):
                 logger.warning(
                     f"Tool arguments validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
                 )
-                return await self.run(error_msg, session_id=session_id, _retry_count=retry_count + 1)
+                return await self.run(
+                    prompt_or_approvals=error_msg, session_id=session_id, _retry_count=retry_count + 1
+                )
             else:
                 raise ValueError(
                     f"Tool arguments validation failed for '{tool_name}' after {MAX_RETRY_ATTEMPTS} attempts: {e}"
                 ) from e
 
-        # All validations passed - create VirtualToolCall
-        tool_call = VirtualToolCall(tool_name=tool_name, arguments=validated.arguments)
+        # All validations passed - return the tool call
         return VirtualToolRequests(calls=[tool_call], session_id=session_id)

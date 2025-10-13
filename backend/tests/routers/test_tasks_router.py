@@ -43,7 +43,9 @@ class TestTasksRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
         db_session.commit()
 
         # Use the nested schema structure (no project_id in body)
@@ -70,7 +72,9 @@ class TestTasksRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -116,7 +120,9 @@ class TestTasksRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -164,7 +170,9 @@ class TestTasksRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -204,7 +212,9 @@ class TestTaskResourcesRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -229,7 +239,9 @@ class TestTaskResourcesRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -275,7 +287,9 @@ class TestTaskResourcesRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -310,7 +324,9 @@ class TestTaskResourcesRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -351,7 +367,9 @@ class TestTaskResourcesRouter:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
@@ -381,13 +399,21 @@ class TestTaskStateTransition:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(name="Test Project", description="A test project for development", specification=spec_doc)
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
         task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
         task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(project_id=created_project.id, title="Test Task", status=TaskStatus.DEFINING, specification=task_spec_doc, implementation_plan=task_plan_doc)
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
 
         # Create conversation for task
         conversation_repo = ConversationRepository(db_session)

@@ -6,8 +6,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from devboard.agents.claude_code.session import ClaudeCodeSessionService
-from devboard.api.schemas.agent_conversation import MessageRole
+from devboard.agents.claude_code.session import ClaudeCodeSessionService, SessionMessageRole
 from devboard.api.schemas.claude_code_todo import TodoPriority, TodoStatus
 
 
@@ -28,12 +27,12 @@ class TestClaudeCodeSessionService:
             "message": {"role": "user", "content": "What is the current directory?"},
         }
 
-        message = service._parse_jsonl_entry(entry)
+        session_msg = service._parse_session_message(entry)
 
-        assert message is not None
-        assert message.role == MessageRole.USER
-        assert message.text_content == "What is the current directory?"
-        assert message.timestamp.year == 2025
+        assert session_msg is not None
+        assert session_msg.role == SessionMessageRole.USER
+        assert session_msg.text_content == "What is the current directory?"
+        assert session_msg.timestamp.year == 2025
 
     def test_parse_assistant_text_message(self, service):
         """Test parsing an assistant message with text content."""
@@ -47,11 +46,11 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        message = service._parse_jsonl_entry(entry)
+        session_msg = service._parse_session_message(entry)
 
-        assert message is not None
-        assert message.role == MessageRole.AGENT
-        assert message.text_content == "/Users/test/projects/TestProject"
+        assert session_msg is not None
+        assert session_msg.role == SessionMessageRole.ASSISTANT
+        assert session_msg.text_content == "/Users/test/projects/TestProject"
 
     def test_parse_assistant_multiple_text_blocks(self, service):
         """Test parsing assistant message with multiple text blocks."""
@@ -68,13 +67,13 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        message = service._parse_jsonl_entry(entry)
+        session_msg = service._parse_session_message(entry)
 
-        assert message is not None
-        assert message.text_content == "First part.\nSecond part."
+        assert session_msg is not None
+        assert session_msg.text_content == "First part.\nSecond part."
 
-    def test_parse_assistant_with_tool_call_filtered(self, service):
-        """Test that assistant messages with only tool calls are filtered out."""
+    def test_parse_assistant_with_tool_call(self, service):
+        """Test parsing assistant message with only tool calls (no text content)."""
         entry = {
             "type": "assistant",
             "uuid": "asst-msg-3",
@@ -92,8 +91,11 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        message = service._parse_jsonl_entry(entry)
-        assert message is None
+        session_msg = service._parse_session_message(entry)
+        # Session message should exist but have empty text_content
+        assert session_msg is not None
+        assert session_msg.text_content == ""
+        assert len(session_msg.tool_calls) == 1
 
     def test_parse_assistant_mixed_text_and_tool(self, service):
         """Test parsing assistant message with both text and tool calls."""
@@ -115,10 +117,11 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        message = service._parse_jsonl_entry(entry)
+        session_msg = service._parse_session_message(entry)
 
-        assert message is not None
-        assert message.text_content == "Let me check that."
+        assert session_msg is not None
+        assert session_msg.text_content == "Let me check that."
+        assert len(session_msg.tool_calls) == 1
 
     def test_parse_summary_filtered(self, service):
         """Test that summary messages are filtered out."""
@@ -128,11 +131,11 @@ class TestClaudeCodeSessionService:
             "leafUuid": "uuid-123",
         }
 
-        message = service._parse_jsonl_entry(entry)
-        assert message is None
+        session_msg = service._parse_session_message(entry)
+        assert session_msg is None
 
-    def test_parse_tool_result_filtered(self, service):
-        """Test that tool result messages are filtered out."""
+    def test_parse_tool_result(self, service):
+        """Test parsing tool result messages."""
         entry = {
             "type": "user",
             "uuid": "user-msg-2",
@@ -149,11 +152,13 @@ class TestClaudeCodeSessionService:
             },
         }
 
-        message = service._parse_jsonl_entry(entry)
-        assert message is None
+        session_msg = service._parse_session_message(entry)
+        # Session message should exist with tool_results populated
+        assert session_msg is not None
+        assert len(session_msg.tool_results) == 1
 
-    def test_load_conversation_history(self, service):
-        """Test loading full conversation history from JSONL file."""
+    def test_load_session_messages(self, service):
+        """Test loading full session message history from JSONL file."""
         jsonl_data = [
             {
                 "type": "user",
@@ -183,26 +188,27 @@ class TestClaudeCodeSessionService:
         ]
 
         jsonl_content = "\n".join(json.dumps(entry) for entry in jsonl_data)
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
 
-        with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(service, "find_session_file", return_value=session_file):
             with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
-                messages = service.load_conversation_history("test-session")
+                session_messages = service.load_session_messages("test-session")
 
-        assert len(messages) == 4  # 2 user + 2 assistant, summary filtered out
-        assert messages[0].role == MessageRole.USER
-        assert messages[0].text_content == "Hello"
-        assert messages[1].role == MessageRole.AGENT
-        assert messages[1].text_content == "Hi there!"
-        assert messages[2].role == MessageRole.USER
-        assert messages[2].text_content == "How are you?"
-        assert messages[3].role == MessageRole.AGENT
-        assert messages[3].text_content == "I'm doing well!"
+        assert len(session_messages) == 4  # 2 user + 2 assistant, summary filtered out
+        assert session_messages[0].role == SessionMessageRole.USER
+        assert session_messages[0].text_content == "Hello"
+        assert session_messages[1].role == SessionMessageRole.ASSISTANT
+        assert session_messages[1].text_content == "Hi there!"
+        assert session_messages[2].role == SessionMessageRole.USER
+        assert session_messages[2].text_content == "How are you?"
+        assert session_messages[3].role == SessionMessageRole.ASSISTANT
+        assert session_messages[3].text_content == "I'm doing well!"
 
     def test_load_conversation_file_not_found(self, service):
         """Test error handling when session file doesn't exist."""
         with patch.object(service, "find_session_file", side_effect=FileNotFoundError("Session file not found")):
             with pytest.raises(FileNotFoundError, match="Session file not found"):
-                service.load_conversation_history("non-existent-session")
+                service.load_session_messages("non-existent-session")
 
     def test_load_conversation_malformed_json(self, service):
         """Test handling of malformed JSONL entries."""
@@ -215,17 +221,19 @@ class TestClaudeCodeSessionService:
         with patch.object(service, "find_session_file", return_value=session_file):
             with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
                 # Should skip malformed entry and continue
-                messages = service.load_conversation_history("test-session")
+                session_messages = service.load_session_messages("test-session")
 
         # Should have 2 messages (malformed one skipped)
-        assert len(messages) == 2
+        assert len(session_messages) == 2
 
     def test_load_conversation_permission_error(self, service):
         """Test handling of permission errors."""
-        with patch("pathlib.Path.exists", return_value=True):
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch.object(service, "find_session_file", return_value=session_file):
             with patch("pathlib.Path.open", side_effect=PermissionError("Access denied")):
-                with pytest.raises(PermissionError, match="Permission denied reading session file"):
-                    service.load_conversation_history("test-session")
+                with pytest.raises(PermissionError, match="Access denied"):
+                    service.load_session_messages("test-session")
 
     def test_find_session_file_found(self, service):
         """Test finding session file across project directories."""
@@ -256,7 +264,7 @@ class TestClaudeCodeSessionService:
                 service.find_session_file(session_id)
 
     def test_load_conversation_with_find(self, service):
-        """Test loading conversation using find_session_file."""
+        """Test loading session messages using find_session_file."""
         session_id = "test-session"
         jsonl_data = [
             {
@@ -279,11 +287,11 @@ class TestClaudeCodeSessionService:
         # Mock find_session_file to return a path
         with patch.object(service, "find_session_file", return_value=session_file):
             with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
-                messages = service.load_conversation_history(session_id)
+                session_messages = service.load_session_messages(session_id)
 
-        assert len(messages) == 2
-        assert messages[0].text_content == "Hello"
-        assert messages[1].text_content == "Hi!"
+        assert len(session_messages) == 2
+        assert session_messages[0].text_content == "Hello"
+        assert session_messages[1].text_content == "Hi!"
 
     def test_load_todo_list_with_content(self, service):
         """Test loading todo list with multiple items."""
@@ -305,7 +313,6 @@ class TestClaudeCodeSessionService:
         ]
 
         todo_content = json.dumps(todo_data)
-        todo_file = Path(f"/home/user/.claude/todos/{session_id}-agent-{session_id}.json")
 
         with patch.object(service, "claude_todos_dir", Path("/home/user/.claude/todos")):
             with patch.object(Path, "exists", return_value=True):

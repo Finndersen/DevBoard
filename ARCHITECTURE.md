@@ -624,7 +624,7 @@ Relationships between entities (e.g., Projects having Tasks, Projects having Res
 
 ### Agent Architecture Implementation
 
-The DevBoard AI agent system is built on **PydanticAI framework** with specialized agent types that understand project context and collaborate through structured document editing.
+The DevBoard AI agent system is built on **PydanticAI framework** with specialized agent types that understand project context and collaborate through structured document editing. Additionally, the system integrates **Claude Code CLI agents** that provide direct access to file operations, shell commands, and developer tools through a virtual tool calling pattern.
 
 #### Core Agent Implementation
 
@@ -649,6 +649,96 @@ Specialized agent for handling project-level questions and collaborative specifi
 
 **Codebase Investigation Agent (`devboard/services/codebase_investigation.py`)**:
 Analyzes code repositories to generate and maintain living architecture documentation. Performs comprehensive code analysis, generates structured documentation using templates from `devboard/services/template_service.py`, and supports incremental updates based on codebase changes.
+
+#### Claude Code Agent Implementation
+
+**Base Claude Agent Class (`devboard/agents/claude_code/base_agent.py`)**:
+Foundation class for Claude Code agents using virtual tool calling pattern. Provides common functionality including:
+- **Client Creation**: Creates `ClaudeClient` instances with current system prompt, session ID, and configuration
+- **System Prompt Building**: Combines role description, virtual tool schemas, and state/context data
+- **Virtual Tool Management**: Maintains registry of VirtualTool instances for this agent
+- **Tool Approval Processing**: Parses tool calls from session history, executes approved tools, returns results
+- **Response Parsing**: Unified parsing detecting both regular messages and JSON tool calls with validation
+- **Retry Logic**: Automatic retry on validation errors with detailed feedback (max 3 attempts)
+
+**Virtual Tool Calling Architecture**:
+The virtual tool calling pattern enables Claude Code agents to request user approval before executing operations:
+
+**VirtualTool Base Class (`devboard/agents/claude_code/virtual_tools.py`)**:
+- **Tool Definition**: Each tool has `tool_name`, `description`, and Pydantic `args_model` for schema validation
+- **Schema Generation**: `build_tool_schemas_section()` generates formatted tool documentation for system prompt
+- **Tool Execution**: Abstract `execute(args)` method implemented by concrete tool classes
+- **Type Safety**: Pydantic models ensure runtime type checking and validation
+
+**VirtualToolCall Schema (`devboard/agents/claude_code/virtual_tools.py`)**:
+- Pydantic model defining structure: `tool_name` (string) and `arguments` (dict)
+- Used for parsing JSON responses from agent into validated tool call objects
+- Enables automatic validation of tool request structure
+
+**VirtualToolRequests Response Type (`devboard/agents/claude_code/virtual_tools.py`)**:
+- Container for tool approval requests: list of `VirtualToolCall` instances plus `session_id`
+- Returned by agent.run() when virtual tool call detected in response
+- Signals to conversation service that user approval workflow needed
+
+**ClaudeResponseParser (`devboard/agents/claude_code/message_parser.py`)**:
+Centralized message parsing with XML marker support:
+- **JSON Extraction**: `extract_json()` supports plain JSON and code block formats (```json ... ```)
+- **Message Type Detection**: `detect_message_type()` classifies as MESSAGE, TOOL_CALL, INVALID_TOOL_CALL, VALIDATION_ERROR, or TOOL_RESULT
+- **Unified Parsing**: `parse_message()` returns either text string or VirtualToolCall with validation
+- **XML Markers**: Recognizes `<validation_error>`, `<tool_call_result tool_name="...">` for internal communication
+- **Conversation Filtering**: `should_include_in_conversation()` determines visibility (filters internal messages)
+
+**Claude Code Session Service (`devboard/agents/claude_code/session.py`)**:
+Service for reading and parsing Claude Code session history from JSONL files:
+- **Session File Discovery**: `find_session_file(session_id)` searches `~/.claude/projects/*/<session_id>.jsonl`
+- **Message Loading**: `load_session_messages(session_id)` returns complete parsed SessionMessage list
+- **Last Message Parsing**: `get_last_session_message(session_id)` retrieves most recent for tool call extraction
+- **Content Block Parsing**: `_parse_content_block()` converts dicts to TextBlock, ToolUseBlock, or ToolResultBlock dataclasses
+- **Todo List Loading**: `load_todo_list(session_id, include_subagents)` reads JSON todo files from `~/.claude/todos/`
+
+**SessionMessage Structure (`devboard/agents/claude_code/session.py`)**:
+Complete message data from Claude Code session with typed content blocks:
+- **Fields**: `uuid`, `timestamp`, `role` (USER/ASSISTANT), `content`, `tool_calls`, `tool_results`
+- **Content Types**: `str` for user text, `list[ContentBlock]` for assistant messages with mixed content
+- **Content Blocks**: Union of TextBlock, ToolUseBlock, ToolResultBlock dataclasses
+- **Text Extraction**: `text_content` property extracts displayable text from content blocks
+- **Tool Parsing**: Automatically extracts ToolUseBlock instances into `tool_calls` list
+- **Result Parsing**: Extracts ToolResultBlock instances into `tool_results` list
+
+**TextBlock, ToolUseBlock, ToolResultBlock Dataclasses (`devboard/agents/claude_code/session.py`)**:
+Typed representations of Claude message content blocks:
+- **TextBlock**: `type="text"`, `text` (string content)
+- **ToolUseBlock**: `type="tool_use"`, `id` (call ID), `name` (tool name), `input` (arguments dict)
+- **ToolResultBlock**: `type="tool_result"`, `tool_use_id`, `content` (str or list), `is_error` (bool)
+
+**Claude Code Conversation Service (`devboard/agents/claude_code/agent_conversation.py`)**:
+Specialized conversation service for Claude Code agents:
+- **Session ID Management**: Tracks `external_session_id` in conversation record for continuity
+- **Message Retrieval**: `get_conversation_messages()` loads from session files, not database
+- **Session Filtering**: `_session_message_to_conversation()` converts SessionMessage with filtering
+  - Filters tool results, validation errors, and tool-only messages
+  - Extracts text content using `text_content` property
+  - Uses `ClaudeResponseParser.should_include_in_conversation()` for visibility checks
+- **Unified Response Handling**: `_run_agent_and_convert_response()` handles both messages and tool requests
+  - Runs agent with current session_id
+  - Updates session_id if changed (e.g., first run creates new session)
+  - Converts result to PromptResponse (either MESSAGE or TOOL_REQUEST type)
+  - Tool requests mapped to ToolCallRequest with tool_name as tool_call_id
+
+**Tool Approval Workflow**:
+1. **Tool Detection**: Agent returns JSON, parser validates structure and arguments
+2. **User Presentation**: Tool request presented via PromptResponse with TOOL_REQUEST type
+3. **Approval Processing**: User approves/denies with optional arg modifications via `process_tool_approvals()`
+4. **Tool Execution**: Approved tools executed by BaseClaudeAgent via virtual tool execute() methods
+5. **Result Formatting**: Results wrapped in XML markers and sent as user message
+6. **Continuation**: Agent receives results and continues conversation
+
+**Validation & Error Handling**:
+- **Three-Level Validation**: Structure (JSON format), tool existence, argument schema compliance
+- **Automatic Retry**: Invalid responses trigger retry with wrapped error feedback
+- **Detailed Errors**: Validation errors include field-level details and expected format
+- **Max Attempts**: Up to 3 retry attempts before raising error
+- **Graceful Degradation**: Conversation continues even after validation failures
 
 #### Agent Conversation Service Implementation
 

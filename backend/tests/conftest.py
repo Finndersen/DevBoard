@@ -9,8 +9,6 @@ from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from devboard.agents.language_models import LanguageModel
-from devboard.agents.types import LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base
@@ -154,10 +152,7 @@ def mock_agent_config_service():
 
     mock_service = Mock()
     # Return an AgentEngineModelConfig with model_id
-    default_config = AgentEngineModelConfig(
-        engine=AgentEngine.INTERNAL,
-        model_id="openai:gpt-4"
-    )
+    default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model_id="openai:gpt-4")
     mock_service.get_effective_config.return_value = default_config
     return mock_service
 

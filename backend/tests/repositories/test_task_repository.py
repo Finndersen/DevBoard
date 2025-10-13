@@ -66,9 +66,7 @@ class TestTaskRepository:
 
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        repo.create(
-            project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1
-        )
+        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")

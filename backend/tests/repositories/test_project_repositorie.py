@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
-    DocumentRepository,
     ProjectRepository,
 )
 

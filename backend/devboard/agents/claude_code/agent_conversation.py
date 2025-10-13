@@ -7,11 +7,9 @@ import logfire
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.claude_code.base_agent import BaseClaudeAgent
-from devboard.agents.claude_code.session import ClaudeCodeSessionService
-from devboard.agents.claude_code.virtual_tools import (
-    VirtualToolCall,
-    VirtualToolRequests,
-)
+from devboard.agents.claude_code.message_parser import ClaudeResponseParser
+from devboard.agents.claude_code.session import ClaudeCodeSessionService, SessionMessage, SessionMessageRole
+from devboard.agents.claude_code.virtual_tools import VirtualToolRequests
 from devboard.api.schemas.agent_conversation import (
     ConversationMessage,
     MessageRole,
@@ -61,28 +59,33 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
 
-    async def send_message(self, message: str) -> PromptResponse:
-        """Send a message to the Claude Code agent and get a response.
+    async def _run_agent_and_convert_response(
+        self,
+        prompt_or_approvals: str | dict[str, ToolApprovalDecision],
+    ) -> PromptResponse:
+        """Run the agent and convert the result to a PromptResponse.
 
-        Messages are stored in Claude Code session files, not in the database.
+        This method handles:
+        - Running the agent with current session_id
+        - Updating session_id if it changed
+        - Converting result to PromptResponse (either message or tool requests)
 
         Args:
-            message: The user's message
+            prompt_or_approvals: Either a user message or tool approval decisions
 
         Returns:
             PromptResponse containing either a message or tool approval requests
         """
         # Run the agent with current session_id
-        # Agent stores messages in Claude Code session files
-        result = await self.agent.run(user_message=message, session_id=self.session_id)
+        result = await self.agent.run(prompt_or_approvals=prompt_or_approvals, session_id=self.session_id)
 
         # Update session_id if it changed (e.g., first run creates new session)
         if result.session_id != self.session_id:
             self.conversation_repo.update_external_session_id(self.conversation, result.session_id)
 
+        # Convert result to PromptResponse
         if isinstance(result, VirtualToolRequests):
-            # Convert to API schema format
-            # Use tool_name as tool_call_id (only one tool call allowed at a time)
+            # Convert to tool request format
             tool_requests = [
                 ToolCallRequest(
                     tool_call_id=call.tool_name,  # Use tool_name as ID
@@ -97,7 +100,6 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                 message=None,
                 tool_requests=tool_requests,
             )
-
         else:
             # Normal text response (MessageResponse)
             message = ConversationMessage(
@@ -113,11 +115,24 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                 tool_requests=None,
             )
 
+    async def send_message(self, message: str) -> PromptResponse:
+        """Send a message to the Claude Code agent and get a response.
+
+        Messages are stored in Claude Code session files, not in the database.
+
+        Args:
+            message: The user's message
+
+        Returns:
+            PromptResponse containing either a message or tool approval requests
+        """
+        return await self._run_agent_and_convert_response(message)
+
     async def process_tool_approvals(self, approvals: dict[str, ToolApprovalDecision]) -> PromptResponse:
         """Process user's tool approval decisions and execute approved tools.
 
-        Parses tool call data from Claude Code session history, executes approved tools,
-        and sends results back to Claude to continue the conversation.
+        Delegates tool execution to the agent, which parses tool calls from session history,
+        executes approved tools, and returns the next response.
 
         Args:
             approvals: Map of tool_name (as tool_call_id) to approval decision
@@ -130,80 +145,10 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             conversation_id=self.conversation.id,
             approval_count=len(approvals),
         ):
-            # Get last message from session to parse tool call
             if not self.session_id:
                 raise ValueError("No session ID available - cannot process tool approvals")
 
-            last_message = self.claude_session_service.get_last_session_message(self.session_id)
-            if not last_message:
-                raise ValueError("No messages in session - cannot process tool approvals")
-
-            # Parse virtual tool call from message text content
-            tool_call = self._parse_tool_call_from_text(last_message.text_content)
-            if not tool_call:
-                raise ValueError("Last message does not contain a virtual tool call")
-
-            # Execute approved tools and build result message
-            result_parts: list[str] = []
-
-            for tool_call_id, decision in approvals.items():
-                # tool_call_id should match tool_name
-                if tool_call_id != tool_call.tool_name:
-                    raise ValueError(
-                        f"Tool call ID mismatch: expected {tool_call.tool_name}, got {tool_call_id}. "
-                        f"Tool call ID must match the tool name from the session."
-                    )
-
-                # Get the virtual tool from agent
-                virtual_tool = self.agent.get_virtual_tool(tool_call.tool_name)
-                if not virtual_tool:
-                    raise ValueError(f"Unknown virtual tool: {tool_call.tool_name}")
-
-                if decision.approved:
-                    # Execute the virtual tool
-                    # Use modified args if provided, otherwise use args from session
-                    args = decision.modified_args if decision.modified_args else tool_call.arguments
-
-                    result = await virtual_tool.execute(args)
-                    result_parts.append(f"✓ {tool_call.tool_name}: {result}")
-
-                else:
-                    # Tool denied
-                    feedback = decision.feedback or "Tool execution was denied"
-                    result_parts.append(f"✗ {tool_call.tool_name} DENIED: {feedback}")
-
-            # Continue conversation with results
-            results_message = "\n".join(result_parts)
-
-            # Send results back to Claude to continue
-            # Results will be stored in Claude Code session files
-            return await self.send_message(results_message)
-
-    def _parse_tool_call_from_text(self, text: str) -> VirtualToolCall | None:
-        """Parse a virtual tool call from message text content.
-
-        Args:
-            text: The text content from an assistant message
-
-        Returns:
-            VirtualToolCall if text contains a valid tool call, None otherwise
-        """
-        import json
-
-        # Try to parse JSON from text
-        try:
-            data = json.loads(text.strip())
-
-            # Check if it's a tool call
-            if data.get("type") == "tool_call":
-                # Parse using Pydantic model for validation
-                return VirtualToolCall.model_validate(data)
-
-        except (json.JSONDecodeError, ValueError):
-            # Not valid JSON or not a valid tool call
-            pass
-
-        return None
+            return await self._run_agent_and_convert_response(approvals)
 
     async def get_conversation_messages(self) -> list[ConversationMessage]:
         """Retrieve all messages for the Claude Code conversation.
@@ -220,5 +165,54 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         if not self.session_id:
             raise ValueError("Claude Code conversation missing external_session_id")
 
-        # Service searches across all project directories in ~/.claude/projects
-        return self.claude_session_service.load_conversation_history(self.session_id)
+        # Load low-level session messages
+        session_messages = self.claude_session_service.load_session_messages(self.session_id)
+
+        # Convert to ConversationMessage with filtering
+        conversation_messages: list[ConversationMessage] = []
+        for session_msg in session_messages:
+            conv_msg = self._session_message_to_conversation(session_msg)
+            if conv_msg:
+                conversation_messages.append(conv_msg)
+
+        return conversation_messages
+
+    def _session_message_to_conversation(self, session_msg: SessionMessage) -> ConversationMessage | None:
+        """Convert a SessionMessage to a ConversationMessage with filtering.
+
+        Filters out:
+        - Messages with <validation_error> tags (validation errors from agent)
+        - Messages with <tool_call_result> tags (tool execution results)
+        - Tool result messages (user messages with tool_result blocks)
+        - Assistant messages with only tool calls (no text content)
+
+        Args:
+            session_msg: SessionMessage to convert
+
+        Returns:
+            ConversationMessage if message should be included, None if filtered out
+        """
+        # Skip tool result messages
+        if session_msg.tool_results:
+            return None
+
+        # Get text content using the property
+        text_content = session_msg.text_content
+
+        # Skip if no text content (only tool calls for assistant messages)
+        if not text_content:
+            return None
+
+        # Filter out validation errors and tool results
+        if not ClaudeResponseParser.should_include_in_conversation(text_content):
+            return None
+
+        # Determine role for ConversationMessage
+        conv_role = MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
+
+        return ConversationMessage(
+            id=0,
+            role=conv_role,
+            text_content=text_content,
+            timestamp=session_msg.timestamp,
+        )

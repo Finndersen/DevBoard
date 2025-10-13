@@ -7,7 +7,6 @@ from devboard.agents.claude_code.virtual_tools import (
     EditDocumentTool,
     SetDocumentContentTool,
     VirtualTool,
-    build_tool_schemas_section,
 )
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
@@ -110,18 +109,21 @@ class ClaudeTaskSpecificationAgent(BaseClaudeAgent):
 
         return tools
 
-    def _build_system_prompt(self) -> str:
-        """Build system prompt with tool schemas and current document state.
+    def _get_role_description(self) -> str:
+        """Get the role description for task specification agent.
 
         Returns:
-            Complete system prompt string
+            Role description string
         """
-        # Get virtual tools and build their schemas
-        virtual_tools = self._get_virtual_tools()
-        tool_schemas = build_tool_schemas_section(virtual_tools)
+        return SPECIFICATION_SYSTEM_PROMPT
 
-        # Build current state section
-        current_state = f"""
+    def _get_state_context(self) -> str:
+        """Get the current state/context for task specification agent.
+
+        Returns:
+            State/context string
+        """
+        return f"""
 CURRENT STATE:
 Task Name: {self.task.title}
 Task Status: {self.task.status.value}
@@ -131,9 +133,6 @@ Task Specification Document (current live state):
 {self.task.specification.content or "<EMPTY>"}
 ```
 """
-
-        # Combine all parts
-        return f"{SPECIFICATION_SYSTEM_PROMPT}\n\n{tool_schemas}\n\n{current_state}"
 
 
 class ClaudeTaskPlanningAgent(BaseClaudeAgent):
@@ -196,18 +195,21 @@ class ClaudeTaskPlanningAgent(BaseClaudeAgent):
 
         return tools
 
-    def _build_system_prompt(self) -> str:
-        """Build system prompt with tool schemas and current document state.
+    def _get_role_description(self) -> str:
+        """Get the role description for task planning agent.
 
         Returns:
-            Complete system prompt string
+            Role description string
         """
-        # Get virtual tools and build their schemas
-        virtual_tools = self._get_virtual_tools()
-        tool_schemas = build_tool_schemas_section(virtual_tools)
+        return PLANNING_SYSTEM_PROMPT
 
-        # Build current state section
-        current_state = f"""
+    def _get_state_context(self) -> str:
+        """Get the current state/context for task planning agent.
+
+        Returns:
+            State/context string
+        """
+        return f"""
 CURRENT STATE:
 Task Name: {self.task.title}
 Task Status: {self.task.status.value}
@@ -222,6 +224,3 @@ Task Implementation Plan Document (current live state):
 {self.task.implementation_plan.content or "<EMPTY>"}
 ```
 """
-
-        # Combine all parts
-        return f"{PLANNING_SYSTEM_PROMPT}\n\n{tool_schemas}\n\n{current_state}"

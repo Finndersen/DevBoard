@@ -53,25 +53,17 @@ class VirtualToolRequests(BaseModel):
 TOOL_RESPONSE_FORMAT = """
 TOOL USAGE INSTRUCTIONS:
 
-1. READ-ONLY TOOLS (file search, codebase search, etc.):
+1. STANDARD READ-ONLY TOOLS (file search, codebase search, etc.):
    Use these tools NORMALLY via your built-in tool system.
-   No special JSON format required - just call them as you would any tool.
+   No special format required - just call them as you would any tool.
 
 2. DOCUMENT EDITING TOOLS (edit_*, set_*_content):
    These tools require approval and must use the VIRTUAL TOOL CALLING format below.
 
 VIRTUAL TOOL CALLING FORMAT (for document editing tools only):
-You MUST ALWAYS respond with valid JSON in one of these formats:
 
-1. Normal message response:
+For document editing tool calls, respond with JSON content ONLY:
 {
-  "type": "message",
-  "content": "Your message here"
-}
-
-2. Document editing tool call (requires approval):
-{
-  "type": "tool_call",
   "tool_name": "edit_task_specification",
   "arguments": {
     "edits": [...],
@@ -79,10 +71,20 @@ You MUST ALWAYS respond with valid JSON in one of these formats:
   }
 }
 
+You can optionally wrap the JSON in a code block:
+```json
+{
+  "tool_name": "edit_task_specification",
+  "arguments": {...}
+}
+```
+
 IMPORTANT:
 - You can only make ONE document editing tool call at a time
-- After the tool executes, you will receive the result
-- Read-only tools can be used freely without this JSON format
+- After the tool executes, you will receive the result wrapped in <tool_call_result> tags
+- Standard build-in tools can be used freely without any special format
+- For document editing tool calls, respond with JSON content ONLY.
+- For normal messages, respond naturally with plain text. No JSON format needed.
 """
 
 
@@ -147,7 +149,6 @@ Arguments:
 
 Example tool call:
 {{
-  "type": "tool_call",
   "tool_name": "{self.tool_name}",
   "arguments": {self._format_example_args()}
 }}
