@@ -3,26 +3,85 @@
 import logging
 from typing import cast
 
-from devboard.agents.agent_engines import AgentEngine, AgentEngineRepository, default_agent_engine_repository
+from pydantic import BaseModel
+
+from devboard.agents.engines.agent_engines import (
+    AgentEngine,
+    AgentEngineInfo,
+    AgentEngineRepository,
+    default_agent_engine_repository,
+)
 from devboard.agents.language_models import (
     LanguageModel,
+    LLMProvider,
     LLMRepository,
+    ModelType,
     default_llm_repository,
 )
-from devboard.agents.types import (
-    AgentConfiguration,
-    AgentEngineInfo,
-    AgentEngineModelConfig,
+from devboard.agents.roles.types import (
     AgentRole,
-    AvailableModelsByEngine,
-    LLMProvider,
-    ModelInfo,
 )
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
+
+
+class AgentEngineModelConfig(BaseModel):
+    """Combined engine and model configuration.
+
+    This structure is used throughout the system to represent an agent's
+    execution engine and the model it uses. Engine and model form a cohesive
+    unit that must be validated together.
+
+    Attributes:
+        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
+        model_id: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4")
+    """
+
+    engine: AgentEngine
+    model_id: str
+
+
+class ModelInfo(BaseModel):
+    """Information about a language model.
+
+    Attributes:
+        id: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4.5")
+        provider: The LLM provider (e.g., anthropic, openai, google)
+        name: Human-readable model name
+        model_type: Type of model (reasoning or fast)
+    """
+
+    id: str
+    provider: LLMProvider
+    name: str
+    model_type: ModelType
+
+
+class AgentConfiguration(BaseModel):
+    """Complete agent configuration including role, config, and available options.
+
+    Attributes:
+        agent_role: The agent role this configuration applies to
+        config: Current effective engine and model configuration
+        available_engines: List of engines available for this agent role
+    """
+
+    agent_role: AgentRole
+    config: AgentEngineModelConfig
+    available_engines: list[AgentEngineInfo]
+
+
+class AvailableModelsByEngine(BaseModel):
+    """All available models grouped by engine.
+
+    Attributes:
+        models_by_engine: Dictionary mapping engine names to lists of models
+    """
+
+    models_by_engine: dict[str, list[ModelInfo]]
 
 
 class AgentConfigService:
@@ -66,7 +125,7 @@ class AgentConfigService:
         # Get available engines for this role
         available_engines = [
             AgentEngineInfo(
-                engine=defn.engine.value,
+                engine=defn.engine,
                 display_name=defn.display_name,
                 description=defn.description,
             )
@@ -74,7 +133,7 @@ class AgentConfigService:
         ]
 
         return AgentConfiguration(
-            agent_role=agent_role.value,
+            agent_role=agent_role,
             config=effective_config,
             available_engines=available_engines,
         )

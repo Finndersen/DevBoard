@@ -76,8 +76,8 @@ class TestProjectsRouter:
 
     def test_get_project_success(self, client, db_session, test_project_data):
         """Test getting a specific project."""
-        from devboard.agents.agent_engines import AgentEngine
-        from devboard.agents.types import AgentRole
+        from devboard.agents.engines.agent_engines import AgentEngine
+        from devboard.agents.roles.types import AgentRole
         from devboard.db.models import ParentEntityType
         from devboard.db.repositories import ConversationRepository
 
@@ -336,8 +336,8 @@ class TestProjectTasksRouter:
 
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
-        from devboard.agents.agent_engines import AgentEngine
-        from devboard.agents.types import AgentRole
+        from devboard.agents.engines.agent_engines import AgentEngine
+        from devboard.agents.roles.types import AgentRole
         from devboard.db.models import ParentEntityType
         from devboard.db.repositories import ConversationRepository
 

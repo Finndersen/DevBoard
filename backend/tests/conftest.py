@@ -148,8 +148,8 @@ def integration_service(configuration_repository):
 @fixture
 def mock_agent_config_service():
     """Mock AgentConfigService to avoid database dependencies."""
-    from devboard.agents.agent_engines import AgentEngine
-    from devboard.agents.types import AgentEngineModelConfig
+    from devboard.agents.agent_config_service import AgentEngineModelConfig
+    from devboard.agents.engines.agent_engines import AgentEngine
 
     mock_service = Mock()
     # Return an AgentEngineModelConfig with model_id

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import logfire
 
-from devboard.agents.gemini_cli import GeminiCliError, execute_gemini_prompt
+from devboard.agents.engines.gemini_cli import GeminiCliError, execute_gemini_prompt
 from devboard.services.template_service import TemplateService, TemplateType
 from devboard.utils.hash import compute_content_hash
 

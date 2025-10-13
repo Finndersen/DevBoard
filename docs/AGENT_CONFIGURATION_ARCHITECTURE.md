@@ -97,7 +97,8 @@ Unified data structure for engine + model configuration:
 
 ```python
 from dataclasses import dataclass
-from devboard.agents.agent_engines import AgentEngine
+from devboard.agents.engines.agent_engines import AgentEngine
+
 
 @dataclass
 class AgentEngineModelConfig:

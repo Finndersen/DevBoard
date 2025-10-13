@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-from devboard.agents.claude_code.client import ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
 
 @pytest.fixture
 def mock_sdk_client():
     """Create a mock ClaudeSDKClient."""
-    with patch("devboard.agents.claude_code.client.ClaudeSDKClient") as mock_class:
+    with patch("devboard.agents.engines.claude_code.client.ClaudeSDKClient") as mock_class:
         mock_instance = AsyncMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock(return_value=None)

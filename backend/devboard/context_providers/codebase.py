@@ -5,7 +5,7 @@ import os
 from typing import Any
 from urllib.parse import urlparse
 
-from devboard.agents.gemini_cli import GeminiCliError, execute_gemini_prompt
+from devboard.agents.engines.gemini_cli import GeminiCliError, execute_gemini_prompt
 from devboard.integrations.codebase import CodebaseIntegration
 
 from .base import (

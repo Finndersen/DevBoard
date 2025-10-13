@@ -7,11 +7,12 @@ from enum import Enum
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.internal.base_agent import InternalAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.internal.tools import create_document_edit_tool, create_set_document_content_tool
-from devboard.agents.prompts import PLANNING_SYSTEM_PROMPT, SPECIFICATION_SYSTEM_PROMPT
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.internal.base_agent import InternalAgent
+from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.engines.internal.tools import create_document_edit_tool, create_set_document_content_tool
+from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT
+from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
 

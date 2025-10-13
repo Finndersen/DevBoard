@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
-from devboard.agents.internal.tools import (
+from devboard.agents.engines.internal.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
     create_file_search_tool,

@@ -2,8 +2,8 @@
 
 from typing import ClassVar
 
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRole
 from devboard.config.base import BaseConfig
 
 

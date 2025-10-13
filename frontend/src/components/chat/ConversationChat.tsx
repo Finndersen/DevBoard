@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { flushSync } from 'react-dom'
 import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../../lib/api'
 import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
@@ -32,8 +33,13 @@ export default function ConversationChat({
   const [loading, setLoading] = useState(false)
   const [showClearModal, setShowClearModal] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  // Track removed pending message IDs locally to immediately hide them in UI
+  // Use ref for synchronous updates without waiting for re-render
+  const removedPendingIdsRef = useRef<Set<string>>(new Set())
+  const [renderCount, setRenderCount] = useState(0)
 
   const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
   const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
@@ -53,8 +59,13 @@ export default function ConversationChat({
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
   const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
 
-  // Get single pending message (only support one at a time)
-  const pendingMessage = pendingMessages[0] || null
+  // Get single pending message (only support one at a time), filtering out removed ones
+  const pendingMessage = useMemo(() => {
+    const msg = pendingMessages[0] || null
+    // Filter out messages that have been marked as removed locally (check ref synchronously)
+    const isRemoved = msg ? removedPendingIdsRef.current.has(msg.id) : false
+    return msg && !isRemoved ? msg : null
+  }, [pendingMessages, renderCount])
 
   // Helper to update current tab's activity status
   const updateCurrentTabStatus = useCallback((status: { type: 'idle' } | { type: 'new_messages'; count: number } | { type: 'agent_working' } | { type: 'action_required' }) => {
@@ -98,6 +109,29 @@ export default function ConversationChat({
     fetchChatHistory()
   }, [fetchChatHistory])
 
+  // Clean up removedPendingIds when pending messages are actually removed from context
+  // Only remove from the local "removed" set when the message is no longer in pendingMessages
+  useEffect(() => {
+    const currentIds = new Set(pendingMessages.map(m => m.id))
+    const removed = removedPendingIdsRef.current
+
+    if (removed.size === 0) return
+
+    // Remove IDs that are no longer in pending messages (context caught up)
+    let changed = false
+    removed.forEach(id => {
+      if (!currentIds.has(id)) {
+        removed.delete(id)
+        changed = true
+      }
+    })
+
+    // Force re-render if we cleaned up any IDs
+    if (changed) {
+      setRenderCount(prev => prev + 1)
+    }
+  }, [pendingMessages])
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null) return
@@ -116,17 +150,24 @@ export default function ConversationChat({
     try {
       // Update status to 'sent' when making API call
       updateMessageStatus(pendingKey, pendingMessageId, 'sent')
-      
+
       const response = await apiClient.sendConversationMessage(conversationId, {
         message: messageText
       })
 
       if (response.type === 'message' && response.message) {
-        // Success: remove from pending and add both user and agent messages to history
+        // Success: remove from pending FIRST, then add both user and agent messages to history
+        // Mark as removed locally for immediate UI update (synchronous ref update)
+        removedPendingIdsRef.current.add(pendingMessageId)
         removeMessage(pendingKey, pendingMessageId)
-        // Add both the user message and agent response to confirmed messages
+
+        // Use flushSync to force synchronous state updates and immediate re-render
+        flushSync(() => {
+          setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
+        })
+
+        // Now add the confirmed messages after pending is hidden
         const userMessage: ConversationMessage = {
-          id: Date.now(),
           role: 'user',
           text_content: messageText,
           timestamp: new Date().toISOString()
@@ -164,16 +205,24 @@ export default function ConversationChat({
 
     try {
       updateMessageStatus(pendingKey, pendingMessage.id, 'sent')
-      
+
       const response = await apiClient.sendConversationMessage(conversationId, {
         message: pendingMessage.text_content
       })
 
       if (response.type === 'message' && response.message) {
-        // Success: remove from pending and add both user and agent messages
+        // Success: remove from pending FIRST, then add both user and agent messages
+        // Mark as removed locally for immediate UI update (synchronous ref update)
+        removedPendingIdsRef.current.add(pendingMessage.id)
         removeMessage(pendingKey, pendingMessage.id)
+
+        // Use flushSync to force synchronous state updates and immediate re-render
+        flushSync(() => {
+          setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
+        })
+
+        // Now add the confirmed messages after pending is hidden
         const userMessage: ConversationMessage = {
-          id: Date.now(),
           role: 'user',
           text_content: pendingMessage.text_content,
           timestamp: pendingMessage.timestamp
@@ -223,6 +272,7 @@ export default function ConversationChat({
     if (pendingApprovals.length === 0) return
 
     setLoading(true)
+    setApprovalError(null) // Clear any previous errors
 
     // Extract tool names from pending approvals before clearing them (for refresh handlers)
     const approvedToolNames: string[] = []
@@ -250,11 +300,20 @@ export default function ConversationChat({
 
       if (response.type === 'message' && response.message) {
         // Agent provided response after tool execution
-        // If there's a pending message in awaiting_approval state, remove it and add user message
-        if (pendingMessage && pendingMessage.status === 'awaiting_approval') {
+        // If there's a pending message, remove it FIRST and add user message
+        // (The pending message is the original user message that triggered the tool request)
+        if (pendingMessage) {
+          // Mark as removed locally for immediate UI update (synchronous ref update)
+          removedPendingIdsRef.current.add(pendingMessage.id)
           removeMessage(pendingKey, pendingMessage.id)
+
+          // Use flushSync to force synchronous state updates and immediate re-render
+          flushSync(() => {
+            setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
+          })
+
+          // Now add the confirmed messages after pending is hidden
           const userMessage: ConversationMessage = {
-            id: Date.now(),
             role: 'user',
             text_content: pendingMessage.text_content,
             timestamp: pendingMessage.timestamp
@@ -270,14 +329,10 @@ export default function ConversationChat({
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
-      const errorMessage: ConversationMessage = {
-        id: Date.now(),
-        role: 'agent',
-        text_content: 'Sorry, I encountered an error processing your approval. Please try again.',
-        timestamp: new Date().toISOString()
-      }
-      setMessages(prev => [...prev, errorMessage])
-      clearApprovals(approvalKey) // Clear approvals on error
+      // Set error message to display above approvals, keep approvals visible
+      const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred'
+      setApprovalError(`Failed to process approval: ${errorMsg}. Please try again.`)
+      // DON'T clear approvals - keep them visible so user can retry
     } finally {
       setLoading(false)
     }
@@ -319,9 +374,9 @@ export default function ConversationChat({
         ) : (
           <>
             {/* Render confirmed messages */}
-            {messages.map((message) => (
+            {messages.map((message, index) => (
               <ConversationMessageComponent
-                key={message.id}
+                key={`${index}-${message.timestamp}`}
                 message={message}
               />
             ))}
@@ -337,6 +392,13 @@ export default function ConversationChat({
           </>
         )}
         
+        {/* Approval Error Message */}
+        {approvalError && pendingApprovals.length > 0 && (
+          <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-800 dark:text-red-200">{approvalError}</p>
+          </div>
+        )}
+
         {/* Pending Tool Approvals */}
         {pendingApprovals.length > 0 && (
           <div className="mt-4">

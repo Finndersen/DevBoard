@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository

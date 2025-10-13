@@ -6,7 +6,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from devboard.agents.claude_code.session import ClaudeCodeSessionService, SessionMessageRole
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService, SessionMessageRole
 from devboard.api.schemas.claude_code_todo import TodoPriority, TodoStatus
 
 

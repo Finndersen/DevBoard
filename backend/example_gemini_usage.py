@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from devboard.agents.gemini_cli import execute_gemini_prompt
+from devboard.agents.engines.gemini_cli import execute_gemini_prompt
 
 
 async def example_usage():

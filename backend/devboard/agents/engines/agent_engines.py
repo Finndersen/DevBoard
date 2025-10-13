@@ -9,8 +9,20 @@ An AgentEngine represents the underlying technology/framework that powers an age
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 
-from devboard.agents.types import AgentEngine, AgentRole, LLMProvider
+from pydantic import BaseModel
+
+from devboard.agents.language_models import LLMProvider
+from devboard.agents.roles.types import AgentRole
+
+
+class AgentEngine(StrEnum):
+    """Available agent execution engines."""
+
+    INTERNAL = "internal"
+    CLAUDE_CODE = "claude_code"
+    GEMINI_CLI = "gemini_cli"
 
 
 @dataclass
@@ -150,3 +162,17 @@ class AgentEngineRepository:
 
 # Global default agent engine repository instance
 default_agent_engine_repository = AgentEngineRepository(ALL_ENGINES)
+
+
+class AgentEngineInfo(BaseModel):
+    """Information about an agent engine.
+
+    Attributes:
+        engine: The agent execution engine value (e.g., "internal", "claude_code")
+        display_name: Human-readable name for display in UI
+        description: Description of what the engine does
+    """
+
+    engine: AgentEngine
+    display_name: str
+    description: str

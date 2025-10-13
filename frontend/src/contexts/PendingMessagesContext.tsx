@@ -53,21 +53,17 @@ function isMessageExpired(timestamp: string): boolean {
 function pendingMessagesReducer(state: PendingMessagesState, action: PendingMessagesAction): PendingMessagesState {
   switch (action.type) {
     case 'ADD_PENDING_MESSAGE': {
-      const messageWithDefaults: PendingMessage = {
-        ...action.payload.message,
-        id: generateMessageId(),
-        timestamp: new Date().toISOString(),
-        status: 'pending',
-        retryCount: 0
-      }
-      
+      // The message already has all required fields (id, timestamp, status, retryCount)
+      // from addPendingMessage - don't overwrite them
+      const message = action.payload.message
+
       return {
         ...state,
         messages: {
           ...state.messages,
           [action.payload.key]: [
             ...(state.messages[action.payload.key] || []),
-            messageWithDefaults
+            message
           ]
         }
       }

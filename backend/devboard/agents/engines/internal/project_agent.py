@@ -5,10 +5,10 @@ import logging
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.internal.base_agent import InternalAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.internal.tools import create_document_edit_tool
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.internal.base_agent import InternalAgent
+from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.engines.internal.tools import create_document_edit_tool
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
 from devboard.services.context_assembly import (

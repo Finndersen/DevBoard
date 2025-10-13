@@ -4,8 +4,8 @@ Handles task creation, phase transitions, and conversation lifecycle management.
 Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
-from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.types import AgentEngineModelConfig, AgentRole
+from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus

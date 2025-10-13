@@ -7,9 +7,9 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
 
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.roles.types import AgentRole
 from devboard.api.dependencies.services import get_agent_conversation_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project

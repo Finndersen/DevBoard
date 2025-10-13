@@ -2,7 +2,8 @@
 
 import pytest
 
-from devboard.agents.types import AgentEngine, AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus

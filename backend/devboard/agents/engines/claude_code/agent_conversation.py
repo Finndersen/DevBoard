@@ -6,10 +6,10 @@ from datetime import datetime
 import logfire
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.claude_code.base_agent import ClaudeCodeAgent
-from devboard.agents.claude_code.message_parser import ClaudeMessageType, ClaudeResponseParser
-from devboard.agents.claude_code.session import ClaudeCodeSessionService, SessionMessage, SessionMessageRole
-from devboard.agents.claude_code.virtual_tools import VirtualToolRequests
+from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.message_parser import ClaudeMessageType, ClaudeResponseParser
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService, SessionMessage, SessionMessageRole
+from devboard.agents.engines.claude_code.virtual_tools import VirtualToolRequests
 from devboard.api.schemas.agent_conversation import (
     ConversationMessage,
     MessageRole,

@@ -6,11 +6,7 @@ import pytest
 
 from devboard.api.dependencies.services import get_config_service
 from devboard.api.main import app
-from devboard.api.schemas import (
-    ConfigurationDetailResponse,
-    ConfigurationFieldInfo,
-)
-from devboard.services.config_service import ConfigService
+from devboard.services.config_service import ConfigService, ConfigurationDetail, ConfigurationFieldInfo
 
 
 @pytest.fixture
@@ -62,13 +58,13 @@ class TestConfigurationsRouter:
 
         # Mock the get_config_details_by_key calls
         mock_config_service.get_config_details_by_key.side_effect = [
-            ConfigurationDetailResponse(
+            ConfigurationDetail(
                 key="llm.openai.main",
                 is_valid=True,
                 validation_errors=[],
                 fields=[ConfigurationFieldInfo(name="api_key", type="str", required=True)],
             ),
-            ConfigurationDetailResponse(
+            ConfigurationDetail(
                 key="llm.anthropic.main",
                 is_valid=False,
                 validation_errors=["Missing API key"],
@@ -101,9 +97,9 @@ class TestConfigurationsRouter:
 
         # Mock get_config_details_by_key to return None for invalid key
         mock_config_service.get_config_details_by_key.side_effect = [
-            ConfigurationDetailResponse(key="llm.openai.main", is_valid=True, validation_errors=[], fields=[]),
+            ConfigurationDetail(key="llm.openai.main", is_valid=True, validation_errors=[], fields=[]),
             None,  # This should be filtered out
-            ConfigurationDetailResponse(
+            ConfigurationDetail(
                 key="llm.anthropic.main", is_valid=False, validation_errors=["Missing API key"], fields=[]
             ),
         ]
@@ -120,7 +116,7 @@ class TestConfigurationsRouter:
     def test_get_configuration_detail_success(self, client_with_mock_config_service, mock_config_service):
         """Test getting detailed configuration information for valid config."""
         # Setup mock response
-        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
+        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=True,
             validation_errors=[],
@@ -170,7 +166,7 @@ class TestConfigurationsRouter:
     ):
         """Test getting configuration details when required field is missing."""
         # Setup mock response with validation errors
-        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
+        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
@@ -225,7 +221,7 @@ class TestConfigurationsRouter:
     def test_get_configuration_detail_unconfigured_schema(self, client_with_mock_config_service, mock_config_service):
         """Test getting details for valid schema with no database configuration."""
         # Setup mock response for unconfigured but valid schema
-        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetailResponse(
+        mock_config_service.get_config_details_by_key.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
@@ -270,7 +266,7 @@ class TestConfigurationsRouter:
         update_data = {"api_key": "updated-api-key-456", "base_url": "https://custom.openai.com/v1"}
 
         # Setup mock response for successful update
-        mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
+        mock_config_service.update_configuration.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=True,
             validation_errors=[],
@@ -319,7 +315,7 @@ class TestConfigurationsRouter:
         update_data = {"api_key": "new-key"}
 
         # Setup mock response for partial update
-        mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
+        mock_config_service.update_configuration.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=True,
             validation_errors=[],
@@ -368,7 +364,7 @@ class TestConfigurationsRouter:
         update_data = {"organization_id": None}
 
         # Setup mock response for field clearing
-        mock_config_service.update_configuration.return_value = ConfigurationDetailResponse(
+        mock_config_service.update_configuration.return_value = ConfigurationDetail(
             key="llm.openai.main",
             is_valid=True,
             validation_errors=[],
@@ -469,7 +465,7 @@ class TestConfigurationsRouter:
 
         # Setup mock responses for the flow
         # 1. Initially invalid configuration
-        invalid_response = ConfigurationDetailResponse(
+        invalid_response = ConfigurationDetail(
             key=config_key,
             is_valid=False,
             validation_errors=["Field 'api_key' is required but not set"],
@@ -488,7 +484,7 @@ class TestConfigurationsRouter:
         )
 
         # 2. Valid configuration after update
-        valid_response = ConfigurationDetailResponse(
+        valid_response = ConfigurationDetail(
             key=config_key,
             is_valid=True,
             validation_errors=[],
@@ -507,7 +503,7 @@ class TestConfigurationsRouter:
         )
 
         # 3. Updated configuration
-        updated_response = ConfigurationDetailResponse(
+        updated_response = ConfigurationDetail(
             key=config_key,
             is_valid=True,
             validation_errors=[],

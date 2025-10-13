@@ -12,7 +12,7 @@ from enum import StrEnum
 
 from pydantic import ValidationError
 
-from devboard.agents.claude_code.virtual_tools import VirtualToolCall
+from devboard.agents.engines.claude_code.virtual_tools import VirtualToolCall
 
 logger = logging.getLogger(__name__)
 

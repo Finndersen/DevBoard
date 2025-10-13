@@ -2,13 +2,15 @@
 
 import logging
 
-from devboard.agents.agent_engines import AgentEngine
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.claude_code.agent_conversation import ClaudeCodeConversationService
-from devboard.agents.claude_code.task_agent import ClaudeTaskPlanningAgent, ClaudeTaskSpecificationAgent
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.internal.task_agent import TaskPlanningAgent, TaskSpecificationAgent
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines.claude_code import (
+    ClaudeCodeConversationService,
+    ClaudeTaskPlanningAgent,
+    ClaudeTaskSpecificationAgent,
+)
+from devboard.agents.engines.internal import PydanticAIConversationService, TaskPlanningAgent, TaskSpecificationAgent
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Conversation, Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository

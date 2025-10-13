@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.types import AgentEngine
+from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import get_agent_config_service, get_agent_conversation_service

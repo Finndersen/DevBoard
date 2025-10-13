@@ -1,6 +1,22 @@
 from dataclasses import dataclass
+from enum import StrEnum
 
-from devboard.agents.types import AgentRole, LLMProvider, ModelType
+from devboard.agents.roles.types import AgentRole
+
+
+class ModelType(StrEnum):
+    """Types of language models."""
+
+    REASONING = "reasoning"
+    FAST = "fast"
+
+
+class LLMProvider(StrEnum):
+    """Supported LLM providers."""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
 
 
 @dataclass(frozen=True)
@@ -20,7 +36,6 @@ class LanguageModel:
         return self.full_name if self.full_name else self.name
 
 
-# Define all available language models with capability classification
 ALL_MODELS = [
     # OpenAI Models
     LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5", type=ModelType.REASONING),

@@ -13,8 +13,8 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.internal.base_agent import InternalAgent
-from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.engines.internal.base_agent import InternalAgent
+from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.api.schemas.agent_conversation import (
     ConversationMessage,
     MessageRole,

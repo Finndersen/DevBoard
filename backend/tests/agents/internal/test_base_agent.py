@@ -7,9 +7,8 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
 
-from devboard.agents.internal.base_agent import InternalAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.internal import BaseDeps, InternalAgent
+from devboard.agents.roles.types import AgentRole
 
 
 class MockDeps(BaseDeps):

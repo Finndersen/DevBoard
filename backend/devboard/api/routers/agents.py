@@ -2,13 +2,15 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import (
+from devboard.agents.agent_config_service import (
+    AgentConfigService,
     AgentConfiguration,
     AgentEngineModelConfig,
-    AgentRole,
     AvailableModelsByEngine,
+)
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import (
+    AgentRole,
 )
 from devboard.api.dependencies.services import get_agent_config_service
 from devboard.api.schemas import UpdateAgentConfigurationRequest

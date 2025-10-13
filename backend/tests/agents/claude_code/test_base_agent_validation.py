@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from claude_agent_sdk import ResultMessage
 
-from devboard.agents.claude_code.base_agent import (
+from devboard.agents.engines.claude_code.base_agent import (
     MAX_RETRY_ATTEMPTS,
     ClaudeCodeAgent,
     MessageResponse,
 )
-from devboard.agents.claude_code.client import ClaudeCodeResult
-from devboard.agents.claude_code.virtual_tools import (
+from devboard.agents.engines.claude_code.client import ClaudeCodeResult
+from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentArgs,
     EditDocumentTool,
     VirtualToolRequests,
@@ -436,7 +436,7 @@ class TestRetryMechanism:
     """Tests for the retry mechanism."""
 
     @pytest.mark.asyncio
-    @patch("devboard.agents.claude_code.base_agent.ClaudeClient")
+    @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
     async def test_run_increments_retry_count(self, mock_client_class, test_agent):
         """Test that run() properly increments retry count."""
         # Create mock client instance
@@ -456,7 +456,7 @@ class TestRetryMechanism:
         assert response.content == "Success"
 
     @pytest.mark.asyncio
-    @patch("devboard.agents.claude_code.base_agent.ClaudeClient")
+    @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
     async def test_run_creates_new_client_each_time(self, mock_client_class, test_agent):
         """Test that run() creates a new client on each call (for fresh system prompt)."""
         mock_client = MagicMock()

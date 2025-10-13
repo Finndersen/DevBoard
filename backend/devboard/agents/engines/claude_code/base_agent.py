@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from devboard.agents.claude_code.client import ClaudeClient, ClaudeCodeResult
-from devboard.agents.claude_code.message_parser import ClaudeResponseParser
-from devboard.agents.claude_code.session import ClaudeCodeSessionService
-from devboard.agents.claude_code.virtual_tools import (
+from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.message_parser import ClaudeResponseParser
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
+from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualTool,
     VirtualToolCall,
     VirtualToolRequests,

@@ -18,10 +18,8 @@ from pydantic_ai.tools import (
 )
 from sqlalchemy.orm import Session
 
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.internal.base_agent import InternalAgent
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.internal import BaseDeps, InternalAgent, PydanticAIConversationService
+from devboard.agents.roles.types import AgentRole
 from devboard.api.schemas.agent_conversation import (
     MessageRole,
     PromptResponseType,
@@ -72,7 +70,7 @@ class TestAgentConversationService:
     def conversation(self, db_session: Session) -> Conversation:
         """Create a test conversation."""
         conversation_repo = ConversationRepository(db_session)
-        from devboard.agents.agent_engines import AgentEngine
+        from devboard.agents.engines.agent_engines import AgentEngine
         from devboard.db.models import ParentEntityType
 
         conversation = conversation_repo.create(
@@ -296,7 +294,7 @@ class TestAgentConversationService:
             mock_run.return_value = mock_result
 
             # Mock logfire.warning to verify it's called
-            with patch("devboard.agents.internal.agent_conversation.logfire.warning") as mock_warning:
+            with patch("devboard.agents.engines.internal.agent_conversation.logfire.warning") as mock_warning:
                 response = await service.send_message(message="New message")
 
         # Verify the cleanup warning was logged

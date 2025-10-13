@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRole
 
 from .base import Base
 

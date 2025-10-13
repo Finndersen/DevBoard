@@ -6,10 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.api.dependencies.services import get_config_service
 from devboard.api.schemas import (
-    ConfigurationDetailResponse,
     DeleteResponse,
 )
-from devboard.services.config_service import ConfigService
+from devboard.services.config_service import ConfigService, ConfigurationDetail
 
 router = APIRouter()
 
@@ -18,7 +17,7 @@ router = APIRouter()
 @router.get("/")
 async def list_configurations(
     prefix: str, config_service: ConfigService = Depends(get_config_service)
-) -> list[ConfigurationDetailResponse]:
+) -> list[ConfigurationDetail]:
     """List configuration details, filtered by key prefix."""
     keys = config_service.list_configs(prefix=prefix)
     results = []
@@ -31,7 +30,7 @@ async def list_configurations(
     return results
 
 
-@router.get("/{config_key}/detail", response_model=ConfigurationDetailResponse)
+@router.get("/{config_key}/detail", response_model=ConfigurationDetail)
 async def get_configuration_detail(config_key: str, config_service: ConfigService = Depends(get_config_service)):
     """Get detailed configuration with field-level source information."""
     result = config_service.get_config_details_by_key(config_key)
@@ -43,7 +42,7 @@ async def get_configuration_detail(config_key: str, config_service: ConfigServic
     return result
 
 
-@router.patch("/{config_key}", response_model=ConfigurationDetailResponse)
+@router.patch("/{config_key}", response_model=ConfigurationDetail)
 async def update_configuration(
     config_key: str,
     config_data: dict[str, Any],

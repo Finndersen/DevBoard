@@ -2,13 +2,14 @@
 
 import logging
 
-from devboard.agents.claude_code.base_agent import ClaudeCodeAgent
-from devboard.agents.claude_code.virtual_tools import (
+from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentTool,
     SetDocumentContentTool,
     VirtualTool,
 )
-from devboard.agents.prompts import PLANNING_SYSTEM_PROMPT, SPECIFICATION_SYSTEM_PROMPT
+from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT
+from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 

@@ -26,13 +26,11 @@ describe('ConversationChat', () => {
       http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
-            id: 1,
             text_content: 'What is the status?',
             role: 'user',
             timestamp: '2024-01-01T10:00:00Z',
           },
           {
-            id: 2,
             text_content: 'The project is progressing well.',
             role: 'agent',
             timestamp: '2024-01-01T10:01:00Z',
@@ -88,7 +86,6 @@ describe('ConversationChat', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: 3,
             text_content: `AI response to: ${message}`,
             role: 'agent',
             timestamp: new Date().toISOString()
@@ -127,13 +124,12 @@ describe('ConversationChat', () => {
 
   it('sends message on Enter key press', async () => {
     const user = userEvent.setup()
-    
+
     server.use(
       http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: 3,
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
@@ -191,7 +187,6 @@ describe('ConversationChat', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: 3,
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
@@ -282,7 +277,6 @@ describe('ConversationChat', () => {
       http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
-            id: 1,
             text_content: 'Test message',
             role: 'user',
             timestamp: testDate,
@@ -304,7 +298,7 @@ describe('ConversationChat', () => {
 
   it('auto-scrolls to bottom when new messages are added', async () => {
     const user = userEvent.setup()
-    
+
     // Mock scrollTop property on HTMLElement
     const mockScrollTop = vi.fn()
     Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
@@ -312,19 +306,18 @@ describe('ConversationChat', () => {
       get: () => 0,
       configurable: true
     })
-    
-    // Mock scrollHeight property 
+
+    // Mock scrollHeight property
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       get: () => 1000,
       configurable: true
     })
-    
+
     server.use(
       http.post('*/api/conversations/1/messages', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: 3,
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
@@ -356,19 +349,16 @@ describe('ConversationChat', () => {
   it('displays messages in chronological order', async () => {
     const messages = [
       {
-        id: 1,
         text_content: 'First message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:00:00Z',
       },
       {
-        id: 2,
         text_content: 'Second message',
         role: 'agent' as const,
         timestamp: '2024-01-01T10:01:00Z',
       },
       {
-        id: 3,
         text_content: 'Third message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:02:00Z',
@@ -420,7 +410,6 @@ describe('ConversationChat', () => {
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: 4,
             text_content: 'Successfully updated the project specification.',
             role: 'agent',
             timestamp: new Date().toISOString()
@@ -461,8 +450,10 @@ describe('ConversationChat', () => {
       expect(screen.getByText('Successfully updated the project specification.')).toBeInTheDocument()
     })
 
-    // Input should be enabled again
-    expect(input).not.toBeDisabled()
+    // Input should be enabled again (wait for pending message to be cleared)
+    await waitFor(() => {
+      expect(input).not.toBeDisabled()
+    })
   })
 
   it('prevents sending messages while tool approval is pending', async () => {
@@ -546,18 +537,22 @@ describe('ConversationChat', () => {
     expect(screen.getByText(/custom empty state/i)).toBeInTheDocument()
   })
 
-  it('generates unique message IDs for new messages', async () => {
+  it('handles multiple messages without key collisions', async () => {
     const user = userEvent.setup()
-    
+
+    let callCount = 0
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        callCount++
+        // Ensure unique timestamps by adding call count to milliseconds
+        const now = new Date()
+        now.setMilliseconds(now.getMilliseconds() + callCount)
         return HttpResponse.json({
           type: 'message',
           message: {
-            id: Date.now(),
             text_content: 'AI response',
             role: 'agent',
-            timestamp: new Date().toISOString()
+            timestamp: now.toISOString()
           },
           tool_requests: null
         })
@@ -576,29 +571,34 @@ describe('ConversationChat', () => {
     await user.type(input, 'First message')
     await user.click(screen.getByRole('button', { name: /send/i }))
 
+    // Wait for first message to complete (both user and AI message should appear, pending should be gone)
     await waitFor(() => {
-      const messages = screen.getAllByText(/First message|AI response/)
-      expect(messages.length).toBeGreaterThan(0)
-    })
-
-    await waitFor(() => {
+      const firstMessages = screen.queryAllByText('First message')
+      // Should only appear once (as confirmed message, not pending)
+      expect(firstMessages).toHaveLength(1)
       expect(screen.getByText('AI response')).toBeInTheDocument()
-    })
+    }, { timeout: 3000 })
 
-    // Send second message
+    // Wait for input to be enabled again before sending second message
+    await waitFor(() => {
+      expect(input).not.toBeDisabled()
+    }, { timeout: 3000 })
+
+    // Send second message - can only send after first completes
     await user.type(input, 'Second message')
     await user.click(screen.getByRole('button', { name: /send/i }))
 
+    // Wait for second message to complete (pending should be gone)
     await waitFor(() => {
-      const messages = screen.getAllByText(/Second message|AI response/)
-      expect(messages.length).toBeGreaterThan(0)
-    })
-
-    await waitFor(() => {
+      const secondMessages = screen.queryAllByText('Second message')
+      // Should only appear once (as confirmed message, not pending)
+      expect(secondMessages).toHaveLength(1)
       expect(screen.getAllByText('AI response')).toHaveLength(2)
-    })
+    }, { timeout: 3000 })
 
-    // Check that messages are working correctly (no duplicate key issues)
+    // Verify both messages are rendered correctly (no duplicate key issues)
+    expect(screen.getAllByText('First message')).toHaveLength(1)
+    expect(screen.getAllByText('Second message')).toHaveLength(1)
     expect(screen.getAllByText('AI response')).toHaveLength(2)
   })
 })

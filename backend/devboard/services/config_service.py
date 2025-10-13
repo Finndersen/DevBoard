@@ -4,13 +4,9 @@ import json
 import os
 from typing import Any, TypeVar, Union, get_args, get_origin
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pydantic.fields import FieldInfo, PydanticUndefined
 
-from devboard.api.schemas.configuration import (
-    ConfigurationDetailResponse,
-    ConfigurationFieldInfo,
-)
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import config_schema_registry
 from devboard.core.registry import Registry
@@ -18,6 +14,43 @@ from devboard.db.models import Configuration
 from devboard.db.repositories.configuration import ConfigurationRepository
 
 T = TypeVar("T", bound="BaseConfig")
+
+
+class ConfigurationFieldInfo(BaseModel):
+    """Information about a single configuration field with explicit value sources."""
+
+    name: str
+    type: str  # "string", "boolean", "integer", "number"
+    required: bool
+    description: str | None = None
+    env_value: Any | None = None  # Value from environment variable
+    db_value: Any | None = None  # Value from database (override)
+    default_value: Any | None = None  # Value from schema default
+    is_secret: bool = False
+    env_var_name: str | None = None
+
+    @property
+    def is_overridden(self) -> bool:
+        """True if there is a database override value."""
+        return self.db_value is not None
+
+    @property
+    def effective_value(self) -> Any:
+        """The effective value using priority hierarchy: db_value > env_value > default_value."""
+        if self.db_value is not None:
+            return self.db_value
+        if self.env_value is not None:
+            return self.env_value
+        return self.default_value
+
+
+class ConfigurationDetail(BaseModel):
+    """Detailed configuration response with field-level information."""
+
+    key: str
+    fields: list[ConfigurationFieldInfo]
+    is_valid: bool
+    validation_errors: list[str] | None = None
 
 
 class ConfigService:
@@ -85,7 +118,7 @@ class ConfigService:
 
             return ConfigValidationResult[T](False, errors=errors)
 
-    def update_configuration(self, key: str, config_data: dict[str, Any]) -> ConfigurationDetailResponse:
+    def update_configuration(self, key: str, config_data: dict[str, Any]) -> ConfigurationDetail:
         """Update configuration with complete structure. None values clear DB overrides."""
         # Get the schema class
         schema_class = self.config_registry.get(key)
@@ -125,14 +158,14 @@ class ConfigService:
         """Delete a configuration."""
         self.config_repo.delete_by_key(key)
 
-    def get_config_details_by_key(self, key: str) -> ConfigurationDetailResponse | None:
+    def get_config_details_by_key(self, key: str) -> ConfigurationDetail | None:
         # 1. Get the schema class
         schema_class = self.config_registry.get(key)
         if not schema_class:
             return None
         return self.get_config_details(schema_class)
 
-    def get_config_details(self, schema_class: type[BaseConfig]) -> ConfigurationDetailResponse:
+    def get_config_details(self, schema_class: type[BaseConfig]) -> ConfigurationDetail:
         """Get configuration with field-level source information."""
         # 2. Load raw DB data
         db_data = self._load_db_data(self.config_repo, schema_class.config_key) or {}
@@ -170,7 +203,7 @@ class ConfigService:
                 )
             )
 
-        return ConfigurationDetailResponse(
+        return ConfigurationDetail(
             key=schema_class.config_key,
             fields=fields,
             is_valid=validation_result.success,

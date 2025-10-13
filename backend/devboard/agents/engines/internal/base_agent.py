@@ -20,8 +20,8 @@ from pydantic_ai.tools import (
     ToolFuncEither,
 )
 
-from devboard.agents.internal.deps import BaseDeps
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.roles.types import AgentRole
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     ProjectContextData,

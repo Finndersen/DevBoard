@@ -3,12 +3,11 @@
 from fastapi import Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_engines import AgentEngine, default_agent_engine_repository
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.internal.project_agent import ProjectAgent
+from devboard.agents.engines.agent_engines import AgentEngine, default_agent_engine_repository
+from devboard.agents.engines.internal import ProjectAgent, PydanticAIConversationService
 from devboard.agents.language_models import default_llm_repository
-from devboard.agents.types import AgentRole
+from devboard.agents.roles.types import AgentRole
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import (
     get_configuration_repository,

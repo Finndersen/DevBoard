@@ -2,9 +2,10 @@
 
 import pytest
 
-from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import AgentEngineModelConfig, AgentRole, ModelType
+from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.language_models import ModelType
+from devboard.agents.roles.types import AgentRole
 
 
 class TestAgentConfigService:
@@ -13,7 +14,7 @@ class TestAgentConfigService:
     @pytest.fixture
     def agent_config_service(self, config_service):
         """Create AgentConfigService instance for testing."""
-        from devboard.agents.agent_engines import default_agent_engine_repository
+        from devboard.agents.engines.agent_engines import default_agent_engine_repository
         from devboard.agents.language_models import default_llm_repository
 
         return AgentConfigService(

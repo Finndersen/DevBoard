@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from devboard.agents.claude_code.tool_approval_manager import (
+from devboard.agents.engines.claude_code.tool_approval_manager import (
     ToolApprovalRequest,
 )
 from devboard.api.routers.tool_approvals import (

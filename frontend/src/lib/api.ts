@@ -40,7 +40,6 @@ export interface DocumentResponse {
 export type MessageRole = 'user' | 'agent'
 
 export interface ConversationMessage {
-  id: number
   role: MessageRole
   text_content: string
   timestamp: string

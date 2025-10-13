@@ -5,8 +5,8 @@ import datetime
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from sqlalchemy import delete, select
 
-from devboard.agents.agent_engines import AgentEngine
-from devboard.agents.types import AgentRole
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
 

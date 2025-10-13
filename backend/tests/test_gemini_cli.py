@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.agents.gemini_cli import (
+from devboard.agents.engines.gemini_cli import (
     GeminiCliExecutionError,
     GeminiCliNotFoundError,
     GeminiCliTimeoutError,

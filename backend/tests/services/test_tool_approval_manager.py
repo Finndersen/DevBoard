@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from devboard.agents.claude_code.tool_approval_manager import (
+from devboard.agents.engines.claude_code.tool_approval_manager import (
     ToolApprovalManager,
     ToolApprovalResponse,
     get_approval_manager,

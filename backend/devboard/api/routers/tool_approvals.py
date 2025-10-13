@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from devboard.agents.claude_code.tool_approval_manager import ToolApprovalResponse, get_approval_manager
+from devboard.agents.engines.claude_code.tool_approval_manager import ToolApprovalResponse, get_approval_manager
 
 logger = logging.getLogger(__name__)
 

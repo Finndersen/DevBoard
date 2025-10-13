@@ -1,6 +1,6 @@
 from pydantic_ai import ApprovalRequired, RunContext, Tool
 
-from devboard.agents.internal.deps import BaseDeps
+from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models.document import Document
 from devboard.db.repositories.document import DocumentRepository

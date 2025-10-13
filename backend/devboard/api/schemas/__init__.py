@@ -11,10 +11,6 @@ from .codebase import (
     CodebaseUpdate,
 )
 from .common import DeleteResponse
-from .configuration import (
-    ConfigurationDetailResponse,
-    ConfigurationFieldInfo,
-)
 from .conversation import ConversationResponse
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
@@ -26,7 +22,6 @@ from .integration import (
     AvailableModelsByEngineResponse,
     AvailableModelsResponse,
     IntegrationTestResponse,
-    ModelInfo,
     UpdateAgentConfigurationRequest,
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
@@ -69,8 +64,6 @@ __all__ = [
     "DocumentResponse",
     "DocumentUpdate",
     # Configuration
-    "ConfigurationDetailResponse",
-    "ConfigurationFieldInfo",
     "ContextProviderResourceBase",
     "ContextProviderResourceCreate",
     "ContextProviderResourceResponse",
@@ -87,7 +80,6 @@ __all__ = [
     "AvailableModelsByEngineResponse",
     "AvailableModelsResponse",
     "IntegrationTestResponse",
-    "ModelInfo",
     "UpdateAgentConfigurationRequest",
     "UpdateAgentModelRequest",
     "UpdateConversationModelRequest",
