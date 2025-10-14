@@ -1,6 +1,5 @@
 """GitHub context provider for PR, issue, and repository context."""
 
-import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -23,8 +22,6 @@ from .base import (
     DescriptionGenerationError,
     ResourceHandlingError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class GitHubContextProvider(BaseContextProvider):
@@ -318,5 +315,5 @@ Based on this repository data, here is the relevant context for your query:
         except Exception as e:
             if isinstance(e, ResourceHandlingError | DescriptionGenerationError):
                 raise
-            logger.error(f"Error generating GitHub description for {resource_uri}: {e}")
+            logfire.error(f"Error generating GitHub description for {resource_uri}: {e}")
             raise DescriptionGenerationError(f"Failed to generate GitHub description: {e}") from e

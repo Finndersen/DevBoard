@@ -1,8 +1,8 @@
 """Project API endpoints."""
 
-import logging
 from typing import Any
 
+import logfire
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.api.dependencies.entities import get_verified_project
@@ -48,7 +48,6 @@ from devboard.services.resource_service import (
 )
 from devboard.services.task_service import TaskService
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -342,7 +341,7 @@ async def get_project_context(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting context for project {project_id}: {e}")
+        logfire.error("Error getting context for project", project_id=project_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Context assembly failed: {e}") from e
 
 

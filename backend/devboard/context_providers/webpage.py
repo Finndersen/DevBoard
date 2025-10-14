@@ -1,6 +1,5 @@
 """Web page context provider for generic web page content."""
 
-import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -15,8 +14,6 @@ from .base import (
     DescriptionGenerationError,
     ResourceHandlingError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class WebPageContextProvider(BaseContextProvider):

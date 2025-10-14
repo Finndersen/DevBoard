@@ -1,9 +1,9 @@
 """Slack integration for accessing messages, channels, and conversations."""
 
-import logging
 from typing import Any
 from urllib.parse import urlparse
 
+import logfire
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -19,8 +19,6 @@ from .base import (
     ResourceNotFoundError,
 )
 
-logger = logging.getLogger(__name__)
-
 
 class SlackIntegration(BaseIntegration):
     """Integration for Slack API access."""
@@ -33,9 +31,9 @@ class SlackIntegration(BaseIntegration):
         super().__init__(config)
         try:
             self.client = WebClient(token=config.api_token)
-            logger.info("Initialized Slack integration")
+            logfire.info("Initialized Slack integration")
         except Exception as e:
-            logger.error(f"Failed to initialize Slack integration: {e}")
+            logfire.error(f"Failed to initialize Slack integration: {e}")
             raise IntegrationConfigurationError(f"Failed to initialize Slack: {e}") from e
 
     async def test_connection(self) -> IntegrationConnectionResult:
@@ -60,12 +58,12 @@ class SlackIntegration(BaseIntegration):
                     success=False, message=f"Slack authentication failed: {e.response['error']}"
                 )
             else:
-                logger.error(f"Slack connection test failed: {e}")
+                logfire.error(f"Slack connection test failed: {e}")
                 return IntegrationConnectionResult(
                     success=False, message=f"Slack API error: {e.response.get('error', str(e))}"
                 )
         except Exception as e:
-            logger.error(f"Slack connection test failed: {e}")
+            logfire.error(f"Slack connection test failed: {e}")
             return IntegrationConnectionResult(success=False, message=f"Slack connection failed: {e}")
 
     async def get_message(self, channel: str, timestamp: str) -> dict[str, Any] | None:
@@ -88,7 +86,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in get_message({channel}, {timestamp}): {e}")
+                logfire.error(f"Slack error in get_message({channel}, {timestamp}): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_channel_history(
@@ -105,7 +103,7 @@ class SlackIntegration(BaseIntegration):
             if response.get("ok"):
                 return response.get("messages", [])  # type: ignore[return-value]
             else:
-                logger.error(f"Slack API error: {response.get('error')}")
+                logfire.error(f"Slack API error: {response.get('error')}")
                 return []
         except SlackApiError as e:
             if e.response["error"] in [
@@ -119,7 +117,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in get_channel_history({channel}): {e}")
+                logfire.error(f"Slack error in get_channel_history({channel}): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_thread_replies(self, channel: str, thread_ts: str) -> list[dict[str, Any]]:
@@ -142,7 +140,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in get_thread_replies({channel}, {thread_ts}): {e}")
+                logfire.error(f"Slack error in get_thread_replies({channel}, {thread_ts}): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     async def search_messages(self, query: str, count: int = 20) -> dict[str, Any]:
@@ -153,7 +151,7 @@ class SlackIntegration(BaseIntegration):
             if response.get("ok"):
                 return response  # type: ignore[return-value]
             else:
-                logger.error(f"Slack search error: {response.get('error')}")
+                logfire.error(f"Slack search error: {response.get('error')}")
                 return {"messages": {"matches": []}}
         except SlackApiError as e:
             if e.response["error"] in [
@@ -165,7 +163,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in search_messages({query}): {e}")
+                logfire.error(f"Slack error in search_messages({query}): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     async def get_channel_info(self, channel: str) -> dict[str, Any] | None:
@@ -188,7 +186,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in get_channel_info({channel}): {e}")
+                logfire.error(f"Slack error in get_channel_info({channel}): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     async def list_channels(self, limit: int = 100) -> list[dict[str, Any]]:
@@ -209,7 +207,7 @@ class SlackIntegration(BaseIntegration):
             elif e.response["error"] == "rate_limited":
                 raise RateLimitError(f"Slack rate limit exceeded: {e}") from e
             else:
-                logger.error(f"Slack error in list_channels(): {e}")
+                logfire.error(f"Slack error in list_channels(): {e}")
                 raise IntegrationError(f"Slack error: {e}") from e
 
     def parse_message_url(self, url: str) -> dict[str, str] | None:

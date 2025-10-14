@@ -1,6 +1,5 @@
 """Base agent service with shared functionality for PydanticAI message handling."""
 
-import logging
 from abc import ABCMeta, abstractmethod
 
 from pydantic_ai import Agent, Tool
@@ -26,8 +25,6 @@ from devboard.services.context_assembly import (
     ContextAssemblyService,
     ProjectContextData,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):

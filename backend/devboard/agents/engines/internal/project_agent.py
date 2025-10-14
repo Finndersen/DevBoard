@@ -1,7 +1,5 @@
 """Project Q&A Agent using PydanticAI for intelligent context-aware responses."""
 
-import logging
-
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
@@ -15,8 +13,6 @@ from devboard.services.context_assembly import (
     EagerContextData,
     OnDemandResourceInfo,
 )
-
-logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """
 You are a Project Assistant for DevBoard, an AI-powered developer command center.

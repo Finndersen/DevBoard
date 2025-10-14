@@ -6,16 +6,15 @@ access to session messages and todos.
 """
 
 import json
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
-from devboard.api.schemas.claude_code_todo import TodoItem
+import logfire
 
-logger = logging.getLogger(__name__)
+from devboard.api.schemas.claude_code_todo import TodoItem
 
 
 @dataclass
@@ -155,7 +154,7 @@ class ClaudeCodeSessionService:
 
         for session_file in self.claude_projects_dir.glob(pattern):
             if session_file.is_file():
-                logger.debug(f"Found session file: {session_file}")
+                logfire.debug(f"Found session file: {session_file}")
                 return session_file
 
         raise FileNotFoundError(f"Session file not found for ID: {session_id}. Searched in: {self.claude_projects_dir}")
@@ -226,7 +225,7 @@ class ClaudeCodeSessionService:
                     if message:
                         messages.append(message)
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Skipping malformed JSONL entry at line {line_num}: {e}")
+                    logfire.warning(f"Skipping malformed JSONL entry at line {line_num}: {e}")
                     continue
 
         return messages
@@ -452,7 +451,7 @@ class ClaudeCodeSessionService:
                         all_todos.append(todo_item)
 
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse todo file {todo_file}: {e}")
+                logfire.error(f"Failed to parse todo file {todo_file}: {e}")
                 raise
 
         return all_todos

@@ -1,3 +1,5 @@
+from devboard.db.models import Task
+
 SPECIFICATION_SYSTEM_PROMPT = """
 You are a Task Specification Assistant for DevBoard, helping developers craft detailed task specifications.
 
@@ -21,4 +23,34 @@ BEHAVIOUR GUIDELINES:
 - ONLY include details in the task specification that have been discussed and confirmed with the user
 
 Your responses should be concise, helpful, accurate, and focused on creating a clear, actionable specification.
+"""
+
+
+def build_task_specification_context(task: Task) -> str:
+    """Build context for task specification agent.
+
+    Includes task metadata, project specification, and task specification document.
+
+    Note: Requires task to be loaded within an active SQLAlchemy session,
+    as it will lazy-load the project relationship if needed.
+
+    Args:
+        task: Task instance with eager-loaded documents
+
+    Returns:
+        Formatted context string
+    """
+    return f"""
+TASK NAME: {task.title}
+TASK STATUS: {task.status.value}
+
+PROJECT SPECIFICATION:
+```markdown
+{task.project.specification.content or "<EMPTY>"}
+```
+
+TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
+```markdown
+{task.specification.content or "<EMPTY>"}
+```
 """

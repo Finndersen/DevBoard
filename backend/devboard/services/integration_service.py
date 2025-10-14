@@ -1,6 +1,5 @@
 """Service for handling integration operations and testing."""
 
-import logging
 from dataclasses import dataclass
 
 import logfire
@@ -13,8 +12,6 @@ from devboard.integrations.base import (
 )
 from devboard.integrations.registry import integration_registry
 from devboard.services.config_service import ConfigService
-
-logger = logging.getLogger(__name__)
 
 
 class InvalidIntegrationTypeError(Exception):

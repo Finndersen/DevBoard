@@ -1,11 +1,8 @@
 """Base context provider class and common patterns."""
 
-import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, ClassVar
-
-logger = logging.getLogger(__name__)
 
 
 class ContextStrategy(str, Enum):

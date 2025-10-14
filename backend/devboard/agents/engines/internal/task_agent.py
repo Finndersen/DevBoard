@@ -1,36 +1,26 @@
 """Task Planning Agent using PydanticAI for interactive document crafting with deferred tools."""
 
-import logging
 from abc import ABCMeta
-from enum import Enum
 
 from pydantic_ai import Tool
 from pydantic_ai.tools import ToolFuncEither
 
 from devboard.agents.engines.internal.base_agent import InternalAgent
 from devboard.agents.engines.internal.deps import BaseDeps
-from devboard.agents.engines.internal.tools import create_document_edit_tool, create_set_document_content_tool
-from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT
-from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT
+from devboard.agents.engines.internal.tools import (
+    create_code_structure_search_tool,
+    create_directory_tree_tool,
+    create_document_edit_tool,
+    create_file_search_tool,
+    create_set_document_content_tool,
+    create_text_search_tool,
+)
+from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT, build_task_planning_context
+from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT, build_task_specification_context
 from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
-
-logger = logging.getLogger(__name__)
-
-
-class TaskState(str, Enum):
-    """Task states that support document crafting."""
-
-    DESIGNING = "Designing"
-    PLANNING = "Planning"
-
-
-class DocumentType(str, Enum):
-    """Document types that can be edited."""
-
-    SPECIFICATION = "specification"
-    IMPLEMENTATION_PLAN = "implementation_plan"
+from devboard.integrations.codebase import CodebaseIntegration
 
 
 class InternalTaskAgent(InternalAgent[BaseDeps], metaclass=ABCMeta):
@@ -47,6 +37,8 @@ class InternalTaskAgent(InternalAgent[BaseDeps], metaclass=ABCMeta):
     ):
         self.task = task
         self.document_repository = document_repository
+        # Create CodebaseIntegration if task has an associated codebase
+        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
         super().__init__(
             context_service=context_service,
             model_name=model_name,
@@ -60,30 +52,39 @@ class TaskSpecificationAgent(InternalTaskAgent):
 
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         """Construct the first user message that contains context information for the agent."""
-        context_message = f"""
-        TASK NAME: {self.task.title}
-        TASK STATE: {self.task.status.value}
-        TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
-        ```markdown
-        {self.task.specification.content or "<EMPTY>"}
-        ```
-        """
-        return context_message
+        return build_task_specification_context(self.task)
 
     def _get_system_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
         return SPECIFICATION_SYSTEM_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
+        tools: list[Tool | ToolFuncEither] = []
+
         # Use set_content tool if document is blank, otherwise use edit tool
-        if not self.task.specification.content or not self.task.specification.content.strip():
-            return [
+        if not self.task.specification.content.strip():
+            tools.append(
                 create_set_document_content_tool(
                     document=self.task.specification, document_repo=self.document_repository
                 )
-            ]
+            )
         else:
-            return [create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)]
+            tools.append(
+                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
+            )
+
+        # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
+        if self.codebase_integration:
+            tools.extend(
+                [
+                    create_text_search_tool(self.codebase_integration),
+                    create_file_search_tool(self.codebase_integration),
+                    create_code_structure_search_tool(self.codebase_integration),
+                    create_directory_tree_tool(self.codebase_integration),
+                ]
+            )
+
+        return tools
 
 
 class TaskPlanningAgent(InternalTaskAgent):
@@ -93,18 +94,7 @@ class TaskPlanningAgent(InternalTaskAgent):
 
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         """Construct the first user message that contains context information for the agent."""
-        context_message = f"""
-        TASK SPECIFICATION DOCUMENT:
-        ```markdown
-        {self.task.specification.content}
-        ```
-
-        TASK IMPLEMENTATION PLAN DOCUMENT:
-        ```markdown
-        {self.task.implementation_plan.content}
-        ```
-        """
-        return context_message
+        return build_task_planning_context(self.task)
 
     def _get_system_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
@@ -137,6 +127,17 @@ class TaskPlanningAgent(InternalTaskAgent):
                 create_document_edit_tool(
                     document=self.task.implementation_plan, document_repo=self.document_repository
                 )
+            )
+
+        # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
+        if self.codebase_integration:
+            tools.extend(
+                [
+                    create_text_search_tool(self.codebase_integration),
+                    create_file_search_tool(self.codebase_integration),
+                    create_code_structure_search_tool(self.codebase_integration),
+                    create_directory_tree_tool(self.codebase_integration),
+                ]
             )
 
         return tools

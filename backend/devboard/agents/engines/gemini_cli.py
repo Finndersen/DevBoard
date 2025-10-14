@@ -1,10 +1,9 @@
 """Async wrapper for gemini-cli single-prompt execution."""
 
 import asyncio
-import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+import logfire
 
 # Define read-only tools
 READ_ONLY_TOOLS = [
@@ -125,7 +124,7 @@ async def execute_gemini_prompt(
     else:
         cwd = str(Path.cwd())
 
-    logger.debug(f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s")
+    logfire.debug(f"Executing gemini prompt in {cwd} with model {model}, mode {operation_mode}, timeout {timeout}s")
 
     try:
         # Build command arguments
@@ -159,7 +158,7 @@ async def execute_gemini_prompt(
             except ProcessLookupError:
                 pass  # Process already terminated
 
-            logger.error(f"Gemini CLI timed out after {timeout}s")
+            logfire.error(f"Gemini CLI timed out after {timeout}s")
             raise GeminiCliTimeoutError(f"Gemini CLI timed out after {timeout} seconds") from e
 
         # Decode output
@@ -168,20 +167,20 @@ async def execute_gemini_prompt(
 
         # Check return code
         if process.returncode == 0:
-            logger.info(f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})")
+            logfire.info(f"Gemini CLI prompt executed successfully (model: {model}, mode: {operation_mode})")
             return stdout_text
         else:
             error_msg = stderr_text or "Unknown error"
-            logger.error(f"Gemini CLI failed with return code {process.returncode}: {error_msg}")
+            logfire.error(f"Gemini CLI failed with return code {process.returncode}: {error_msg}")
             raise GeminiCliExecutionError(f"Gemini CLI error: {error_msg}")
 
     except FileNotFoundError as e:
-        logger.error("Gemini CLI not found - ensure gemini is installed and in PATH")
+        logfire.error("Gemini CLI not found - ensure gemini is installed and in PATH")
         raise GeminiCliNotFoundError(
             "Gemini CLI not installed - install from https://github.com/google-gemini/gemini-cli"
         ) from e
     except Exception as e:
         if isinstance(e, GeminiCliError):
             raise
-        logger.error(f"Unexpected error executing gemini-cli: {e}")
+        logfire.error(f"Unexpected error executing gemini-cli: {e}")
         raise GeminiCliExecutionError(f"Unexpected error: {e}") from e

@@ -1,14 +1,13 @@
 """Codebase integration for exploring and analyzing code repositories."""
 
-import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
+import logfire
+
 from .base import IntegrationConnectionResult
 from .shell import execute_shell_command
-
-logger = logging.getLogger(__name__)
 
 
 class CodebaseIntegration:
@@ -145,7 +144,7 @@ class CodebaseIntegration:
             return []
 
         except Exception as e:
-            logger.error(f"Error searching file content with ripgrep: {e}")
+            logfire.error(f"Error searching file content with ripgrep: {e}")
             return []
 
     async def search_files(
@@ -194,7 +193,7 @@ class CodebaseIntegration:
             return []
 
         except Exception as e:
-            logger.error(f"Error searching files with fd: {e}")
+            logfire.error(f"Error searching files with fd: {e}")
             return []
 
     async def search_code_structure(self, pattern: str, language: str | None = None) -> list[str]:
@@ -206,6 +205,19 @@ class CodebaseIntegration:
 
         Returns:
             List of matching lines from ast-grep output
+
+        TODO: Output appears to repeat the file path multiple times, e.g.:
+        Search: "class TaskStatus(StrEnum):
+        $$$"
+        Returns:
+        backend/devboard/db/models/task.py:19:class TaskStatus(StrEnum):
+        backend/devboard/db/models/task.py:20:    ""Enumeration of possible task statuses.""
+        backend/devboard/db/models/task.py:21:
+        backend/devboard/db/models/task.py:22:    DEFINING = "defining"
+        backend/devboard/db/models/task.py:23:    PLANNING = "planning"
+        backend/devboard/db/models/task.py:24:    IMPLEMENTING = "implementing"
+        backend/devboard/db/models/task.py:25:    REVIEWING = "reviewing"
+        backend/devboard/db/models/task.py:26:    COMPLETE = "complete"
         """
         cmd = ["ast-grep", "--pattern", pattern]
 
@@ -225,7 +237,7 @@ class CodebaseIntegration:
             return []
 
         except Exception as e:
-            logger.error(f"Error searching code structure with ast-grep: {e}")
+            logfire.error(f"Error searching code structure with ast-grep: {e}")
             return []
 
     async def get_directory_tree(self, max_depth: int | None = None, subdirectory: str | None = None) -> str:
@@ -271,7 +283,7 @@ class CodebaseIntegration:
                 return f"Error generating file tree: {result.stderr}"
 
         except Exception as e:
-            logger.error(f"Error getting file tree: {e}")
+            logfire.error(f"Error getting file tree: {e}")
             return f"Error: {str(e)}"
 
     async def get_git_log(self, max_count: int = 10, file_path: str | None = None) -> list[dict[str, str]]:
@@ -428,7 +440,7 @@ class CodebaseIntegration:
                 relative_path = full_path.relative_to(self.codebase_path)
                 return str(relative_path)
             except ValueError:
-                logger.warning(f"File path outside codebase directory: {file_path}")
+                logfire.warning(f"File path outside codebase directory: {file_path}")
                 return None
 
         except Exception:

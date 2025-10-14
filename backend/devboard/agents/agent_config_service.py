@@ -1,6 +1,5 @@
 """Service for managing agent engine and model configuration."""
 
-import logging
 from typing import cast
 
 from pydantic import BaseModel
@@ -24,8 +23,6 @@ from devboard.agents.roles.types import (
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.services.config_service import ConfigService
-
-logger = logging.getLogger(__name__)
 
 
 class AgentEngineModelConfig(BaseModel):

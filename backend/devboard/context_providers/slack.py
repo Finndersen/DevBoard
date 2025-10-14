@@ -1,8 +1,9 @@
 """Slack context provider for message, channel, and conversation context."""
 
-import logging
 from typing import Any
 from urllib.parse import urlparse
+
+import logfire
 
 from devboard.integrations.slack import SlackIntegration
 
@@ -14,8 +15,6 @@ from .base import (
     DescriptionGenerationError,
     ResourceHandlingError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class SlackContextProvider(BaseContextProvider):
@@ -130,7 +129,7 @@ class SlackContextProvider(BaseContextProvider):
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting Slack resource for {resource_uri}: {e}")
+            logfire.error(f"Error getting Slack resource for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get Slack resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
@@ -198,7 +197,7 @@ Based on this channel and recent messages, here is the relevant context for your
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting Slack context for {resource_uri}: {e}")
+            logfire.error(f"Error getting Slack context for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get Slack context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:
@@ -236,5 +235,5 @@ Based on this channel and recent messages, here is the relevant context for your
         except Exception as e:
             if isinstance(e, ResourceHandlingError | DescriptionGenerationError):
                 raise
-            logger.error(f"Error generating Slack description for {resource_uri}: {e}")
+            logfire.error(f"Error generating Slack description for {resource_uri}: {e}")
             raise DescriptionGenerationError(f"Failed to generate Slack description: {e}") from e

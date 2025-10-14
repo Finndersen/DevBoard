@@ -1,10 +1,9 @@
 """Async shell command execution utility."""
 
 import asyncio
-import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+import logfire
 
 
 class ShellCommandError(Exception):
@@ -77,7 +76,7 @@ async def execute_shell_command(
     else:
         cwd = str(Path.cwd())
 
-    logger.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
+    logfire.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -97,7 +96,7 @@ async def execute_shell_command(
             except ProcessLookupError:
                 pass
 
-            logger.error(f"Shell command timed out after {timeout}s: {' '.join(command)}")
+            logfire.error(f"Shell command timed out after {timeout}s: {' '.join(command)}")
             raise ShellCommandTimeoutError(f"Command timed out after {timeout} seconds: {command[0]}") from e
 
         stdout_text = stdout.decode("utf-8")
@@ -107,12 +106,12 @@ async def execute_shell_command(
 
         if not result.success and raise_on_error:
             error_msg = stderr_text.strip() or f"Command failed with return code {process.returncode}"
-            logger.error(f"Shell command failed: {' '.join(command)} - {error_msg}")
+            logfire.error(f"Shell command failed: {' '.join(command)} - {error_msg}")
             raise ShellCommandExecutionError(f"Command '{command[0]}' failed: {error_msg}")
 
-        logger.debug(f"Shell command completed successfully: {command[0]}")
+        logfire.debug(f"Shell command completed successfully: {command[0]}")
         return result
 
     except FileNotFoundError as e:
-        logger.error(f"Shell command not found: {command[0]}")
+        logfire.error(f"Shell command not found: {command[0]}")
         raise ShellCommandNotFoundError(f"Command not found: {command[0]}") from e

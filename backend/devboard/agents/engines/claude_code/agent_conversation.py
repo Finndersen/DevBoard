@@ -1,6 +1,5 @@
 """Claude Code agent conversation service with virtual tool calling."""
 
-import logging
 from datetime import datetime
 
 import logfire
@@ -20,8 +19,6 @@ from devboard.api.schemas.agent_conversation import (
 )
 from devboard.db.models import Conversation
 from devboard.db.repositories.conversation import ConversationRepository
-
-logger = logging.getLogger(__name__)
 
 
 class ClaudeCodeConversationService(BaseAgentConversationService):

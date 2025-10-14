@@ -1,6 +1,5 @@
 """Service for codebase investigation and architecture document generation."""
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,8 +8,6 @@ import logfire
 from devboard.agents.engines.gemini_cli import GeminiCliError, execute_gemini_prompt
 from devboard.services.template_service import TemplateService, TemplateType
 from devboard.utils.hash import compute_content_hash
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,7 +79,7 @@ class CodebaseInvestigationService:
                     return ArchitectureStatus(exists=False)
 
             except Exception as e:
-                logger.error(f"Error checking architecture document for {codebase_path}: {e}")
+                logfire.error("Error checking architecture document", codebase_path=codebase_path, error=str(e))
                 return ArchitectureStatus(exists=False)
 
     def read_architecture_content(self, codebase_path: str) -> str | None:
@@ -98,7 +95,7 @@ class CodebaseInvestigationService:
                 return content
 
             except Exception as e:
-                logger.error(f"Error reading architecture document for {codebase_path}: {e}")
+                logfire.error("Error reading architecture document", codebase_path=codebase_path, error=str(e))
                 return None
 
     def get_architecture_document(self, codebase_path: str) -> ArchitectureDocument:
@@ -135,7 +132,7 @@ class CodebaseInvestigationService:
                     return ArchitectureDocument(exists=False)
 
             except Exception as e:
-                logger.error(f"Error getting architecture document for {codebase_path}: {e}")
+                logfire.error("Error getting architecture document", codebase_path=codebase_path, error=str(e))
                 return ArchitectureDocument(exists=False)
 
     def update_architecture_content(
@@ -212,7 +209,7 @@ class CodebaseInvestigationService:
 
             except Exception as e:
                 error_msg = f"Error updating architecture document: {e}"
-                logger.error(f"Error updating architecture document for {codebase_path}: {e}")
+                logfire.error("Error updating architecture document", codebase_path=codebase_path, error=str(e))
                 return ArchitectureUpdateResult(success=False, message=error_msg, error_type="unexpected_error")
 
     async def generate_architecture_document(
@@ -267,14 +264,12 @@ class CodebaseInvestigationService:
 
             except GeminiCliError as e:
                 error_msg = f"AI generation failed: {e}"
-                logger.error(error_msg)
                 logfire.error("Gemini CLI error during architecture generation", error=str(e))
                 return ArchitectureGenerationResult(
                     success=False, error_message=error_msg, error_type="ai_generation_error"
                 )
             except Exception as e:
                 error_msg = f"Unexpected error generating architecture document: {e}"
-                logger.error(error_msg)
                 logfire.error("Unexpected error during architecture generation", error=str(e))
                 return ArchitectureGenerationResult(
                     success=False, error_message=error_msg, error_type="unexpected_error"

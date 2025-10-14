@@ -5,13 +5,12 @@ approval requests using async queues.
 """
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+import logfire
 
 
 @dataclass
@@ -114,7 +113,7 @@ class ToolApprovalManager:
             response_queue: asyncio.Queue[ToolApprovalResponse] = asyncio.Queue(maxsize=1)
             self._pending[request_id] = (request, response_queue)
 
-        logger.info(
+        logfire.info(
             f"Tool approval requested: {request_id} (conversation={conversation_id}, "
             f"tool={tool_name}, pending={len(self._pending)})"
         )
@@ -123,12 +122,12 @@ class ToolApprovalManager:
             # Block until response received or timeout
             timeout_seconds = timeout if timeout is not None else self._default_timeout
             response = await asyncio.wait_for(response_queue.get(), timeout=timeout_seconds)
-            logger.info(
+            logfire.info(
                 f"Tool approval received: {request_id} (approved={response.approved}, feedback={response.feedback})"
             )
             return response
         except TimeoutError:
-            logger.warning(f"Tool approval timeout: {request_id} (timeout={timeout_seconds}s)")
+            logfire.warning(f"Tool approval timeout: {request_id} (timeout={timeout_seconds}s)")
             # Return denied response on timeout
             return ToolApprovalResponse(
                 approved=False,
@@ -162,7 +161,7 @@ class ToolApprovalManager:
         async with self._lock:
             pending = self._pending.get(request_id)
             if not pending:
-                logger.warning(f"Approval response for unknown request: {request_id}")
+                logfire.warning(f"Approval response for unknown request: {request_id}")
                 return False
 
             request, response_queue = pending
@@ -170,14 +169,14 @@ class ToolApprovalManager:
         try:
             # Put response in queue (maxsize=1, so should never block)
             await asyncio.wait_for(response_queue.put(response), timeout=1.0)
-            logger.info(
+            logfire.info(
                 f"Approval response delivered: {request_id} "
                 f"(conversation={request.conversation_id}, approved={response.approved})"
             )
             return True
         except TimeoutError as e:
             # This should never happen since maxsize=1 and we only put once
-            logger.error(f"Failed to deliver approval response: {request_id} (queue full?)")
+            logfire.error(f"Failed to deliver approval response: {request_id} (queue full?)")
             raise RuntimeError(f"Failed to deliver approval response for {request_id}") from e
 
     async def get_pending_approvals(
@@ -234,9 +233,9 @@ class ToolApprovalManager:
                         timeout=1.0,
                     )
                 except TimeoutError:
-                    logger.error(f"Failed to cancel approval: {request_id}")
+                    logfire.error(f"Failed to cancel approval: {request_id}")
 
-            logger.info(f"Cancelled {len(to_cancel)} pending approvals for conversation {conversation_id}")
+            logfire.info(f"Cancelled {len(to_cancel)} pending approvals for conversation {conversation_id}")
             return len(to_cancel)
 
     def get_stats(self) -> dict[str, Any]:

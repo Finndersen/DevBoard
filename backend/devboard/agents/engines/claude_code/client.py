@@ -1,6 +1,5 @@
 """Claude Code client using claude-agent-sdk for Claude Code CLI integration."""
 
-import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -29,8 +28,6 @@ try:
     from claude_agent_sdk.types import StreamEvent
 except ImportError:
     StreamEvent = None  # type: ignore
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -1,7 +1,5 @@
 """PydanticAI agent conversation service with deferred tools support."""
 
-import logging
-
 import logfire
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import (
@@ -27,8 +25,6 @@ from devboard.db.models import Conversation
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
 from devboard.db.models.messages import MessageType
 from devboard.db.repositories.conversation import ConversationRepository
-
-logger = logging.getLogger(__name__)
 
 
 class PydanticAIConversationService(BaseAgentConversationService):
@@ -171,7 +167,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
             if decision.approved:
                 # For approved tools, set approval to True
                 converted_approvals[tool_call_id] = ToolApproved()
-                logger.info(f"Tool {tool_call_id} approved")
+                logfire.info(f"Tool {tool_call_id} approved")
             else:
                 # For denied tools, set approval to False or use ToolDenied
                 if decision.feedback:
@@ -180,7 +176,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
                     message = "The tool call was DENIED."
 
                 converted_approvals[tool_call_id] = ToolDenied(message=message)
-                logger.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
+                logfire.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
 
         return DeferredToolResults(approvals=converted_approvals)
 

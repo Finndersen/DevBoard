@@ -1,3 +1,5 @@
+from devboard.db.models import Task
+
 PLANNING_SYSTEM_PROMPT = """
 You are a Task Planning Assistant for DevBoard, helping developers create detailed implementation plans.
 
@@ -21,4 +23,40 @@ AVAILABLE ACTIONS:
 - Suggest transition to Implementing state when plan is complete
 
 Your responses should be technical, detailed, and focused on creating actionable implementation steps.
+"""
+
+
+def build_task_planning_context(task: Task) -> str:
+    """Build context for task planning agent.
+
+    Includes task metadata, project specification, task specification,
+    and implementation plan documents.
+
+    Note: Requires task to be loaded within an active SQLAlchemy session,
+    as it will lazy-load the project relationship if needed.
+
+    Args:
+        task: Task instance with eager-loaded documents
+
+    Returns:
+        Formatted context string
+    """
+    return f"""
+TASK NAME: {task.title}
+TASK STATUS: {task.status.value}
+
+PROJECT SPECIFICATION:
+```markdown
+{task.project.specification.content or "<EMPTY>"}
+```
+
+TASK SPECIFICATION DOCUMENT:
+```markdown
+{task.specification.content or "<EMPTY>"}
+```
+
+TASK IMPLEMENTATION PLAN DOCUMENT:
+```markdown
+{task.implementation_plan.content or "<EMPTY>"}
+```
 """

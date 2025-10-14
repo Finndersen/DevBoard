@@ -1,7 +1,6 @@
 """Context assembly service for orchestrating multi-source context gathering."""
 
 import asyncio
-import logging
 import re
 from collections.abc import Coroutine
 from dataclasses import dataclass
@@ -23,8 +22,6 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class NoProviderFound(Exception):

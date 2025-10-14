@@ -1,7 +1,5 @@
 """Factory for creating agent conversation services based on engine type."""
 
-import logging
-
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code import (
@@ -15,8 +13,6 @@ from devboard.db.models import Conversation, Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.context_assembly import ContextAssemblyService
-
-logger = logging.getLogger(__name__)
 
 
 def create_task_conversation_service(

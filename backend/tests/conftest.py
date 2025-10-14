@@ -20,6 +20,9 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
+from devboard.db.models import Codebase, Document, Task
+from devboard.db.models.document import DocumentType
+from devboard.db.models.task import TaskStatus
 from devboard.services.config_service import ConfigService
 from devboard.services.integration_service import IntegrationService
 
@@ -199,3 +202,58 @@ def mock_agent():
     mock_agent.run.side_effect = run_side_effect
 
     return mock_agent
+
+
+def create_mock_task(
+    task_id: int = 1,
+    title: str = "Test Task",
+    status: TaskStatus = TaskStatus.DEFINING,
+    specification_content: str = "",
+    implementation_plan_content: str = "",
+    with_codebase: bool = False,
+    codebase_path: str | None = None,
+) -> Mock:
+    """Create a mock Task with proper codebase handling.
+
+    Args:
+        task_id: Task ID
+        title: Task title
+        status: Task status
+        specification_content: Content for specification document
+        implementation_plan_content: Content for implementation plan document
+        with_codebase: Whether to include a codebase
+        codebase_path: Path to codebase (defaults to /tmp/test-codebase if with_codebase is True)
+
+    Returns:
+        Mock Task object with proper codebase relationship
+    """
+    task = Mock(spec=Task)
+    task.id = task_id
+    task.title = title
+    task.status = status
+
+    # Mock specification document
+    spec_doc = Mock(spec=Document)
+    spec_doc.id = task_id * 10
+    spec_doc.document_type = DocumentType.TASK_SPECIFICATION
+    spec_doc.content = specification_content
+    task.specification = spec_doc
+
+    # Mock implementation plan document
+    plan_doc = Mock(spec=Document)
+    plan_doc.id = task_id * 10 + 1
+    plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
+    plan_doc.content = implementation_plan_content
+    task.implementation_plan = plan_doc
+
+    # Handle codebase - set to None or create proper mock
+    if with_codebase:
+        codebase = Mock(spec=Codebase)
+        codebase.id = task_id * 100
+        codebase.name = "Test Codebase"
+        codebase.local_path = codebase_path or "/tmp/test-codebase"
+        task.codebase = codebase
+    else:
+        task.codebase = None
+
+    return task

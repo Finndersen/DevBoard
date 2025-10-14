@@ -1,9 +1,10 @@
 """Jira context provider for ticket, project, and comment context."""
 
-import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
+
+import logfire
 
 from devboard.integrations.jira import JiraIntegration
 
@@ -15,8 +16,6 @@ from .base import (
     DescriptionGenerationError,
     ResourceHandlingError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class JiraContextProvider(BaseContextProvider):
@@ -123,7 +122,7 @@ class JiraContextProvider(BaseContextProvider):
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting Jira resource for {resource_uri}: {e}")
+            logfire.error(f"Error getting Jira resource for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get Jira resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
@@ -181,7 +180,7 @@ Based on this project data, here is the relevant context for your query:
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting Jira context for {resource_uri}: {e}")
+            logfire.error(f"Error getting Jira context for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get Jira context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:
@@ -209,5 +208,5 @@ Based on this project data, here is the relevant context for your query:
         except Exception as e:
             if isinstance(e, ResourceHandlingError | DescriptionGenerationError):
                 raise
-            logger.error(f"Error generating Jira description for {resource_uri}: {e}")
+            logfire.error(f"Error generating Jira description for {resource_uri}: {e}")
             raise DescriptionGenerationError(f"Failed to generate Jira description: {e}") from e

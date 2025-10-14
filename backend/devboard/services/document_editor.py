@@ -1,13 +1,10 @@
 """Document editing service for applying structured edits to markdown documents."""
 
-import logging
 from typing import NamedTuple
 
 import logfire
 
 from ..api.schemas import DocumentEdit
-
-logger = logging.getLogger(__name__)
 
 
 class EditResult(NamedTuple):

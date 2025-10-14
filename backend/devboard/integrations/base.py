@@ -1,12 +1,9 @@
 """Base integration class and common patterns."""
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from devboard.config.base import BaseConfig
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

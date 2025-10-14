@@ -1,8 +1,8 @@
 """Jira integration for accessing tickets, projects, and comments."""
 
-import logging
 from typing import Any
 
+import logfire
 from jira import JIRA as JiraClient
 from jira import JIRAError
 
@@ -16,8 +16,6 @@ from .base import (
     IntegrationError,
     ResourceNotFoundError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class JiraIntegration(BaseIntegration):
@@ -35,9 +33,9 @@ class JiraIntegration(BaseIntegration):
                 basic_auth=(config.user_email, config.api_token),
                 options={"agile_rest_path": "agile"},
             )
-            logger.info("Initialized Jira integration")
+            logfire.info("Initialized Jira integration")
         except Exception as e:
-            logger.error(f"Failed to initialize Jira integration: {e}")
+            logfire.error(f"Failed to initialize Jira integration: {e}")
             raise IntegrationConfigurationError(f"Failed to initialize Jira: {e}") from e
 
     async def test_connection(self) -> IntegrationConnectionResult:
@@ -75,7 +73,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in get_issue({issue_key}): {e}")
+                logfire.error(f"Jira error in get_issue({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def get_project(self, project_key: str) -> dict[str, Any]:
@@ -89,7 +87,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Project {project_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in get_project({project_key}): {e}")
+                logfire.error(f"Jira error in get_project({project_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def search_issues(self, jql: str, fields: list[str] | None = None, max_results: int = 50) -> dict[str, Any]:
@@ -107,7 +105,7 @@ class JiraIntegration(BaseIntegration):
             if "401" in str(e) or "403" in str(e):
                 raise AuthenticationError(f"Jira authentication failed: {e}") from e
             else:
-                logger.error(f"Jira error in search_issues({jql}): {e}")
+                logfire.error(f"Jira error in search_issues({jql}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def get_issue_comments(self, issue_key: str) -> list[dict[str, Any]]:
@@ -121,7 +119,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in get_issue_comments({issue_key}): {e}")
+                logfire.error(f"Jira error in get_issue_comments({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def update_issue(self, issue_key: str, fields: dict[str, Any]) -> None:
@@ -135,7 +133,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in update_issue({issue_key}): {e}")
+                logfire.error(f"Jira error in update_issue({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def add_comment(self, issue_key: str, comment_body: str) -> dict[str, Any]:
@@ -149,7 +147,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in add_comment({issue_key}): {e}")
+                logfire.error(f"Jira error in add_comment({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def get_transitions(self, issue_key: str) -> list[dict[str, Any]]:
@@ -163,7 +161,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in get_transitions({issue_key}): {e}")
+                logfire.error(f"Jira error in get_transitions({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     async def transition_issue(self, issue_key: str, transition_id: str) -> None:
@@ -176,7 +174,7 @@ class JiraIntegration(BaseIntegration):
             elif "404" in str(e):
                 raise ResourceNotFoundError(f"Issue {issue_key} not found: {e}") from e
             else:
-                logger.error(f"Jira error in transition_issue({issue_key}): {e}")
+                logfire.error(f"Jira error in transition_issue({issue_key}): {e}")
                 raise IntegrationError(f"Jira error: {e}") from e
 
     @staticmethod

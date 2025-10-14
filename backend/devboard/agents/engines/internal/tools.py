@@ -296,7 +296,6 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         Args:
             pattern: AST pattern using ast-grep syntax. Use $NAME for single nodes,
                     $$$ARGS for multiple nodes, and specific syntax for language constructs.
-                    See ast-grep documentation for full pattern syntax.
             language: Optional language filter (e.g., 'python', 'typescript', 'rust', 'go').
                      Helps ast-grep parse files correctly and improves accuracy.
 

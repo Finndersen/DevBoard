@@ -8,10 +8,11 @@ from pydantic_ai import ApprovalRequired
 from devboard.agents.engines.internal import BaseDeps, TaskPlanningAgent, TaskSpecificationAgent
 from devboard.agents.engines.internal.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.api.schemas import DocumentEdit
-from devboard.db.models import Document, Task
+from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import DocumentRepository
+from tests.conftest import create_mock_task
 
 
 class TestTaskSpecificationAgent:
@@ -20,26 +21,13 @@ class TestTaskSpecificationAgent:
     @pytest.fixture
     def mock_task(self):
         """Create a mock task with specification document."""
-        task = Mock(spec=Task)
-        task.id = 1
-        task.name = "Test Task"
-        task.status = TaskStatus.DEFINING
-
-        # Mock specification document
-        spec_doc = Mock(spec=Document)
-        spec_doc.id = 10
-        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
-        spec_doc.content = "# Task Specification\n\nInitial content"
-        task.specification = spec_doc
-
-        # Mock implementation plan document
-        plan_doc = Mock(spec=Document)
-        plan_doc.id = 11
-        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
-        plan_doc.content = "# Implementation Plan\n\nEmpty"
-        task.implementation_plan = plan_doc
-
-        return task
+        return create_mock_task(
+            task_id=1,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification_content="# Task Specification\n\nInitial content",
+            implementation_plan_content="# Implementation Plan\n\nEmpty",
+        )
 
     @pytest.fixture
     def mock_document_repo(self):
@@ -102,26 +90,13 @@ class TestTaskPlanningAgent:
     @pytest.fixture
     def mock_task(self):
         """Create a mock task with both documents."""
-        task = Mock(spec=Task)
-        task.id = 2
-        task.name = "Planning Task"
-        task.status = TaskStatus.PLANNING
-
-        # Mock specification document
-        spec_doc = Mock(spec=Document)
-        spec_doc.id = 20
-        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
-        spec_doc.content = "# Task Specification\n\nDetailed spec"
-        task.specification = spec_doc
-
-        # Mock implementation plan document
-        plan_doc = Mock(spec=Document)
-        plan_doc.id = 21
-        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
-        plan_doc.content = "# Implementation Plan\n\nPlan content"
-        task.implementation_plan = plan_doc
-
-        return task
+        return create_mock_task(
+            task_id=2,
+            title="Planning Task",
+            status=TaskStatus.PLANNING,
+            specification_content="# Task Specification\n\nDetailed spec",
+            implementation_plan_content="# Implementation Plan\n\nPlan content",
+        )
 
     @pytest.fixture
     def mock_document_repo(self):
@@ -352,46 +327,24 @@ class TestAgentToolSelection:
     @pytest.fixture
     def mock_task_with_blank_spec(self):
         """Create a mock task with blank specification."""
-        task = Mock(spec=Task)
-        task.id = 300
-        task.title = "Test Task"
-        task.status = TaskStatus.DEFINING
-
-        spec_doc = Mock(spec=Document)
-        spec_doc.id = 301
-        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
-        spec_doc.content = ""
-        task.specification = spec_doc
-
-        plan_doc = Mock(spec=Document)
-        plan_doc.id = 302
-        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
-        plan_doc.content = ""
-        task.implementation_plan = plan_doc
-
-        return task
+        return create_mock_task(
+            task_id=300,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification_content="",
+            implementation_plan_content="",
+        )
 
     @pytest.fixture
     def mock_task_with_content(self):
         """Create a mock task with content in both documents."""
-        task = Mock(spec=Task)
-        task.id = 400
-        task.title = "Planning Task"
-        task.status = TaskStatus.PLANNING
-
-        spec_doc = Mock(spec=Document)
-        spec_doc.id = 401
-        spec_doc.document_type = DocumentType.TASK_SPECIFICATION
-        spec_doc.content = "# Specification\n\nContent here"
-        task.specification = spec_doc
-
-        plan_doc = Mock(spec=Document)
-        plan_doc.id = 402
-        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
-        plan_doc.content = "# Plan\n\nPlan content"
-        task.implementation_plan = plan_doc
-
-        return task
+        return create_mock_task(
+            task_id=400,
+            title="Planning Task",
+            status=TaskStatus.PLANNING,
+            specification_content="# Specification\n\nContent here",
+            implementation_plan_content="# Plan\n\nPlan content",
+        )
 
     @pytest.fixture
     def mock_document_repo(self):

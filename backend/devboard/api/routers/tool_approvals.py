@@ -1,14 +1,12 @@
 """API router for tool approval requests and responses."""
 
-import logging
 from typing import Annotated
 
+import logfire
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from devboard.agents.engines.claude_code.tool_approval_manager import ToolApprovalResponse, get_approval_manager
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tool-approvals", tags=["tool-approvals"])
 
@@ -116,8 +114,11 @@ async def respond_to_approval(
             detail=f"Approval request '{request_id}' not found or already responded to",
         )
 
-    logger.info(
-        f"Approval response recorded: {request_id} (approved={decision.approved}, feedback={decision.feedback})"
+    logfire.info(
+        "Approval response recorded",
+        request_id=request_id,
+        approved=decision.approved,
+        feedback=decision.feedback,
     )
 
     return {
@@ -149,7 +150,9 @@ async def cancel_conversation_approvals(
     approval_manager = get_approval_manager()
     cancelled_count = await approval_manager.cancel_pending_approvals(conversation_id)
 
-    logger.info(f"Cancelled {cancelled_count} approvals for conversation {conversation_id}")
+    logfire.info(
+        "Cancelled approvals for conversation", conversation_id=conversation_id, cancelled_count=cancelled_count
+    )
 
     return {
         "message": f"Cancelled {cancelled_count} pending approval(s)",

@@ -1,17 +1,13 @@
 """Task agents using Claude Code with virtual tool calling."""
 
-import logging
-
 from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent
 from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentTool,
     SetDocumentContentTool,
     VirtualTool,
 )
-from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT
-from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT
-
-logger = logging.getLogger(__name__)
+from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT, build_task_planning_context
+from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT, build_task_specification_context
 
 
 class ClaudeTaskSpecificationAgent(ClaudeCodeAgent):
@@ -28,7 +24,7 @@ class ClaudeTaskSpecificationAgent(ClaudeCodeAgent):
         tools: list[VirtualTool] = []
 
         # Specification document tools based on its state
-        if not self.task.specification.content or not self.task.specification.content.strip():
+        if not self.task.specification.content.strip():
             # Document is empty - provide set_content tool
             tools.append(
                 SetDocumentContentTool(
@@ -61,16 +57,7 @@ class ClaudeTaskSpecificationAgent(ClaudeCodeAgent):
         Returns:
             State/context string
         """
-        return f"""
-CURRENT STATE:
-Task Name: {self.task.title}
-Task Status: {self.task.status.value}
-
-Task Specification Document (current live state):
-```markdown
-{self.task.specification.content or "<EMPTY>"}
-```
-"""
+        return f"CURRENT STATE:\n{build_task_specification_context(self.task)}"
 
 
 class ClaudeTaskPlanningAgent(ClaudeCodeAgent):
@@ -87,7 +74,7 @@ class ClaudeTaskPlanningAgent(ClaudeCodeAgent):
         tools: list[VirtualTool] = []
 
         # Specification document tools based on its state
-        if not self.task.specification.content or not self.task.specification.content.strip():
+        if not self.task.specification.content.strip():
             # Document is empty - provide set_content tool
             tools.append(
                 SetDocumentContentTool(
@@ -105,7 +92,7 @@ class ClaudeTaskPlanningAgent(ClaudeCodeAgent):
             )
 
         # Implementation plan document tools based on its state
-        if not self.task.implementation_plan.content or not self.task.implementation_plan.content.strip():
+        if not self.task.implementation_plan.content.strip():
             # Document is empty - provide set_content tool
             tools.append(
                 SetDocumentContentTool(
@@ -138,18 +125,4 @@ class ClaudeTaskPlanningAgent(ClaudeCodeAgent):
         Returns:
             State/context string
         """
-        return f"""
-CURRENT STATE:
-Task Name: {self.task.title}
-Task Status: {self.task.status.value}
-
-Task Specification Document (current live state):
-```markdown
-{self.task.specification.content or "<EMPTY>"}
-```
-
-Task Implementation Plan Document (current live state):
-```markdown
-{self.task.implementation_plan.content or "<EMPTY>"}
-```
-"""
+        return f"CURRENT STATE:\n{build_task_planning_context(self.task)}"

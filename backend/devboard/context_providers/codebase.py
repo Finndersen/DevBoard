@@ -1,9 +1,10 @@
 """Codebase context provider for file and repository context using AI analysis."""
 
-import logging
 import os
 from typing import Any
 from urllib.parse import urlparse
+
+import logfire
 
 from devboard.agents.engines.gemini_cli import GeminiCliError, execute_gemini_prompt
 from devboard.integrations.codebase import CodebaseIntegration
@@ -16,8 +17,6 @@ from .base import (
     DescriptionGenerationError,
     ResourceHandlingError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class CodebaseContextProvider(BaseContextProvider):
@@ -108,7 +107,7 @@ class CodebaseContextProvider(BaseContextProvider):
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting codebase resource for {resource_uri}: {e}")
+            logfire.error(f"Error getting codebase resource for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get codebase resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
@@ -155,7 +154,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
         except Exception as e:
             if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                 raise
-            logger.error(f"Error getting codebase context for {resource_uri}: {e}")
+            logfire.error(f"Error getting codebase context for {resource_uri}: {e}")
             raise ContextRetrievalError(f"Failed to get codebase context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:
@@ -192,7 +191,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
         except Exception as e:
             if isinstance(e, ResourceHandlingError | DescriptionGenerationError):
                 raise
-            logger.error(f"Error generating codebase description for {resource_uri}: {e}")
+            logfire.error(f"Error generating codebase description for {resource_uri}: {e}")
             raise DescriptionGenerationError(f"Failed to generate codebase description: {e}") from e
 
     async def _investigate_codebase(self, query: str, context: str = "") -> str:
@@ -225,9 +224,9 @@ Focus on providing specific, actionable insights about the code organization, ar
                 operation_mode="read_only",  # Codebase analysis should be read-only
             )
 
-            logger.info(f"Codebase investigation completed: {query}")
+            logfire.info(f"Codebase investigation completed: {query}")
             return result
 
         except GeminiCliError as e:
-            logger.error(f"Gemini CLI error during codebase investigation: {e}")
+            logfire.error(f"Gemini CLI error during codebase investigation: {e}")
             raise ContextRetrievalError(f"Codebase investigation failed: {e}") from e

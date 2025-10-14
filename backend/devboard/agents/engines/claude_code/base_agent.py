@@ -1,9 +1,9 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import logfire
 from pydantic import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
@@ -18,8 +18,6 @@ from devboard.agents.engines.claude_code.virtual_tools import (
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
-
-logger = logging.getLogger(__name__)
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
@@ -352,7 +350,7 @@ class ClaudeCodeAgent(ABC):
                     f'"arguments": {{"edits": [...], "reasoning": "..."}}}}\n\n'
                     f"Please correct these errors and try again."
                 )
-                logger.warning(
+                logfire.warning(
                     f"Tool call structure validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
                 )
                 return await self.run(
@@ -398,7 +396,7 @@ class ClaudeCodeAgent(ABC):
                     f"Available tools: {tools_list}\n\n"
                     f"Please use one of the available tools."
                 )
-                logger.warning(f"Unknown tool (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {tool_name}")
+                logfire.warning(f"Unknown tool (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {tool_name}")
                 return await self.run(
                     prompt_or_approvals=error_msg, session_id=session_id, _retry_count=retry_count + 1
                 )
@@ -417,7 +415,7 @@ class ClaudeCodeAgent(ABC):
                     f"Validation errors:\n{error_details}\n\n"
                     f"Please check the tool schema and provide valid arguments."
                 )
-                logger.warning(
+                logfire.warning(
                     f"Tool arguments validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
                 )
                 return await self.run(

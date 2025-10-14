@@ -1,8 +1,8 @@
 """GitHub integration for accessing PRs, commits, issues, and branches."""
 
-import logging
 from typing import Any
 
+import logfire
 from github import (
     BadCredentialsException,
     Github,
@@ -23,8 +23,6 @@ from .base import (
     ResourceNotFoundError,
 )
 
-logger = logging.getLogger(__name__)
-
 
 class GitHubIntegration(BaseIntegration):
     """Integration for GitHub API access."""
@@ -37,9 +35,9 @@ class GitHubIntegration(BaseIntegration):
         super().__init__(config)
         try:
             self.client = Github(auth=Token(config.api_token), base_url=config.base_url)
-            logger.info("Initialized GitHub integration")
+            logfire.info("Initialized GitHub integration")
         except Exception as e:
-            logger.error(f"Failed to initialize GitHub integration: {e}")
+            logfire.error(f"Failed to initialize GitHub integration: {e}")
             raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
 
     async def test_connection(self) -> IntegrationConnectionResult:
@@ -70,7 +68,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in get_pull_request({owner}/{repo}#{pr_number}): {e}")
+            logfire.error(f"GitHub error in get_pull_request({owner}/{repo}#{pr_number}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def get_pull_request_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -85,7 +83,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in get_pull_request_comments({owner}/{repo}#{pr_number}): {e}")
+            logfire.error(f"GitHub error in get_pull_request_comments({owner}/{repo}#{pr_number}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def get_commit(self, owner: str, repo: str, sha: str) -> dict[str, Any]:
@@ -99,7 +97,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in get_commit({owner}/{repo}/{sha}): {e}")
+            logfire.error(f"GitHub error in get_commit({owner}/{repo}/{sha}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def get_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
@@ -113,7 +111,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in get_issue({owner}/{repo}#{issue_number}): {e}")
+            logfire.error(f"GitHub error in get_issue({owner}/{repo}#{issue_number}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def get_repository(self, owner: str, repo: str) -> dict[str, Any]:
@@ -126,7 +124,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in get_repository({owner}/{repo}): {e}")
+            logfire.error(f"GitHub error in get_repository({owner}/{repo}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def list_branches(self, owner: str, repo: str) -> list[dict[str, Any]]:
@@ -140,7 +138,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in list_branches({owner}/{repo}): {e}")
+            logfire.error(f"GitHub error in list_branches({owner}/{repo}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> dict[str, Any]:
@@ -163,7 +161,7 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in search_issues({query}): {e}")
+            logfire.error(f"GitHub error in search_issues({query}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
 
     async def create_pull_request(
@@ -185,5 +183,5 @@ class GitHubIntegration(BaseIntegration):
         except RateLimitExceededException as e:
             raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
         except GithubException as e:
-            logger.error(f"GitHub error in create_pull_request({owner}/{repo}): {e}")
+            logfire.error(f"GitHub error in create_pull_request({owner}/{repo}): {e}")
             raise IntegrationError(f"GitHub error: {e}") from e
