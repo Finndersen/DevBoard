@@ -87,9 +87,53 @@ describe('TaskDetail', () => {
     )
 
     renderTaskDetail('999')
-    
+
     await waitFor(() => {
       expect(screen.getByText('API request failed: 404 Not Found')).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('displays codebase information when assigned', async () => {
+    const mockCodebase = {
+      id: 1,
+      name: 'Test Codebase',
+      description: 'A test codebase',
+      local_path: '/path/to/test/codebase',
+      repository_url: 'https://github.com/test/repo',
+    }
+
+    const taskWithCodebase = createMockTask({
+      id: 1,
+      codebase_id: 1,
+    })
+
+    server.use(
+      http.get('*/api/tasks/1', () => {
+        return HttpResponse.json(taskWithCodebase)
+      }),
+      http.get('*/api/codebases', () => {
+        return HttpResponse.json([mockCodebase])
+      })
+    )
+
+    renderTaskDetail()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Codebase')).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('displays "None" when no codebase is assigned', async () => {
+    server.use(
+      http.get('*/api/codebases', () => {
+        return HttpResponse.json([])
+      })
+    )
+
+    renderTaskDetail()
+
+    await waitFor(() => {
+      expect(screen.getByText('None')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 })

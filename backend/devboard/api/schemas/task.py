@@ -43,6 +43,7 @@ class TaskUpdate(BaseModel):
 
     title: str | None = None
     status: TaskStatus | None = None
+    codebase_id: int | None = None
     remote_task_id: str | None = None
     conversation_id: str | None = None
     specification: str | None = None

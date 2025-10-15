@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
-import type { Project, Task } from '../lib/api'
-import { useTask, useUpdateTask, useEditableField } from '../hooks'
+import type { Project, Task, Codebase } from '../lib/api'
+import { useTask, useUpdateTask, useEditableField, useCodebases } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
@@ -15,6 +15,7 @@ export default function TaskDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: task, loading, error, refetch } = useTask(id!)
   const { setTask } = useDataStore()
+  const { data: codebases } = useCodebases()
 
   // Refetch task when ID changes (for tab switching)
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function TaskDetail() {
   useTabTitle('task', id)
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
+  const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
   
   // Use ref to store refetch function to avoid dependency issues
@@ -66,6 +68,17 @@ export default function TaskDetail() {
   const titleField = useEditableField(task?.title || '', saveTitleField)
   const specificationField = useEditableField(task?.specification.content || '', saveSpecificationField)
   const planField = useEditableField(task?.implementation_plan.content || '', savePlanField)
+
+  // Handle codebase selection
+  const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
+    setShowCodebaseSelector(false)
+    updateTask({ id: id!, task: { codebase_id: codebaseId } as unknown as Task })
+  }, [updateTask, id])
+
+  // Get selected codebase object
+  const selectedCodebase = task && task.codebase_id && codebases
+    ? codebases.find((c: Codebase) => c.id === task.codebase_id)
+    : null
 
   useEffect(() => {
     const fetchProject = async (projectId: number) => {
@@ -106,6 +119,21 @@ export default function TaskDetail() {
       }
     }
   }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
+
+  // Close codebase selector when clicking outside
+  useEffect(() => {
+    if (!showCodebaseSelector) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.relative')) {
+        setShowCodebaseSelector(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showCodebaseSelector])
 
   const handleStateTransition = async (newState: string) => {
     try {
@@ -284,6 +312,48 @@ export default function TaskDetail() {
             <StatusBadge variant={getStatusVariant(task.status)}>
               {task.status}
             </StatusBadge>
+
+            {/* Codebase Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
+                className={`flex items-center space-x-1 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+                title="Select codebase"
+              >
+                <span className="font-medium">Codebase:</span>
+                <span>{selectedCodebase ? selectedCodebase.name : 'None'}</span>
+                <ChevronDownIcon className="w-3 h-3" />
+              </button>
+
+              {showCodebaseSelector && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                  <div className="max-h-64 overflow-y-auto">
+                    <button
+                      onClick={() => handleCodebaseSelect(null)}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                        !task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
+                      }`}
+                    >
+                      <div className="font-medium">None</div>
+                      <div className={`text-xs ${textColors.secondary}`}>No codebase assigned</div>
+                    </button>
+                    {codebases && codebases.map((codebase: Codebase) => (
+                      <button
+                        key={codebase.id}
+                        onClick={() => handleCodebaseSelect(codebase.id)}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-100 dark:border-gray-700 ${
+                          task.codebase_id === codebase.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
+                        }`}
+                      >
+                        <div className="font-medium">{codebase.name}</div>
+                        <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <span className={`${textColors.secondary} text-sm`}>
               Created {new Date(task.created_at).toLocaleDateString()}
             </span>

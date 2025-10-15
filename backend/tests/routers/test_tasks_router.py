@@ -7,7 +7,9 @@ from devboard.agents.roles.types import AgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
+from devboard.db.models.codebase import Codebase
 from devboard.db.repositories import (
+    CodebaseRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
     DocumentRepository,
@@ -202,6 +204,122 @@ class TestTasksRouter:
         response = client.delete("/api/tasks/999")
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
+
+    def test_update_task_codebase_assignment(self, client, db_session, test_task_data):
+        """Test updating task codebase assignment."""
+        # Create test project and codebase
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        codebase_repo = CodebaseRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
+
+        # Create a test codebase
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/path/to/test/codebase",
+            repository_url="https://github.com/test/repo",
+        )
+        created_codebase = codebase_repo.create(codebase)
+
+        # Create test task without codebase
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+            codebase_id=None,  # Start without codebase
+        )
+
+        # Create conversation for task
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        # Update task to assign codebase
+        update_data = {"codebase_id": created_codebase.id}
+        response = client.patch(f"/api/tasks/{created_task.id}", json=update_data)
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        assert updated_task["codebase_id"] == created_codebase.id
+
+        # Verify the update persisted
+        get_response = client.get(f"/api/tasks/{created_task.id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["codebase_id"] == created_codebase.id
+
+    def test_update_task_remove_codebase(self, client, db_session, test_task_data):
+        """Test removing codebase assignment from a task."""
+        # Create test project and codebase
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        codebase_repo = CodebaseRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project for development", specification=spec_doc
+        )
+
+        # Create a test codebase
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/path/to/test/codebase",
+            repository_url="https://github.com/test/repo",
+        )
+        created_codebase = codebase_repo.create(codebase)
+
+        # Create test task with codebase
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title=test_task_data["title"],
+            status=test_task_data["status"],
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+            codebase_id=created_codebase.id,  # Start with codebase
+        )
+
+        # Create conversation for task
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        # Update task to remove codebase
+        update_data = {"codebase_id": None}
+        response = client.patch(f"/api/tasks/{created_task.id}", json=update_data)
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        assert updated_task["codebase_id"] is None
+
+        # Verify the update persisted
+        get_response = client.get(f"/api/tasks/{created_task.id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["codebase_id"] is None
 
 
 class TestTaskResourcesRouter:
