@@ -6,21 +6,14 @@
 - Allow customising templates through frontend UI
 - OAuth integrations (either direct or via remote MCP server)
 - Unified MCP server management UI in frontend, with ability to choose tools/resources
-- move agent conversation and resources routers to dedicated module
-- Add configuration cache
-- Roolback messages when tool approval fails
 - Daily update/briefing of new Slack content, task updates, etc
 - custom slash commands for project agent for custom workflows (e.g. use Datadog to translate transaction ID to trip ID) 
 - General purpose AI-Powered "Rubber Ducking" & Debugging Partner
-- Remodel message types since response messages can contain both text and tool call parts
-- More standardised agent chat interface across agent types (maybe also introduce Codebase agent). Allow multiple conversations per project
-- custom tools for file searching, `tree` etc
 - To-Do list (project or global level)
-- Format agent response messages as Markdown
 - Show unified diff view by default when showing code changes
-- Edit diff approval state still does not persist when reloading page
 - allow configuring which patterns to exclude from directory tree view
 - Integrate memory (maybe with https://github.com/mem0ai/mem0)
+- Change implementation of Project Specification toa more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
