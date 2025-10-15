@@ -74,8 +74,8 @@ def get_agent_config_service(
     """Get AgentConfigService instance."""
     return AgentConfigService(
         config_service=config_service,
-        llm_repository=llm_registry,
-        engine_repository=agent_engine_registry,
+        llm_registry=llm_registry,
+        engine_registry=agent_engine_registry,
     )
 
 

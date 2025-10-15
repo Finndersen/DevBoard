@@ -6,16 +6,13 @@ from pydantic import BaseModel
 
 from devboard.agents.engines.agent_engines import (
     AgentEngine,
-    AgentEngineInfo,
     AgentEngineRegistry,
-    agent_engine_registry,
 )
 from devboard.agents.language_models import (
     LanguageModel,
     LLMProvider,
     LLMRegistry,
     ModelType,
-    llm_registry,
 )
 from devboard.agents.roles.types import (
     AgentRole,
@@ -57,6 +54,20 @@ class ModelInfo(BaseModel):
     model_type: ModelType
 
 
+class AgentEngineInfo(BaseModel):
+    """Information about an agent engine.
+
+    Attributes:
+        engine: The agent execution engine value (e.g., "internal", "claude_code")
+        display_name: Human-readable name for display in UI
+        description: Description of what the engine does
+    """
+
+    engine: AgentEngine
+    display_name: str
+    description: str
+
+
 class AgentConfiguration(BaseModel):
     """Complete agent configuration including role, config, and available options.
 
@@ -93,19 +104,19 @@ class AgentConfigService:
     def __init__(
         self,
         config_service: ConfigService,
-        llm_repository: LLMRegistry | None = None,
-        engine_repository: AgentEngineRegistry | None = None,
+        llm_registry: LLMRegistry,
+        engine_registry: AgentEngineRegistry,
     ) -> None:
         """Initialize AgentConfigService.
 
         Args:
             config_service: Service for accessing configuration
-            llm_repository: Registry for LLM/model information
-            engine_repository: Registry for agent engine information
+            llm_registry: Registry for LLM/model information
+            engine_registry: Registry for agent engine information
         """
         self.config_service = config_service
-        self.llm_repository = llm_repository or llm_registry
-        self.engine_repository = engine_repository or agent_engine_registry
+        self.llm_registry = llm_registry
+        self.engine_registry = engine_registry
 
     def get_agent_configuration(self, agent_role: AgentRole) -> AgentConfiguration:
         """Get role-level configuration with effective config and available engines.
@@ -126,7 +137,7 @@ class AgentConfigService:
                 display_name=defn.display_name,
                 description=defn.description,
             )
-            for defn in self.engine_repository.get_available_engines_for_agent_role(agent_role)
+            for defn in self.engine_registry.get_available_engines_for_agent_role(agent_role)
         ]
 
         return AgentConfiguration(
@@ -143,7 +154,7 @@ class AgentConfigService:
         """
         models_by_engine: dict[str, list[ModelInfo]] = {}
 
-        for engine_def in self.engine_repository.get_all_engines():
+        for engine_def in self.engine_registry.get_all_engines():
             # Get models available for this engine
             engine_models = self._get_available_models_for_engine(engine_def.engine)
 
@@ -184,8 +195,8 @@ class AgentConfigService:
             ValueError: If engine not allowed for role or model not available for engine
         """
         # Validate engine allowed for role
-        if not self.engine_repository.validate_engine_for_agent_role(config.engine, agent_role):
-            allowed_engines = self.engine_repository.get_available_engines_for_agent_role(agent_role)
+        if not self.engine_registry.validate_engine_for_agent_role(config.engine, agent_role):
+            allowed_engines = self.engine_registry.get_available_engines_for_agent_role(agent_role)
             allowed_names = [e.engine.value for e in allowed_engines]
             raise ValueError(
                 f"Engine '{config.engine.value}' not allowed for role '{agent_role.value}'. "
@@ -231,7 +242,7 @@ class AgentConfigService:
         effective_engine = (
             config.selected_engine
             if config and config.selected_engine
-            else self.engine_repository.get_default_engine_for_agent_role(agent_role)
+            else self.engine_registry.get_default_engine_for_agent_role(agent_role)
         )
 
         # Resolve model (selected or default for agent role + engine)
@@ -268,17 +279,17 @@ class AgentConfigService:
             return self._get_all_available_models()
         else:
             # Get engine's supported provider
-            engine_def = self.engine_repository.get(engine)
+            engine_def = self.engine_registry.get(engine)
             if engine_def is None:
                 raise ValueError(f"Invalid engine: {engine}")
             # For external engines, return all models from the specific provider
             # (no API key filtering - these engines manage auth themselves)
             if engine_def.available_provider is None:
                 # Engine supports all providers (unlikely for external engines)
-                return self.llm_repository.get_all_models()
+                return self.llm_registry.get_all_models()
             else:
                 # Return models from the specific provider
-                return self.llm_repository.get_models_for_provider(engine_def.available_provider)
+                return self.llm_registry.get_models_for_provider(engine_def.available_provider)
 
     def _get_all_available_models(self) -> list[LanguageModel]:
         """Get all models from configured providers.
@@ -294,7 +305,7 @@ class AgentConfigService:
                 working_providers.add(provider_type)
 
         # Return models from working providers
-        return [model for model in self.llm_repository.get_all_models() if model.provider in working_providers]
+        return [model for model in self.llm_registry.get_all_models() if model.provider in working_providers]
 
     def _get_default_model_for_agent_role_and_engine(self, agent_role: AgentRole, engine: AgentEngine) -> str:
         """Get default model for an agent role and engine.
@@ -319,7 +330,7 @@ class AgentConfigService:
             )
 
         # Get recommended model type for this agent role
-        recommended_type = self.llm_repository.get_recommended_model_type_for_agent(agent_role)
+        recommended_type = self.llm_registry.get_recommended_model_type_for_agent(agent_role)
 
         # Try to find a model of the recommended type
         for model in available:

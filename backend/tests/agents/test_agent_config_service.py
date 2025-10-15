@@ -3,8 +3,8 @@
 import pytest
 
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
-from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.language_models import ModelType
+from devboard.agents.engines.agent_engines import AgentEngine, agent_engine_registry
+from devboard.agents.language_models import ModelType, llm_registry
 from devboard.agents.roles.types import AgentRole
 
 
@@ -14,13 +14,10 @@ class TestAgentConfigService:
     @pytest.fixture
     def agent_config_service(self, config_service):
         """Create AgentConfigService instance for testing."""
-        from devboard.agents.engines.agent_engines import agent_engine_registry
-        from devboard.agents.language_models import llm_registry
-
         return AgentConfigService(
             config_service=config_service,
-            llm_repository=llm_registry,
-            engine_repository=agent_engine_registry,
+            llm_registry=llm_registry,
+            engine_registry=agent_engine_registry,
         )
 
     def test_internal_engine_filters_by_api_configuration(self, agent_config_service):
@@ -101,7 +98,7 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
         # Verify it's a REASONING model
-        model = agent_config_service.llm_repository.get(project_default)
+        model = agent_config_service.llm_registry.get(project_default)
         assert model is not None
         assert model.type == ModelType.REASONING
 
@@ -112,7 +109,7 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in investigation_default
         # Verify it's a FAST model
-        model = agent_config_service.llm_repository.get(investigation_default)
+        model = agent_config_service.llm_registry.get(investigation_default)
         assert model is not None
         assert model.type == ModelType.FAST
 
@@ -123,7 +120,7 @@ class TestAgentConfigService:
         # Should return an Anthropic model (Claude Code only supports Anthropic)
         assert task_impl_default.startswith("anthropic:")
         # Should be a REASONING model (recommended for TASK_IMPLEMENTATION)
-        model = agent_config_service.llm_repository.get(task_impl_default)
+        model = agent_config_service.llm_registry.get(task_impl_default)
         assert model is not None
         assert model.type == ModelType.REASONING
 
