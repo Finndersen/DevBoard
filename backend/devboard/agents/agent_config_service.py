@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from devboard.agents.engines.agent_engines import (
     AgentEngine,
     AgentEngineInfo,
-    AgentEngineRepository,
-    default_agent_engine_repository,
+    AgentEngineRegistry,
+    agent_engine_registry,
 )
 from devboard.agents.language_models import (
     LanguageModel,
@@ -94,18 +94,18 @@ class AgentConfigService:
         self,
         config_service: ConfigService,
         llm_repository: LLMRegistry | None = None,
-        engine_repository: AgentEngineRepository | None = None,
+        engine_repository: AgentEngineRegistry | None = None,
     ) -> None:
         """Initialize AgentConfigService.
 
         Args:
             config_service: Service for accessing configuration
             llm_repository: Registry for LLM/model information
-            engine_repository: Repository for agent engine information
+            engine_repository: Registry for agent engine information
         """
         self.config_service = config_service
         self.llm_repository = llm_repository or llm_registry
-        self.engine_repository = engine_repository or default_agent_engine_repository
+        self.engine_repository = engine_repository or agent_engine_registry
 
     def get_agent_configuration(self, agent_role: AgentRole) -> AgentConfiguration:
         """Get role-level configuration with effective config and available engines.
@@ -262,22 +262,23 @@ class AgentConfigService:
         Returns:
             List of LanguageModel objects available for the engine
         """
-        # Get engine's supported provider
-        supported_provider = self.engine_repository.get_available_provider_for_engine(engine)
-
         if engine == AgentEngine.INTERNAL:
             # For INTERNAL engine, return all configured models (API key check)
             # None means all providers are supported
             return self._get_all_available_models()
         else:
+            # Get engine's supported provider
+            engine_def = self.engine_repository.get(engine)
+            if engine_def is None:
+                raise ValueError(f"Invalid engine: {engine}")
             # For external engines, return all models from the specific provider
             # (no API key filtering - these engines manage auth themselves)
-            if supported_provider is None:
+            if engine_def.available_provider is None:
                 # Engine supports all providers (unlikely for external engines)
                 return self.llm_repository.get_all_models()
             else:
                 # Return models from the specific provider
-                return self.llm_repository.get_models_for_provider(supported_provider)
+                return self.llm_repository.get_models_for_provider(engine_def.available_provider)
 
     def _get_all_available_models(self) -> list[LanguageModel]:
         """Get all models from configured providers.

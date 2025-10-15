@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from devboard.agents.language_models import LLMProvider
 from devboard.agents.roles.types import AgentRole
+from devboard.core.registry import Registry
 
 
 class AgentEngine(StrEnum):
@@ -80,28 +81,12 @@ ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRole, list[AgentEngine]] = {
 }
 
 
-class AgentEngineRepository:
-    """Repository for querying agent engine capabilities."""
+class AgentEngineRegistry(Registry[AgentEngineDefinition]):
+    """Registry for querying agent engine capabilities."""
 
     def __init__(self, engines: list[AgentEngineDefinition]) -> None:
-        """Initialize repository with engine definitions."""
-        self._engines = {defn.engine: defn for defn in engines}
-
-    def get_engine_definition(self, engine: AgentEngine) -> AgentEngineDefinition:
-        """Get definition for a specific engine.
-
-        Args:
-            engine: The engine to get definition for
-
-        Returns:
-            AgentEngineDefinition for the engine
-
-        Raises:
-            ValueError: If engine is not found
-        """
-        if engine not in self._engines:
-            raise ValueError(f"Unknown engine: {engine}")
-        return self._engines[engine]
+        """Initialize registry with engine definitions."""
+        super().__init__(engines, key_attr="engine")
 
     def get_available_engines_for_agent_role(self, agent_role: AgentRole) -> list[AgentEngineDefinition]:
         """Get all engines allowed for a given agent role.
@@ -113,7 +98,7 @@ class AgentEngineRepository:
             List of AgentEngineDefinition instances allowed for the agent role
         """
         allowed = ALLOWED_ENGINES_BY_AGENT_ROLE.get(agent_role, [])
-        return [self._engines[engine] for engine in allowed if engine in self._engines]
+        return [defn for engine in allowed if (defn := self.get(engine)) is not None]
 
     def get_default_engine_for_agent_role(self, agent_role: AgentRole) -> AgentEngine:
         """Get recommended engine for a given agent role.
@@ -139,29 +124,17 @@ class AgentEngineRepository:
         allowed = ALLOWED_ENGINES_BY_AGENT_ROLE.get(agent_role, [])
         return engine in allowed
 
-    def get_available_provider_for_engine(self, engine: AgentEngine) -> LLMProvider | None:
-        """Get the available provider for an engine.
-
-        Args:
-            engine: The engine to get provider for
-
-        Returns:
-            LLMProvider enum, or None if engine supports all providers
-        """
-        defn = self.get_engine_definition(engine)
-        return defn.available_provider
-
     def get_all_engines(self) -> list[AgentEngineDefinition]:
         """Get all available engine definitions.
 
         Returns:
             List of all AgentEngineDefinition instances
         """
-        return list(self._engines.values())
+        return self.list_values()
 
 
-# Global default agent engine repository instance
-default_agent_engine_repository = AgentEngineRepository(ALL_ENGINES)
+# Global default agent engine registry instance
+agent_engine_registry = AgentEngineRegistry(ALL_ENGINES)
 
 
 class AgentEngineInfo(BaseModel):

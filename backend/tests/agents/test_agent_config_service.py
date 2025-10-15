@@ -1,6 +1,7 @@
 """Tests for AgentConfigService."""
 
 import pytest
+
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.language_models import ModelType
@@ -13,13 +14,13 @@ class TestAgentConfigService:
     @pytest.fixture
     def agent_config_service(self, config_service):
         """Create AgentConfigService instance for testing."""
-        from devboard.agents.engines.agent_engines import default_agent_engine_repository
+        from devboard.agents.engines.agent_engines import agent_engine_registry
         from devboard.agents.language_models import llm_registry
 
         return AgentConfigService(
             config_service=config_service,
             llm_repository=llm_registry,
-            engine_repository=default_agent_engine_repository,
+            engine_repository=agent_engine_registry,
         )
 
     def test_internal_engine_filters_by_api_configuration(self, agent_config_service):

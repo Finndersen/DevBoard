@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.agent_engines import AgentEngine, default_agent_engine_repository
+from devboard.agents.engines.agent_engines import AgentEngine, agent_engine_registry
 from devboard.agents.engines.internal import ProjectAgent, PydanticAIConversationService
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.types import AgentRole
@@ -75,7 +75,7 @@ def get_agent_config_service(
     return AgentConfigService(
         config_service=config_service,
         llm_repository=llm_registry,
-        engine_repository=default_agent_engine_repository,
+        engine_repository=agent_engine_registry,
     )
 
 
