@@ -14,7 +14,6 @@ class ConversationResponse(BaseModel):
     agent_role: str
     engine: str
     model_id: str
-    model_name: str  # Human-readable model name for display
     is_active: bool
     created_at: datetime.datetime
 

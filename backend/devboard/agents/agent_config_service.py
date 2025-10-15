@@ -13,9 +13,9 @@ from devboard.agents.engines.agent_engines import (
 from devboard.agents.language_models import (
     LanguageModel,
     LLMProvider,
-    LLMRepository,
+    LLMRegistry,
     ModelType,
-    default_llm_repository,
+    llm_registry,
 )
 from devboard.agents.roles.types import (
     AgentRole,
@@ -93,18 +93,18 @@ class AgentConfigService:
     def __init__(
         self,
         config_service: ConfigService,
-        llm_repository: LLMRepository | None = None,
+        llm_repository: LLMRegistry | None = None,
         engine_repository: AgentEngineRepository | None = None,
     ) -> None:
         """Initialize AgentConfigService.
 
         Args:
             config_service: Service for accessing configuration
-            llm_repository: Repository for LLM/model information
+            llm_repository: Registry for LLM/model information
             engine_repository: Repository for agent engine information
         """
         self.config_service = config_service
-        self.llm_repository = llm_repository or default_llm_repository
+        self.llm_repository = llm_repository or llm_registry
         self.engine_repository = engine_repository or default_agent_engine_repository
 
     def get_agent_configuration(self, agent_role: AgentRole) -> AgentConfiguration:

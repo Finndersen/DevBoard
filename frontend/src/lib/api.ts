@@ -214,7 +214,6 @@ export interface ConversationResponse {
   agent_role: string
   engine: string
   model_id: string
-  model_name: string
   is_active: boolean
   created_at: string
 }

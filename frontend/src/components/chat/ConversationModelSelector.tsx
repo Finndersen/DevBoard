@@ -56,13 +56,12 @@ export default function ConversationModelSelector({
 
       // Find the new model name
       const newModel = availableModels.find(m => m.id === newModelId)
-      const newModelName = newModel?.name || newModelId
+      const newModelName = newModel?.name || newModelId.split(':')[1] || newModelId
 
       // Update local state
       setConversation({
         ...conversation,
-        model_id: newModelId,
-        model_name: newModelName
+        model_id: newModelId
       })
 
       // Close dropdown
@@ -106,6 +105,9 @@ export default function ConversationModelSelector({
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 
+  // Extract model name from model_id (format: "provider:name")
+  const modelDisplayName = conversation.model_id.split(':')[1] || conversation.model_id
+
   return (
     <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
       {/* Engine display (non-interactive) */}
@@ -119,7 +121,7 @@ export default function ConversationModelSelector({
           disabled={updating || availableModels.length === 0}
           className="flex items-center space-x-1 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span>{conversation.model_name}</span>
+          <span>{modelDisplayName}</span>
           {availableModels.length > 1 && (
             <ChevronDownIcon className="w-4 h-4" />
           )}

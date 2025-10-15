@@ -26,29 +26,18 @@ router = APIRouter()
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
-    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> ConversationResponse:
-    """Get conversation details including model display name.
+    """Get conversation details.
 
-    Returns conversation configuration and metadata. The model_name field provides
-    a human-readable display name derived from the model_id.
+    Returns conversation configuration and metadata.
     """
-    # Get model info for display name
-    try:
-        model = agent_config_service.llm_repository.get_model_by_id(conversation.model_id)
-        model_name = model.name
-    except ValueError:
-        # Model not found in repository (shouldn't happen but handle gracefully)
-        model_name = conversation.model_id
-
     return ConversationResponse(
         id=conversation.id,
-        parent_entity_type=conversation.parent_entity_type.value,
+        parent_entity_type=conversation.parent_entity_type,
         parent_entity_id=conversation.parent_entity_id,
         agent_role=conversation.agent_role,
-        engine=conversation.engine.value,
+        engine=conversation.engine,
         model_id=conversation.model_id,
-        model_name=model_name,
         is_active=conversation.is_active,
         created_at=conversation.created_at,
     )

@@ -11,7 +11,9 @@ from sqlalchemy.pool import StaticPool
 
 from devboard.api.main import app
 from devboard.db.database import get_db
-from devboard.db.models import Base
+from devboard.db.models import Base, Codebase, Document, Task
+from devboard.db.models.document import DocumentType
+from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     ConfigurationRepository,
     ContextProviderResourceRepository,
@@ -20,9 +22,6 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
-from devboard.db.models import Codebase, Document, Task
-from devboard.db.models.document import DocumentType
-from devboard.db.models.task import TaskStatus
 from devboard.services.config_service import ConfigService
 from devboard.services.integration_service import IntegrationService
 

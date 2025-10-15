@@ -1,7 +1,6 @@
 """Tests for AgentConfigService."""
 
 import pytest
-
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.language_models import ModelType
@@ -15,11 +14,11 @@ class TestAgentConfigService:
     def agent_config_service(self, config_service):
         """Create AgentConfigService instance for testing."""
         from devboard.agents.engines.agent_engines import default_agent_engine_repository
-        from devboard.agents.language_models import default_llm_repository
+        from devboard.agents.language_models import llm_registry
 
         return AgentConfigService(
             config_service=config_service,
-            llm_repository=default_llm_repository,
+            llm_repository=llm_registry,
             engine_repository=default_agent_engine_repository,
         )
 
@@ -42,7 +41,7 @@ class TestAgentConfigService:
         claude_models = agent_config_service._get_available_models_for_engine(AgentEngine.CLAUDE_CODE)
         claude_model_ids = [m.id for m in claude_models]
 
-        # Should include all Anthropic models from LLMRepository
+        # Should include all Anthropic models from LLMRegistry
         expected_claude_models = [
             "anthropic:claude-sonnet-4.5",
             "anthropic:claude-opus-4.1",
@@ -57,7 +56,7 @@ class TestAgentConfigService:
         gemini_models = agent_config_service._get_available_models_for_engine(AgentEngine.GEMINI_CLI)
         gemini_model_ids = [m.id for m in gemini_models]
 
-        # Should include all Google models from LLMRepository (including gemini-2.5-flash-lite)
+        # Should include all Google models from LLMRegistry (including gemini-2.5-flash-lite)
         assert "google:gemini-2.5-pro" in gemini_model_ids
         assert "google:gemini-2.5-flash" in gemini_model_ids
         assert "google:gemini-2.5-flash-lite" in gemini_model_ids
@@ -101,8 +100,8 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
         # Verify it's a REASONING model
-        model = agent_config_service.llm_repository.get_model_by_id(project_default)
-
+        model = agent_config_service.llm_repository.get(project_default)
+        assert model is not None
         assert model.type == ModelType.REASONING
 
         # INVESTIGATION role recommends FAST models
@@ -112,7 +111,8 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in investigation_default
         # Verify it's a FAST model
-        model = agent_config_service.llm_repository.get_model_by_id(investigation_default)
+        model = agent_config_service.llm_repository.get(investigation_default)
+        assert model is not None
         assert model.type == ModelType.FAST
 
         # External engines should also work and select by recommended type
@@ -122,7 +122,8 @@ class TestAgentConfigService:
         # Should return an Anthropic model (Claude Code only supports Anthropic)
         assert task_impl_default.startswith("anthropic:")
         # Should be a REASONING model (recommended for TASK_IMPLEMENTATION)
-        model = agent_config_service.llm_repository.get_model_by_id(task_impl_default)
+        model = agent_config_service.llm_repository.get(task_impl_default)
+        assert model is not None
         assert model.type == ModelType.REASONING
 
     def test_update_agent_configuration_validates_model(self, agent_config_service):
@@ -167,14 +168,16 @@ class TestAgentConfigService:
 
     def test_language_model_full_name(self):
         """LanguageModel should have optional full_name attribute."""
-        from devboard.agents.language_models import default_llm_repository
+        from devboard.agents.language_models import llm_registry
 
         # Test Anthropic models have full_name
-        claude_sonnet = default_llm_repository.get_model_by_id("anthropic:claude-sonnet-4.5")
+        claude_sonnet = llm_registry.get("anthropic:claude-sonnet-4.5")
+        assert claude_sonnet is not None
         assert claude_sonnet.full_name == "claude-sonnet-4-5-20250929"
         assert claude_sonnet.display_full_name == "claude-sonnet-4-5-20250929"
 
         # Test models without full_name default to name
-        gpt5 = default_llm_repository.get_model_by_id("openai:gpt-5")
+        gpt5 = llm_registry.get("openai:gpt-5")
+        assert gpt5 is not None
         assert gpt5.full_name is None
         assert gpt5.display_full_name == "gpt-5"

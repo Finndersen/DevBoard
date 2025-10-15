@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from devboard.agents.roles.types import AgentRole
+from devboard.core.registry import Registry
 
 
 class ModelType(StrEnum):
@@ -86,25 +87,12 @@ ALL_MODELS = [
 ]
 
 
-class LLMRepository:
-    """Repository for managing language model definitions and queries."""
+class LLMRegistry(Registry[LanguageModel]):
+    """Registry for managing language model definitions and queries."""
 
     def __init__(self, models: list[LanguageModel]) -> None:
-        """Initialize repository with language models."""
-        self._models = {model.id: model for model in models}
-
-    def get_model_by_id(self, model_id: str) -> LanguageModel:
-        """Get a language model by its ID.
-
-        Args:
-            model_id: Model ID in format "provider:model_name"
-
-        Returns:
-            LanguageModel instance or None if not found
-        """
-        if model_id not in self._models:
-            raise ValueError(f"Model ID '{model_id}' not found.")
-        return self._models[model_id]
+        """Initialize registry with language models."""
+        super().__init__(models, key_attr="id")
 
     def get_models_by_type(self, model_type: ModelType) -> list[LanguageModel]:
         """Get all models of a specific type.
@@ -115,7 +103,7 @@ class LLMRepository:
         Returns:
             List of LanguageModel instances matching the type
         """
-        return [model for model in self._models.values() if model.type == model_type]
+        return [model for model in self.list_values() if model.type == model_type]
 
     def get_models_for_provider(self, provider: LLMProvider) -> list[LanguageModel]:
         """Get all models for a specific provider.
@@ -126,7 +114,7 @@ class LLMRepository:
         Returns:
             List of LanguageModel instances for the provider
         """
-        return [model for model in self._models.values() if model.provider == provider]
+        return [model for model in self.list_values() if model.provider == provider]
 
     def get_all_models(self) -> list[LanguageModel]:
         """Get all available language models.
@@ -134,7 +122,7 @@ class LLMRepository:
         Returns:
             List of all LanguageModel instances
         """
-        return list(self._models.values())
+        return self.list_values()
 
     def get_recommended_model_type_for_agent(self, agent_role: AgentRole) -> ModelType:
         """Get the recommended model type for an agent role.
@@ -156,5 +144,5 @@ RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentRole.TASK_IMPLEMENTATION: ModelType.REASONING,
     AgentRole.INVESTIGATION: ModelType.FAST,
 }
-# Global default LLM repository instance
-default_llm_repository = LLMRepository(ALL_MODELS)
+# Global default LLM registry instance
+llm_registry = LLMRegistry(ALL_MODELS)

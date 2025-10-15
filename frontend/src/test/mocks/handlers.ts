@@ -285,7 +285,6 @@ export const handlers = [
       agent_role: 'project',
       engine: 'internal',
       model_id: 'openai:gpt-4',
-      model_name: 'OpenAI GPT-4',
       is_active: true,
       created_at: new Date().toISOString(),
     })
