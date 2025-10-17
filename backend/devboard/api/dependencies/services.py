@@ -146,11 +146,12 @@ def get_agent_conversation_service(
                 f"engine={conversation.engine}, role={conversation.agent_role}",
             )
 
+        model = llm_registry.get(conversation.model_id)
         agent = ProjectAgent(
             project=project,
             document_repository=document_repo,
             context_service=context_service,
-            model_name=conversation.model_id,
+            model=model,
         )
 
         return PydanticAIConversationService(

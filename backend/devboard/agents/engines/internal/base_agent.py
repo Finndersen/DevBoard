@@ -20,6 +20,7 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.types import AgentRole
 from devboard.services.context_assembly import (
     ContextAssemblyService,
@@ -36,10 +37,10 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
     def __init__(
         self,
         context_service: ContextAssemblyService,
-        model_name: str,
+        model: LanguageModel,
     ):
         self.context_service = context_service
-        self.model_name = model_name
+        self.model = model
 
     def _create_agent(self) -> Agent[TDeps]:
         """Create the PydanticAI agent with context tools."""
@@ -55,9 +56,12 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         return agent
 
     def _get_model(self) -> str:
-        """Get the model name for this agent instance."""
+        """Get the model identifier for this agent instance.
+
+        Returns the model ID with provider-specific adjustments for PydanticAI compatibility.
+        """
         # Replace google with google-gla for compatibility with PydanticAI
-        return self.model_name.replace("google", "google-gla")
+        return self.model.id.replace("google", "google-gla")
 
     @abstractmethod
     def _get_system_prompt(self) -> str:

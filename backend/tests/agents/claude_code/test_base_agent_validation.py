@@ -17,6 +17,7 @@ from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentTool,
     VirtualToolRequests,
 )
+from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.db.models.task import Task
 
 
@@ -34,9 +35,16 @@ def create_mock_result(text_content: str, session_id: str = "test-session") -> C
 class MockAgent(ClaudeCodeAgent):
     """Mock implementation of BaseClaudeAgent for testing."""
 
-    def __init__(self, task, document_repo, virtual_tools=None, model_name="anthropic:claude-sonnet-4"):
+    def __init__(self, task, document_repo, virtual_tools=None, model=None):
         self._test_virtual_tools = virtual_tools or []
-        super().__init__(task, document_repo, model_name)
+        if model is None:
+            model = LanguageModel(
+                provider=LLMProvider.ANTHROPIC,
+                name="claude-sonnet-4",
+                type=ModelType.REASONING,
+                full_name="claude-sonnet-4-20250514",
+            )
+        super().__init__(task, document_repo, model)
 
     def _get_role_description(self) -> str:
         return "Test agent role description"

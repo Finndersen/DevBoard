@@ -15,6 +15,7 @@ from devboard.agents.engines.internal.tools import (
     create_set_document_content_tool,
     create_text_search_tool,
 )
+from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT, build_task_planning_context
 from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT, build_task_specification_context
 from devboard.agents.roles.types import AgentRole
@@ -33,7 +34,7 @@ class InternalTaskAgent(InternalAgent[BaseDeps], metaclass=ABCMeta):
         task: Task,
         document_repository: DocumentRepository,
         context_service,
-        model_name: str,
+        model: LanguageModel,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -41,7 +42,7 @@ class InternalTaskAgent(InternalAgent[BaseDeps], metaclass=ABCMeta):
         self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
         super().__init__(
             context_service=context_service,
-            model_name=model_name,
+            model=model,
         )
 
 

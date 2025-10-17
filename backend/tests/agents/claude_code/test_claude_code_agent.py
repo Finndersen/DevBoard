@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
-
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
 
@@ -72,6 +71,7 @@ class TestClaudeClient:
             num_turns=1,
             session_id="session-123",
             total_cost_usd=0.001,
+            result="Hello, this is Claude!",
         )
 
         async def mock_receive_response():
@@ -111,6 +111,7 @@ class TestClaudeClient:
             is_error=False,
             num_turns=2,
             session_id="existing-session",
+            result="Resumed conversation",
         )
 
         async def mock_receive_response():
@@ -143,6 +144,7 @@ class TestClaudeClient:
             is_error=False,
             num_turns=1,
             session_id="session-456",
+            result="First part\nSecond part",
         )
 
         async def mock_receive_response():

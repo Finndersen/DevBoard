@@ -15,6 +15,7 @@ from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualToolRequests,
     build_tool_schemas_section,
 )
+from devboard.agents.language_models import LanguageModel, LLMProvider
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
@@ -46,7 +47,7 @@ class ClaudeCodeAgent(ABC):
         self,
         task: Task,
         document_repository: DocumentRepository,
-        model_name: str,
+        model: LanguageModel,
         plan_mode: bool = False,
     ):
         """Initialize the base Claude agent.
@@ -54,12 +55,15 @@ class ClaudeCodeAgent(ABC):
         Args:
             task: The task this agent is working on
             document_repository: Repository for document operations
-            model_name: Model ID (e.g., "anthropic:claude-sonnet-4")
+            model: Language model instance
             plan_mode: Whether to enable plan mode in Claude Code
         """
+        if not model.provider == LLMProvider.ANTHROPIC:
+            raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
+
         self.task = task
         self.document_repo = document_repository
-        self.model_name = model_name
+        self.model = model
         self._virtual_tools = {tool.tool_name: tool for tool in self._get_virtual_tools()}
         self.plan_mode = plan_mode
         self.session_service = ClaudeCodeSessionService()
@@ -82,7 +86,7 @@ class ClaudeCodeAgent(ABC):
             session_id=session_id,
             system_prompt=system_prompt,
             allowed_tools=self._get_allowed_tools(),
-            model=self._get_model(),
+            model=self.model.display_full_name,
             cwd=self._get_cwd(),
             plan_mode=self.plan_mode,
         )
@@ -171,20 +175,6 @@ class ClaudeCodeAgent(ABC):
         """
         return ["Read", "Grep", "Glob", "Bash"]
 
-    def _get_model(self) -> str | None:
-        """Get the model to use for this agent.
-
-        Strips the "anthropic:" prefix from the model name if present,
-        as ClaudeClient expects just the model identifier.
-
-        Returns:
-            Model name without prefix, or None to use default
-        """
-        if self.model_name:
-            # Remove "anthropic:" prefix if present
-            return self.model_name.replace("anthropic:", "")
-        return None
-
     def _get_cwd(self) -> str | None:
         """Get the working directory for Claude Code operations.
 
@@ -263,10 +253,9 @@ class ClaudeCodeAgent(ABC):
             raise ValueError("No messages in session - cannot process tool approvals")
 
         # Parse virtual tool call from message text content using centralized parser
-        parsed = ClaudeResponseParser.parse_message(last_message.text_content)
-        if not isinstance(parsed, VirtualToolCall):
+        tool_call = ClaudeResponseParser.parse_message(last_message.text_content)
+        if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
-        tool_call = parsed
 
         # Execute approved tools and build result messages
         result_parts: list[str] = []
@@ -286,12 +275,8 @@ class ClaudeCodeAgent(ABC):
 
             if decision.approved:
                 # Execute the virtual tool
-                # Use modified args if provided, otherwise use args from session
-                args = decision.modified_args if decision.modified_args else tool_call.arguments
-
-                result = await virtual_tool.execute(args)
+                result = await virtual_tool.execute(tool_call.arguments)
                 result_text = f"✓ {tool_call.tool_name}: {result}"
-
             else:
                 # Tool denied
                 feedback = decision.feedback or "Tool execution was denied"

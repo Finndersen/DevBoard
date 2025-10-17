@@ -6,6 +6,7 @@ from pydantic_ai.tools import ToolFuncEither
 from devboard.agents.engines.internal.base_agent import InternalAgent
 from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.agents.engines.internal.tools import create_document_edit_tool
+from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
@@ -64,13 +65,13 @@ class ProjectAgent(InternalAgent[BaseDeps]):
         project: Project,
         document_repository: DocumentRepository,
         context_service,
-        model_name: str,
+        model: LanguageModel,
     ):
         self.project = project
         self.document_repository = document_repository
         super().__init__(
             context_service=context_service,
-            model_name=model_name,
+            model=model,
         )
 
     def _get_system_prompt(self) -> str:

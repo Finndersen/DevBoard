@@ -8,6 +8,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import DeferredToolApprovalResult
 
 from devboard.agents.engines.internal import BaseDeps, InternalAgent
+from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.types import AgentRole
 
 
@@ -47,9 +48,18 @@ class TestBaseAgent:
         return Mock()
 
     @pytest.fixture
-    def mock_agent_instance(self, mock_context_service):
+    def mock_model(self):
+        """Create a mock language model."""
+        return LanguageModel(
+            provider=LLMProvider.OPENAI,
+            name="gpt-4",
+            type=ModelType.REASONING,
+        )
+
+    @pytest.fixture
+    def mock_agent_instance(self, mock_context_service, mock_model):
         """Create mock agent instance with mocked dependencies."""
-        return MockInternalAgent(mock_context_service, model_name="openai:gpt-4")
+        return MockInternalAgent(mock_context_service, mock_model)
 
     @pytest.mark.asyncio
     async def test_agent_initialization_and_context(self, mock_agent_instance):
@@ -210,9 +220,18 @@ class TestBaseAgentAbstract:
         """Mock context assembly service for abstract tests."""
         return Mock()
 
-    def test_concrete_implementation_works(self, mock_context_service_for_abstract):
+    @pytest.fixture
+    def mock_model_for_abstract(self):
+        """Create a mock language model for abstract tests."""
+        return LanguageModel(
+            provider=LLMProvider.OPENAI,
+            name="gpt-4",
+            type=ModelType.REASONING,
+        )
+
+    def test_concrete_implementation_works(self, mock_context_service_for_abstract, mock_model_for_abstract):
         """Test that concrete implementation can be instantiated."""
-        agent = ConcreteAgent(mock_context_service_for_abstract, model_name="openai:gpt-4")
+        agent = ConcreteAgent(mock_context_service_for_abstract, mock_model_for_abstract)
         assert agent.agent_role == AgentRole.TASK_SPECIFICATION
         assert agent.deps_type == BaseDeps
 
