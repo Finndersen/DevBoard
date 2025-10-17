@@ -20,13 +20,17 @@ interface ConversationChatProps {
   emptyStateMessage?: string
   onClearHistory?: () => void
   showClearButton?: boolean
+  isTransitioning?: boolean
+  transitionMessage?: string
 }
 
 export default function ConversationChat({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
-  onClearHistory
+  onClearHistory,
+  isTransitioning = false,
+  transitionMessage = ''
 }: ConversationChatProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -77,14 +81,14 @@ export default function ConversationChat({
 
   // Update tab status when loading state changes
   useEffect(() => {
-    if (loading) {
+    if (loading || isTransitioning) {
       updateCurrentTabStatus({ type: 'agent_working' })
     } else if (pendingApprovals.length > 0) {
       updateCurrentTabStatus({ type: 'action_required' })
     } else {
       updateCurrentTabStatus({ type: 'idle' })
     }
-  }, [loading, pendingApprovals.length, updateCurrentTabStatus])
+  }, [loading, isTransitioning, pendingApprovals.length, updateCurrentTabStatus])
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -94,7 +98,7 @@ export default function ConversationChat({
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, pendingMessage])
+  }, [messages, pendingMessage, isTransitioning])
 
   const fetchChatHistory = useCallback(async () => {
     try {
@@ -134,7 +138,7 @@ export default function ConversationChat({
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null) return
+    if (!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
 
     const messageText = newMessage.trim()
     setNewMessage('') // Clear input immediately
@@ -421,7 +425,22 @@ export default function ConversationChat({
             </div>
           </div>
         )}
-        
+
+        {isTransitioning && transitionMessage && (
+          <div className="flex justify-start">
+            <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3">
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">{transitionMessage}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -433,19 +452,19 @@ export default function ConversationChat({
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder={placeholder}
-            disabled={loading || pendingApprovals.length > 0 || pendingMessage !== null}
+            disabled={loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
             className={`flex-1 ${standardChatInputClasses}`}
           />
           <button
             type="submit"
-            disabled={!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null}
+            disabled={!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
             aria-label="Send message"
             className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <PaperAirplaneIcon className="w-4 h-4" />
           </button>
         </form>
-        
+
         {pendingApprovals.length > 0 && (
           <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
             Please review and approve/deny the pending tool requests above before sending another message.
@@ -454,6 +473,11 @@ export default function ConversationChat({
         {pendingMessage && pendingMessage.status !== 'failed' && (
           <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
             Waiting for agent response...
+          </p>
+        )}
+        {isTransitioning && (
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+            Running action...
           </p>
         )}
       </div>

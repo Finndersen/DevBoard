@@ -1,27 +1,87 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import logfire
 from pydantic import ValidationError
 
-from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult, ClaudeCodeToolFunc
 from devboard.agents.engines.claude_code.message_parser import ClaudeResponseParser
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualTool,
     VirtualToolCall,
     VirtualToolRequests,
-    build_tool_schemas_section,
+    build_virtual_tool_schemas_section,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
+from devboard.agents.prompts import DOCUMENT_EDIT_PROMPT
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
+from devboard.db.models import Document
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
+
+
+def create_set_document_content_function(
+    document: Document,
+    document_repo: DocumentRepository,
+) -> Callable[[str], Awaitable[str]]:
+    """Create a function for setting content of a blank document (no approval).
+
+    This returns a regular async Python function that can be passed to ClaudeClient
+    as a normal tool. This version is only for blank documents - for documents
+    with content, use the virtual tool version which requires approval.
+
+    Args:
+        document: Document instance to set content for
+        document_repo: Repository for document operations
+
+    Returns:
+        Async function that sets document content and returns a string result
+    """
+
+    async def set_document_content(content: str) -> str:
+        """Set the content of a blank document.
+
+        Args:
+            content: The full content to set for the document
+
+        Returns:
+            Success message or error details
+        """
+        # Validate the document is currently blank
+        if document.content and document.content.strip():
+            return f"Error: Document already has content. Use edit_{document.document_type.value} or set_{document.document_type.value}_content virtual tools which require approval."
+
+        # Validate content is not empty
+        if not content or not content.strip():
+            return "Error: Content cannot be empty."
+
+        # Update document content and hash using repository
+        document_repo.update_content(document, content)
+
+        return f"Content set successfully for {document.document_type.value}."
+
+    # Set function metadata for tool generation
+    set_document_content.__name__ = f"set_{document.document_type.value}_content"
+    set_document_content.__doc__ = f"""Set the content of a blank {document.document_type.value} document (no approval required).
+
+This tool only works on blank documents. For documents with existing content,
+use the set_{document.document_type.value}_content or edit_{document.document_type.value} virtual tools.
+
+Args:
+    content: The full content to set for the document
+
+Returns:
+    Success message or error details
+"""
+
+    return set_document_content
 
 
 @dataclass
@@ -48,7 +108,8 @@ class ClaudeCodeAgent(ABC):
         task: Task,
         document_repository: DocumentRepository,
         model: LanguageModel,
-        plan_mode: bool = False,
+        include_builtin_system_prompt: bool = False,
+        include_claude_md: bool = False,
     ):
         """Initialize the base Claude agent.
 
@@ -65,8 +126,9 @@ class ClaudeCodeAgent(ABC):
         self.document_repo = document_repository
         self.model = model
         self._virtual_tools = {tool.tool_name: tool for tool in self._get_virtual_tools()}
-        self.plan_mode = plan_mode
         self.session_service = ClaudeCodeSessionService()
+        self.include_builtin_system_prompt = include_builtin_system_prompt
+        self.include_claude_md = include_claude_md
 
     def _create_client(self, session_id: str | None = None) -> ClaudeClient:
         """Create a Claude client with the current system prompt and session ID.
@@ -82,13 +144,18 @@ class ClaudeCodeAgent(ABC):
         """
         system_prompt = self._build_system_prompt()
 
+        # Use codebase directory if available
+        cwd = self.task.codebase.local_path if self.task.codebase else None
+
         return ClaudeClient(
             session_id=session_id,
             system_prompt=system_prompt,
-            allowed_tools=self._get_allowed_tools(),
+            tools=self._get_function_tools(),
+            allowed_builtin_tools=self._get_allowed_builtin_tools(),
             model=self.model.display_full_name,
-            cwd=self._get_cwd(),
-            plan_mode=self.plan_mode,
+            cwd=cwd,
+            include_builtin_system_prompt=self.include_builtin_system_prompt,
+            include_claude_md=self.include_claude_md,
         )
 
     def _build_system_prompt(self) -> str:
@@ -104,13 +171,13 @@ class ClaudeCodeAgent(ABC):
         role_description = self._get_role_description()
 
         # Build tool schemas from virtual tools
-        tool_schemas = build_tool_schemas_section(list(self._virtual_tools.values()))
+        tool_schemas = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
 
         # Get current state/context
         state_context = self._get_state_context()
 
         # Combine all parts
-        return f"{role_description}\n\n{tool_schemas}\n\n{state_context}"
+        return "\n\n".join([role_description, DOCUMENT_EDIT_PROMPT, tool_schemas, state_context])
 
     @abstractmethod
     def _get_role_description(self) -> str:
@@ -152,6 +219,19 @@ class ClaudeCodeAgent(ABC):
         """
         pass
 
+    def _get_function_tools(self) -> list[ClaudeCodeToolFunc] | None:
+        """Get the list of regular function tools for this agent.
+
+        These are tools that don't require approval and will be passed to
+        ClaudeClient as normal tools (not virtual tools requiring JSON responses).
+
+        Override this method to provide regular tools. By default returns None.
+
+        Returns:
+            List of sync or async functions that return strings, or None
+        """
+        return None
+
     def get_virtual_tool(self, tool_name: str) -> VirtualTool | None:
         """Get a virtual tool by name.
 
@@ -165,7 +245,7 @@ class ClaudeCodeAgent(ABC):
         """
         return self._virtual_tools.get(tool_name)
 
-    def _get_allowed_tools(self) -> list[str] | None:
+    def _get_allowed_builtin_tools(self) -> list[str] | None:
         """Get list of allowed Claude Code tools for this agent.
 
         Override to customize tool access. By default allows common read-only tools.
@@ -173,17 +253,7 @@ class ClaudeCodeAgent(ABC):
         Returns:
             List of tool names or None to allow all tools
         """
-        return ["Read", "Grep", "Glob", "Bash"]
-
-    def _get_cwd(self) -> str | None:
-        """Get the working directory for Claude Code operations.
-
-        Override to customize working directory.
-
-        Returns:
-            Working directory path or None to use default
-        """
-        return None
+        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch"]
 
     async def run(
         self,

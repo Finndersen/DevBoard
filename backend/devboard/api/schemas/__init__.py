@@ -27,6 +27,7 @@ from .integration import (
     UpdateConversationModelRequest,
 )
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
+from .prompt_action import PromptActionRequest
 from .resource import (
     ContextProviderResourceBase,
     ContextProviderResourceCreate,
@@ -88,6 +89,8 @@ __all__ = [
     "ProjectCreate",
     "ProjectResponse",
     "ProjectUpdate",
+    # Prompt Action
+    "PromptActionRequest",
     # Task
     "DocumentEdit",
     "StateTransitionRequest",

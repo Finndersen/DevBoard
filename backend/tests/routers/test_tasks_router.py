@@ -522,16 +522,16 @@ class TestTaskStateTransition:
             name="Test Project", description="A test project for development", specification=spec_doc
         )
 
-        # Create test task using repository
+        # Create test task using repository with specification content
         task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
+        # Don't create implementation_plan yet - it will be created during transition
         created_task = task_repo.create(
             project_id=created_project.id,
             title="Test Task",
             status=TaskStatus.DEFINING,
             specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
+            implementation_plan=None,
         )
 
         # Create conversation for task
@@ -577,3 +577,178 @@ class TestTaskStateTransition:
         response = client.post("/api/tasks/999/state-transition", json=transition_request)
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
+
+    def test_transition_defining_to_planning_without_spec(self, client, db_session):
+        """Test transitioning from DEFINING to PLANNING without specification content fails."""
+        # Create task with empty specification
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project", specification=spec_doc
+        )
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")  # Empty spec
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=None,
+        )
+
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        # Try to transition without spec content
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.PLANNING.value},
+        )
+        assert response.status_code == 400
+        assert "specification content" in response.json()["detail"].lower()
+
+    def test_transition_defining_to_planning_creates_implementation_plan(self, client, db_session):
+        """Test transitioning from DEFINING to PLANNING creates implementation_plan document."""
+        # Create task with specification content
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project", specification=spec_doc
+        )
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=None,  # No plan initially
+        )
+
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        # Transition to PLANNING
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.PLANNING.value},
+        )
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        assert updated_task["status"] == TaskStatus.PLANNING.value
+        assert updated_task["implementation_plan"] is not None
+        assert updated_task["implementation_plan"]["document_type"] == "task_implementation_plan"
+
+    def test_transition_creates_new_conversation_with_correct_role(self, client, db_session):
+        """Test that state transition creates new conversation with appropriate agent role."""
+        # Create task with specification content
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project", specification=spec_doc
+        )
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=None,
+        )
+
+        conversation_repo = ConversationRepository(db_session)
+        initial_conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+        initial_conversation_id = initial_conversation.id
+
+        # Transition to PLANNING
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.PLANNING.value},
+        )
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        new_conversation_id = updated_task["conversation_id"]
+
+        # Verify new conversation was created
+        assert new_conversation_id != initial_conversation_id
+
+        # Verify new conversation has correct role
+        new_conversation = conversation_repo.get_by_id(new_conversation_id)
+        assert new_conversation is not None
+        assert new_conversation.agent_role == AgentRole.TASK_PLANNING
+        assert new_conversation.is_active is True
+
+        # Verify old conversation was archived
+        old_conversation = conversation_repo.get_by_id(initial_conversation_id)
+        assert old_conversation is not None
+        assert old_conversation.is_active is False
+        assert old_conversation.archived_at is not None
+
+    def test_transition_planning_to_implementing_without_plan(self, client, db_session):
+        """Test transitioning from PLANNING to IMPLEMENTING without implementation plan fails."""
+        # Create task in PLANNING state with empty plan
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project", description="A test project", specification=spec_doc
+        )
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")  # Empty plan
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.PLANNING,
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+        )
+
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        # Try to transition without plan content
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.IMPLEMENTING.value},
+        )
+        assert response.status_code == 400
+        assert "implementation plan" in response.json()["detail"].lower()

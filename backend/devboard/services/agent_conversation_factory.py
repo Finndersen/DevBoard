@@ -4,6 +4,7 @@ from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code import (
     ClaudeCodeConversationService,
+    ClaudeImplementationAgent,
     ClaudeTaskPlanningAgent,
     ClaudeTaskSpecificationAgent,
 )
@@ -80,6 +81,12 @@ def create_task_conversation_service(
             )
         elif agent_role == AgentRole.TASK_PLANNING:
             agent = ClaudeTaskPlanningAgent(
+                task=task,
+                document_repository=document_repo,
+                model=model,
+            )
+        elif agent_role == AgentRole.TASK_IMPLEMENTATION:
+            agent = ClaudeImplementationAgent(
                 task=task,
                 document_repository=document_repo,
                 model=model,

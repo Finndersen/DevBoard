@@ -33,6 +33,7 @@ from devboard.services.config_service import ConfigService
 from devboard.services.context_assembly import ContextAssemblyService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.project_service import ProjectService
+from devboard.services.prompt_action_service import PromptActionService
 from devboard.services.resource_service import ResourceService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
@@ -195,3 +196,10 @@ def get_project_service(
         project_repo=project_repo,
         agent_config_service=agent_config_service,
     )
+
+
+def get_prompt_action_service(
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+) -> PromptActionService:
+    """Get PromptActionService instance."""
+    return PromptActionService(conversation_service=conversation_service)

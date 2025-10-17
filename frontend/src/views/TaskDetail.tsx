@@ -34,6 +34,8 @@ export default function TaskDetail() {
   const [project, setProject] = useState<Project | null>(null)
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [transitionMessage, setTransitionMessage] = useState<string>('')
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
   
   // Use ref to store refetch function to avoid dependency issues
@@ -135,16 +137,44 @@ export default function TaskDetail() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showCodebaseSelector])
 
+  // Helper to map task status to prompt action key
+  const getPromptActionForState = (state: string): string | null => {
+    const mapping: Record<string, string> = {
+      'planning': 'task.create_implementation_plan',
+      'implementing': 'task.begin_implementation',
+    }
+    return mapping[state.toLowerCase()] || null
+  }
+
   const handleStateTransition = async (newState: string) => {
+    // Set appropriate message based on the new state
+    const messages: Record<string, string> = {
+      'planning': 'Generating Implementation Plan...',
+      'implementing': 'Preparing Implementation Environment...',
+    }
+    const message = messages[newState.toLowerCase()] || 'Processing...'
+
+    setIsTransitioning(true)
+    setTransitionMessage(message)
     try {
-      // TODO: Call the state transition API
-      // await apiClient.transitionTaskState(id!, newState)
-      
-      // For now, just update the task status locally
-      await updateTask({ id: id!, task: { status: newState } })
+      // Step 1: Transition state (creates new conversation)
+      const result = await apiClient.transitionTaskState(id!, { new_state: newState })
+
+      // Step 2: Refresh to get new task state and conversation
       await refetch()
+
+      // Step 3: Get appropriate prompt action key for new state
+      const actionKey = getPromptActionForState(newState)
+
+      // Step 4: Send initialization prompt to new conversation
+      if (actionKey && result.conversation_id) {
+        await apiClient.sendPromptAction(result.conversation_id, { action_key: actionKey })
+      }
     } catch (error) {
       console.error('Failed to transition task state:', error)
+    } finally {
+      setIsTransitioning(false)
+      setTransitionMessage('')
     }
   }
 
@@ -152,21 +182,12 @@ export default function TaskDetail() {
   const getNextStateButton = () => {
     if (!task) return null
     const status = task.status.toLowerCase()
-    
+
     switch (status) {
-      case 'pending':
+      case 'defining':
         return (
           <Button
-            onClick={() => handleStateTransition('Designing')}
-            variant="primary"
-          >
-            Start Design
-          </Button>
-        )
-      case 'designing':
-        return (
-          <Button
-            onClick={() => handleStateTransition('Planning')}
+            onClick={() => handleStateTransition('planning')}
             variant="primary"
           >
             Begin Planning
@@ -175,7 +196,7 @@ export default function TaskDetail() {
       case 'planning':
         return (
           <Button
-            onClick={() => handleStateTransition('Implementing')}
+            onClick={() => handleStateTransition('implementing')}
             variant="primary"
             className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
           >
@@ -183,6 +204,8 @@ export default function TaskDetail() {
           </Button>
         )
       case 'implementing':
+      case 'reviewing':
+      case 'complete':
         return null
       default:
         return null
@@ -191,13 +214,11 @@ export default function TaskDetail() {
 
   const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
     switch (status.toLowerCase()) {
-      case 'pending':
-        return 'warning'
-      case 'designing':
+      case 'defining':
       case 'planning':
       case 'implementing':
         return 'info'
-      case 'in review':
+      case 'reviewing':
         return 'warning'
       case 'complete':
         return 'success'
@@ -520,6 +541,8 @@ export default function TaskDetail() {
             emptyStateMessage="Welcome to the Task Agent!"
             className="h-full flex flex-col overflow-hidden"
             padding="xs"
+            isTransitioning={isTransitioning}
+            transitionMessage={transitionMessage}
           />
         </div>
       </div>

@@ -16,8 +16,8 @@ from devboard.agents.engines.internal.tools import (
     create_text_search_tool,
 )
 from devboard.agents.language_models import LanguageModel
-from devboard.agents.roles.task_planning import PLANNING_SYSTEM_PROMPT, build_task_planning_context
-from devboard.agents.roles.task_specification import SPECIFICATION_SYSTEM_PROMPT, build_task_specification_context
+from devboard.agents.roles.task_planning import PLANNING_ROLE_PROMPT, build_task_planning_context
+from devboard.agents.roles.task_specification import SPECIFICATION_ROLE_PROMPT, build_task_specification_context
 from devboard.agents.roles.types import AgentRole
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
@@ -55,24 +55,20 @@ class TaskSpecificationAgent(InternalTaskAgent):
         """Construct the first user message that contains context information for the agent."""
         return build_task_specification_context(self.task)
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
-        return SPECIFICATION_SYSTEM_PROMPT
+        return SPECIFICATION_ROLE_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
         tools: list[Tool | ToolFuncEither] = []
 
-        # Use set_content tool if document is blank, otherwise use edit tool
-        if not self.task.specification.content.strip():
-            tools.append(
-                create_set_document_content_tool(
-                    document=self.task.specification, document_repo=self.document_repository
-                )
-            )
-        else:
-            tools.append(
-                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
-            )
+        # Always provide both set_content and edit tools for specification
+        tools.extend([
+            create_set_document_content_tool(
+                document=self.task.specification, document_repo=self.document_repository
+            ),
+            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
+        ])
 
         # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
         if self.codebase_integration:
@@ -97,38 +93,26 @@ class TaskPlanningAgent(InternalTaskAgent):
         """Construct the first user message that contains context information for the agent."""
         return build_task_planning_context(self.task)
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         """Get default system prompt (used for base agent creation)."""
-        return PLANNING_SYSTEM_PROMPT
+        return PLANNING_ROLE_PROMPT
 
     def _get_tools(self) -> list[Tool | ToolFuncEither]:
         tools: list[Tool | ToolFuncEither] = []
 
-        # Add appropriate tool for specification document
-        if not self.task.specification.content.strip():
-            tools.append(
-                create_set_document_content_tool(
-                    document=self.task.specification, document_repo=self.document_repository
-                )
+        # Always provide both set_content and edit tools for both documents
+        tools.extend([
+            create_set_document_content_tool(
+                document=self.task.specification, document_repo=self.document_repository
+            ),
+            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
+            create_set_document_content_tool(
+                document=self.task.implementation_plan, document_repo=self.document_repository
+            ),
+            create_document_edit_tool(
+                document=self.task.implementation_plan, document_repo=self.document_repository
             )
-        else:
-            tools.append(
-                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
-            )
-
-        # Add appropriate tool for implementation plan document
-        if not self.task.implementation_plan.content.strip():
-            tools.append(
-                create_set_document_content_tool(
-                    document=self.task.implementation_plan, document_repo=self.document_repository
-                )
-            )
-        else:
-            tools.append(
-                create_document_edit_tool(
-                    document=self.task.implementation_plan, document_repo=self.document_repository
-                )
-            )
+        ])
 
         # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
         if self.codebase_integration:

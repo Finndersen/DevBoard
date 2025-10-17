@@ -21,6 +21,7 @@ from pydantic_ai.tools import (
 
 from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.agents.language_models import LanguageModel
+from devboard.agents.prompts import DOCUMENT_EDIT_PROMPT
 from devboard.agents.roles.types import AgentRole
 from devboard.services.context_assembly import (
     ContextAssemblyService,
@@ -48,7 +49,7 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         agent = Agent[TDeps](
             self._get_model(),
             deps_type=self.deps_type,
-            system_prompt=self._get_system_prompt(),
+            system_prompt=self._get_role_prompt(),
             tools=self._get_tools(),
             output_type=DeferredToolRequests | str,
         )
@@ -63,8 +64,11 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         # Replace google with google-gla for compatibility with PydanticAI
         return self.model.id.replace("google", "google-gla")
 
-    @abstractmethod
     def _get_system_prompt(self) -> str:
+        return "\n\n".join([self._get_role_prompt(), DOCUMENT_EDIT_PROMPT])
+
+    @abstractmethod
+    def _get_role_prompt(self) -> str:
         """Get the system prompt for this agent."""
         pass
 
@@ -84,10 +88,10 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         :param deps:
         :return:
         """
-        parts: list[ModelRequestPart] = [SystemPromptPart(content=self._get_system_prompt())]
+        parts: list[ModelRequestPart] = [SystemPromptPart(content=self._get_role_prompt())]
 
         context_msg_content = await self._get_context_message_content(deps)
-        parts.append(UserPromptPart(content=context_msg_content))
+        parts.append(UserPromptPart(content="CURRENT STATE AND CONTEXT:\n" + context_msg_content))
 
         return ModelRequest(parts=parts)
 

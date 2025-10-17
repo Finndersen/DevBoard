@@ -3,13 +3,12 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.tools import DeferredToolApprovalResult
-
 from devboard.agents.engines.internal import BaseDeps, InternalAgent
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.types import AgentRole
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.tools import DeferredToolApprovalResult
 
 
 class MockDeps(BaseDeps):
@@ -24,7 +23,7 @@ class MockInternalAgent(InternalAgent):
     agent_role = AgentRole.PROJECT
     deps_type = MockDeps
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         return "Test system prompt"
 
     def _get_tools(self):
@@ -178,7 +177,7 @@ class TestBaseAgent:
         assert mock_agent_instance.deps_type == MockDeps
 
         # Test abstract method implementations return correct types
-        prompt = mock_agent_instance._get_system_prompt()
+        prompt = mock_agent_instance._get_role_prompt()
         assert isinstance(prompt, str) and prompt
 
         tools = mock_agent_instance._get_tools()
@@ -202,7 +201,7 @@ class ConcreteAgent(InternalAgent):
     agent_role = AgentRole.TASK_SPECIFICATION
     deps_type = BaseDeps
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         return "Concrete system prompt"
 
     def _get_tools(self):

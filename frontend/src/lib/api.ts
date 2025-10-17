@@ -84,6 +84,10 @@ export interface StateTransitionRequest {
   new_state: string
 }
 
+export interface PromptActionRequest {
+  action_key: string
+}
+
 export interface Integration {
   id: string
   name: string
@@ -326,6 +330,13 @@ export class ApiClient {
   async clearConversationMessages(conversationId: number | string): Promise<{ message: string; success: boolean }> {
     return this.request<{ message: string; success: boolean }>(`/api/conversations/${conversationId}/messages`, {
       method: 'DELETE',
+    })
+  }
+
+  async sendPromptAction(conversationId: number | string, request: PromptActionRequest): Promise<PromptResponse> {
+    return this.request<PromptResponse>(`/api/conversations/${conversationId}/prompt-action`, {
+      method: 'POST',
+      body: JSON.stringify(request),
     })
   }
 

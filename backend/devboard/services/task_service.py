@@ -4,7 +4,7 @@ Handles task creation, phase transitions, and conversation lifecycle management.
 Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
-from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.types import AgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
@@ -191,8 +191,8 @@ class TaskService:
         agent_role = self._get_agent_role_for_status(new_status)
 
         # Get effective config for role
-        config_dict = self.agent_config_service.get_agent_configuration(agent_role)
-        config = AgentEngineModelConfig.from_dict(config_dict["config"])
+        agent_config = self.agent_config_service.get_agent_configuration(agent_role)
+        config = agent_config.config
 
         # Create conversation with config snapshot (external_session_id will be set later if needed)
         return self.conversation_repo.create(

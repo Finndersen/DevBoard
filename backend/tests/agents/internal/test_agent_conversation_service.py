@@ -3,6 +3,15 @@
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from devboard.agents.engines.internal import BaseDeps, InternalAgent, PydanticAIConversationService
+from devboard.agents.roles.types import AgentRole
+from devboard.api.schemas.agent_conversation import (
+    MessageRole,
+    PromptResponseType,
+    ToolApprovalDecision,
+)
+from devboard.db.models import Conversation
+from devboard.db.repositories.conversation import ConversationRepository
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -18,16 +27,6 @@ from pydantic_ai.tools import (
 )
 from sqlalchemy.orm import Session
 
-from devboard.agents.engines.internal import BaseDeps, InternalAgent, PydanticAIConversationService
-from devboard.agents.roles.types import AgentRole
-from devboard.api.schemas.agent_conversation import (
-    MessageRole,
-    PromptResponseType,
-    ToolApprovalDecision,
-)
-from devboard.db.models import Conversation
-from devboard.db.repositories.conversation import ConversationRepository
-
 
 class MockAgent(InternalAgent):
     """Mock agent for testing."""
@@ -41,7 +40,7 @@ class MockAgent(InternalAgent):
     async def _get_context_message_content(self, deps: BaseDeps) -> str:
         return "Test context"
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         return "Test system prompt"
 
     def _get_tools(self) -> list:

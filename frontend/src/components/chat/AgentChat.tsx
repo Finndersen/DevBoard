@@ -19,6 +19,8 @@ interface AgentChatProps {
   emptyStateMessage?: string
   className?: string
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
+  isTransitioning?: boolean
+  transitionMessage?: string
 }
 
 export default function AgentChat({
@@ -26,7 +28,9 @@ export default function AgentChat({
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   className = "flex flex-col overflow-hidden",
-  padding = "xs"
+  padding = "xs",
+  isTransitioning = false,
+  transitionMessage = ''
 }: AgentChatProps) {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
@@ -112,10 +116,12 @@ export default function AgentChat({
         </div>
         <div className="flex-1 overflow-hidden">
           {conversationId ? (
-            <ConversationChat 
-              conversationId={conversationId} 
+            <ConversationChat
+              conversationId={conversationId}
               placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
+              isTransitioning={isTransitioning}
+              transitionMessage={transitionMessage}
             />
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">

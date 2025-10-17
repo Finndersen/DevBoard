@@ -7,7 +7,11 @@ from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
-from devboard.api.dependencies.services import get_agent_config_service, get_agent_conversation_service
+from devboard.api.dependencies.services import (
+    get_agent_config_service,
+    get_agent_conversation_service,
+    get_prompt_action_service,
+)
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ConversationMessage,
@@ -17,8 +21,10 @@ from devboard.api.schemas.agent_conversation import (
 from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
+from devboard.api.schemas.prompt_action import PromptActionRequest
 from devboard.db.models import Conversation
 from devboard.db.repositories.conversation import ConversationRepository
+from devboard.services.prompt_action_service import PromptActionNotFoundError, PromptActionService
 
 router = APIRouter()
 
@@ -159,3 +165,37 @@ async def update_conversation_model(
         "engine": updated.engine.value,
         "model_id": updated.model_id,
     }
+
+
+@router.post("/{conversation_id}/prompt-action", response_model=PromptResponse)
+async def execute_prompt_action(
+    request: PromptActionRequest,
+    prompt_action_service: PromptActionService = Depends(get_prompt_action_service),
+    conversation: Conversation = Depends(get_verified_conversation),
+) -> PromptResponse:
+    """Execute a predefined prompt action on a conversation.
+
+    Prompt actions are reusable, named operations that send predefined prompts
+    to agent conversations. This endpoint looks up the action by key and sends
+    the associated prompt as a user message.
+
+    Args:
+        request: Request with action_key to execute
+        prompt_action_service: Service for managing prompt actions
+        conversation: Agent conversation
+
+    Returns:
+        PromptResponse with the agent's response to the prompt
+
+    Raises:
+        HTTPException: 404 if action_key not found
+        HTTPException: 400 if conversation not active
+    """
+    # Check if conversation is active
+    if not conversation.is_active:
+        raise HTTPException(status_code=400, detail="Cannot execute prompt action on archived conversation")
+
+    try:
+        return await prompt_action_service.execute_action(request.action_key)
+    except PromptActionNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None

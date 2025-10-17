@@ -74,7 +74,7 @@ class ProjectAgent(InternalAgent[BaseDeps]):
             model=model,
         )
 
-    def _get_system_prompt(self) -> str:
+    def _get_role_prompt(self) -> str:
         """Get the system prompt for this agent."""
         return SYSTEM_PROMPT.format(project_name=self.project.name)
 

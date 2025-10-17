@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
 

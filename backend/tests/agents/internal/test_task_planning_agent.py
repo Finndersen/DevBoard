@@ -3,8 +3,6 @@
 from unittest.mock import MagicMock, Mock
 
 import pytest
-from pydantic_ai import ApprovalRequired
-
 from devboard.agents.engines.internal import BaseDeps, TaskPlanningAgent, TaskSpecificationAgent
 from devboard.agents.engines.internal.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
@@ -13,6 +11,8 @@ from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import DocumentRepository
+from pydantic_ai import ApprovalRequired
+
 from tests.conftest import create_mock_task
 
 
@@ -68,7 +68,7 @@ class TestTaskSpecificationAgent:
 
     def test_system_prompt(self, agent):
         """Test agent has appropriate system prompt."""
-        prompt = agent._get_system_prompt()
+        prompt = agent._get_role_prompt()
         assert "Task Specification Assistant" in prompt
         assert "task specification" in prompt.lower()
 
@@ -76,12 +76,13 @@ class TestTaskSpecificationAgent:
         """Test agent creates correct tools for Designing state."""
         tools = agent._get_tools()
 
-        # Should have one tool for editing specification
-        assert len(tools) == 1
-        tool = tools[0]
+        # Should have both set_content and edit tools for specification
+        assert len(tools) == 2
+        tool_names = [tool.name for tool in tools]
 
-        # Tool should be for editing specification document
-        assert tool.name == f"edit_{DocumentType.TASK_SPECIFICATION}"
+        # Should have both set_content and edit tools
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_message_content(self, agent, mock_task):
@@ -146,20 +147,22 @@ class TestTaskPlanningAgent:
 
     def test_system_prompt(self, agent):
         """Test agent has appropriate system prompt for Planning state."""
-        prompt = agent._get_system_prompt()
+        prompt = agent._get_role_prompt()
         assert "Task Planning Assistant" in prompt
-        assert "Planning" in prompt
-        assert "Edit both Task Specification and Implementation Plan" in prompt
+        assert "Implementation Plan" in prompt
+        assert "implementation plan" in prompt.lower()
 
     def test_get_tools(self, agent, mock_task):
         """Test agent creates tools for both documents in Planning state."""
         tools = agent._get_tools()
 
-        # Should have two tools for editing both documents
-        assert len(tools) == 2
+        # Should have both set_content and edit tools for both documents
+        assert len(tools) == 4
 
         tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
 
     @pytest.mark.asyncio
@@ -284,23 +287,11 @@ class TestSetDocumentContentTool:
 
         assert tool.name == f"set_{mock_blank_document.document_type}_content"
 
-    def test_tool_requires_approval_for_valid_content(self, mock_blank_document, mock_document_repo):
-        """Test tool requests approval for valid content on blank document."""
-        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
-
-        ctx = MagicMock()
-        ctx.tool_call_approved = False
-
-        # Tool should raise ApprovalRequired for valid content
-        with pytest.raises(ApprovalRequired):
-            tool.function(ctx, "New content for blank document")
-
     def test_tool_rejects_empty_content(self, mock_blank_document, mock_document_repo):
         """Test tool rejects empty or whitespace-only content."""
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
         ctx = MagicMock()
-        ctx.tool_call_approved = False
 
         # Empty content should return error
         result = tool.function(ctx, "")
@@ -310,23 +301,12 @@ class TestSetDocumentContentTool:
         result = tool.function(ctx, "   \n  ")
         assert "Error: Content cannot be empty" in result
 
-    def test_tool_rejects_non_blank_document(self, mock_document_with_content, mock_document_repo):
-        """Test tool rejects setting content on document that already has content."""
-        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
-
-        ctx = MagicMock()
-        ctx.tool_call_approved = False
-
-        result = tool.function(ctx, "New content")
-        assert "Error: Document already has content" in result
-        assert f"edit_{mock_document_with_content.document_type}" in result
-
-    def test_tool_applies_approved_content(self, mock_blank_document, mock_document_repo):
-        """Test tool sets content when approved."""
+    def test_tool_sets_content_directly_for_blank_document(self, mock_blank_document, mock_document_repo):
+        """Test tool sets content directly without requiring approval for blank documents."""
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
         ctx = MagicMock()
-        ctx.tool_call_approved = True
+        ctx.tool_call_approved = False  # Not approved - should still work for blank document
 
         new_content = "# New Document\n\nThis is the initial content."
         result = tool.function(ctx, new_content)
@@ -337,6 +317,35 @@ class TestSetDocumentContentTool:
         # Check the arguments
         args = mock_document_repo.update_content.call_args[0]
         assert args[0] == mock_blank_document
+        assert args[1] == new_content
+
+    def test_tool_requires_approval_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+        """Test tool requires approval when setting content on document that already has content."""
+        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
+
+        ctx = MagicMock()
+        ctx.tool_call_approved = False  # Not approved yet
+
+        # Tool should raise ApprovalRequired for documents with content (destructive operation)
+        with pytest.raises(ApprovalRequired):
+            tool.function(ctx, "New content replacing existing")
+
+    def test_tool_sets_content_when_approved_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+        """Test tool sets content when approved for document with existing content."""
+        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
+
+        ctx = MagicMock()
+        ctx.tool_call_approved = True  # Approved
+
+        new_content = "# Replaced Document\n\nThis replaces the existing content."
+        result = tool.function(ctx, new_content)
+
+        assert "successfully" in result
+        # Verify repository update was called
+        mock_document_repo.update_content.assert_called_once()
+        # Check the arguments
+        args = mock_document_repo.update_content.call_args[0]
+        assert args[0] == mock_document_with_content
         assert args[1] == new_content
 
 
@@ -384,42 +393,11 @@ class TestAgentToolSelection:
             type=ModelType.REASONING,
         )
 
-    def test_specification_agent_uses_set_tool_for_blank_document(
+    def test_specification_agent_provides_both_tools(
         self, mock_task_with_blank_spec, mock_document_repo, mock_context_service, mock_model
     ):
-        """Test TaskSpecificationAgent uses set_content tool when document is blank."""
+        """Test TaskSpecificationAgent always provides both set_content and edit tools."""
         agent = TaskSpecificationAgent(
-            context_service=mock_context_service,
-            model=mock_model,
-            task=mock_task_with_blank_spec,
-            document_repository=mock_document_repo,
-        )
-
-        tools = agent._get_tools()
-        assert len(tools) == 1
-        assert tools[0].name == f"set_{DocumentType.TASK_SPECIFICATION}_content"
-
-    def test_specification_agent_uses_edit_tool_for_document_with_content(
-        self, mock_task_with_content, mock_document_repo, mock_context_service, mock_model
-    ):
-        """Test TaskSpecificationAgent uses edit tool when document has content."""
-        agent = TaskSpecificationAgent(
-            context_service=mock_context_service,
-            model=mock_model,
-            task=mock_task_with_content,
-            document_repository=mock_document_repo,
-        )
-
-        tools = agent._get_tools()
-        assert len(tools) == 1
-        assert tools[0].name == f"edit_{DocumentType.TASK_SPECIFICATION}"
-
-    def test_planning_agent_uses_appropriate_tools_for_both_documents(
-        self, mock_task_with_blank_spec, mock_document_repo, mock_context_service, mock_model
-    ):
-        """Test TaskPlanningAgent uses appropriate tools based on each document's state."""
-        # Modify task to have blank spec and blank plan
-        agent = TaskPlanningAgent(
             context_service=mock_context_service,
             model=mock_model,
             task=mock_task_with_blank_spec,
@@ -430,15 +408,29 @@ class TestAgentToolSelection:
         assert len(tools) == 2
         tool_names = [tool.name for tool in tools]
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
 
-    def test_planning_agent_mixed_document_states(
+    def test_specification_agent_provides_both_tools_for_document_with_content(
+        self, mock_task_with_content, mock_document_repo, mock_context_service, mock_model
+    ):
+        """Test TaskSpecificationAgent provides both tools even when document has content."""
+        agent = TaskSpecificationAgent(
+            context_service=mock_context_service,
+            model=mock_model,
+            task=mock_task_with_content,
+            document_repository=mock_document_repo,
+        )
+
+        tools = agent._get_tools()
+        assert len(tools) == 2
+        tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+
+    def test_planning_agent_provides_all_tools_for_both_documents(
         self, mock_task_with_blank_spec, mock_document_repo, mock_context_service, mock_model
     ):
-        """Test TaskPlanningAgent handles mixed document states correctly."""
-        # Set spec to have content, but plan to be blank
-        mock_task_with_blank_spec.specification.content = "# Spec\n\nContent"
-
+        """Test TaskPlanningAgent always provides both set_content and edit tools for both documents."""
         agent = TaskPlanningAgent(
             context_service=mock_context_service,
             model=mock_model,
@@ -447,10 +439,31 @@ class TestAgentToolSelection:
         )
 
         tools = agent._get_tools()
-        assert len(tools) == 2
+        assert len(tools) == 4  # set_content + edit for both specification and plan
         tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+
+    def test_planning_agent_provides_all_tools_regardless_of_content(
+        self, mock_task_with_content, mock_document_repo, mock_context_service, mock_model
+    ):
+        """Test TaskPlanningAgent provides all tools even when documents have content."""
+        agent = TaskPlanningAgent(
+            context_service=mock_context_service,
+            model=mock_model,
+            task=mock_task_with_content,
+            document_repository=mock_document_repo,
+        )
+
+        tools = agent._get_tools()
+        assert len(tools) == 4  # set_content + edit for both specification and plan
+        tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
 
 
 class TestDocumentEdit:

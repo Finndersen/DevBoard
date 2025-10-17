@@ -1,8 +1,8 @@
 """Claude Code client using claude-agent-sdk for Claude Code CLI integration."""
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 import logfire
 from claude_agent_sdk import (
@@ -25,7 +25,7 @@ from pydantic_ai._function_schema import function_schema
 
 # StreamEvent is not exported from public API, import from types module
 try:
-    from claude_agent_sdk.types import StreamEvent
+    from claude_agent_sdk.types import StreamEvent, SystemPromptPreset
 except ImportError:
     StreamEvent = None  # type: ignore
 
@@ -37,6 +37,23 @@ class ClaudeCodeResult:
     text_content: str
     result_message: ResultMessage
     session_id: str
+
+
+class ClaudeToolTextBlock(TypedDict):
+    """Text block structure expected by Claude SDK tools."""
+
+    type: str  # Should be "text"
+    text: str
+
+
+class ClaudeToolContent(TypedDict):
+    """Content structure expected by Claude SDK tool responses."""
+
+    content: list[ClaudeToolTextBlock]
+
+
+# Type alias for custom tool functions - can be sync or async functions returning str
+ClaudeCodeToolFunc = Callable[..., str | Awaitable[str]]
 
 
 class ClaudeClient:
@@ -58,128 +75,134 @@ class ClaudeClient:
         self,
         session_id: str | None = None,
         system_prompt: str | None = None,
-        tools: list[Callable[[dict[str, Any]], Any]] | None = None,
-        allowed_tools: list[str] | None = None,
+        include_builtin_system_prompt: bool = False,
+        tools: list[ClaudeCodeToolFunc] | None = None,
+        allowed_builtin_tools: list[str] | None = None,
         model: str | None = None,
         cwd: str | None = None,
         plan_mode: bool = False,
+        include_claude_md: bool = False,
     ):
         """Initialize Claude Code client.
 
         Args:
             session_id: Optional session ID to resume a previous conversation
             system_prompt: Optional system prompt to include in all runs
-            tools: Optional list of async Python functions to expose as tools.
+            include_builtin_system_prompt: Whether to include the built-in system prompt
+            tools: Optional list of sync or async Python functions to expose as tools.
                    Each function should accept keyword arguments matching its signature
-                   and return a string or dict with 'content' key containing the response.
-            allowed_tools: Optional list of allowed tool names (e.g., ["Read", "Bash", "Grep"]).
+                   and return a string result.
+            allowed_builtin_tools: Optional list of allowed tool names (e.g., ["Read", "Bash", "Grep"]).
                            If tools are provided, this will be extended with the custom tool names.
             model: Optional model to use (e.g., "claude-sonnet-4-5-20250929")
             cwd: Optional working directory for Claude Code operations
+            include_claude_md: Whether to load CLAUDE.md prompt guidance files
         """
-        # Build options with custom tools if provided
-        self.options = self._build_options(
-            tools=tools or [],
-            system_prompt=system_prompt,
-            allowed_tools=allowed_tools,
-            model=model,
-            cwd=cwd,
-            session_id=session_id,
-            plan_mode=plan_mode,
-        )
         self.session_id = session_id
 
-    def _build_options(
-        self,
-        tools: list[Callable[[dict[str, Any]], Any]],
-        system_prompt: str | None,
-        allowed_tools: list[str] | None,
-        model: str | None,
-        cwd: str | None,
-        session_id: str | None,
-        plan_mode: bool = False,
-    ) -> ClaudeAgentOptions:
-        """Build ClaudeAgentOptions from client configuration.
-
-        Args:
-            tools: List of Python functions to expose as custom tools
-            system_prompt: Optional system prompt suffix
-            allowed_tools: Optional list of allowed tool names
-            model: Optional model name
-            cwd: Optional working directory
-            session_id: Optional session ID for resumption
-
-        Returns:
-            Configured ClaudeAgentOptions instance
-        """
-        # Prepare MCP servers and tool names if custom tools are provided
-        mcp_servers = None
-        final_allowed_tools = allowed_tools
-
+        # Build MCP servers from custom tools if provided
         if tools:
-            # Wrap tools with SDK's @tool decorator
-            sdk_tools = []
+            mcp_servers, custom_tool_names = self._build_mcp_servers(tools)
+        else:
+            mcp_servers = None
             custom_tool_names = []
 
-            for tool_func in tools:
-                # Use PydanticAI's function_schema to extract metadata
-                schema = function_schema(
-                    function=tool_func,
-                    schema_generator=GenerateJsonSchema,
-                    takes_ctx=False,
-                    docstring_format="auto",
-                )
-
-                # Extract function metadata
-                tool_name = tool_func.__name__
-                tool_description = schema.description or f"Tool: {tool_name}"
-                input_schema = schema.json_schema
-
-                # Create wrapper that converts the function to Claude Code format
-                wrapper_func = self._create_tool_wrapper(tool_func, schema)
-
-                # Wrap with the @tool decorator
-                sdk_tool = tool(tool_name, tool_description, input_schema)(wrapper_func)
-                sdk_tools.append(sdk_tool)
-                custom_tool_names.append(f"mcp__devboard_tools__{tool_name}")
-
-            # Create SDK MCP server with custom tools
-            mcp_server = create_sdk_mcp_server(
-                name="devboard_tools",
-                version="1.0.0",
-                tools=sdk_tools,
-            )
-            mcp_servers = {"devboard_tools": mcp_server}
-
-            # Combine allowed_tools with custom tool names
-            if allowed_tools:
-                final_allowed_tools = allowed_tools + custom_tool_names
+        # Combine allowed_tools with custom tool names
+        final_allowed_tools = allowed_builtin_tools
+        if custom_tool_names:
+            if allowed_builtin_tools:
+                final_allowed_tools = allowed_builtin_tools + custom_tool_names
             else:
                 final_allowed_tools = custom_tool_names
 
-        return ClaudeAgentOptions(
+        # Initialize ClaudeAgentOptions directly
+        self.options = ClaudeAgentOptions(
             resume=session_id,
-            system_prompt=system_prompt,
+            system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
             allowed_tools=final_allowed_tools,
             model=model,
             cwd=cwd,
             mcp_servers=mcp_servers,
             permission_mode="plan" if plan_mode else "acceptEdits",
+            setting_sources=["user", "project", "local"] if include_claude_md else None,
         )
 
-    @staticmethod
-    def _create_tool_wrapper(func: Callable[..., Any], func_schema: Any) -> Callable[[dict[str, Any]], Any]:
-        """Create a wrapper function that converts a regular function to Claude Code tool format.
+    def _build_system_prompt(
+        self, system_prompt: str | None, include_builtin_system_prompt: bool
+    ) -> SystemPromptPreset | str | None:
+        if include_builtin_system_prompt:
+            if system_prompt:
+                return SystemPromptPreset(type="preset", preset="claude_code", append=system_prompt)
+            else:
+                return SystemPromptPreset(type="preset", preset="claude_code")
+        elif system_prompt:
+            return system_prompt
+        else:
+            return None
+
+    def _build_mcp_servers(
+        self,
+        tools: list[ClaudeCodeToolFunc],
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Build MCP servers from custom Python tools.
 
         Args:
-            func: The original function to wrap
+            tools: List of sync or async Python functions to expose as custom tools
+
+        Returns:
+            Tuple of (mcp_servers dict or None, list of custom tool names)
+        """
+        # Wrap tools with SDK's @tool decorator
+        sdk_tools = []
+        custom_tool_names = []
+
+        for tool_func in tools:
+            # Use PydanticAI's function_schema to extract metadata
+            schema = function_schema(
+                function=tool_func,
+                schema_generator=GenerateJsonSchema,
+                takes_ctx=False,
+                docstring_format="auto",
+            )
+
+            # Extract function metadata
+            tool_name = tool_func.__name__
+            tool_description = schema.description or f"Tool: {tool_name}"
+            input_schema = schema.json_schema
+
+            # Create wrapper that converts the function to Claude Code format
+            wrapper_func = self._create_tool_wrapper(tool_func, schema)
+
+            # Wrap with the @tool decorator
+            sdk_tool = tool(tool_name, tool_description, input_schema)(wrapper_func)
+            sdk_tools.append(sdk_tool)
+            custom_tool_names.append(f"mcp__devboard_tools__{tool_name}")
+
+        # Create SDK MCP server with custom tools
+        mcp_server = create_sdk_mcp_server(
+            name="devboard_tools",
+            version="1.0.0",
+            tools=sdk_tools,
+        )
+        mcp_servers = {"devboard_tools": mcp_server}
+
+        return mcp_servers, custom_tool_names
+
+    @staticmethod
+    def _create_tool_wrapper(
+        func: ClaudeCodeToolFunc, func_schema: Any
+    ) -> Callable[[dict[str, Any]], Awaitable[ClaudeToolContent]]:
+        """Create a wrapper function that converts a sync/async function to Claude Code tool format.
+
+        Args:
+            func: The original sync or async function to wrap (should return str)
             func_schema: The FunctionSchema containing validation and metadata
 
         Returns:
-            An async function that accepts a dict of arguments and returns a dict with 'content' key
+            An async function that accepts a dict of arguments and returns ClaudeToolContent
         """
 
-        async def wrapper(args: dict[str, Any]) -> dict[str, Any]:
+        async def wrapper(args: dict[str, Any]) -> ClaudeToolContent:
             # Validate arguments using the function schema
             validated_args = func_schema.validator.validate_python(args)
 
@@ -191,9 +214,7 @@ class ClaudeClient:
 
             # Convert result to Claude Code format
             if isinstance(result, dict) and "content" in result:
-                return result
-            elif isinstance(result, str):
-                return {"content": [{"type": "text", "text": result}]}
+                return result  # type: ignore[return-value]
             else:
                 return {"content": [{"type": "text", "text": str(result)}]}
 

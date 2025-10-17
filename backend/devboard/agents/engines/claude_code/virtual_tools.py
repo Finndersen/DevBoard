@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from pydantic import BaseModel, Field
+from pydantic_core import ValidationError
 
 from devboard.api.schemas import DocumentEdit
 from devboard.services.document_editor import DocumentEditorService
@@ -60,7 +61,7 @@ TOOL_RESPONSE_FORMAT = """
 2. DOCUMENT EDITING TOOLS (edit_*, set_*_content):
    These tools require approval and must use the VIRTUAL TOOL CALLING format below.
 
-## VIRTUAL TOOL CALLING FORMAT (for document editing tools only):
+## VIRTUAL TOOL CALLING FORMAT (for document editing tools that require approval only):
 
 For document editing tool calls, respond with JSON content ONLY (no other text in your message):
 {
@@ -78,8 +79,8 @@ Assistant: '
   "arguments": {
     "edits": [
       {
-        "old_string": "# Overview\\nOld content here",
-        "new_string": "# Overview\\nNew improved content"
+        "find": "# Overview\\nOld content here",
+        "replace": "# Overview\\nNew improved content"
       }
     ],
     "reasoning": "Updated overview section"
@@ -94,8 +95,8 @@ Assistant: 'I will update the task specification. Here's the updated content:
   "arguments": {
     "edits": [
       {
-        "old_string": "# Overview\\nOld content here",
-        "new_string": "# Overview\\nNew improved content"
+        "find": "# Overview\\nOld content here",
+        "replace": "# Overview\\nNew improved content"
       }
     ],
     "reasoning": "Updated overview section"
@@ -180,10 +181,16 @@ Example tool call:
 {self._format_additional_notes()}
 """
 
-    @abstractmethod
     def _format_args_schema(self) -> str:
-        """Format the arguments schema section."""
-        pass
+        """Format the arguments schema section from the Pydantic model's JSON schema.
+
+        Returns:
+            JSON schema as formatted string
+        """
+        import json
+
+        schema = self.args_model.model_json_schema()
+        return json.dumps(schema, indent=2)
 
     @abstractmethod
     def _format_example_args(self) -> str:
@@ -237,7 +244,7 @@ class EditDocumentTool(VirtualTool):
         # Validate arguments using Pydantic model
         try:
             args = self.args_model.model_validate(arguments)
-        except Exception as e:
+        except ValidationError as e:
             return f"Error: Invalid arguments: {e}"
 
         # Apply edits
@@ -251,21 +258,13 @@ class EditDocumentTool(VirtualTool):
 
         return f"Edits applied successfully to {self.document.document_type.value}."
 
-    def _format_args_schema(self) -> str:
-        """Format the arguments schema section."""
-        return """- edits: list[object] - List of find-replace edit operations
-  Each edit object has:
-  - old_string: str - Exact text to find (must match exactly including whitespace)
-  - new_string: str - Text to replace with
-- reasoning: str (optional) - CONCISE explanation for the edits"""
-
     def _format_example_args(self) -> str:
         """Format example arguments for the schema."""
         return """{
     "edits": [
       {
-        "old_string": "# Overview\\nOld content here",
-        "new_string": "# Overview\\nNew improved content"
+        "find": "# Overview\\nOld content here",
+        "replace": "# Overview\\nNew improved content"
       }
     ],
     "reasoning": "Updated overview section"
@@ -274,14 +273,17 @@ class EditDocumentTool(VirtualTool):
     def _format_additional_notes(self) -> str:
         """Format additional notes/warnings for the schema."""
         return """IMPORTANT:
-- old_string must match EXACTLY (including all whitespace, newlines, indentation)
-- If old_string is not found, the edit will fail
+- find must match EXACTLY (including all whitespace, newlines, indentation)
+- If find is not found, the edit will fail
 - Make edits atomic - one logical change per edit
-- Always provide enough context in old_string to make matches unique"""
+- Always provide enough context in find to make matches unique"""
 
 
 class SetDocumentContentTool(VirtualTool):
-    """Tool for setting initial content of blank documents."""
+    """Tool for setting content of documents.
+
+    Used when the associated document is non-empty, so requires approval.
+    """
 
     def __init__(self, document, document_repo):
         """Initialize the set document content tool.
@@ -301,10 +303,7 @@ class SetDocumentContentTool(VirtualTool):
     @property
     def description(self) -> str:
         """Return the tool description."""
-        return (
-            f"Set the initial content of the blank {self.document.document_type.value} document. "
-            f"(Only available when document is empty. Once content exists, use edit_{self.document.document_type.value} instead.)"
-        )
+        return f"Set the content of the {self.document.document_type.value} document. "
 
     @property
     def args_model(self) -> type[BaseModel]:
@@ -326,10 +325,6 @@ class SetDocumentContentTool(VirtualTool):
         except Exception as e:
             return f"Error: Invalid arguments: {e}"
 
-        # Validate document is blank
-        if self.document.content and self.document.content.strip():
-            return f"Error: Document already has content. Use edit_{self.document.document_type.value} instead."
-
         # Validate content not empty
         if not args.content.strip():
             return "Error: Content cannot be empty."
@@ -338,11 +333,6 @@ class SetDocumentContentTool(VirtualTool):
         self.document_repo.update_content(self.document, args.content)
 
         return f"Content set successfully for {self.document.document_type.value}."
-
-    def _format_args_schema(self) -> str:
-        """Format the arguments schema section."""
-        return """- content: str - The full content to set for the document
-- reasoning: str (optional) - CONCISE explanation for the content"""
 
     def _format_example_args(self) -> str:
         """Format example arguments for the schema."""
@@ -355,12 +345,10 @@ class SetDocumentContentTool(VirtualTool):
     def _format_additional_notes(self) -> str:
         """Format additional notes/warnings for the schema."""
         return """IMPORTANT:
-- This tool can only be used when the document is currently empty
-- If the document already has content, you will get an error
 - Provide complete, well-formatted content in a single call"""
 
 
-def build_tool_schemas_section(tools: list[VirtualTool]) -> str:
+def build_virtual_tool_schemas_section(tools: list[VirtualTool]) -> str:
     """Build the complete tool schemas section for the system prompt.
 
     Args:
