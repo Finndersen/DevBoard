@@ -65,14 +65,13 @@ class TaskService:
         """
         # Create documents
         specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, specification_content)
-        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
 
-        # Create task using repository
+        # Create task using repository (implementation plan will be created later when needed)
         task = self.task_repo.create(
             project_id=project_id,
             title=title,
             specification=specification_doc,
-            implementation_plan=implementation_plan_doc,
+            implementation_plan=None,
             status=status,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,
@@ -119,12 +118,12 @@ class TaskService:
         """
         # DEFINING → PLANNING
         if target_status == TaskStatus.PLANNING:
-            if not task.specification or not task.specification.strip():
+            if not task.specification or not task.specification.content.strip():
                 return False, "Cannot transition to PLANNING without specification content"
 
         # PLANNING → IMPLEMENTING
         elif target_status == TaskStatus.IMPLEMENTING:
-            if not task.implementation_plan or not task.implementation_plan.strip():
+            if not task.implementation_plan or not task.implementation_plan.content.strip():
                 return False, "Cannot transition to IMPLEMENTING without implementation plan"
 
         # IMPLEMENTING → REVIEWING

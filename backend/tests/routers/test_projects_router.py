@@ -453,7 +453,7 @@ class TestProjectTasksRouter:
         assert task_data["title"] == api_task_data["title"]
         assert task_data["status"] == "defining"  # Always DEFINING when created
         assert task_data["specification"]["content"] == api_task_data["specification_content"]
-        assert task_data["implementation_plan"]["content"] == ""  # Should be empty
+        assert task_data["implementation_plan"] is None  # Should be None initially
 
     def test_create_project_task_with_codebase(self, client, db_session, test_project_data):
         """Test creating a task with a codebase association."""

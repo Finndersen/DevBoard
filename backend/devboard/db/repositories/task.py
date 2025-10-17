@@ -19,7 +19,7 @@ class TaskRepository(BaseRepository[Task]):
         project_id: int,
         title: str,
         specification: "Document",
-        implementation_plan: "Document",
+        implementation_plan: "Document | None" = None,
         status: TaskStatus = TaskStatus.DEFINING,
         codebase_id: int | None = None,
         remote_task_id: str | None = None,
@@ -30,7 +30,7 @@ class TaskRepository(BaseRepository[Task]):
             project_id: ID of the parent project
             title: Task title
             specification: Specification document instance
-            implementation_plan: Implementation plan document instance
+            implementation_plan: Optional implementation plan document instance
             status: Initial task status (defaults to DEFINING)
             codebase_id: Optional codebase ID
             remote_task_id: Optional remote task identifier
@@ -42,7 +42,7 @@ class TaskRepository(BaseRepository[Task]):
             project_id=project_id,
             title=title,
             specification_id=specification.id,
-            implementation_plan_id=implementation_plan.id,
+            implementation_plan_id=implementation_plan.id if implementation_plan else None,
             status=status,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,

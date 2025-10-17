@@ -208,7 +208,7 @@ def create_mock_task(
     title: str = "Test Task",
     status: TaskStatus = TaskStatus.DEFINING,
     specification_content: str = "",
-    implementation_plan_content: str = "",
+    implementation_plan_content: str | None = None,
     with_codebase: bool = False,
     codebase_path: str | None = None,
 ) -> Mock:
@@ -219,7 +219,7 @@ def create_mock_task(
         title: Task title
         status: Task status
         specification_content: Content for specification document
-        implementation_plan_content: Content for implementation plan document
+        implementation_plan_content: Content for implementation plan document, or None to not include one
         with_codebase: Whether to include a codebase
         codebase_path: Path to codebase (defaults to /tmp/test-codebase if with_codebase is True)
 
@@ -238,12 +238,15 @@ def create_mock_task(
     spec_doc.content = specification_content
     task.specification = spec_doc
 
-    # Mock implementation plan document
-    plan_doc = Mock(spec=Document)
-    plan_doc.id = task_id * 10 + 1
-    plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
-    plan_doc.content = implementation_plan_content
-    task.implementation_plan = plan_doc
+    # Mock implementation plan document (optional)
+    if implementation_plan_content is not None:
+        plan_doc = Mock(spec=Document)
+        plan_doc.id = task_id * 10 + 1
+        plan_doc.document_type = DocumentType.TASK_IMPLEMENTATION_PLAN
+        plan_doc.content = implementation_plan_content
+        task.implementation_plan = plan_doc
+    else:
+        task.implementation_plan = None
 
     # Handle codebase - set to None or create proper mock
     if with_codebase:
