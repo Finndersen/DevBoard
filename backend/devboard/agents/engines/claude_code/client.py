@@ -273,27 +273,20 @@ class ClaudeClient:
             ClaudeCodeResult containing the response text, result metadata,
             and session ID for resuming
         """
-        text_parts: list[str] = []
         result_message = None
 
         # Collect all messages. The stream automatically terminates after ResultMessage.
         async for message in self.stream(user_query):
-            if isinstance(message, AssistantMessage):
-                # Extract text content from assistant messages
-                for content_block in message.content:
-                    if isinstance(content_block, TextBlock):
-                        text_parts.append(content_block.text)
-
-            elif isinstance(message, ResultMessage):
+            # There may be intermediate AssistantMessages before the final ResultMessage that wont be captured
+            if isinstance(message, ResultMessage):
                 result_message = message
                 # Continue to let iterator finish naturally and ensure cleanup
 
-        if not result_message:
+        if not result_message or result_message.result is None:
             raise RuntimeError("No ResultMessage received from Claude Code")
 
-        combined_text = "\n".join(text_parts) if text_parts else ""
         return ClaudeCodeResult(
-            text_content=combined_text,
+            text_content=result_message.result,
             result_message=result_message,
             session_id=result_message.session_id,
         )
