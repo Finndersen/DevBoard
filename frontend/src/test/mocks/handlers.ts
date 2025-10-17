@@ -52,14 +52,7 @@ const mockTasks: Task[] = [
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
     },
-    implementation_plan: {
-      id: 4,
-      document_type: 'implementation_plan',
-      content: 'Test implementation plan',
-      content_hash: 'plan123',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
+    implementation_plan: null, // No implementation plan for early-stage task
     created_at: '2024-01-01T00:00:00Z',
   },
   {
@@ -278,11 +271,17 @@ export const handlers = [
 
   // Unified conversation endpoints
   http.get('*/api/conversations/:conversationId', ({ params }) => {
+    const conversationId = Number(params.conversationId)
+    // Map conversation IDs to appropriate agent roles
+    // conversation_id 1 = project conversation
+    // conversation_id 3 = task conversation (task_specification is the default task role)
+    const agentRole = conversationId === 3 ? 'task_specification' : 'project'
+
     return HttpResponse.json({
-      id: Number(params.conversationId),
-      parent_entity_type: 'project',
+      id: conversationId,
+      parent_entity_type: conversationId === 3 ? 'task' : 'project',
       parent_entity_id: 1,
-      agent_role: 'project',
+      agent_role: agentRole,
       engine: 'internal',
       model_id: 'openai:gpt-4',
       is_active: true,

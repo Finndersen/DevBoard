@@ -199,32 +199,42 @@ describe('ApiClient', () => {
     })
 
     it('creates a new task', async () => {
-      const newTask = {
+      const newTaskRequest = {
         title: 'New Task',
-        description: 'New task description',
-        status: 'Pending',
         codebase_id: null,
         remote_task_id: null,
-        conversation_id: null,
-        implementation_plan: null,
+        specification_content: 'New task specification',
       }
 
       const createdTask: Task = {
         id: 3,
         project_id: 1,
-        ...newTask,
+        title: 'New Task',
+        status: 'defining',
+        codebase_id: null,
+        remote_task_id: null,
+        conversation_id: 5,
+        specification: {
+          id: 10,
+          document_type: 'task_specification',
+          content: 'New task specification',
+          content_hash: 'hash10',
+          created_at: '2024-01-03T00:00:00Z',
+          updated_at: '2024-01-03T00:00:00Z',
+        },
+        implementation_plan: null,
         created_at: '2024-01-03T00:00:00Z',
       }
 
       server.use(
         http.post('*/api/projects/1/tasks', async ({ request }) => {
           const body = await request.json()
-          expect(body).toEqual(newTask)
+          expect(body).toEqual(newTaskRequest)
           return HttpResponse.json(createdTask)
         })
       )
 
-      const result = await apiClient.createTask(1, newTask)
+      const result = await apiClient.createTask(1, newTaskRequest)
       expect(result).toEqual(createdTask)
     })
 
@@ -653,40 +663,60 @@ describe('ApiClient', () => {
       const fullTask: Task = {
         id: 1,
         title: 'Test Task',
-        description: 'Task description',
         status: 'Planning',
         project_id: 1,
         codebase_id: 2,
         remote_task_id: 'PROJ-123',
-        conversation_id: 'conv-456',
-        implementation_plan: 'Implementation details',
+        conversation_id: 3,
+        specification: {
+          id: 1,
+          document_type: 'task_specification',
+          content: 'Task specification content',
+          content_hash: 'hash1',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+        implementation_plan: {
+          id: 2,
+          document_type: 'implementation_plan',
+          content: 'Implementation details',
+          content_hash: 'hash2',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
         created_at: '2024-01-01T00:00:00Z'
       }
 
       expect(fullTask.codebase_id).toBe(2)
       expect(fullTask.remote_task_id).toBe('PROJ-123')
-      expect(fullTask.conversation_id).toBe('conv-456')
-      expect(fullTask.implementation_plan).toBe('Implementation details')
+      expect(fullTask.conversation_id).toBe(3)
+      expect(fullTask.implementation_plan).toBeTruthy()
+      expect(fullTask.implementation_plan?.content).toBe('Implementation details')
     })
 
     it('allows nullable fields', () => {
       const minimalTask: Task = {
         id: 1,
         title: 'Minimal Task',
-        description: null,
         status: 'Pending',
         project_id: 1,
         codebase_id: null,
         remote_task_id: null,
-        conversation_id: null,
+        conversation_id: 4,
+        specification: {
+          id: 3,
+          document_type: 'task_specification',
+          content: 'Minimal task spec',
+          content_hash: 'hash3',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
         implementation_plan: null,
         created_at: '2024-01-01T00:00:00Z'
       }
 
-      expect(minimalTask.description).toBeNull()
       expect(minimalTask.codebase_id).toBeNull()
       expect(minimalTask.remote_task_id).toBeNull()
-      expect(minimalTask.conversation_id).toBeNull()
       expect(minimalTask.implementation_plan).toBeNull()
     })
   })

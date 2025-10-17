@@ -67,7 +67,7 @@ export default function TaskDetail() {
   // Use useEditableField hooks to eliminate boilerplate
   const titleField = useEditableField(task?.title || '', saveTitleField)
   const specificationField = useEditableField(task?.specification.content || '', saveSpecificationField)
-  const planField = useEditableField(task?.implementation_plan.content || '', savePlanField)
+  const planField = useEditableField(task?.implementation_plan?.content || '', savePlanField)
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
@@ -368,9 +368,9 @@ export default function TaskDetail() {
       </div>
 
       {/* Main Content Layout */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)] overflow-hidden">
         {/* Left Column: Document Content with Integrated Tabs */}
-        <Card padding="none" className="h-[600px] flex flex-col">
+        <Card padding="none" className="h-full flex flex-col overflow-hidden">
           {/* Card Header with Tabs */}
           <div className="border-b border-gray-200 dark:border-gray-700">
             <div className="px-6 py-3">
@@ -379,7 +379,7 @@ export default function TaskDetail() {
                 <nav className="flex space-x-6">
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
-                    { id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon },
+                    ...(task.implementation_plan ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -500,7 +500,7 @@ export default function TaskDetail() {
                   />
                 ) : (
                   <div className="h-full overflow-y-auto">
-                    {task.implementation_plan.content ? (
+                    {task.implementation_plan?.content ? (
                       <Markdown>{task.implementation_plan.content}</Markdown>
                     ) : (
                       <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
@@ -513,13 +513,12 @@ export default function TaskDetail() {
         </Card>
 
         {/* Right Column: Task Agent Chat */}
-        <div>
+        <div className="h-full overflow-hidden">
           <AgentChat
-            title="Task Agent"
             conversationId={task.conversation_id}
             placeholder="Ask me to help with task specification or implementation planning..."
             emptyStateMessage="Welcome to the Task Agent!"
-            className="h-[600px] flex flex-col overflow-hidden"
+            className="h-full flex flex-col overflow-hidden"
             padding="xs"
           />
         </div>

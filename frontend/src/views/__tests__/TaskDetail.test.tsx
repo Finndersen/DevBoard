@@ -60,15 +60,18 @@ describe('TaskDetail', () => {
 
   it('renders task details', async () => {
     renderTaskDetail()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test task specification content')).toBeInTheDocument()
     }, { timeout: 3000 })
-    
+
     expect(screen.getAllByText('Planning').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Task Specification').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Implementation Plan')).toBeInTheDocument()
-    expect(screen.getByText('Task Agent')).toBeInTheDocument()
+    // Agent title is now dynamically loaded based on conversation's agent_role
+    await waitFor(() => {
+      expect(screen.getByText('Task Specification Agent')).toBeInTheDocument()
+    }, { timeout: 3000 })
   })
 
   it('renders project information', async () => {

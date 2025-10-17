@@ -17,7 +17,7 @@ export interface Task {
   conversation_id: number
   created_at: string
   specification: DocumentResponse
-  implementation_plan: DocumentResponse
+  implementation_plan: DocumentResponse | null
 }
 
 export interface TaskCreate {

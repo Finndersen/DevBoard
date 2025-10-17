@@ -363,7 +363,6 @@ export default function ProjectDetail() {
 
           {/* Right Side - Chat */}
           <AgentChat
-            title="Agent"
             conversationId={project.default_conversation_id}
             placeholder="Ask a question about this project..."
             emptyStateMessage="Ask me anything about this project!"
