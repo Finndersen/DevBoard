@@ -71,35 +71,23 @@ For document editing tool calls, respond with JSON content ONLY (no other text i
   }
 }
 
-## CORRECT Tool Call Example (ONLY JSON content):
+## CORRECT Tool Call Example (ONLY JSON content) ✅:
 User: 'Update the task specification with the details we have discussed'
 Assistant: '
 {
-  "tool_name": "edit_task_specification",
+  "tool_name": "<tool_name>",
   "arguments": {
-    "edits": [
-      {
-        "find": "# Overview\\nOld content here",
-        "replace": "# Overview\\nNew improved content"
-      }
-    ],
-    "reasoning": "Updated overview section"
+    ...
   }
 }'
 
-## INCORRECT Tool Call Example (containing other text):
+## INCORRECT Tool Call Example (containing other text) ❌:
 User: 'Update the task specification with the details we have discussed. Also, fix the indentation.'
 Assistant: 'I will update the task specification. Here's the updated content:
 {
-  "tool_name": "edit_task_specification",
+  "tool_name": "<tool_name>",
   "arguments": {
-    "edits": [
-      {
-        "find": "# Overview\\nOld content here",
-        "replace": "# Overview\\nNew improved content"
-      }
-    ],
-    "reasoning": "Updated overview section"
+    ...
   }
 }'
 

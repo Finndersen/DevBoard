@@ -108,12 +108,9 @@ class ClaudeClient:
             custom_tool_names = []
 
         # Combine allowed_tools with custom tool names
-        final_allowed_tools = allowed_builtin_tools
+        final_allowed_tools = allowed_builtin_tools or []
         if custom_tool_names:
-            if allowed_builtin_tools:
-                final_allowed_tools = allowed_builtin_tools + custom_tool_names
-            else:
-                final_allowed_tools = custom_tool_names
+            final_allowed_tools += custom_tool_names
 
         # Initialize ClaudeAgentOptions directly
         self.options = ClaudeAgentOptions(
