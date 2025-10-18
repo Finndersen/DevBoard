@@ -45,6 +45,7 @@ async def get_conversation(
         engine=conversation.engine,
         model_id=conversation.model_id,
         is_active=conversation.is_active,
+        external_session_id=conversation.external_session_id,
         created_at=conversation.created_at,
     )
 

@@ -1,4 +1,4 @@
-import type { HighlightedChange } from '../utils/diffUtils'
+import type { HighlightedChange } from '../../utils/diffUtils'
 
 interface InlineChangeHighlighterProps {
   changes: HighlightedChange[]

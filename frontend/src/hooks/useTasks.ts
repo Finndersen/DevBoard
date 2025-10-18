@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api'
-import type { Task } from '../lib/api'
+import type { Task, TaskCreate } from '../lib/api'
 import { useApi, useMutation } from './useApi'
 
 export function useProjectTasks(projectId: number | string) {
@@ -11,10 +11,10 @@ export function useTask(id: number | string) {
 }
 
 export function useCreateTask() {
-  return useMutation((data: { 
-    projectId: number | string; 
-    task: Omit<Task, 'id' | 'project_id' | 'created_at' | 'updated_at'> 
-  }) => 
+  return useMutation((data: {
+    projectId: number | string;
+    task: TaskCreate
+  }) =>
     apiClient.createTask(data.projectId, data.task)
   )
 }

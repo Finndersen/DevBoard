@@ -18,15 +18,31 @@ describe('ApiClient', () => {
       {
         id: 1,
         name: 'Test Project 1',
-        specification: 'Project 1 specification',
+        specification: {
+          id: 1,
+          document_type: 'project_specification',
+          content: 'Project 1 specification',
+          content_hash: 'hash1',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
         description: 'A comprehensive testing platform for automated QA workflows and continuous integration',
+        default_conversation_id: null,
         created_at: '2024-01-01T00:00:00Z',
       },
       {
         id: 2,
         name: 'Test Project 2',
-        specification: 'Project 2 specification',
+        specification: {
+          id: 2,
+          document_type: 'project_specification',
+          content: 'Project 2 specification',
+          content_hash: 'hash2',
+          created_at: '2024-01-02T00:00:00Z',
+          updated_at: '2024-01-02T00:00:00Z',
+        },
         description: 'Mobile application for real-time collaboration and task management across distributed teams',
+        default_conversation_id: null,
         created_at: '2024-01-02T00:00:00Z',
       },
     ]
@@ -45,8 +61,16 @@ describe('ApiClient', () => {
     it('creates a new project', async () => {
       const newProject = {
         name: 'New Project',
-        specification: 'New project specification',
+        specification: {
+          id: 3,
+          document_type: 'project_specification',
+          content: 'New project specification',
+          content_hash: 'hash3',
+          created_at: '2024-01-03T00:00:00Z',
+          updated_at: '2024-01-03T00:00:00Z',
+        },
         description: 'Enterprise dashboard for analytics and business intelligence with real-time reporting capabilities',
+        default_conversation_id: null,
       }
 
       const createdProject: Project = {
@@ -466,14 +490,36 @@ describe('ApiClient', () => {
       server.use(
         http.post('*/api/projects', async ({ request }) => {
           capturedHeaders = request.headers
-          return HttpResponse.json({ id: 1, name: 'Test', specification: '', description: 'Test project for API validation and integration testing', created_at: '' })
+          return HttpResponse.json({
+            id: 1,
+            name: 'Test',
+            specification: {
+              id: 1,
+              document_type: 'project_specification',
+              content: '',
+              content_hash: 'hash1',
+              created_at: '2024-01-01T00:00:00Z',
+              updated_at: '2024-01-01T00:00:00Z',
+            },
+            description: 'Test project for API validation and integration testing',
+            default_conversation_id: null,
+            created_at: ''
+          })
         })
       )
 
       await apiClient.createProject({
         name: 'Test Project',
-        specification: 'Test specification',
+        specification: {
+          id: 1,
+          document_type: 'project_specification',
+          content: 'Test specification',
+          content_hash: 'hash1',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
         description: 'Comprehensive test project for validating API endpoints and data flow',
+        default_conversation_id: null,
       })
 
       expect(capturedHeaders?.get('Content-Type')).toBe('application/json')
@@ -544,14 +590,36 @@ describe('ApiClient', () => {
         http.post('*/api/projects', async ({ request }) => {
           capturedMethod = request.method
           capturedBody = await request.json()
-          return HttpResponse.json({ id: 1, name: 'Test', specification: '', description: 'Test project for API validation and integration testing', created_at: '' })
+          return HttpResponse.json({
+            id: 1,
+            name: 'Test',
+            specification: {
+              id: 1,
+              document_type: 'project_specification',
+              content: '',
+              content_hash: 'hash1',
+              created_at: '2024-01-01T00:00:00Z',
+              updated_at: '2024-01-01T00:00:00Z',
+            },
+            description: 'Test project for API validation and integration testing',
+            default_conversation_id: null,
+            created_at: ''
+          })
         })
       )
 
       const projectData = {
         name: 'Test Project',
-        specification: 'Test specification',
+        specification: {
+          id: 1,
+          document_type: 'project_specification',
+          content: 'Test specification',
+          content_hash: 'hash1',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
         description: 'Comprehensive test project for validating API endpoints and data flow',
+        default_conversation_id: null,
       }
 
       await apiClient.createProject(projectData)
@@ -567,7 +635,21 @@ describe('ApiClient', () => {
         http.patch('*/api/projects/1', async ({ request }) => {
           capturedMethod = request.method
           capturedBody = await request.json()
-          return HttpResponse.json({ id: 1, name: 'Updated', specification: '', description: 'Updated test project for API validation and integration testing', created_at: '' })
+          return HttpResponse.json({
+            id: 1,
+            name: 'Updated',
+            specification: {
+              id: 1,
+              document_type: 'project_specification',
+              content: '',
+              content_hash: 'hash1',
+              created_at: '2024-01-01T00:00:00Z',
+              updated_at: '2024-01-01T00:00:00Z',
+            },
+            description: 'Updated test project for API validation and integration testing',
+            default_conversation_id: null,
+            created_at: ''
+          })
         })
       )
 

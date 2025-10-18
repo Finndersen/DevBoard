@@ -116,13 +116,13 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
     }
   }
 
-  const formatValueForDisplay = (val: string | number | boolean | null | undefined, isSecret: boolean): string => {
+  const formatValueForDisplay = (val: unknown, isSecret: boolean): string => {
     if (val === null || val === undefined) {
       return ''
     }
-    
+
     const strValue = String(val)
-    
+
     if (isSecret && strValue.length > 8) {
       // Show first 4 and last 4 characters with **** in between
       return `${strValue.substring(0, 4)}****${strValue.slice(-4)}`
@@ -130,7 +130,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
       // For shorter secrets, show first few characters with ****
       return `${strValue.substring(0, Math.min(2, strValue.length))}****`
     }
-    
+
     return strValue
   }
 

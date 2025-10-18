@@ -138,6 +138,7 @@ export const handlers = [
         created_at: now,
         updated_at: now,
       },
+      default_conversation_id: null,
       created_at: now,
     }
     return HttpResponse.json(project)

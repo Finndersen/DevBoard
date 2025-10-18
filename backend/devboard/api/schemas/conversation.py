@@ -15,6 +15,7 @@ class ConversationResponse(BaseModel):
     engine: str
     model_id: str
     is_active: bool
+    external_session_id: str | None
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}

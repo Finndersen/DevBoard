@@ -219,6 +219,7 @@ export interface ConversationResponse {
   engine: string
   model_id: string
   is_active: boolean
+  external_session_id: string | null
   created_at: string
 }
 

@@ -24,6 +24,8 @@ interface ConversationChatProps {
   transitionMessage?: string
 }
 
+const MAX_TEXTAREA_ROWS = 10
+
 export default function ConversationChat({
   conversationId,
   placeholder = "Ask a question...",
@@ -40,6 +42,7 @@ export default function ConversationChat({
   const [approvalError, setApprovalError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   // Track removed pending message IDs locally to immediately hide them in UI
   // Use ref for synchronous updates without waiting for re-render
   const removedPendingIdsRef = useRef<Set<string>>(new Set())
@@ -69,7 +72,8 @@ export default function ConversationChat({
     // Filter out messages that have been marked as removed locally (check ref synchronously)
     const isRemoved = msg ? removedPendingIdsRef.current.has(msg.id) : false
     return msg && !isRemoved ? msg : null
-  }, [pendingMessages, renderCount])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMessages, renderCount]) // renderCount is intentionally used to force re-evaluation when we manually trigger renders
 
   // Helper to update current tab's activity status
   const updateCurrentTabStatus = useCallback((status: { type: 'idle' } | { type: 'new_messages'; count: number } | { type: 'agent_working' } | { type: 'action_required' }) => {
@@ -99,6 +103,27 @@ export default function ConversationChat({
   useEffect(() => {
     scrollToBottom()
   }, [messages, pendingMessage, isTransitioning])
+
+  // Auto-resize textarea based on content
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Reset height to calculate scrollHeight properly
+    textarea.style.height = 'auto'
+
+    // Calculate the number of lines based on line height
+    const lineHeight = parseInt(window.getComputedStyle(textarea).lineHeight)
+    const maxHeight = lineHeight * MAX_TEXTAREA_ROWS
+
+    // Set height to scrollHeight (content height) but cap at maxHeight
+    const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+    textarea.style.height = `${newHeight}px`
+  }, [])
+
+  useEffect(() => {
+    adjustTextareaHeight()
+  }, [newMessage, adjustTextareaHeight])
 
   const fetchChatHistory = useCallback(async () => {
     try {
@@ -142,6 +167,11 @@ export default function ConversationChat({
 
     const messageText = newMessage.trim()
     setNewMessage('') // Clear input immediately
+
+    // Reset textarea height after clearing
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
 
     // Add message to pending state
     const pendingMessageId = addPendingMessage(pendingKey, {
@@ -446,20 +476,28 @@ export default function ConversationChat({
 
       {/* Input */}
       <div className="border-t border-gray-200 dark:border-gray-600 p-4 flex-shrink-0">
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <input
-            type="text"
+        <form onSubmit={handleSendMessage} className="flex space-x-2 items-end">
+          <textarea
+            ref={textareaRef}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              // Submit on Enter (without Shift)
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSendMessage(e)
+              }
+            }}
             placeholder={placeholder}
             disabled={loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
-            className={`flex-1 ${standardChatInputClasses}`}
+            className={`flex-1 resize-none overflow-y-auto ${standardChatInputClasses}`}
+            rows={1}
           />
           <button
             type="submit"
             disabled={!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
             aria-label="Send message"
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
             <PaperAirplaneIcon className="w-4 h-4" />
           </button>

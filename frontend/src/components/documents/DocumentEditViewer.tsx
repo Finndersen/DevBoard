@@ -8,7 +8,7 @@ import {
   formatDiffStats,
   highlightUnifiedDiff
 } from '../../utils/diffUtils'
-import { getEditsFromToolArgs, getDiffPreviewFromToolArgs } from '../../utils/toolTypeUtils'
+import { getEditsFromToolArgs } from '../../utils/toolTypeUtils'
 import { ChangeComparison } from './InlineChangeHighlighter'
 
 interface DocumentEditViewerProps {
@@ -21,7 +21,6 @@ type ViewMode = 'cards' | 'unified'
 export default function DocumentEditViewer({ approval, className = '' }: DocumentEditViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const edits = getEditsFromToolArgs(approval)
-  const diffPreview = getDiffPreviewFromToolArgs(approval)
 
   const expandAllEdits = useCallback(() => {
     // Functionality removed - keeping for potential future use

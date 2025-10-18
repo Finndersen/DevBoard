@@ -58,7 +58,8 @@ export function getEditsFromToolArgs(approval: PendingApproval): DocumentEdit[] 
   if (!isEditTool(approval.tool_name) || !approval.tool_args) {
     return null
   }
-  return approval.tool_args.edits || null
+  const edits = approval.tool_args.edits
+  return (edits && Array.isArray(edits)) ? edits as DocumentEdit[] : null
 }
 
 /**
@@ -68,7 +69,8 @@ export function getContentFromToolArgs(approval: PendingApproval): string | null
   if (!isSetContentTool(approval.tool_name) || !approval.tool_args) {
     return null
   }
-  return approval.tool_args.content || null
+  const content = approval.tool_args.content
+  return typeof content === 'string' ? content : null
 }
 
 /**
@@ -78,7 +80,8 @@ export function getReasoningFromToolArgs(approval: PendingApproval): string | nu
   if (!approval.tool_args) {
     return null
   }
-  return approval.tool_args.reasoning || null
+  const reasoning = approval.tool_args.reasoning
+  return typeof reasoning === 'string' ? reasoning : null
 }
 
 /**
@@ -88,5 +91,6 @@ export function getDiffPreviewFromToolArgs(approval: PendingApproval): string | 
   if (!approval.tool_args) {
     return null
   }
-  return approval.tool_args.diff_preview || null
+  const diffPreview = approval.tool_args.diff_preview
+  return typeof diffPreview === 'string' ? diffPreview : null
 }

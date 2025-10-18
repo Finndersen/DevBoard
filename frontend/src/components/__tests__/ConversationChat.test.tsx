@@ -155,6 +155,50 @@ describe('ConversationChat', () => {
     })
   })
 
+  it('allows multi-line input with Shift+Enter but submits on Enter', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.post('*/api/conversations/1/messages', async ({ request }) => {
+        const { message } = await request.json() as { message: string }
+        return HttpResponse.json({
+          type: 'message',
+          message: {
+            text_content: `Got: ${message}`,
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          tool_requests: null
+        })
+      })
+    )
+
+    render(<ConversationChat conversationId={mockConversationId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByPlaceholderText(/ask a question/i)
+
+    // Type multi-line message with Shift+Enter
+    await user.type(textarea, 'Line 1{Shift>}{Enter}{/Shift}Line 2{Shift>}{Enter}{/Shift}Line 3')
+
+    // Verify multi-line content is in textarea
+    expect(textarea).toHaveValue('Line 1\nLine 2\nLine 3')
+
+    // Press Enter without Shift to submit
+    await user.type(textarea, '{Enter}')
+
+    // Should clear the input immediately
+    expect(textarea).toHaveValue('')
+
+    // Should send multi-line message and get response
+    await waitFor(() => {
+      expect(screen.getByText(/Got: Line 1.*Line 2.*Line 3/s)).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
   it('prevents sending empty messages', async () => {
     const user = userEvent.setup()
     
