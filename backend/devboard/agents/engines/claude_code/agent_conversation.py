@@ -190,6 +190,10 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         if session_msg.tool_results:
             return None
 
+        # Skip sidechain messages
+        if session_msg.is_sidechain:
+            return None
+
         # Get text content using the property
         text_content = session_msg.text_content
 

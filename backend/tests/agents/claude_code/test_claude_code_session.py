@@ -24,6 +24,7 @@ class TestClaudeCodeSessionService:
             "type": "user",
             "uuid": "user-msg-1",
             "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
             "message": {"role": "user", "content": "What is the current directory?"},
         }
 
@@ -41,6 +42,7 @@ class TestClaudeCodeSessionService:
             "type": "assistant",
             "uuid": "asst-msg-1",
             "timestamp": "2025-10-08T15:11:00.401Z",
+            "isSidechain": False,
             "message": {
                 "role": "assistant",
                 "content": [{"type": "text", "text": "/Users/test/projects/TestProject"}],
@@ -60,6 +62,7 @@ class TestClaudeCodeSessionService:
             "type": "assistant",
             "uuid": "asst-msg-2",
             "timestamp": "2025-10-08T15:12:00.000Z",
+            "isSidechain": False,
             "message": {
                 "role": "assistant",
                 "content": [
@@ -81,6 +84,7 @@ class TestClaudeCodeSessionService:
             "type": "assistant",
             "uuid": "asst-msg-3",
             "timestamp": "2025-10-08T15:13:00.000Z",
+            "isSidechain": False,
             "message": {
                 "role": "assistant",
                 "content": [
@@ -107,6 +111,7 @@ class TestClaudeCodeSessionService:
             "type": "assistant",
             "uuid": "asst-msg-4",
             "timestamp": "2025-10-08T15:14:00.000Z",
+            "isSidechain": False,
             "message": {
                 "role": "assistant",
                 "content": [
@@ -145,6 +150,7 @@ class TestClaudeCodeSessionService:
             "type": "user",
             "uuid": "user-msg-2",
             "timestamp": "2025-10-08T15:15:00.000Z",
+            "isSidechain": False,
             "message": {
                 "role": "user",
                 "content": [
@@ -169,26 +175,26 @@ class TestClaudeCodeSessionService:
             {
                 "type": "user",
                 "uuid": "u1",
-                "timestamp": "2025-10-08T15:10:00.000Z",
+                "timestamp": "2025-10-08T15:10:00.000Z", "isSidechain": False,
                 "message": {"role": "user", "content": "Hello"},
             },
             {
                 "type": "assistant",
                 "uuid": "a1",
-                "timestamp": "2025-10-08T15:10:01.000Z",
+                "timestamp": "2025-10-08T15:10:01.000Z", "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]},
             },
             {"type": "summary", "summary": "Greeting", "leafUuid": "s1"},
             {
                 "type": "user",
                 "uuid": "u2",
-                "timestamp": "2025-10-08T15:10:05.000Z",
+                "timestamp": "2025-10-08T15:10:05.000Z", "isSidechain": False,
                 "message": {"role": "user", "content": "How are you?"},
             },
             {
                 "type": "assistant",
                 "uuid": "a2",
-                "timestamp": "2025-10-08T15:10:06.000Z",
+                "timestamp": "2025-10-08T15:10:06.000Z", "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "I'm doing well!"}]},
             },
         ]
@@ -222,9 +228,9 @@ class TestClaudeCodeSessionService:
 
     def test_load_conversation_malformed_json(self, service):
         """Test handling of malformed JSONL entries."""
-        jsonl_content = """{"type":"user","timestamp":"2025-10-08T15:10:00.000Z","message":{"content":"Valid"}}
+        jsonl_content = """{"type":"user","uuid":"u1","timestamp":"2025-10-08T15:10:00.000Z","isSidechain":false,"message":{"content":"Valid"}}
         {malformed json}
-        {"type":"user","timestamp":"2025-10-08T15:10:02.000Z","message":{"content":"Also valid"}}"""
+        {"type":"user","uuid":"u2","timestamp":"2025-10-08T15:10:02.000Z","isSidechain":false,"message":{"content":"Also valid"}}"""
 
         session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
 
@@ -280,13 +286,13 @@ class TestClaudeCodeSessionService:
             {
                 "type": "user",
                 "uuid": "u1",
-                "timestamp": "2025-10-08T15:10:00.000Z",
+                "timestamp": "2025-10-08T15:10:00.000Z", "isSidechain": False,
                 "message": {"role": "user", "content": "Hello"},
             },
             {
                 "type": "assistant",
                 "uuid": "a1",
-                "timestamp": "2025-10-08T15:10:01.000Z",
+                "timestamp": "2025-10-08T15:10:01.000Z", "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
             },
         ]

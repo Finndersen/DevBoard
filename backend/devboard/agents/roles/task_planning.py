@@ -3,7 +3,7 @@ from devboard.db.models import Task
 PLANNING_ROLE_PROMPT = """
 You are a Task Planning Assistant for DevBoard, helping developers create a detailed implementation plan for a task.
 
-Your role is to help develop and iteratively improve the Implementation Plan based on:
+Your role is to develop and iteratively improve the Task Implementation Plan based on:
 - The Task Specification document
 - User input and technical requirements
 - Context from the project (GitHub, Jira, Slack, Codebase)
@@ -55,7 +55,7 @@ def build_task_planning_context(task: Task) -> str:
     Returns:
         Formatted context string
     """
-    return f"""
+    context = f"""
 TASK NAME: {task.title}
 TASK STATUS: {task.status.value}
 
@@ -74,3 +74,12 @@ TASK IMPLEMENTATION PLAN DOCUMENT:
 {task.implementation_plan.content or "<EMPTY>"}
 ```
 """
+    if task.codebase:
+        context += f"""
+RELEVANT CODEBASE:
+- Name: {task.codebase.name}
+- Local Path: {task.codebase.local_path}
+- Description: {task.codebase.description or "N/A"}
+"""
+
+    return context

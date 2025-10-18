@@ -10,52 +10,135 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import logfire
 
 from devboard.api.schemas.claude_code_todo import TodoItem
 
 
-@dataclass
-class TextBlock:
-    """Structure of a text content block in assistant messages.
+# TypedDict structures for JSONL entry types
+class CacheCreationDict(TypedDict):
+    """Cache creation statistics in usage data."""
 
-    This represents plain text content in Claude's response.
+    ephemeral_5m_input_tokens: int
+    ephemeral_1h_input_tokens: int
+
+
+class UsageDict(TypedDict):
+    """Token usage statistics in API response.
+
+    Core fields (input_tokens, output_tokens) are always present.
+    Caching-related fields are present when prompt caching is used.
     """
 
-    type: str  # Always "text"
-    text: str  # The text content
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: NotRequired[int]
+    cache_read_input_tokens: NotRequired[int]
+    cache_creation: NotRequired[CacheCreationDict]
+    service_tier: NotRequired[str]
 
 
-@dataclass
-class ToolUseBlock:
-    """Structure of a tool_use block in assistant messages.
+class TextBlockDict(TypedDict):
+    """Text content block in a message."""
 
-    This represents Claude's request to call a tool with specific arguments.
-    """
-
-    type: str  # Always "tool_use"
-    id: str  # Tool call ID (e.g., "toolu_0121WU3WtkV7WG4CNpPkqR7d")
-    name: str  # Tool name (e.g., "Bash", "Read", "Write")
-    input: dict[str, Any]  # Tool arguments/parameters
+    type: str  # "text"
+    text: str
 
 
-@dataclass
-class ToolResultBlock:
-    """Structure of a tool_result block in user messages.
+class ToolUseBlockDict(TypedDict):
+    """Tool use content block in assistant messages."""
 
-    This represents the result of a tool execution being returned to Claude.
-    """
-
-    type: str  # Always "tool_result"
-    tool_use_id: str  # Corresponding tool call ID
-    content: str | list[dict[str, Any]]  # Tool result content
-    is_error: bool  # Whether the tool execution failed
+    type: str  # "tool_use"
+    id: str
+    name: str
+    input: dict[str, Any]
 
 
-# Union type for all possible content blocks
-ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock
+class ToolResultBlockDict(TypedDict):
+    """Tool result content block in user messages."""
+
+    type: str  # "tool_result"
+    tool_use_id: str
+    content: str | list[dict[str, Any]]
+    is_error: NotRequired[bool]  # Optional - defaults to False
+
+
+# Union type for all content block types
+MessageContentDict = TextBlockDict | ToolUseBlockDict | ToolResultBlockDict
+
+
+class UserMessageDict(TypedDict):
+    """User message data structure."""
+
+    role: str  # "user"
+    content: str | list[ToolResultBlockDict]
+
+
+class AssistantMessageDict(TypedDict):
+    """Assistant message data structure (API response)."""
+
+    role: str  # "assistant"
+    content: list[TextBlockDict | ToolUseBlockDict]
+    model: str
+    id: str
+    type: str
+    stop_reason: str | None
+    stop_sequence: str | None
+    usage: UsageDict
+
+
+class ToolUseResultDict(TypedDict):
+    """Tool execution result metadata."""
+
+    stdout: str
+    stderr: str
+    interrupted: bool
+    isImage: bool
+
+
+class SummaryEntry(TypedDict):
+    """Summary entry in JSONL file."""
+
+    type: str  # "summary"
+    summary: str
+    leafUuid: str
+
+
+class BaseMessageEntry(TypedDict):
+    """Base fields common to both user and assistant message entries."""
+
+    type: str  # "user" or "assistant"
+    uuid: str
+    timestamp: str  # ISO format datetime
+    parentUuid: str | None
+    isSidechain: bool
+    userType: str
+    cwd: str
+    sessionId: str
+    version: str
+    gitBranch: str
+
+
+class UserEntry(BaseMessageEntry):
+    """User message entry in JSONL file."""
+
+    type: str  # "user"
+    message: UserMessageDict
+    toolUseResult: NotRequired[ToolUseResultDict]
+
+
+class AssistantEntry(BaseMessageEntry):
+    """Assistant message entry in JSONL file."""
+
+    type: str  # "assistant"
+    message: AssistantMessageDict
+    requestId: str
+
+
+# Union type for all JSONL entry types
+JSONLEntry = SummaryEntry | UserEntry | AssistantEntry
 
 
 class SessionMessageRole(StrEnum):
@@ -73,42 +156,55 @@ class SessionMessage:
     including tool calls and results that may be filtered out of
     conversation history but are useful for debugging and processing.
 
-    Content can be:
-    - str: For user messages (plain text)
-    - list[ContentBlock]: For assistant messages (list of text/tool blocks)
-    - list[ToolResultBlock]: For user messages with tool results
+    Content is always a list of MessageContentDict blocks:
+    - For user text messages: Single TextBlockDict with the message text
+    - For assistant messages: List of text blocks and/or tool use blocks
+    - For user tool results: List of ToolResultBlockDict blocks
     """
 
     uuid: str
     timestamp: datetime
     role: SessionMessageRole
-    content: str | list[ContentBlock]
-    tool_calls: list[ToolUseBlock] | None  # Tool use blocks if present
-    tool_results: list[ToolResultBlock] | None  # Tool result blocks if present
+    content: list[MessageContentDict]
     line_num: int  # Line number in the JSONL file (1-indexed)
+    is_sidechain: bool  # Whether this message is from a sidechain session
+
+    @property
+    def tool_calls(self) -> list[ToolUseBlockDict] | None:
+        """Extract tool use blocks from content.
+
+        Returns:
+            List of tool use blocks if present (assistant messages), None otherwise
+        """
+        if self.role != SessionMessageRole.ASSISTANT:
+            return None
+        tool_calls_list = [block for block in self.content if block.get("type") == "tool_use"]
+        return cast(list[ToolUseBlockDict], tool_calls_list) if tool_calls_list else None
+
+    @property
+    def tool_results(self) -> list[ToolResultBlockDict] | None:
+        """Extract tool result blocks from content.
+
+        Returns:
+            List of tool result blocks if present (user messages), None otherwise
+        """
+        if self.role != SessionMessageRole.USER:
+            return None
+        tool_results_list = [block for block in self.content if block.get("type") == "tool_result"]
+        return cast(list[ToolResultBlockDict], tool_results_list) if tool_results_list else None
 
     @property
     def text_content(self) -> str:
         """Extract text content from the message.
 
-        For user messages, content is already a string.
-        For assistant messages, content is a list of blocks - extract text blocks.
-
         Returns:
             Extracted text content, or empty string if no text content
         """
-        if isinstance(self.content, str):
-            # User message - content is already a string
-            return self.content or ""
-        elif isinstance(self.content, list):
-            # Assistant message or tool result - extract text blocks
-            text_parts = []
-            for block in self.content:
-                if isinstance(block, TextBlock):
-                    text_parts.append(block.text)
-            return "\n".join(text_parts)
-        else:
-            return ""
+        text_parts = []
+        for block in self.content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_parts.append(block["text"])
+        return "\n".join(text_parts)
 
 
 class ClaudeCodeSessionService:
@@ -200,6 +296,9 @@ class ClaudeCodeSessionService:
         This is a low-level method that returns full SessionMessage objects
         including tool calls, tool results, and all metadata.
 
+        Malformed JSONL entries (invalid JSON, missing required fields, or unexpected
+        data formats) are logged and skipped, allowing the rest of the session to be parsed.
+
         Args:
             session_id: The Claude Code session ID
 
@@ -208,7 +307,6 @@ class ClaudeCodeSessionService:
 
         Raises:
             FileNotFoundError: If Claude projects directory or session file doesn't exist
-            json.JSONDecodeError: If the JSONL file is malformed
             PermissionError: If unable to read the session file
         """
         session_file = self.find_session_file(session_id)
@@ -224,48 +322,13 @@ class ClaudeCodeSessionService:
                     message = self._parse_session_message(entry, line_num=line_num)
                     if message:
                         messages.append(message)
-                except json.JSONDecodeError as e:
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
                     logfire.warning(f"Skipping malformed JSONL entry at line {line_num}: {e}")
                     continue
 
         return messages
 
-    @staticmethod
-    def _parse_content_block(block_dict: dict[str, Any]) -> ContentBlock:
-        """Parse a content block dict into the appropriate dataclass.
-
-        Args:
-            block_dict: Dictionary representing a content block
-
-        Returns:
-            ContentBlock instance (TextBlock, ToolUseBlock, or ToolResultBlock)
-        """
-        block_type = block_dict.get("type")
-
-        if block_type == "text":
-            return TextBlock(
-                type=block_dict["type"],
-                text=block_dict["text"],
-            )
-        elif block_type == "tool_use":
-            return ToolUseBlock(
-                type=block_dict["type"],
-                id=block_dict["id"],
-                name=block_dict["name"],
-                input=block_dict["input"],
-            )
-        elif block_type == "tool_result":
-            return ToolResultBlock(
-                type=block_dict["type"],
-                tool_use_id=block_dict["tool_use_id"],
-                content=block_dict["content"],
-                is_error=block_dict.get("is_error", False),
-            )
-        else:
-            # Unknown block type - raise error or return a generic block
-            raise ValueError(f"Unknown content block type: {block_type}")
-
-    def _parse_session_message(self, entry: dict[str, Any], line_num: int) -> SessionMessage | None:
+    def _parse_session_message(self, entry: JSONLEntry, line_num: int) -> SessionMessage | None:
         """Parse a JSONL entry into a SessionMessage with full data.
 
         Args:
@@ -274,74 +337,35 @@ class ClaudeCodeSessionService:
 
         Returns:
             SessionMessage with complete data, or None if not a message type
+
+        Raises:
+            KeyError: If required fields are missing
+            ValueError: If message data has unexpected format
         """
-        msg_type = entry.get("type")
+        msg_type = entry["type"]
 
         # Only parse user and assistant messages
         if msg_type not in ("user", "assistant"):
             return None
 
-        uuid = entry.get("uuid", "")
-        timestamp = datetime.fromisoformat(entry["timestamp"])
-        message_data = entry.get("message", {})
+        # Extract content - required field
+        content_raw = entry["message"]["content"]
 
-        if msg_type == "user":
-            content = message_data.get("content")
-            # Check if it's a tool result (array format)
-            tool_results = None
-            parsed_content: str | list[ContentBlock] = content
+        # Convert string content to TextBlockDict for consistency
+        if isinstance(content_raw, str):
+            content = [TextBlockDict(type="text", text=content_raw)]
+        else:
+            # Validate and parse list content
+            content = content_raw
 
-            if isinstance(content, list):
-                # Parse all tool result blocks
-                tool_results_raw = [
-                    item for item in content if isinstance(item, dict) and item.get("type") == "tool_result"
-                ]
-                if tool_results_raw:
-                    # Convert to dataclass instances
-                    tool_results = [cast(ToolResultBlock, self._parse_content_block(item)) for item in tool_results_raw]
-                    # Assign as list[ContentBlock] (ToolResultBlock is a ContentBlock)
-                    parsed_content = cast(list[ContentBlock], tool_results)
-                else:
-                    parsed_content = ""
-
-            return SessionMessage(
-                uuid=uuid,
-                timestamp=timestamp,
-                role=SessionMessageRole.USER,
-                content=parsed_content,
-                tool_calls=None,
-                tool_results=tool_results,
-                line_num=line_num,
-            )
-
-        elif msg_type == "assistant":
-            content_raw = message_data.get("content", [])
-
-            # Parse all content blocks and extract tool calls
-            parsed_blocks: list[ContentBlock] = []
-            tool_calls: list[ToolUseBlock] | None = None
-
-            if isinstance(content_raw, list):
-                # Parse all content blocks into dataclass instances
-                for block_dict in content_raw:
-                    if isinstance(block_dict, dict):
-                        parsed_blocks.append(self._parse_content_block(block_dict))
-
-                # Extract tool calls from parsed blocks
-                tool_calls_list = [block for block in parsed_blocks if isinstance(block, ToolUseBlock)]
-                tool_calls = tool_calls_list if tool_calls_list else None
-
-            return SessionMessage(
-                uuid=uuid,
-                timestamp=timestamp,
-                role=SessionMessageRole.ASSISTANT,
-                content=parsed_blocks,
-                tool_calls=tool_calls,
-                tool_results=None,
-                line_num=line_num,
-            )
-
-        return None
+        return SessionMessage(
+            uuid=entry["uuid"],
+            timestamp=datetime.fromisoformat(entry["timestamp"]),
+            role=SessionMessageRole.USER if msg_type == "user" else SessionMessageRole.ASSISTANT,
+            content=content,
+            line_num=line_num,
+            is_sidechain=entry["isSidechain"],
+        )
 
     def find_main_session_todo_file(self, session_id: str) -> Path:
         """Find the main session's todo file.

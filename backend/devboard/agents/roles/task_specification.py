@@ -45,7 +45,7 @@ def build_task_specification_context(task: Task) -> str:
     Returns:
         Formatted context string
     """
-    return f"""
+    context = f"""
 TASK NAME: {task.title}
 TASK STATUS: {task.status.value}
 
@@ -59,3 +59,12 @@ TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
 {task.specification.content or "<EMPTY>"}
 ```
 """
+    if task.codebase:
+        context += f"""
+    RELEVANT CODEBASE:
+    - Name: {task.codebase.name}
+    - Local Path: {task.codebase.local_path}
+    - Description: {task.codebase.description or "N/A"}
+    """
+
+    return context

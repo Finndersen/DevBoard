@@ -48,7 +48,7 @@ def build_task_implementation_context(task: Task) -> str:
     return f"""
 TASK NAME: {task.title}
 TASK STATUS: {task.status.value}
-CODEBASE:
+RELEVANT CODEBASE:
 - Name: {task.codebase.name}
 - Local Path: {task.codebase.local_path}
 - Description: {task.codebase.description or "N/A"}
