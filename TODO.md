@@ -16,7 +16,7 @@
 - Change implementation of Project Specification toa more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
 - streaming: Initially just stream final result content using agent.run_stream(), then can stream tool calls etc as well as final content using agent.run_stream_events() (for PydanticAI)
 - Handle CladueCOde error responses like: API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4.5"},"request_id":"req_011CU9vQ1DSP73cZHsQ62QNL"}
-
+- Do not clear conversation between Specification and Planning if same agent engine
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
