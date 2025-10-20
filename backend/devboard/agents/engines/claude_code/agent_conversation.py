@@ -1,16 +1,24 @@
 """Claude Code agent conversation service with virtual tool calling."""
 
 import datetime
-import re
 
 import logfire
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
-from mcp.server.fastmcp.exceptions import ValidationError
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent, MessageResponse, VirtualToolRequests
-from devboard.agents.engines.claude_code.message_parser import ClaudeMessageType, ClaudeResponseParser
-from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService, SessionMessage, SessionMessageRole
+from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.message_parser import (
+    ClaudeResponseParser,
+    TextResponse,
+    VirtualToolCall,
+    VirtualToolRequests,
+    VirtualToolResult,
+)
+from devboard.agents.engines.claude_code.session import (
+    ClaudeCodeSessionService,
+    SessionMessage,
+    SessionMessageRole,
+)
 from devboard.api.schemas.agent_conversation import (
     ConversationEvent,
     ConversationMessage,
@@ -153,18 +161,14 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                                 )
                             )
 
-            elif isinstance(event, MessageResponse):
-                # Final message response - convert to ConversationMessage
-                # Filter out validation errors and virtual tool calls
-                message_type = ClaudeResponseParser.detect_message_type(event.content)
-                if message_type == ClaudeMessageType.MESSAGE:
-                    events.append(
-                        ConversationMessage(
-                            role=MessageRole.AGENT,
-                            text_content=event.content,
-                            timestamp=timestamp,
-                        )
+            elif isinstance(event, TextResponse):
+                events.append(
+                    ConversationMessage(
+                        role=MessageRole.AGENT,
+                        text_content=event.content,
+                        timestamp=timestamp,
                     )
+                )
 
             elif isinstance(event, VirtualToolRequests):
                 # Virtual tool call requests - convert to ToolCallRequest events
@@ -235,159 +239,78 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                 block_type = content_block["type"]
 
                 if block_type == "text":
-                    # Text content - check message type to determine how to handle
-                    # Type guard: we know this is a TextBlockDict
-                    if "text" in content_block:
-                        text_content: str = content_block["text"]  # type: ignore[typeddict-item]
-                        message_type = ClaudeResponseParser.detect_message_type(text_content)
+                    # Text content - parse to determine message type
+                    text_content: str = content_block["text"]
 
-                        if message_type == ClaudeMessageType.MESSAGE:
-                            # Standard text message
-                            conv_role = (
-                                MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
+                    # Parse the message to get its type
+                    parsed = ClaudeResponseParser.parse_message(text_content)
+
+                    if isinstance(parsed, TextResponse):
+                        # Standard text message
+                        conv_role = (
+                            MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
+                        )
+                        events.append(
+                            ConversationMessage(
+                                role=conv_role,
+                                text_content=parsed.content,
+                                timestamp=session_msg.timestamp,
                             )
+                        )
 
-                            events.append(
-                                ConversationMessage(
-                                    role=conv_role,
-                                    text_content=text_content,
-                                    timestamp=session_msg.timestamp,
-                                )
-                            )
-
-                        elif message_type == ClaudeMessageType.TOOL_CALL:
-                            # Virtual tool call - parse and convert to ToolCall event
-                            try:
-                                parsed = ClaudeResponseParser.parse_message(text_content)
-                                if isinstance(parsed, str):
-                                    raise ValueError("Expected VirtualToolCall data for TOOL_CALL message type")
-
-                                tool_call = ToolCall(
-                                    tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools
-                                    tool_name=parsed.tool_name,
-                                    tool_args=parsed.arguments,
-                                    timestamp=session_msg.timestamp,
-                                )
-                            except ValidationError:
-                                tool_call = ToolCall(
-                                    tool_call_id="invalid_tool_call",
-                                    tool_name="invalid_tool_call",
-                                    tool_args=None,
-                                    timestamp=session_msg.timestamp,
-                                )
-
-                            events.append(tool_call)
-
-                        elif message_type == ClaudeMessageType.TOOL_RESULT:
-                            # Tool result - convert to ToolResult event
-                            # Extract tool name and result content
-                            tool_info = ClaudeResponseParser.extract_tool_result_info(text_content)
-                            if not tool_info:
-                                raise ValueError("Failed to extract tool result information from text content")
-                            tool_name, result_text = tool_info
-                            events.append(
-                                ToolResult(
-                                    tool_call_id=tool_name,  # Use tool_name as ID for virtual tools
-                                    result_content=result_text,
-                                    is_error=False,
-                                    timestamp=session_msg.timestamp,
-                                )
-                            )
-                        elif message_type == ClaudeMessageType.VALIDATION_ERROR:
-                            # Validation error - extract tool name (if present) and error message
-                            error_info = ClaudeResponseParser.extract_validation_error_info(text_content)
-                            if error_info:
-                                tool_name_from_error, error_text = error_info
-                                # Use tool_name from error tag if present, otherwise use generic ID
-                                tool_call_id = tool_name_from_error if tool_name_from_error else "invalid_tool_call"
-                                events.append(
-                                    ToolResult(
-                                        tool_call_id=tool_call_id,
-                                        result_content=error_text,
-                                        is_error=True,
-                                        timestamp=session_msg.timestamp,
-                                    )
-                                )
-
-                elif block_type == "tool_use":
-                    # Type guard: we know this is a ToolUseBlockDict
-                    if "id" in content_block and "name" in content_block and "input" in content_block:
+                    elif isinstance(parsed, VirtualToolCall):
+                        # Virtual tool call - convert to ToolCall event (for both invalid and valid calls)
                         events.append(
                             ToolCall(
-                                tool_call_id=content_block["id"],  # type: ignore[typeddict-item]
-                                tool_name=content_block["name"],  # type: ignore[typeddict-item]
-                                tool_args=content_block["input"],  # type: ignore[typeddict-item]
+                                tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools
+                                tool_name=parsed.tool_name,
+                                tool_args=parsed.arguments,
                                 timestamp=session_msg.timestamp,
                             )
                         )
 
-                elif block_type == "tool_result":
-                    # Type guard: we know this is a ToolResultBlockDict
-                    if "tool_use_id" in content_block and "content" in content_block:
-                        result_content = content_block["content"]  # type: ignore[typeddict-item]
-
-                        # Convert content to string if it's a list of dicts
-                        if isinstance(result_content, list):
-                            # Join text blocks from the content
-                            text_parts = []
-                            for item in result_content:
-                                if item.get("type") == "text":
-                                    text_parts.append(item.get("text", ""))
-                            result_str = "\n".join(text_parts)
-                        else:
-                            result_str = str(result_content)
-
+                    elif isinstance(parsed, VirtualToolResult):
+                        # Tool result - convert to ToolResult event
                         events.append(
                             ToolResult(
-                                tool_call_id=content_block["tool_use_id"],  # type: ignore[typeddict-item]
-                                result_content=result_str,
-                                is_error=content_block.get("is_error", False),
+                                tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools
+                                result_content=parsed.content,
+                                is_error=not parsed.successful,
                                 timestamp=session_msg.timestamp,
                             )
                         )
 
+                elif block_type == "tool_use":
+                    events.append(
+                        ToolCall(
+                            tool_call_id=content_block["id"],
+                            tool_name=content_block["name"],
+                            tool_args=content_block["input"],
+                            timestamp=session_msg.timestamp,
+                        )
+                    )
+
+                elif block_type == "tool_result":
+                    result_content = content_block["content"]
+
+                    # Convert content to string if it's a list of dicts
+                    if isinstance(result_content, list):
+                        # Join text blocks from the content
+                        text_parts = []
+                        for item in result_content:
+                            if item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                        result_str = "\n".join(text_parts)
+                    else:
+                        result_str = str(result_content)
+
+                    events.append(
+                        ToolResult(
+                            tool_call_id=content_block["tool_use_id"],
+                            result_content=result_str,
+                            is_error=content_block.get("is_error", False),
+                            timestamp=session_msg.timestamp,
+                        )
+                    )
+
         return events
-
-    def _session_message_to_conversation(self, session_msg: SessionMessage) -> ConversationMessage | None:
-        """Convert a SessionMessage to a ConversationMessage with filtering.
-
-        Filters out:
-        - Messages with <validation_error> tags (validation errors from agent)
-        - Messages with <tool_call_result> tags (tool execution results)
-        - Tool result messages (user messages with tool_result blocks)
-        - Assistant messages with only tool calls (no text content)
-
-        Args:
-            session_msg: SessionMessage to convert
-
-        Returns:
-            ConversationMessage if message should be included, None if filtered out
-        """
-        # Skip tool result messages
-        if session_msg.tool_results:
-            return None
-
-        # Skip sidechain messages
-        if session_msg.is_sidechain:
-            return None
-
-        # Get text content using the property
-        text_content = session_msg.text_content
-
-        # Skip if no text content (only tool calls for assistant messages)
-        if not text_content:
-            return None
-
-        # Only include standard text messages (Not virtual tool calls or validation errors etc)
-        message_type = ClaudeResponseParser.detect_message_type(text_content)
-        if message_type != ClaudeMessageType.MESSAGE:
-            return None
-
-        # Determine role for ConversationMessage
-        conv_role = MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
-
-        return ConversationMessage(
-            role=conv_role,
-            text_content=text_content,
-            timestamp=session_msg.timestamp,
-        )

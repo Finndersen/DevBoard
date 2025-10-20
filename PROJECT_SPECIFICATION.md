@@ -356,14 +356,26 @@ Agents collaborate with users through **structured document editing**:
 - Atomic application of approved changes
 - Conflict detection and resolution
 
-#### Conversation Persistence
-All agent interactions are **preserved across sessions** using a unified conversation system:
+#### Conversation Persistence & Event-Based Architecture
+All agent interactions are **preserved across sessions** using a unified event-based conversation system:
 - **Polymorphic Conversations**: Each project and task has a dedicated conversation that persists agent interactions
+- **Event-Driven Communication**: Agents return structured event streams rather than single responses, providing complete visibility into agent operations
+- **Multiple Event Types**: Conversations contain diverse events including:
+  - **Text Messages**: User prompts and agent responses with conversational content
+  - **Tool Calls**: Agent requests to execute specific tools with structured arguments
+  - **Tool Results**: Execution results from approved tool calls including success/error states
+  - **Tool Call Requests**: Virtual tool calls requiring user approval before execution
 - **Sub-Conversations**: Support for agent-to-agent conversations for internal operations (e.g., codebase investigation)
-- **Message Persistence**: Full conversation history with both raw agent messages and user-friendly text content
-- **Context-Aware Responses**: Agent responses informed by complete conversation history
+- **Complete Event History**: Full conversation timeline with all events (messages, tool interactions) preserved and displayed chronologically
+- **Context-Aware Responses**: Agent responses informed by complete conversation history including tool execution context
 - **State Transitions**: Task and project state changes tracked through conversation flows
-- **Unified API**: Single `/conversations/{id}/messages` endpoint for all agent communication
+- **Unified API**: Single `/conversations/{id}/messages` endpoint returns event lists for all agent communication
+
+**User Experience Benefits**:
+- **Transparency**: Users see complete agent workflow including tool usage and execution results
+- **Debugging**: Tool call arguments and results visible for understanding agent behavior
+- **Progress Tracking**: Real-time visibility into agent operations as events stream in
+- **Contextual Understanding**: Tool interactions provide context for agent responses
 
 ## User Experience Design
 
@@ -452,14 +464,25 @@ The **Home view** serves as the central command center displaying all projects a
 **Project Detail View**: Comprehensive project management interface
 - Tabbed interface for Board, Editor (specification), and Settings
 - Task list with status filtering and quick creation
-- Agent conversation panel with project context
+- Agent conversation panel with project context displaying event timeline
 - External resource links and integration status
 
 **Task Detail View**: Focused task development interface
 - Specification and implementation plan editors
 - State-driven agent panels (different agents per task state)
 - External link management (Jira, GitHub, etc.)
-- Real-time collaboration with AI agents
+- Real-time collaboration with AI agents showing complete event streams
+
+**Agent Conversation Display**: Event-based chat interface
+- **Text Messages**: Standard chat bubbles for user/agent messages with timestamps
+- **Tool Call Panels**: Expandable cards showing tool invocations with visual status indicators
+  - Collapsed state displays tool name, status icon (running/complete/error), and call timestamp in header
+  - Expanded state reveals tool arguments (JSON format) and execution results
+  - Status indicators: Animated spinner for running tools, checkmark for success, X icon for errors
+  - Timestamps: Call time in header, "Returned:" timestamp for results
+  - Text selection enabled for arguments and results for easy copying
+- **Event Timeline**: Chronological display of all conversation events interleaved naturally
+- **Real-Time Updates**: Events appear progressively as agents stream responses
 
 **Settings View**: Unified configuration management
 - Integration setup and testing

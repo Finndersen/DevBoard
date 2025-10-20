@@ -172,6 +172,7 @@ class TestConversationsRouter:
                 ModelResponse(parts=[tool_call_part]),
             ]
         )
+
         # Override the side_effect to return our tool request result
         async def tool_request_stream(**kwargs):
             from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent

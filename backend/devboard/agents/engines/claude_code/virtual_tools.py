@@ -9,13 +9,27 @@ tool system and do not require virtual tool calling.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
 
 from devboard.api.schemas import DocumentEdit
 from devboard.services.document_editor import DocumentEditorService
+
+
+class ToolCallError(Exception):
+    """Exception raised when a virtual tool execution fails.
+
+    This exception should be raised by VirtualTool.execute() methods when
+    tool execution fails for any reason (validation errors, operation failures,
+    resource issues, etc.). The error message will be returned to the agent
+    as a failed tool result.
+
+    Example:
+        raise ToolCallError("Failed to update document: file not found")
+    """
+
+    pass
 
 
 class EditDocumentArgs(BaseModel):
@@ -30,23 +44,6 @@ class SetContentArgs(BaseModel):
 
     content: str = Field(description="The complete content to set for the document")
     reasoning: str | None = Field(default=None, description="Optional explanation of the content")
-
-
-class VirtualToolCall(BaseModel):
-    """Represents a single virtual tool call request from Claude.
-
-    Note: tool_name serves as the tool_call_id since only one tool call
-    is allowed at a time. The backend uses tool_name as the identifier.
-    """
-
-    tool_name: str = Field(description="Name of the tool to call")
-    arguments: dict[str, Any] = Field(description="Arguments for the tool")
-
-
-class VirtualToolRequests(BaseModel):
-    """Container for virtual tool call requests."""
-
-    calls: list[VirtualToolCall]
 
 
 # Tool response format instructions for system prompts
@@ -138,10 +135,10 @@ class VirtualTool(ABC):
             arguments: Raw arguments dict from tool call
 
         Returns:
-            Result message string
+            Result message string on success
 
         Raises:
-            ValueError: If execution fails
+            ToolCallError: If execution fails for any reason (validation, operation failure, etc.)
         """
         pass
 
@@ -226,19 +223,22 @@ class EditDocumentTool(VirtualTool):
             arguments: Raw tool arguments dict with 'edits' and optional 'reasoning'
 
         Returns:
-            Success message or error details
+            Success message
+
+        Raises:
+            ToolCallError: If arguments are invalid or edit operation fails
         """
         # Validate arguments using Pydantic model
         try:
             args = self.args_model.model_validate(arguments)
         except ValidationError as e:
-            return f"Error: Invalid arguments: {e}"
+            raise ToolCallError(f"Invalid arguments: {e}") from e
 
         # Apply edits
         edit_result = self.document_editor.apply_edits(self.document.content, args.edits)
 
         if not edit_result.success:
-            return f"Failed to apply edits: {'; '.join(edit_result.errors)}"
+            raise ToolCallError(f"Failed to apply edits: {'; '.join(edit_result.errors)}")
 
         # Update document
         self.document_repo.update_content(self.document, edit_result.content)
@@ -304,17 +304,20 @@ class SetDocumentContentTool(VirtualTool):
             arguments: Raw tool arguments dict with 'content' and optional 'reasoning'
 
         Returns:
-            Success message or error details
+            Success message
+
+        Raises:
+            ToolCallError: If arguments are invalid or content is empty
         """
         # Validate arguments using Pydantic model
         try:
             args = self.args_model.model_validate(arguments)
         except Exception as e:
-            return f"Error: Invalid arguments: {e}"
+            raise ToolCallError(f"Invalid arguments: {e}") from e
 
         # Validate content not empty
         if not args.content.strip():
-            return "Error: Content cannot be empty."
+            raise ToolCallError("Content cannot be empty.")
 
         # Update document
         self.document_repo.update_content(self.document, args.content)

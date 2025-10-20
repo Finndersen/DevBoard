@@ -367,7 +367,7 @@ npm run type-check      # TypeScript compilation check
 ### Frontend
 -   **UI Component Library (`frontend/src/components/ui`)**: Standardized, reusable UI components with consistent theming, variants, and error handling. Includes Button, Card, Input, Modal, StatusBadge, and form components.
 -   **Layout Components (`frontend/src/components/layout`)**: Application shell and navigation components including AppShell, TabBar, Tab (with activity indicators), TopBar, NavigationMenu, and Layout wrapper.
--   **Chat Components (`frontend/src/components/chat`)**: Agent conversation system with AgentChat wrapper, ConversationChat core implementation, message display components (ConversationMessage, PendingMessage), and AgentReasoning display.
+-   **Chat Components (`frontend/src/components/chat`)**: Event-based agent conversation system rendering `list[ConversationEvent]` timelines. Includes AgentChat wrapper, ConversationChat core implementation with event type discrimination, message display components (ConversationMessage, PendingMessage), ToolCallDisplay for expandable tool panels with arguments/results, and AgentReasoning display. Uses TypeScript type guards for type-safe event rendering.
 -   **Approval System (`frontend/src/components/approvals`)**: Hierarchical tool approval architecture with generic approval UI (`approvals/common/`) for PendingApprovalsList and ApprovalActions, and document-specific handling (`approvals/documents/`) for DocumentEditApproval and DocumentApprovalModal.
 -   **Document Components (`frontend/src/components/documents`)**: Document viewing and editing with DocumentEditViewer (diff viewer with cards/unified modes), DocumentContentViewer, DocumentDiffModal, and InlineChangeHighlighter.
 -   **Configuration Components (`frontend/src/components/configuration`)**: Settings UI with ConfigurationForm, ConfigurationField, list views, and AgentModelSelector for agent configuration management.
@@ -447,17 +447,23 @@ The backend exposes a RESTful API with the following main endpoint categories:
 ### Conversations API (`/api/conversations`)
 **Unified conversation endpoints for all entity types (projects, tasks, codebases)**
 
--   `GET /api/conversations/{conversation_id}/messages`: Retrieve conversation message history.
--   `POST /api/conversations/{conversation_id}/messages`: Send a message to the agent.
--   `POST /api/conversations/{conversation_id}/approve-tools`: Approve or deny tool execution requests.
+-   `GET /api/conversations/{conversation_id}/messages`: Retrieve conversation event history as chronological list.
+-   `POST /api/conversations/{conversation_id}/messages`: Send a message to the agent, returns list of new events generated.
+-   `POST /api/conversations/{conversation_id}/approve-tools`: Approve or deny tool execution requests, returns list of result events.
 -   `DELETE /api/conversations/{conversation_id}/messages`: Clear all messages in a conversation.
 
 **Request/Response Schemas (Pydantic)**:
 -   `ChatRequest`: `message` (str)
--   `ToolApprovalRequest`: `approvals` (dict[str, bool])
--   `PromptResponse`: `type` (MESSAGE | TOOL_REQUEST), `message` (str, optional), `tool_requests` (list, optional)
--   `ConversationMessage`: `id` (int), `role` (str), `text_content` (str), `timestamp` (datetime)
+-   `ToolApprovalRequest`: `approvals` (dict[str, ToolApprovalDecision])
+-   `ConversationEvent`: Discriminated union base class with `event_type` field
+  - `ConversationMessage`: `event_type="text_message"`, `role`, `text_content`, `timestamp`
+  - `ToolCall`: `event_type="tool_call"`, `tool_call_id`, `tool_name`, `tool_args`, `timestamp`
+  - `ToolResult`: `event_type="tool_result"`, `tool_call_id`, `result_content`, `is_error`, `timestamp`
+  - `ToolCallRequest`: `event_type="tool_call_request"`, `tool_call_id`, `tool_name`, `tool_args`, `timestamp`
 -   `DeleteResponse`: `message` (str), `success` (bool)
+
+**Event-Based Response Pattern**:
+All conversation mutation endpoints (`POST /messages`, `POST /approve-tools`) return `list[ConversationEvent]` containing all new events generated during agent execution. This includes the agent's text response plus any tool calls, tool results, or approval requests created during processing. Frontend receives complete event timeline enabling immediate display of all agent activity without additional API calls.
 
 ### Other Routers
 -   `/api/settings`: For managing application settings (specific endpoints not detailed here).
@@ -670,23 +676,27 @@ The virtual tool calling pattern enables Claude Code agents to request user appr
 - **Tool Execution**: Abstract `execute(args)` method implemented by concrete tool classes
 - **Type Safety**: Pydantic models ensure runtime type checking and validation
 
-**VirtualToolCall Schema (`devboard/agents/claude_code/virtual_tools.py`)**:
-- Pydantic model defining structure: `tool_name` (string) and `arguments` (dict)
-- Used for parsing JSON responses from agent into validated tool call objects
-- Enables automatic validation of tool request structure
+**Message Type Models (`devboard/agents/claude_code/virtual_tools.py`)**:
+Pydantic models representing different message types returned by `parse_message()`:
+- **TextMessage**: Regular text message with `content` field
+- **VirtualToolCall**: Validated tool call request with `tool_name` and `arguments` fields
+- **VirtualToolResult**: Tool execution result with `tool_name` and `result_content` (parsed from XML markers)
+- **VirtualToolError**: Validation/execution error with `tool_name`, `error_message`, and `error_type` (parsed from XML markers)
 
 **VirtualToolRequests Response Type (`devboard/agents/claude_code/virtual_tools.py`)**:
-- Container for tool approval requests: list of `VirtualToolCall` instances plus `session_id`
+- Container for tool approval requests: list of `VirtualToolCall` instances
 - Returned by agent.run() when virtual tool call detected in response
 - Signals to conversation service that user approval workflow needed
 
 **ClaudeResponseParser (`devboard/agents/claude_code/message_parser.py`)**:
 Centralized message parsing with XML marker support:
 - **JSON Extraction**: `extract_json()` supports plain JSON and code block formats (```json ... ```)
-- **Message Type Detection**: `detect_message_type()` classifies as MESSAGE, TOOL_CALL, INVALID_TOOL_CALL, VALIDATION_ERROR, or TOOL_RESULT
-- **Unified Parsing**: `parse_message()` returns either text string or VirtualToolCall with validation
+- **Unified Parsing**: `parse_message()` returns typed message objects: `TextMessage`, `VirtualToolCall`, `VirtualToolResult`, or `VirtualToolError`
+  - Detects XML markers for tool results and validation errors
+  - Parses JSON for virtual tool calls with Pydantic validation
+  - Returns TextMessage for regular text content
+- **Type-Safe Parsing**: Message types are Pydantic models that can be differentiated using `isinstance()` checks
 - **XML Markers**: Recognizes `<validation_error>`, `<tool_call_result tool_name="...">` for internal communication
-- **Conversation Filtering**: `should_include_in_conversation()` determines visibility (filters internal messages)
 
 **Claude Code Session Service (`devboard/agents/claude_code/session.py`)**:
 Service for reading and parsing Claude Code session history from JSONL files:
@@ -718,7 +728,7 @@ Specialized conversation service for Claude Code agents:
 - **Session Filtering**: `_session_message_to_conversation()` converts SessionMessage with filtering
   - Filters tool results, validation errors, and tool-only messages
   - Extracts text content using `text_content` property
-  - Uses `ClaudeResponseParser.should_include_in_conversation()` for visibility checks
+  - Uses `ClaudeResponseParser.parse_message()` with `isinstance()` checks to filter by message type
 - **Unified Response Handling**: `_run_agent_and_convert_response()` handles both messages and tool requests
   - Runs agent with current session_id
   - Updates session_id if changed (e.g., first run creates new session)
@@ -743,7 +753,46 @@ Specialized conversation service for Claude Code agents:
 #### Agent Conversation Service Implementation
 
 **AgentConversationService (`devboard/services/agent_conversation.py`)**:
-Central orchestration service managing agent conversations with persistence and tool approval workflows. Constructor takes `conversation_id` as first parameter, eliminating need to pass it to each method call. Key methods include `send_message(message)` for user prompts, `process_tool_approvals(approvals)` for deferred tool execution, `store_new_messages(messages)` for persistence, and `clear_messages()` for conversation history deletion. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Automatically detects and cleans up pending tool calls when user sends new message instead of approving tools. Integrates with unified `ConversationRepository` and PydanticAI framework for structured agent interactions.
+Central orchestration service managing agent conversations with persistence and tool approval workflows. Constructor takes `conversation_id` as first parameter, eliminating need to pass it to each method call. Key methods include `send_message(message)` for user prompts (returns `list[ConversationEvent]`), `process_tool_approvals(approvals)` for deferred tool execution (returns `list[ConversationEvent]`), `store_new_messages(messages)` for persistence, and `clear_messages()` for conversation history deletion. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Automatically detects and cleans up pending tool calls when user sends new message instead of approving tools. Integrates with unified `ConversationRepository` and PydanticAI framework for structured agent interactions.
+
+**Event-Based Response Architecture**:
+Agent methods return `list[ConversationEvent]` instead of single responses, providing complete conversation timeline. Event lists include all new events generated during agent execution: text messages, tool calls, tool results, and tool approval requests. Events are generated during streaming from agent execution, with immediate conversion from SDK messages (AssistantMessage, UserMessage) to ConversationEvent types. This architecture enables transparent agent operation visibility and real-time progress tracking.
+
+#### Conversation Event System
+
+**ConversationEvent Types (`devboard/api/schemas/agent_conversation.py`)**:
+Polymorphic event system using Pydantic discriminated unions for type-safe event handling. Base `ConversationEvent` class with `event_type` discriminator field enabling automatic type resolution. Concrete event types include:
+
+**ConversationMessage**:
+- **Fields**: `event_type="text_message"`, `role` (USER/AGENT), `text_content`, `timestamp`
+- **Purpose**: Standard conversational messages from user or agent
+- **Display**: Rendered as chat bubbles in conversation interface
+
+**ToolCall**:
+- **Fields**: `event_type="tool_call"`, `tool_call_id`, `tool_name`, `tool_args` (dict), `timestamp`
+- **Purpose**: Agent's request to execute a tool (from AssistantMessage ToolUseBlock)
+- **Display**: Expandable tool call panel with arguments and status indicator
+- **Matching**: Paired with ToolResult by tool_call_id for chronological result display
+
+**ToolResult**:
+- **Fields**: `event_type="tool_result"`, `tool_call_id`, `result_content` (string), `is_error` (bool), `timestamp`
+- **Purpose**: Execution result from completed tool call (from UserMessage ToolResultBlock)
+- **Display**: Shown in tool call panel's result section with success/error styling
+- **Result Matching**: Frontend searches forward from ToolCall position to find matching ToolResult, supporting non-unique tool_call_ids for virtual tools
+
+**ToolCallRequest**:
+- **Fields**: `event_type="tool_call_request"`, `tool_call_id`, `tool_name`, `tool_args` (dict), `timestamp`
+- **Purpose**: Virtual tool call requiring user approval before execution
+- **Display**: Triggers approval workflow UI with approve/deny actions
+
+**Event Stream Generation**:
+Agent conversation services convert agent SDK messages to ConversationEvent objects during streaming. `_handle_agent_execution()` iterates through agent.stream_events(), extracting:
+- `AssistantMessage` content blocks → ToolCall events (from ToolUseBlock)
+- `UserMessage` content blocks → ToolResult events (from ToolResultBlock)
+- `MessageResponse` content → ConversationMessage events (filtered by message type)
+- `VirtualToolRequests` → ToolCallRequest events (for approval workflow)
+
+Session message loading (`get_conversation_messages()`) converts stored SessionMessage objects to ConversationEvent timeline including text blocks, tool_use blocks, and tool_result blocks with appropriate event type classification.
 
 #### Context Assembly Implementation
 
@@ -1186,6 +1235,49 @@ HTTP middleware adding request context including unique request IDs, timing info
 ### UI Component Library Architecture
 
 The DevBoard frontend implements a **comprehensive design system** with reusable, theme-aware components that provide consistent user experience across all views.
+
+#### Event-Based Conversation UI
+
+**ConversationChat Component (`frontend/src/components/chat/ConversationChat.tsx`)**:
+Core chat implementation rendering event-based conversation timeline. Receives `list[ConversationEvent]` from API and renders each event with appropriate component based on event_type discriminator. Implements chronological event ordering with interleaved messages and tool interactions. Uses TypeScript type guards (`message.event_type === 'tool_call'`) for type-safe event handling and component selection.
+
+**Event Rendering Logic**:
+Iterates through conversation events, mapping each to appropriate display component:
+- `event_type="text_message"` → ConversationMessage component (chat bubble)
+- `event_type="tool_call"` → ToolCallDisplay component (expandable panel)
+- `event_type="tool_result"` → Matched to parent ToolCall for inline result display
+- `event_type="tool_call_request"` → Tool approval UI (separate approval workflow)
+
+**Tool Call/Result Matching**:
+`findToolResult(toolCallId, toolCallIndex)` helper searches forward from ToolCall position to find next matching ToolResult. Forward search ensures correct pairing even when same tool called multiple times (non-unique tool_call_ids for virtual tools). Passes found ToolResult to ToolCallDisplay for integrated display of call + result.
+
+**ToolCallDisplay Component (`frontend/src/components/chat/ToolCallDisplay.tsx`)**:
+Expandable card displaying tool invocation with arguments, execution status, and results. Receives `toolCall` (ToolCall event) and optional `toolResult` (ToolResult event) props.
+
+**Collapsed State Display**:
+- Header shows tool icon, tool name, status indicator, call timestamp, and expand/collapse chevron
+- Status indicators: Animated spinner (running), checkmark (success), X icon (error)
+- Status determined by: error if `toolResult?.is_error`, complete if `toolResult` exists, running otherwise
+- Call timestamp displayed in header without "Called:" label for compact view
+- Color-coded border/background based on status (blue=running, green=success, red=error)
+
+**Expanded State Display**:
+- **Arguments Section** (if present): JSON-formatted tool arguments with syntax highlighting
+  - Displays "Arguments:" label
+  - Pre-formatted JSON with scrollable overflow
+  - Text selection enabled for easy copying
+- **Result Section** (if result available): Execution result content
+  - Header shows "Result:" or "Error:" label with "Returned: [timestamp]" right-aligned
+  - Result content displayed in monospace font with whitespace preservation
+  - Success results have green styling, errors have red styling
+  - Text selection enabled for copying results
+  - Max height with scrollable overflow for long results
+
+**Interactive Behavior**:
+- Click anywhere on card to toggle expanded/collapsed state
+- Expanded content uses `onClick={(e) => e.stopPropagation()}` to prevent collapse when selecting text
+- `select-text` and `cursor-text` classes enable text selection in arguments and results
+- `select-none` classes on labels prevent unwanted label selection
 
 #### Core UI Components (`frontend/src/components/ui/`)
 

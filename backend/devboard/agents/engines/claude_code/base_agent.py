@@ -2,19 +2,23 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 
 import logfire
 from claude_agent_sdk import Message, ResultMessage
 from pydantic import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeToolFunc
-from devboard.agents.engines.claude_code.message_parser import ClaudeResponseParser
-from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
-from devboard.agents.engines.claude_code.virtual_tools import (
-    VirtualTool,
+from devboard.agents.engines.claude_code.message_parser import (
+    ClaudeResponseParser,
+    TextResponse,
+    ToolCallOutcome,
     VirtualToolCall,
     VirtualToolRequests,
+)
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
+from devboard.agents.engines.claude_code.virtual_tools import (
+    ToolCallError,
+    VirtualTool,
     build_virtual_tool_schemas_section,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
@@ -26,12 +30,7 @@ from devboard.db.repositories.document import DocumentRepository
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
 
-
-@dataclass
-class MessageResponse:
-    """Response from Claude Code agent containing a text message."""
-
-    content: str
+FinalResult = TextResponse | VirtualToolRequests
 
 
 class ClaudeCodeAgent(ABC):
@@ -202,7 +201,7 @@ class ClaudeCodeAgent(ABC):
         self,
         prompt_or_approvals: str | dict[str, ToolApprovalDecision],
         _retry_count: int = 0,
-    ) -> AsyncIterator[Message | MessageResponse | VirtualToolRequests]:
+    ) -> AsyncIterator[Message | FinalResult]:
         """Stream messages from Claude Code execution and parse final result.
 
         Args:
@@ -255,7 +254,7 @@ class ClaudeCodeAgent(ABC):
         self,
         prompt_or_approvals: str | dict[str, ToolApprovalDecision],
         _retry_count: int = 0,
-    ) -> MessageResponse | VirtualToolRequests:
+    ) -> FinalResult:
         """Run the agent with either a user message or tool approval results.
 
         Args:
@@ -274,7 +273,7 @@ class ClaudeCodeAgent(ABC):
 
         async for event in self.stream_events(prompt_or_approvals, _retry_count):
             # The last event will be the parsed MessageResponse or VirtualToolRequests
-            if isinstance(event, MessageResponse | VirtualToolRequests):
+            if isinstance(event, FinalResult):
                 final_result = event
 
         if final_result is None:
@@ -313,9 +312,9 @@ class ClaudeCodeAgent(ABC):
         if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
 
-        # Execute approved tools and build result messages
         result_parts: list[str] = []
 
+        # Should only ever actually be a single approval
         for tool_call_id, decision in approvals.items():
             # tool_call_id should match tool_name
             if tool_call_id != tool_call.tool_name:
@@ -331,40 +330,81 @@ class ClaudeCodeAgent(ABC):
 
             if decision.approved:
                 # Execute the virtual tool
-                result = await virtual_tool.execute(tool_call.arguments)
-                result_text = f"✓ {tool_call.tool_name}: {result}"
+                try:
+                    result_content = await virtual_tool.execute(tool_call.arguments)
+                    outcome = ToolCallOutcome.SUCCESS
+                except ToolCallError as e:
+                    # Tool execution failed
+                    result_content = str(e)
+                    outcome = ToolCallOutcome.ERROR
+                    logfire.warning(
+                        f"Tool execution failed for {tool_call.tool_name}: {e}",
+                        tool_name=tool_call.tool_name,
+                    )
             else:
                 # Tool denied
-                feedback = decision.feedback or "Tool execution was denied"
-                result_text = f"✗ {tool_call.tool_name} DENIED: {feedback}"
+                result_content = "Tool execution denied: " + (decision.feedback or "<No reason provided>")
+                outcome = ToolCallOutcome.DENIED
 
-            # Wrap result in XML marker
+            # Format result with outcome attribute
             result_parts.append(
-                f'<tool_call_result tool_name="{tool_call.tool_name}">\n{result_text}\n</tool_call_result>'
+                self._format_tool_result(tool_name=tool_call.tool_name, outcome=outcome, content=result_content)
             )
 
         # Return combined results
         return "\n\n".join(result_parts)
 
-    def _wrap_validation_error(self, error_message: str, tool_name: str | None = None) -> str:
-        """Wrap a validation error message in XML markers.
+    def _format_tool_result(self, tool_name: str, outcome: ToolCallOutcome, content: str) -> str:
+        """Format a tool result message with XML markers.
 
         Args:
-            error_message: The error message to wrap
-            tool_name: Optional tool name to include in the error marker
+            tool_name: Name of the tool
+            outcome: Outcome of the tool call enum value
+            content: Result content or error message
 
         Returns:
-            Error message wrapped in <validation_error> tags
+            Formatted tool result message with XML markers
         """
-        if tool_name:
-            return f'<validation_error tool_name="{tool_name}">\n{error_message}\n</validation_error>'
-        return f"<validation_error>\n{error_message}\n</validation_error>"
+        # Get string value from enum
+        outcome_str = outcome.value if isinstance(outcome, ToolCallOutcome) else outcome
+        return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome_str}">\n{content}\n</tool_call_result>'
+
+    async def _retry_on_validation_error(
+        self,
+        error_message: str,
+        tool_name: str,
+        retry_count: int,
+        error_description: str,
+    ) -> FinalResult:
+        """Handle retry logic for validation errors.
+
+        Args:
+            error_message: The validation error message to send to the agent
+            tool_name: Tool name for XML marker and error messages
+            retry_count: Current retry count
+            error_description: Description of the error for logging and exception
+
+        Returns:
+            Result from retry attempt
+
+        Raises:
+            ValueError: If max retry attempts exceeded
+        """
+        if retry_count < MAX_RETRY_ATTEMPTS:
+            # Use validation_error outcome for the tool result
+            formatted_error = self._format_tool_result(
+                tool_name=tool_name, outcome=ToolCallOutcome.VALIDATION_ERROR, content=error_message
+            )
+            logfire.warning(f"{error_description} (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS})")
+            return await self.run(prompt_or_approvals=formatted_error, _retry_count=retry_count + 1)
+        else:
+            raise ValueError(f"{error_description} after {MAX_RETRY_ATTEMPTS} attempts")
 
     async def _parse_response(
         self,
         result_message: ResultMessage,
         retry_count: int,
-    ) -> MessageResponse | VirtualToolRequests:
+    ) -> FinalResult:
         """Parse the Claude response to detect virtual tool calls.
 
         Uses the centralized parser to consistently handle both regular messages
@@ -383,42 +423,27 @@ class ClaudeCodeAgent(ABC):
         response_text = result_message.result.strip()
 
         # Use unified parser to handle both messages and tool calls
-        try:
-            parsed = ClaudeResponseParser.parse_message(response_text)
-        except ValidationError as e:
-            # Invalid tool call structure - provide feedback and retry
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-                error_msg = self._wrap_validation_error(
-                    f"ERROR: Invalid tool call response format.\n\n"
-                    f"Validation errors:\n{error_details}\n\n"
-                    f"Expected format:\n"
-                    f'{{"tool_name": "edit_task_specification", '
-                    f'"arguments": {{"edits": [...], "reasoning": "..."}}}}\n\n'
-                    f"Please correct these errors and try again."
-                )
-                logfire.warning(
-                    f"Tool call structure validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
-                )
-                return await self.run(
-                    prompt_or_approvals=error_msg, _retry_count=retry_count + 1
-                )
-            else:
-                raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}") from e
+        parsed = ClaudeResponseParser.parse_message(response_text)
 
+        # Handle each message type
         if isinstance(parsed, VirtualToolCall):
-            # Tool call detected - validate and handle it
-            return await self._handle_virtual_tool_call_response(parsed, retry_count)
-        else:
+            # Tool call is valid - validate arguments and handle it
+            return await self._validate_virtual_tool_call_response(parsed, retry_count)
+        elif isinstance(parsed, TextResponse):
             # Normal message
-            return MessageResponse(content=parsed)
+            return parsed
+        else:
+            raise ValueError(f"Expected VirtualToolCall or TextMessage from agent response, got {type(parsed)}")
 
-    async def _handle_virtual_tool_call_response(
+    async def _validate_virtual_tool_call_response(
         self,
         tool_call: VirtualToolCall,
         retry_count: int,
-    ) -> MessageResponse | VirtualToolRequests:
-        """Handle and validate a tool call response.
+    ) -> FinalResult:
+        """
+        Validate a tool call response, making a retry request if there are any validation errors.
+        In this case, the model may respond with a standard message response instead of another tool call attempt.
+        These intermediate retry messages will not be streamed back to the caller.
 
         Args:
             tool_call: Parsed and structurally validated VirtualToolCall
@@ -427,51 +452,60 @@ class ClaudeCodeAgent(ABC):
         Returns:
             VirtualToolRequests if valid, or MessageResponse on retry
         """
+        # Check if tool call is structurally valid
+        if not tool_call.valid:
+            # Invalid tool call structure - provide feedback and retry
+            error_msg = (
+                f"ERROR: {tool_call.validation_error}\n\n"
+                f"Expected format:\n"
+                f'{{"tool_name": "<tool_name>", '
+                f'"arguments": {{"arg1": [...], "arg2": "..."}}}}\n\n'
+                f"Please correct these errors and try again."
+            )
+            return await self._retry_on_validation_error(
+                error_message=error_msg,
+                tool_name=tool_call.tool_name,
+                retry_count=retry_count,
+                error_description=f"Tool call validation failed: {tool_call.validation_error}",
+            )
+
         # Get the virtual tool and validate arguments
         tool_name = tool_call.tool_name
         virtual_tool = self.get_virtual_tool(tool_name)
 
         if not virtual_tool:
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                # Get available tool names for helpful error message
-                available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
-                tools_list = ", ".join(available_tools) if available_tools else "none"
-                error_msg = self._wrap_validation_error(
-                    f"ERROR: Unknown tool '{tool_name}'.\n\n"
-                    f"Available tools: {tools_list}\n\n"
-                    f"Please use one of the available tools.",
-                    tool_name=tool_name
-                )
-                logfire.warning(f"Unknown tool (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {tool_name}")
-                return await self.run(
-                    prompt_or_approvals=error_msg, _retry_count=retry_count + 1
-                )
-            else:
-                raise ValueError(f"Unknown tool '{tool_name}' after {MAX_RETRY_ATTEMPTS} attempts")
+            # Get available tool names for helpful error message
+            available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
+            tools_list = ", ".join(available_tools) if available_tools else "none"
+            error_msg = (
+                f"ERROR: Unknown tool '{tool_name}'.\n\n"
+                f"Available tools: {tools_list}\n\n"
+                f"Please use one of the available tools."
+            )
+            return await self._retry_on_validation_error(
+                error_message=error_msg,
+                tool_name=tool_name,
+                retry_count=retry_count,
+                error_description=f"Unknown tool '{tool_name}'",
+            )
 
         # Validate tool arguments against the tool's schema
         try:
             # Use the tool's args_model to validate
             virtual_tool.args_model.model_validate(tool_call.arguments)
         except ValidationError as e:
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-                error_msg = self._wrap_validation_error(
-                    f"ERROR: Invalid arguments for tool '{tool_name}'.\n\n"
-                    f"Validation errors:\n{error_details}\n\n"
-                    f"Please check the tool schema and provide valid arguments.",
-                    tool_name=tool_name
-                )
-                logfire.warning(
-                    f"Tool arguments validation failed (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {e}"
-                )
-                return await self.run(
-                    prompt_or_approvals=error_msg, _retry_count=retry_count + 1
-                )
-            else:
-                raise ValueError(
-                    f"Tool arguments validation failed for '{tool_name}' after {MAX_RETRY_ATTEMPTS} attempts: {e}"
-                ) from e
+            error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            error_msg = (
+                f"ERROR: Invalid arguments for tool '{tool_name}'.\n\n"
+                f"Validation errors:\n{error_details}\n\n"
+                f"Please check the tool schema and provide valid arguments."
+            )
+            return await self._retry_on_validation_error(
+                error_message=error_msg,
+                tool_name=tool_name,
+                retry_count=retry_count,
+                error_description=f"Tool arguments validation failed for '{tool_name}': {e}",
+            )
 
         # All validations passed - return the tool call
         return VirtualToolRequests(calls=[tool_call])

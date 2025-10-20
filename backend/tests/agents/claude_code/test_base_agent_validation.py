@@ -5,16 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from claude_agent_sdk import ResultMessage
-
 from devboard.agents.engines.claude_code.base_agent import (
     MAX_RETRY_ATTEMPTS,
     ClaudeCodeAgent,
-    MessageResponse,
 )
+from devboard.agents.engines.claude_code.message_parser import TextResponse, VirtualToolRequests
 from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentArgs,
     EditDocumentTool,
-    VirtualToolRequests,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.db.models.task import Task
@@ -98,7 +96,7 @@ class TestValidMessageResponse:
 
         response = await test_agent._parse_response(result, retry_count=0)
 
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert response.content == "Hello, world!"
 
 
@@ -140,7 +138,7 @@ class TestInvalidJSONResponse:
         response = await test_agent._parse_response(result, retry_count=0)
 
         # Non-JSON is now treated as a normal text message
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert response.content == "This is not JSON at all"
 
     @pytest.mark.asyncio
@@ -151,7 +149,7 @@ class TestInvalidJSONResponse:
         response = await test_agent._parse_response(result, retry_count=0)
 
         # Plain text should work fine as normal message
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert "Hello! I've analyzed" in response.content
 
 
@@ -166,7 +164,7 @@ class TestInvalidResponseStructure:
         response = await test_agent._parse_response(result, retry_count=0)
 
         # JSON array should be treated as plain text message
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert response.content == '["array", "not", "object"]'
 
     @pytest.mark.asyncio
@@ -175,7 +173,7 @@ class TestInvalidResponseStructure:
         """Test that JSON object without tool_name/arguments triggers validation error and retry."""
         result = create_mock_result('{"content": "Hello", "no_tool_fields": true}')
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -184,7 +182,7 @@ class TestInvalidResponseStructure:
         # JSON object should trigger validation and retry
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call response format" in call_args.kwargs["prompt_or_approvals"]
+        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
         assert call_args.kwargs["_retry_count"] == 1
 
 
@@ -197,7 +195,7 @@ class TestInvalidMessageFormat:
         """Test that JSON object triggers validation (and retry if invalid)."""
         result = create_mock_result('{"type": "message"}')
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -205,7 +203,7 @@ class TestInvalidMessageFormat:
 
         # JSON object should trigger validation and retry
         mock_run.assert_called_once()
-        assert "ERROR: Invalid tool call response format" in mock_run.call_args.kwargs["prompt_or_approvals"]
+        assert "ERROR: Invalid tool call format" in mock_run.call_args.kwargs["prompt_or_approvals"]
 
     @pytest.mark.asyncio
     async def test_message_with_content_works(self, test_agent):
@@ -215,7 +213,7 @@ class TestInvalidMessageFormat:
         response = await test_agent._parse_response(result, retry_count=0)
 
         # Should return full text
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert response.content == "Test message"
 
 
@@ -228,7 +226,7 @@ class TestInvalidToolCallFormat:
         """Test that JSON with arguments but no tool_name triggers a retry."""
         result = create_mock_result('{"arguments": {}}')
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -237,24 +235,24 @@ class TestInvalidToolCallFormat:
         # JSON object should trigger validation and retry
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call response format" in call_args.kwargs["prompt_or_approvals"]
+        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
 
     @pytest.mark.asyncio
     @patch.object(MockAgent, "run")
     async def test_tool_call_missing_arguments_triggers_retry(self, mock_run, test_agent):
-        """Test that JSON with tool_name but no arguments triggers a retry."""
+        """Test that JSON with tool_name but no arguments triggers structural validation retry."""
         result = create_mock_result('{"tool_name": "edit_task_specification"}')
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
         await test_agent._parse_response(result, retry_count=0)
 
-        # JSON object should trigger validation and retry
+        # Should trigger structural validation error and retry
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call response format" in call_args.kwargs["prompt_or_approvals"]
+        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
 
     @pytest.mark.asyncio
     @patch.object(MockAgent, "run")
@@ -263,7 +261,7 @@ class TestInvalidToolCallFormat:
         # Tool call detected (has tool_name and arguments) but structure is invalid
         result = create_mock_result('{"tool_name": "edit_task_specification", "arguments": "not a dict"}')
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -272,7 +270,7 @@ class TestInvalidToolCallFormat:
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         # Check keyword argument
-        assert "ERROR: Invalid tool call response format" in call_args.kwargs["prompt_or_approvals"]
+        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
         assert call_args.kwargs["_retry_count"] == 1
 
     @pytest.mark.asyncio
@@ -283,8 +281,8 @@ class TestInvalidToolCallFormat:
         with pytest.raises(ValueError) as exc_info:
             await test_agent._parse_response(result, retry_count=MAX_RETRY_ATTEMPTS)
 
-        assert "Tool call validation failed after" in str(exc_info.value)
-        assert str(MAX_RETRY_ATTEMPTS) in str(exc_info.value)
+        assert "Tool call validation failed" in str(exc_info.value)
+        assert f"after {MAX_RETRY_ATTEMPTS} attempts" in str(exc_info.value)
 
 
 class TestUnknownTool:
@@ -304,7 +302,7 @@ class TestUnknownTool:
             )
         )
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -358,7 +356,7 @@ class TestInvalidToolArguments:
             )
         )
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -388,7 +386,7 @@ class TestInvalidToolArguments:
             )
         )
 
-        mock_run.return_value = MessageResponse(
+        mock_run.return_value = TextResponse(
             content="Fixed response",
         )
 
@@ -418,8 +416,8 @@ class TestInvalidToolArguments:
         with pytest.raises(ValueError) as exc_info:
             await test_agent._parse_response(result, retry_count=MAX_RETRY_ATTEMPTS)
 
-        assert "Tool arguments validation failed for 'edit_task_specification' after" in str(exc_info.value)
-        assert str(MAX_RETRY_ATTEMPTS) in str(exc_info.value)
+        assert "Tool arguments validation failed for 'edit_task_specification'" in str(exc_info.value)
+        assert f"after {MAX_RETRY_ATTEMPTS} attempts" in str(exc_info.value)
 
 
 class TestRetryMechanism:
@@ -448,7 +446,7 @@ class TestRetryMechanism:
         )
 
         # Verify response is valid
-        assert isinstance(response, MessageResponse)
+        assert isinstance(response, TextResponse)
         assert response.content == "Success"
 
     @pytest.mark.asyncio
