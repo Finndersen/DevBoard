@@ -44,10 +44,9 @@ class VirtualToolCall(BaseModel):
 
 
 class VirtualToolRequests(BaseModel):
-    """Container for virtual tool call requests with session tracking."""
+    """Container for virtual tool call requests."""
 
     calls: list[VirtualToolCall]
-    session_id: str
 
 
 # Tool response format instructions for system prompts
@@ -96,7 +95,7 @@ IMPORTANT:
 - ONLY make edits to task documents when specifically asked by the user, or after asking and receiving confirmation
 - After the tool executes, you will receive the result wrapped in <tool_call_result> tags
 - Standard build-in tools can be used freely without any special format
-- For virtual tool calls, your message must contain JSON content ONLY (NO OTHER TEXT).
+- When making virtual tool calls, your message must consist of JSON content ONLY (NO OTHER TEXT).
 - For normal messages, respond naturally with plain text. No JSON format needed.
 """
 

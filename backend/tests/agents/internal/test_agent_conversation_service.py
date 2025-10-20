@@ -1,17 +1,9 @@
 """Tests for AgentConversationService."""
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from devboard.agents.engines.internal import BaseDeps, InternalAgent, PydanticAIConversationService
-from devboard.agents.roles.types import AgentRole
-from devboard.api.schemas.agent_conversation import (
-    MessageRole,
-    PromptResponseType,
-    ToolApprovalDecision,
-)
-from devboard.db.models import Conversation
-from devboard.db.repositories.conversation import ConversationRepository
+from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -26,6 +18,21 @@ from pydantic_ai.tools import (
     ToolDenied,
 )
 from sqlalchemy.orm import Session
+
+from devboard.agents.engines.internal import BaseDeps, InternalAgent, PydanticAIConversationService
+from devboard.agents.roles.types import AgentRole
+from devboard.api.schemas.agent_conversation import (
+    MessageRole,
+    ToolApprovalDecision,
+)
+from devboard.db.models import Conversation
+from devboard.db.repositories.conversation import ConversationRepository
+
+
+async def mock_stream_events(*events):
+    """Helper to create an async generator for stream events."""
+    for event in events:
+        yield event
 
 
 class MockAgent(InternalAgent):
@@ -45,6 +52,10 @@ class MockAgent(InternalAgent):
 
     def _get_tools(self) -> list:
         return []
+
+    async def stream_events(self, **kwargs):
+        """Mock stream_events for testing (should be patched in tests)."""
+        raise NotImplementedError("Should be mocked in tests")
 
 
 class TestAgentConversationService:
@@ -106,16 +117,20 @@ class TestAgentConversationService:
             ModelResponse(parts=[TextPart(content="Test response")]),
         ]
 
-        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = mock_result
+        # Create async generator function for mock
+        async def mock_stream_events(**kwargs):
+            yield AgentRunResultEvent(result=mock_result)
 
-            response = await service.send_message(message="Test message")
+        # Replace the stream_events method with our mock
+        mock_agent.stream_events = mock_stream_events
 
-        assert response.type == PromptResponseType.MESSAGE
-        assert response.message is not None
-        assert response.message.text_content == "Test response"
-        assert response.message.role == MessageRole.AGENT
-        assert response.tool_requests is None
+        events = await service.send_message(message="Test message")
+
+        assert isinstance(events, list)
+        assert len(events) == 1
+        assert events[0].event_type == "message"
+        assert events[0].text_content == "Test response"
+        assert events[0].role == MessageRole.AGENT
 
     @pytest.mark.asyncio
     async def test_send_message_tool_request(self, service, mock_agent):
@@ -144,17 +159,31 @@ class TestAgentConversationService:
             ),
         ]
 
-        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = mock_result
+        # Create async generator function for mock
+        async def mock_stream_events(**kwargs):
+            tool_call_part = ToolCallPart(
+                tool_name="edit_document",
+                tool_call_id="tool_123",
+                args={"edits": [{"find": "old", "replace": "new"}]},
+            )
+            yield FunctionToolCallEvent(part=tool_call_part)
+            yield AgentRunResultEvent(result=mock_result)
 
-            response = await service.send_message(message="Edit this")
+        # Replace the stream_events method with our mock
+        mock_agent.stream_events = mock_stream_events
 
-        assert response.type == PromptResponseType.TOOL_REQUEST
-        assert response.tool_requests is not None
-        assert len(response.tool_requests) == 1
-        assert response.tool_requests[0].tool_call_id == "tool_123"
-        assert response.tool_requests[0].tool_name == "edit_document"
-        assert response.message is None
+        events = await service.send_message(message="Edit this")
+
+        assert isinstance(events, list)
+        assert len(events) == 2
+        # First event should be the tool call
+        assert events[0].event_type == "tool_call"
+        assert events[0].tool_call_id == "tool_123"
+        assert events[0].tool_name == "edit_document"
+        # Second event should be the tool call request
+        assert events[1].event_type == "tool_call_request"
+        assert events[1].tool_call_id == "tool_123"
+        assert events[1].tool_name == "edit_document"
 
     @pytest.mark.asyncio
     async def test_process_tool_approvals(self, service, mock_agent, conversation_repo, conversation, db_session):
@@ -180,14 +209,18 @@ class TestAgentConversationService:
         mock_result.output = "Continued after approval"
         mock_result.new_messages.return_value = [ModelResponse(parts=[TextPart(content="Continued after approval")])]
 
-        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = mock_result
+        # Create async generator function for mock
+        async def mock_stream_events(**kwargs):
+            yield AgentRunResultEvent(result=mock_result)
 
-            response = await service.process_tool_approvals(approvals=approvals)
+        # Replace the stream_events method with our mock
+        mock_agent.stream_events = Mock(side_effect=mock_stream_events)
+
+        events = await service.process_tool_approvals(approvals=approvals)
 
         # Verify the agent was called with proper approval results
-        mock_run.assert_called_once()
-        args = mock_run.call_args[1]
+        mock_agent.stream_events.assert_called_once()
+        args = mock_agent.stream_events.call_args[1]
         approval_result = args["prompt_or_approvals"]
 
         # Check the approval result structure
@@ -195,8 +228,11 @@ class TestAgentConversationService:
         assert "tool_123" in approval_result.approvals
         assert "tool_456" in approval_result.approvals
 
-        # Check response
-        assert response.type == PromptResponseType.MESSAGE
+        # Check response - should be a list with message event
+        assert isinstance(events, list)
+        assert len(events) == 1
+        assert events[0].event_type == "message"
+        assert events[0].text_content == "Continued after approval"
 
     def test_convert_messages_to_pydantic(self, service, conversation_repo, conversation, db_session):
         """Test converting database messages to PydanticAI format."""
@@ -289,12 +325,16 @@ class TestAgentConversationService:
             ModelResponse(parts=[TextPart(content="I've processed your new request")]),
         ]
 
-        with patch.object(mock_agent, "run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = mock_result
+        # Create async generator function for mock
+        async def mock_stream_events(**kwargs):
+            yield AgentRunResultEvent(result=mock_result)
 
-            # Mock logfire.warning to verify it's called
-            with patch("devboard.agents.engines.internal.agent_conversation.logfire.warning") as mock_warning:
-                response = await service.send_message(message="New message")
+        # Replace the stream_events method with our mock
+        mock_agent.stream_events = mock_stream_events
+
+        # Mock logfire.warning to verify it's called
+        with patch("devboard.agents.engines.internal.agent_conversation.logfire.warning") as mock_warning:
+            events = await service.send_message(message="New message")
 
         # Verify the cleanup warning was logged
         mock_warning.assert_called_once()
@@ -303,8 +343,10 @@ class TestAgentConversationService:
         )
 
         # Verify response is correct
-        assert response.type == PromptResponseType.MESSAGE
-        assert response.message is not None
+        assert isinstance(events, list)
+        assert len(events) == 1
+        assert events[0].event_type == "message"
+        assert events[0].text_content == "I've processed your new request"
 
     @pytest.mark.asyncio
     async def test_process_tool_approvals_with_no_existing_messages(self, service, mock_agent):

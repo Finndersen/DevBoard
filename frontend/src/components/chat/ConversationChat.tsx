@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../../lib/api'
-import type { ConversationMessage, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
+import type { ConversationEvent, ToolCallRequest, ToolApprovalRequest, ToolResult } from '../../lib/api'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
 import { usePendingMessages, type PendingMessage } from '../../contexts/PendingMessagesContext'
@@ -34,7 +34,7 @@ export default function ConversationChat({
   isTransitioning = false,
   transitionMessage = ''
 }: ConversationChatProps) {
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
+  const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [showClearModal, setShowClearModal] = useState(false)
@@ -185,11 +185,19 @@ export default function ConversationChat({
       // Update status to 'sent' when making API call
       updateMessageStatus(pendingKey, pendingMessageId, 'sent')
 
-      const response = await apiClient.sendConversationMessage(conversationId, {
+      const events = await apiClient.sendConversationMessage(conversationId, {
         message: messageText
       })
 
-      if (response.type === 'message' && response.message) {
+      // Check if we have any tool_call_request events (need approval)
+      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
+
+      if (toolRequests.length > 0) {
+        // Tool request: update status to awaiting_approval, DON'T remove from pending
+        updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
+        const approvals = await convertToolRequestsToApprovals(toolRequests)
+        setApprovals(approvalKey, approvals)
+      } else {
         // Success: remove from pending FIRST, then add both user and agent messages to history
         // Mark as removed locally for immediate UI update (synchronous ref update)
         removedPendingIdsRef.current.add(pendingMessageId)
@@ -201,17 +209,13 @@ export default function ConversationChat({
         })
 
         // Now add the confirmed messages after pending is hidden
-        const userMessage: ConversationMessage = {
+        const userMessage: ConversationEvent = {
+          event_type: 'message',
           role: 'user',
           text_content: messageText,
           timestamp: new Date().toISOString()
         }
-        setMessages(prev => [...prev, userMessage, response.message!])
-      } else if (response.type === 'tool_request' && response.tool_requests) {
-        // Tool request: update status to awaiting_approval, DON'T remove from pending
-        updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
-        const approvals = await convertToolRequestsToApprovals(response.tool_requests)
-        setApprovals(approvalKey, approvals)
+        setMessages(prev => [...prev, userMessage, ...events])
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -240,11 +244,19 @@ export default function ConversationChat({
     try {
       updateMessageStatus(pendingKey, pendingMessage.id, 'sent')
 
-      const response = await apiClient.sendConversationMessage(conversationId, {
+      const events = await apiClient.sendConversationMessage(conversationId, {
         message: pendingMessage.text_content
       })
 
-      if (response.type === 'message' && response.message) {
+      // Check if we have any tool_call_request events (need approval)
+      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
+
+      if (toolRequests.length > 0) {
+        // Tool request: update status, DON'T remove
+        updateMessageStatus(pendingKey, pendingMessage.id, 'awaiting_approval')
+        const approvals = await convertToolRequestsToApprovals(toolRequests)
+        setApprovals(approvalKey, approvals)
+      } else {
         // Success: remove from pending FIRST, then add both user and agent messages
         // Mark as removed locally for immediate UI update (synchronous ref update)
         removedPendingIdsRef.current.add(pendingMessage.id)
@@ -256,17 +268,13 @@ export default function ConversationChat({
         })
 
         // Now add the confirmed messages after pending is hidden
-        const userMessage: ConversationMessage = {
+        const userMessage: ConversationEvent = {
+          event_type: 'message',
           role: 'user',
           text_content: pendingMessage.text_content,
           timestamp: pendingMessage.timestamp
         }
-        setMessages(prev => [...prev, userMessage, response.message!])
-      } else if (response.type === 'tool_request' && response.tool_requests) {
-        // Tool request: update status, DON'T remove
-        updateMessageStatus(pendingKey, pendingMessage.id, 'awaiting_approval')
-        const approvals = await convertToolRequestsToApprovals(response.tool_requests)
-        setApprovals(approvalKey, approvals)
+        setMessages(prev => [...prev, userMessage, ...events])
       }
     } catch (error) {
       console.error('Failed to retry message:', error)
@@ -321,7 +329,7 @@ export default function ConversationChat({
     })
 
     try {
-      const response = await apiClient.approveConversationTools(conversationId, approvalRequest)
+      const events = await apiClient.approveConversationTools(conversationId, approvalRequest)
 
       // Clear pending approvals after successful response
       clearApprovals(approvalKey)
@@ -332,7 +340,14 @@ export default function ConversationChat({
         await executeRefreshHandlers(conversationId, approvedToolNames)
       }
 
-      if (response.type === 'message' && response.message) {
+      // Check if we have any tool_call_request events (agent wants to use more tools)
+      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
+
+      if (toolRequests.length > 0) {
+        // Agent wants to use more tools
+        const newApprovals = await convertToolRequestsToApprovals(toolRequests)
+        setApprovals(approvalKey, newApprovals)
+      } else {
         // Agent provided response after tool execution
         // If there's a pending message, remove it FIRST and add user message
         // (The pending message is the original user message that triggered the tool request)
@@ -347,19 +362,16 @@ export default function ConversationChat({
           })
 
           // Now add the confirmed messages after pending is hidden
-          const userMessage: ConversationMessage = {
+          const userMessage: ConversationEvent = {
+            event_type: 'message',
             role: 'user',
             text_content: pendingMessage.text_content,
             timestamp: pendingMessage.timestamp
           }
-          setMessages(prev => [...prev, userMessage, response.message!])
+          setMessages(prev => [...prev, userMessage, ...events])
         } else {
-          setMessages(prev => [...prev, response.message!])
+          setMessages(prev => [...prev, ...events])
         }
-      } else if (response.type === 'tool_request' && response.tool_requests) {
-        // Agent wants to use more tools
-        const newApprovals = await convertToolRequestsToApprovals(response.tool_requests)
-        setApprovals(approvalKey, newApprovals)
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
@@ -370,6 +382,20 @@ export default function ConversationChat({
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helper to find matching tool result for a tool call
+  // Searches for the NEXT ToolResult with matching tool_call_id that comes AFTER the tool call
+  // This is important for virtual tool calls which may have non-unique tool_call_ids
+  const findToolResult = (toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
+    // Search only messages that come after the tool call
+    for (let i = toolCallIndex + 1; i < messages.length; i++) {
+      const msg = messages[i]
+      if (msg.event_type === 'tool_result' && msg.tool_call_id === toolCallId) {
+        return msg as ToolResult
+      }
+    }
+    return undefined
   }
 
   const handleClearHistory = async () => {
@@ -408,12 +434,20 @@ export default function ConversationChat({
         ) : (
           <>
             {/* Render confirmed messages */}
-            {messages.map((message, index) => (
-              <ConversationMessageComponent
-                key={`${index}-${message.timestamp}`}
-                message={message}
-              />
-            ))}
+            {messages.map((message, index) => {
+              // For tool calls, find the matching result
+              const toolResult = message.event_type === 'tool_call'
+                ? findToolResult(message.tool_call_id, index)
+                : undefined
+
+              return (
+                <ConversationMessageComponent
+                  key={`${index}-${message.timestamp}`}
+                  message={message}
+                  toolResult={toolResult}
+                />
+              )
+            })}
             
             {/* Render pending message if exists */}
             {pendingMessage && (

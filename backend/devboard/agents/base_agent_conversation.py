@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from devboard.api.schemas.agent_conversation import ConversationMessage, PromptResponse, ToolApprovalDecision
+from devboard.api.schemas.agent_conversation import ConversationEvent, ToolApprovalDecision
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
 
@@ -18,7 +18,7 @@ class BaseAgentConversationService(ABC):
     - Conversation state management (message history or session ID)
     - Tool approval workflows
     - Response formatting
-    - Message retrieval
+    - Event retrieval
 
     Attributes:
         conversation: The conversation instance this service manages
@@ -35,7 +35,7 @@ class BaseAgentConversationService(ABC):
         self.conversation_repo = conversation_repository
 
     @abstractmethod
-    async def send_message(self, message: str) -> PromptResponse:
+    async def send_message(self, message: str) -> list[ConversationEvent]:
         """Send a message to the agent and get a response.
 
         Args:
@@ -47,7 +47,7 @@ class BaseAgentConversationService(ABC):
         pass
 
     @abstractmethod
-    async def process_tool_approvals(self, approvals: dict[str, ToolApprovalDecision]) -> PromptResponse:
+    async def process_tool_approvals(self, approvals: dict[str, ToolApprovalDecision]) -> list[ConversationEvent]:
         """Process user's tool approval decisions and continue agent execution.
 
         Args:
@@ -59,14 +59,20 @@ class BaseAgentConversationService(ABC):
         pass
 
     @abstractmethod
-    async def get_conversation_messages(self) -> list[ConversationMessage]:
-        """Retrieve all messages for the conversation.
+    async def get_conversation_messages(self) -> list[ConversationEvent]:
+        """Retrieve all events for the conversation.
 
-        For PydanticAI conversations, messages are queried from the database.
-        For external engines (Claude Code, Gemini CLI), messages are loaded
+        Events include text messages, tool calls, and tool results in chronological order.
+        This provides a complete timeline of the conversation including intermediate steps.
+
+        For PydanticAI conversations, events are queried from the database.
+        For external engines (Claude Code, Gemini CLI), events are loaded
         from their respective session storage.
 
         Returns:
-            List of ConversationMessage instances in chronological order
+            List of ConversationEvent instances (ConversationMessage, ToolCall, ToolResult)
+            in chronological order.
+            Note: ToolCallRequest events are excluded as they are ephemeral approval
+            requests, not conversation history.
         """
         pass

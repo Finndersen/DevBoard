@@ -2,7 +2,7 @@
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.prompt_actions import PromptAction, prompt_action_registry
-from devboard.api.schemas.agent_conversation import PromptResponse
+from devboard.api.schemas.agent_conversation import ConversationEvent
 
 
 class PromptActionNotFoundError(Exception):
@@ -37,14 +37,14 @@ class PromptActionService:
         """
         return prompt_action_registry.get(action_key)
 
-    async def execute_action(self, action_key: str) -> PromptResponse:
+    async def execute_action(self, action_key: str) -> list[ConversationEvent]:
         """Execute a prompt action by sending its prompt to a conversation.
 
         Args:
             action_key: The unique identifier for the action to execute
 
         Returns:
-            PromptResponse with the agent's response
+            List of ConversationEvent objects from processing the prompt action
 
         Raises:
             PromptActionNotFoundError: If the action_key does not exist

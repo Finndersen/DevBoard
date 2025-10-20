@@ -29,16 +29,14 @@ _PROMPT_ACTIONS = [
     PromptAction(
         key="task.create_implementation_plan",
         prompt_template=(
-            "The task specification is complete. Your goal is now to create "
-            "a detailed technical implementation plan."
+            "The task specification is complete. Your goal is now to create a detailed technical implementation plan."
         ),
         description="Generate a technical implementation plan from the task specification",
     ),
     PromptAction(
         key="task.begin_implementation",
         prompt_template=(
-            "The implementation plan has been approved. Your goal is to write "
-            "the code to fulfill the plan."
+            "The implementation plan has been approved. Your goal is to write the code to fulfill the plan."
         ),
         description="Start implementing the approved plan",
     ),

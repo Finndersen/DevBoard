@@ -1,7 +1,10 @@
 """PydanticAI agent conversation service with deferred tools support."""
 
+import datetime
+
 import logfire
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent, FunctionToolResultEvent
+from pydantic_ai.messages import AgentStreamEvent, ModelMessage, RetryPromptPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.tools import (
     DeferredToolApprovalResult,
     DeferredToolRequests,
@@ -14,12 +17,13 @@ from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.internal.base_agent import InternalAgent
 from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.api.schemas.agent_conversation import (
+    ConversationEvent,
     ConversationMessage,
     MessageRole,
-    PromptResponse,
-    PromptResponseType,
     ToolApprovalDecision,
+    ToolCall,
     ToolCallRequest,
+    ToolResult,
 )
 from devboard.db.models import Conversation
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
@@ -63,11 +67,14 @@ class PydanticAIConversationService(BaseAgentConversationService):
     async def send_message(
         self,
         message: str,
-    ) -> PromptResponse:
-        """Process a message and return conversation response.
+    ) -> list[ConversationEvent]:
+        """Process a message and return conversation events.
 
         Args:
             message: User's message
+
+        Returns:
+            List of conversation events including tool calls, results, and final message
         """
         with logfire.span(
             "agent_conversation.send_message",
@@ -79,11 +86,14 @@ class PydanticAIConversationService(BaseAgentConversationService):
     async def process_tool_approvals(
         self,
         approvals: dict[str, ToolApprovalDecision],
-    ) -> PromptResponse:
+    ) -> list[ConversationEvent]:
         """Process tool approval/denial and continue agent execution.
 
         Args:
             approvals: User's approval decisions
+
+        Returns:
+            List of conversation events including tool calls, results, and final message
         """
         with logfire.span(
             "agent_conversation.process_tool_approval",
@@ -93,11 +103,13 @@ class PydanticAIConversationService(BaseAgentConversationService):
             tool_approval_results = self._create_deferred_results(approvals)
             return await self._handle_message_or_approval(message_or_approvals=tool_approval_results)
 
-    async def _handle_message_or_approval(self, message_or_approvals: str | DeferredToolResults) -> PromptResponse:
+    async def _handle_message_or_approval(
+        self, message_or_approvals: str | DeferredToolResults
+    ) -> list[ConversationEvent]:
         """
         Handle either a new user message or tool approval result.
         :param message_or_approvals: User message/prompt or tool approval results
-        :return:
+        :return: List of conversation events
         """
         # Load conversation history
         existing_messages = self._get_message_history()
@@ -117,41 +129,100 @@ class PydanticAIConversationService(BaseAgentConversationService):
 
         message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
 
-        # Process with agent
-        result = await self.agent.run(
+        # Process with agent using streaming
+        events: list[ConversationEvent] = []
+        agent_run_result = None
+
+        async for event in self.agent.stream_events(
             prompt_or_approvals=message_or_approvals,
             conversation_history=message_history,
             deps=BaseDeps(),
-        )
+        ):
+            # Capture final result
+            if isinstance(event, AgentRunResultEvent):
+                agent_run_result = event.result
+            else:
+                # Collect events for batch processing
+                converted_event = self._convert_stream_event(event)
+                if converted_event is not None:
+                    events.append(converted_event)
+
+        if agent_run_result is None:
+            raise ValueError("Agent execution did not produce a result")
 
         # Store and process results
-        saved_messages = self._store_new_messages(new_messages=result.new_messages())
+        saved_messages = self._store_new_messages(new_messages=agent_run_result.new_messages())
 
-        output = result.output
+        # Add final message or tool requests to events
+        output = agent_run_result.output
         if isinstance(output, DeferredToolRequests):
-            tool_requests = [
-                ToolCallRequest(
-                    tool_call_id=tr.tool_call_id,
-                    tool_name=tr.tool_name,
-                    tool_args=tr.args,
+            # Add tool requests to events
+            timestamp = datetime.datetime.now(datetime.UTC)
+            for tr in output.approvals:
+                # Convert args to dict if it's a string (JSON-encoded)
+                tool_args: dict | None = tr.args if isinstance(tr.args, dict) else None
+                events.append(
+                    ToolCallRequest(
+                        tool_call_id=tr.tool_call_id,
+                        tool_name=tr.tool_name,
+                        tool_args=tool_args,
+                        timestamp=timestamp,
+                    )
                 )
-                for tr in output.approvals
-            ]
-            response = PromptResponse(type=PromptResponseType.TOOL_REQUEST, tool_requests=tool_requests)
         elif isinstance(output, str):
+            # Add final message to events
             agent_final_message = saved_messages[-1]
-            response = PromptResponse(
-                type=PromptResponseType.MESSAGE,
-                message=ConversationMessage(
+            events.append(
+                ConversationMessage(
                     role=MessageRole.AGENT,
                     text_content=output,
                     timestamp=agent_final_message.timestamp,
-                ),
+                )
             )
         else:
             raise ValueError(f"Unexpected agent result: {output}")
 
-        return response
+        return events
+
+    def _convert_stream_event(self, event: AgentStreamEvent) -> ConversationEvent | None:
+        """Convert a PydanticAI stream event to our ConversationEvent type.
+
+        Args:
+            event: Stream event from PydanticAI
+
+        Returns:
+            ConversationEvent instance or None if this event type should be ignored
+        """
+        timestamp = datetime.datetime.now(datetime.UTC)
+
+        if isinstance(event, FunctionToolCallEvent):
+            # Extract tool call information
+            part = event.part
+            return ToolCall(
+                tool_call_id=part.tool_call_id,
+                tool_name=part.tool_name,
+                tool_args=part.args,
+                timestamp=timestamp,
+            )
+
+        elif isinstance(event, FunctionToolResultEvent):
+            # Extract tool result information
+            result_part = event.result
+            is_error = isinstance(result_part, RetryPromptPart)
+            result_content = str(result_part.content)
+
+            return ToolResult(
+                tool_call_id=result_part.tool_call_id,
+                result_content=result_content,
+                is_error=is_error,
+                timestamp=timestamp,
+            )
+
+        # Ignore other event types:
+        # - AgentRunResultEvent: Handled separately in main flow
+        # - PartStartEvent, PartDeltaEvent: For future real-time streaming
+
+        return None
 
     def _create_deferred_results(self, approvals: dict[str, ToolApprovalDecision]) -> DeferredToolResults:
         """Create deferred tool results from user approvals.
@@ -191,24 +262,77 @@ class PydanticAIConversationService(BaseAgentConversationService):
             saved_messages.append(self.conversation_repo.create_message(self.conversation.id, message))
         return saved_messages
 
-    async def get_conversation_messages(self) -> list[ConversationMessage]:
+    async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all messages for the PydanticAI conversation.
 
-        Messages are queried from the database and exclude tool call messages
-        (only user prompts and agent responses are returned).
+        Messages are queried from the database and converted to ConversationEvent objects
+        that include text messages, tool calls, and tool results.
 
         Returns:
-            List of ConversationMessage instances in chronological order
+            List of ConversationEvent instances in chronological order
         """
-        db_messages = self.conversation_repo.get_messages(
-            self.conversation.id,
-            exclude_tool_calls=True,  # Only return user/agent text messages
-        )
-        return [
-            ConversationMessage(
-                role=MessageRole.USER if msg.message_type == MessageType.USER_PROMPT else MessageRole.AGENT,
-                text_content=msg.text_content,
-                timestamp=msg.timestamp,
+        db_messages = self.conversation_repo.get_messages(self.conversation.id)
+
+        events: list[ConversationEvent] = []
+
+        for msg in db_messages:
+            # Convert each database message to appropriate ConversationEvent type(s)
+            msg_events = self._db_message_to_events(msg)
+            events.extend(msg_events)
+
+        return events
+
+    def _db_message_to_events(self, msg: DbConversationMessage) -> list[ConversationEvent]:
+        """Convert a database message to one or more ConversationEvent objects.
+
+        Args:
+            msg: Database conversation message
+
+        Returns:
+            List of ConversationEvent objects representing the message content
+        """
+        events: list[ConversationEvent] = []
+
+        if msg.message_type == MessageType.USER_PROMPT:
+            # User prompt - single text message
+            events.append(
+                ConversationMessage(
+                    role=MessageRole.USER,
+                    text_content=msg.text_content,
+                    timestamp=msg.timestamp,
+                )
             )
-            for msg in db_messages
-        ]
+        elif msg.message_type == MessageType.TEXT_RESPONSE:
+            # Agent text response - single text message
+            events.append(
+                ConversationMessage(
+                    role=MessageRole.AGENT,
+                    text_content=msg.text_content,
+                    timestamp=msg.timestamp,
+                )
+            )
+        elif msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_RESULT, MessageType.STRUCTURED_RESPONSE):
+            # For messages containing tool calls/results, we need to parse the PydanticAI message
+            pydantic_msg = self.conversation_repo.convert_messages_to_pydantic([msg])[0]
+            # Extract parts from the message
+            for part in pydantic_msg.parts:
+                if isinstance(part, ToolCallPart):
+                    events.append(
+                        ToolCall(
+                            tool_call_id=part.tool_call_id,
+                            tool_name=part.tool_name,
+                            tool_args=part.args,
+                            timestamp=msg.timestamp,
+                        )
+                    )
+                elif isinstance(part, ToolReturnPart):
+                    events.append(
+                        ToolResult(
+                            tool_call_id=part.tool_call_id,
+                            result_content=str(part.content),
+                            is_error=False,
+                            timestamp=msg.timestamp,
+                        )
+                    )
+
+        return events

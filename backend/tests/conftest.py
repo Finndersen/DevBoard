@@ -2,6 +2,7 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, Mock
 
 from fastapi.testclient import TestClient
+from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.run import AgentRunResult
 from pytest import fixture
@@ -199,6 +200,15 @@ def mock_agent():
             return mock_tool_approval_result
 
     mock_agent.run.side_effect = run_side_effect
+
+    # Add stream_events method for PydanticAI conversation service
+    async def stream_events_side_effect(prompt_or_approvals, conversation_history, deps):
+        if isinstance(prompt_or_approvals, str):
+            yield AgentRunResultEvent(result=mock_message_result)
+        else:  # DeferredToolApprovalResult
+            yield AgentRunResultEvent(result=mock_tool_approval_result)
+
+    mock_agent.stream_events = Mock(side_effect=stream_events_side_effect)
 
     return mock_agent
 

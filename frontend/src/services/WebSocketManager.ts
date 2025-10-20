@@ -1,5 +1,5 @@
 import { useConversationStore } from '../stores/conversationStore'
-import type { ConversationMessage } from '../lib/api'
+import type { ConversationEvent } from '../lib/api'
 
 interface WebSocketConnection {
   ws: WebSocket
@@ -101,17 +101,17 @@ class WebSocketManager {
    */
   private routeMessage(conversationId: number, data: string): void {
     try {
-      const message: ConversationMessage = JSON.parse(data)
+      const event: ConversationEvent = JSON.parse(data)
 
-      // Add message to conversation store
+      // Add event to conversation store
       const { addMessage, setIsTyping } = useConversationStore.getState()
 
-      if (message.role === 'agent') {
-        // Agent is no longer typing
+      // For message events from agent, clear typing indicator
+      if (event.event_type === 'message' && event.role === 'agent') {
         setIsTyping(conversationId, false)
       }
 
-      addMessage(conversationId, message)
+      addMessage(conversationId, event)
     } catch (error) {
       console.error('WebSocketManager: Failed to parse message:', error)
     }

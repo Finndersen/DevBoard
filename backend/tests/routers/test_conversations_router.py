@@ -102,13 +102,15 @@ class TestConversationsRouter:
         assert messages[1]["role"] == "agent"
         assert messages[1]["text_content"] == "Of course! How can I assist you?"
 
-    def test_get_conversation_messages_excludes_tool_calls(self, client, db_session, test_conversation):
-        """Test that tool call messages are excluded from results."""
+    def test_get_conversation_messages_includes_tool_calls(self, client, db_session, test_conversation):
+        """Test that tool call events are included in results."""
         conversation_repo = ConversationRepository(db_session)
 
         # Create messages including a tool call
         user_msg = ModelRequest(parts=[UserPromptPart(content="Edit this document")])
-        tool_call_msg = ModelResponse(parts=[ToolCallPart(tool_name="edit_document", tool_call_id="tool_123", args={})])
+        tool_call_msg = ModelResponse(
+            parts=[ToolCallPart(tool_name="edit_document", tool_call_id="tool_123", args={"content": "new"})]
+        )
         agent_response = ModelResponse(parts=[TextPart(content="I've made the requested edits")])
 
         conversation_repo.create_message(test_conversation.id, user_msg)
@@ -119,11 +121,16 @@ class TestConversationsRouter:
         response = client.get(f"/api/conversations/{test_conversation.id}/messages")
         assert response.status_code == 200
 
-        messages = response.json()
-        # Should only have user message and final agent response, not tool call
-        assert len(messages) == 2
-        assert messages[0]["text_content"] == "Edit this document"
-        assert messages[1]["text_content"] == "I've made the requested edits"
+        events = response.json()
+        # Should have user message, tool call, and final agent response
+        assert len(events) == 3
+        assert events[0]["event_type"] == "message"
+        assert events[0]["text_content"] == "Edit this document"
+        assert events[1]["event_type"] == "tool_call"
+        assert events[1]["tool_name"] == "edit_document"
+        assert events[1]["tool_call_id"] == "tool_123"
+        assert events[2]["event_type"] == "message"
+        assert events[2]["text_content"] == "I've made the requested edits"
 
     def test_send_conversation_message(self, client_with_mock_agent, test_conversation, mock_agent):
         """Test sending a message to a conversation."""
@@ -134,14 +141,16 @@ class TestConversationsRouter:
         )
         assert response.status_code == 200
 
-        conversation_response = response.json()
-        assert conversation_response["type"] == "message"
-        assert conversation_response["message"]["role"] == "agent"
-        assert "I can help you analyze" in conversation_response["message"]["text_content"]
+        events = response.json()
+        assert isinstance(events, list)
+        assert len(events) == 1
+        assert events[0]["event_type"] == "message"
+        assert events[0]["role"] == "agent"
+        assert "I can help you analyze" in events[0]["text_content"]
 
         # Verify the mock agent was called correctly
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
+        mock_agent.stream_events.assert_called_once()
+        args, kwargs = mock_agent.stream_events.call_args
         assert kwargs["prompt_or_approvals"] == "Help me analyze my project and answer questions."
 
     def test_send_conversation_message_returns_tool_request(
@@ -164,8 +173,15 @@ class TestConversationsRouter:
             ]
         )
         # Override the side_effect to return our tool request result
-        mock_agent.run.side_effect = None
-        mock_agent.run.return_value = mock_result
+        async def tool_request_stream(**kwargs):
+            from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent
+
+            # Yield tool call event first
+            yield FunctionToolCallEvent(part=tool_call_part)
+            # Then yield the result
+            yield AgentRunResultEvent(result=mock_result)
+
+        mock_agent.stream_events.side_effect = tool_request_stream
 
         message_request = {"message": "Please update the document with better content"}
 
@@ -174,13 +190,17 @@ class TestConversationsRouter:
         )
         assert response.status_code == 200
 
-        conversation_response = response.json()
-        assert conversation_response["type"] == "tool_request"
-        assert conversation_response["tool_requests"] is not None
-        assert len(conversation_response["tool_requests"]) == 1
-        assert conversation_response["tool_requests"][0]["tool_name"] == "edit_document"
-        assert conversation_response["tool_requests"][0]["tool_call_id"] == "test_call_1"
-        assert conversation_response["message"] is None
+        events = response.json()
+        assert isinstance(events, list)
+        assert len(events) == 2
+        # First event should be the tool call
+        assert events[0]["event_type"] == "tool_call"
+        assert events[0]["tool_name"] == "edit_document"
+        assert events[0]["tool_call_id"] == "test_call_1"
+        # Second event should be the tool call request
+        assert events[1]["event_type"] == "tool_call_request"
+        assert events[1]["tool_name"] == "edit_document"
+        assert events[1]["tool_call_id"] == "test_call_1"
 
     def test_approve_conversation_tools(self, client_with_mock_agent, test_conversation, db_session, mock_agent):
         """Test approving tool calls in a conversation."""
@@ -206,7 +226,7 @@ class TestConversationsRouter:
                 )
             ]
         )
-        mock_agent.run.return_value = mock_result
+        mock_agent.stream_events.return_value = mock_result
 
         approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
 
@@ -215,14 +235,16 @@ class TestConversationsRouter:
         )
         assert response.status_code == 200
 
-        conversation_response = response.json()
-        assert conversation_response["type"] == "message"
-        assert conversation_response["message"]["role"] == "agent"
-        assert "tool approvals" in conversation_response["message"]["text_content"]
+        events = response.json()
+        assert isinstance(events, list)
+        assert len(events) == 1
+        assert events[0]["event_type"] == "message"
+        assert events[0]["role"] == "agent"
+        assert "tool approvals" in events[0]["text_content"]
 
         # Verify the mock agent was called with tool approvals
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
+        mock_agent.stream_events.assert_called_once()
+        args, kwargs = mock_agent.stream_events.call_args
         assert not isinstance(kwargs["prompt_or_approvals"], str)
 
     def test_approve_conversation_tools_mixed_approvals(
@@ -254,7 +276,7 @@ class TestConversationsRouter:
                 )
             ]
         )
-        mock_agent.run.return_value = mock_result
+        mock_agent.stream_events.return_value = mock_result
 
         approval_request = {
             "approvals": {
@@ -268,9 +290,10 @@ class TestConversationsRouter:
         )
         assert response.status_code == 200
 
-        conversation_response = response.json()
-        assert conversation_response["type"] == "message"
-        assert conversation_response["message"] is not None
+        events = response.json()
+        assert isinstance(events, list)
+        assert len(events) >= 1
+        assert events[-1]["event_type"] == "message"
 
     def test_clear_conversation_messages_success(self, client, db_session, test_conversation):
         """Test clearing all messages from a conversation."""

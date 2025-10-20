@@ -73,23 +73,29 @@ def create_task_conversation_service(
 
     elif agent_engine == AgentEngine.CLAUDE_CODE:
         # Create Claude Code agent based on role
+        # Pass the conversation's external_session_id to resume previous conversations
+        session_id = conversation.external_session_id
+
         if agent_role == AgentRole.TASK_SPECIFICATION:
             agent = ClaudeTaskSpecificationAgent(
                 task=task,
                 document_repository=document_repo,
                 model=model,
+                session_id=session_id,
             )
         elif agent_role == AgentRole.TASK_PLANNING:
             agent = ClaudeTaskPlanningAgent(
                 task=task,
                 document_repository=document_repo,
                 model=model,
+                session_id=session_id,
             )
         elif agent_role == AgentRole.TASK_IMPLEMENTATION:
             agent = ClaudeImplementationAgent(
                 task=task,
                 document_repository=document_repo,
                 model=model,
+                session_id=session_id,
             )
         else:
             raise ValueError(f"Unsupported agent role for Claude Code: {agent_role}")

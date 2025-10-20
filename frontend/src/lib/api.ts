@@ -39,26 +39,41 @@ export interface DocumentResponse {
 // New agent conversation interfaces matching backend schemas
 export type MessageRole = 'user' | 'agent'
 
+export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request'
+
 export interface ConversationMessage {
+  event_type: 'message'
   role: MessageRole
   text_content: string
   timestamp: string
 }
 
+export interface ToolCall {
+  event_type: 'tool_call'
+  tool_call_id: string
+  tool_name: string
+  tool_args: Record<string, unknown> | null
+  timestamp: string
+}
+
+export interface ToolResult {
+  event_type: 'tool_result'
+  tool_call_id: string
+  result_content: string
+  is_error: boolean
+  timestamp: string
+}
 
 export interface ToolCallRequest {
+  event_type: 'tool_call_request'
   tool_call_id: string
   tool_name: string
   tool_args: string | Record<string, unknown> | null
+  timestamp: string
 }
 
-export type PromptResponseType = 'message' | 'tool_request'
-
-export interface PromptResponse {
-  type: PromptResponseType
-  message: ConversationMessage | null
-  tool_requests: ToolCallRequest[] | null
-}
+// Union type for all conversation events
+export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest
 
 export interface UserPrompt {
   message: string
@@ -310,19 +325,19 @@ export class ApiClient {
     return this.request<ConversationResponse>(`/api/conversations/${conversationId}`)
   }
 
-  async getConversationMessages(conversationId: number | string): Promise<ConversationMessage[]> {
-    return this.request<ConversationMessage[]>(`/api/conversations/${conversationId}/messages`)
+  async getConversationMessages(conversationId: number | string): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`)
   }
 
-  async sendConversationMessage(conversationId: number | string, request: UserPrompt): Promise<PromptResponse> {
-    return this.request<PromptResponse>(`/api/conversations/${conversationId}/messages`, {
+  async sendConversationMessage(conversationId: number | string, request: UserPrompt): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
   }
 
-  async approveConversationTools(conversationId: number | string, request: ToolApprovalRequest): Promise<PromptResponse> {
-    return this.request<PromptResponse>(`/api/conversations/${conversationId}/approve-tools`, {
+  async approveConversationTools(conversationId: number | string, request: ToolApprovalRequest): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
@@ -334,8 +349,8 @@ export class ApiClient {
     })
   }
 
-  async sendPromptAction(conversationId: number | string, request: PromptActionRequest): Promise<PromptResponse> {
-    return this.request<PromptResponse>(`/api/conversations/${conversationId}/prompt-action`, {
+  async sendPromptAction(conversationId: number | string, request: PromptActionRequest): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/prompt-action`, {
       method: 'POST',
       body: JSON.stringify(request),
     })

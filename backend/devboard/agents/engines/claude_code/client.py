@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, TypeAlias, TypedDict
+from typing import Any, TypedDict
 
 import logfire
 from claude_agent_sdk import (
@@ -53,7 +53,7 @@ class ClaudeToolContent(TypedDict):
 
 
 # Type alias for custom tool functions - can be sync or async functions returning str
-ClaudeCodeToolFunc: TypeAlias = Callable[..., str | Awaitable[str]]
+type ClaudeCodeToolFunc = Callable[..., str | Awaitable[str]]
 
 
 class ClaudeClient:

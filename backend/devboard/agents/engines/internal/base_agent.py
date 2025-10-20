@@ -1,8 +1,9 @@
 """Base agent service with shared functionality for PydanticAI message handling."""
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import AsyncIterator
 
-from pydantic_ai import Agent, Tool
+from pydantic_ai import Agent, AgentRunResultEvent, AgentStreamEvent, Tool
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -95,21 +96,21 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
         return ModelRequest(parts=parts)
 
-    async def run(
+    async def stream_events(
         self,
         prompt_or_approvals: str | DeferredToolResults,
         conversation_history: list[ModelMessage],
         deps: TDeps,
-    ) -> AgentRunResult:
-        """Process a user message with conversation history.
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Stream events from agent execution.
 
         Args:
-            prompt_or_approvals: The user's message
+            prompt_or_approvals: The user's message or tool approval results
             conversation_history: Previous conversation messages
             deps: Agent-specific dependencies/context
 
-        Returns:
-            Final response message, or deferred tool requests if applicable
+        Yields:
+            Stream events from PydanticAI agent execution
         """
         # Build system prompt and context message dynamically each time
         initial_request = await self.build_system_and_context_messages(deps)
@@ -123,19 +124,46 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
 
         agent = self._create_agent()
 
-        # Run the agent with message history
+        # Stream events from the agent
         if isinstance(prompt_or_approvals, DeferredToolResults):
-            result = await agent.run(
+            async for event in agent.run_stream_events(
                 deferred_tool_results=prompt_or_approvals,
                 deps=deps,
                 message_history=total_message_history,
-            )
+            ):
+                yield event
         else:
-            result = await agent.run(
+            async for event in agent.run_stream_events(
                 user_prompt=prompt_or_approvals,
                 deps=deps,
                 message_history=total_message_history,
-            )
+            ):
+                yield event
+
+    async def run(
+        self,
+        prompt_or_approvals: str | DeferredToolResults,
+        conversation_history: list[ModelMessage],
+        deps: TDeps,
+    ) -> AgentRunResult:
+        """Process a user message with conversation history.
+
+        Args:
+            prompt_or_approvals: The user's message or tool approval results
+            conversation_history: Previous conversation messages
+            deps: Agent-specific dependencies/context
+
+        Returns:
+            Final response message, or deferred tool requests if applicable
+        """
+        # Use stream_events and consume the iterator to get final result
+        result = None
+        async for event in self.stream_events(prompt_or_approvals, conversation_history, deps):
+            if isinstance(event, AgentRunResultEvent):
+                result = event.result
+
+        if result is None:
+            raise ValueError("Agent execution did not produce a result")
 
         return result
 

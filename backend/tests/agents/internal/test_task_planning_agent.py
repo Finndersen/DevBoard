@@ -3,6 +3,8 @@
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from pydantic_ai import ApprovalRequired
+
 from devboard.agents.engines.internal import BaseDeps, TaskPlanningAgent, TaskSpecificationAgent
 from devboard.agents.engines.internal.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
@@ -11,8 +13,6 @@ from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import DocumentRepository
-from pydantic_ai import ApprovalRequired
-
 from tests.conftest import create_mock_task
 
 
@@ -330,7 +330,9 @@ class TestSetDocumentContentTool:
         with pytest.raises(ApprovalRequired):
             tool.function(ctx, "New content replacing existing")
 
-    def test_tool_sets_content_when_approved_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+    def test_tool_sets_content_when_approved_for_document_with_content(
+        self, mock_document_with_content, mock_document_repo
+    ):
         """Test tool sets content when approved for document with existing content."""
         tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
 

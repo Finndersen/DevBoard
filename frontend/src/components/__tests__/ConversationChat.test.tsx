@@ -26,11 +26,13 @@ describe('ConversationChat', () => {
       http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
+            event_type: 'message',
             text_content: 'What is the status?',
             role: 'user',
             timestamp: '2024-01-01T10:00:00Z',
           },
           {
+            event_type: 'message',
             text_content: 'The project is progressing well.',
             role: 'agent',
             timestamp: '2024-01-01T10:01:00Z',
@@ -83,15 +85,14 @@ describe('ConversationChat', () => {
     server.use(
       http.post('*/api/conversations/1/messages', async ({ request }) => {
         const { message } = await request.json() as { message: string }
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: `AI response to: ${message}`,
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -127,15 +128,14 @@ describe('ConversationChat', () => {
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -161,15 +161,14 @@ describe('ConversationChat', () => {
     server.use(
       http.post('*/api/conversations/1/messages', async ({ request }) => {
         const { message } = await request.json() as { message: string }
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: `Got: ${message}`,
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -223,20 +222,19 @@ describe('ConversationChat', () => {
 
   it('shows loading state while sending message', async () => {
     const user = userEvent.setup()
-    
+
     // Delay the API response to test loading state
     server.use(
       http.post('*/api/conversations/1/messages', async () => {
         await new Promise(resolve => setTimeout(resolve, 200))
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -316,11 +314,12 @@ describe('ConversationChat', () => {
 
   it('formats timestamps correctly', async () => {
     const testDate = '2024-01-01T15:30:00Z'
-    
+
     server.use(
       http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json([
           {
+            event_type: 'message',
             text_content: 'Test message',
             role: 'user',
             timestamp: testDate,
@@ -359,15 +358,14 @@ describe('ConversationChat', () => {
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: 'AI response',
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -393,16 +391,19 @@ describe('ConversationChat', () => {
   it('displays messages in chronological order', async () => {
     const messages = [
       {
+        event_type: 'message',
         text_content: 'First message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:00:00Z',
       },
       {
+        event_type: 'message',
         text_content: 'Second message',
         role: 'agent' as const,
         timestamp: '2024-01-01T10:01:00Z',
       },
       {
+        event_type: 'message',
         text_content: 'Third message',
         role: 'user' as const,
         timestamp: '2024-01-01T10:02:00Z',
@@ -429,14 +430,13 @@ describe('ConversationChat', () => {
 
   it('handles tool approval workflow for document editing', async () => {
     const user = userEvent.setup()
-    
+
     // Mock agent requesting tool approval
     server.use(
       http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json({
-          type: 'tool_request',
-          message: null,
-          tool_requests: [{
+        return HttpResponse.json([
+          {
+            event_type: 'tool_call_request',
             tool_call_id: 'edit_123',
             tool_name: 'edit_project_specification',
             tool_args: {
@@ -445,21 +445,20 @@ describe('ConversationChat', () => {
               ],
               reasoning: 'Updating project specification'
             }
-          }]
-        })
+          }
+        ])
       }),
-      
+
       // Mock approval endpoint
       http.post('*/api/conversations/1/approve-tools', () => {
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: 'Successfully updated the project specification.',
             role: 'agent',
             timestamp: new Date().toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 
@@ -502,18 +501,17 @@ describe('ConversationChat', () => {
 
   it('prevents sending messages while tool approval is pending', async () => {
     const user = userEvent.setup()
-    
+
     server.use(
       http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json({
-          type: 'tool_request',
-          message: null,
-          tool_requests: [{
+        return HttpResponse.json([
+          {
+            event_type: 'tool_call_request',
             tool_call_id: 'edit_123',
             tool_name: 'edit_project_specification',
             tool_args: { edits: [], reasoning: 'Test' }
-          }]
-        })
+          }
+        ])
       })
     )
 
@@ -591,15 +589,14 @@ describe('ConversationChat', () => {
         // Ensure unique timestamps by adding call count to milliseconds
         const now = new Date()
         now.setMilliseconds(now.getMilliseconds() + callCount)
-        return HttpResponse.json({
-          type: 'message',
-          message: {
+        return HttpResponse.json([
+          {
+            event_type: 'message',
             text_content: 'AI response',
             role: 'agent',
             timestamp: now.toISOString()
-          },
-          tool_requests: null
-        })
+          }
+        ])
       })
     )
 

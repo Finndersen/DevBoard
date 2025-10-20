@@ -63,12 +63,14 @@ class TaskSpecificationAgent(InternalTaskAgent):
         tools: list[Tool | ToolFuncEither] = []
 
         # Always provide both set_content and edit tools for specification
-        tools.extend([
-            create_set_document_content_tool(
-                document=self.task.specification, document_repo=self.document_repository
-            ),
-            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository)
-        ])
+        tools.extend(
+            [
+                create_set_document_content_tool(
+                    document=self.task.specification, document_repo=self.document_repository
+                ),
+                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
+            ]
+        )
 
         # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
         if self.codebase_integration:
@@ -101,18 +103,20 @@ class TaskPlanningAgent(InternalTaskAgent):
         tools: list[Tool | ToolFuncEither] = []
 
         # Always provide both set_content and edit tools for both documents
-        tools.extend([
-            create_set_document_content_tool(
-                document=self.task.specification, document_repo=self.document_repository
-            ),
-            create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
-            create_set_document_content_tool(
-                document=self.task.implementation_plan, document_repo=self.document_repository
-            ),
-            create_document_edit_tool(
-                document=self.task.implementation_plan, document_repo=self.document_repository
-            )
-        ])
+        tools.extend(
+            [
+                create_set_document_content_tool(
+                    document=self.task.specification, document_repo=self.document_repository
+                ),
+                create_document_edit_tool(document=self.task.specification, document_repo=self.document_repository),
+                create_set_document_content_tool(
+                    document=self.task.implementation_plan, document_repo=self.document_repository
+                ),
+                create_document_edit_tool(
+                    document=self.task.implementation_plan, document_repo=self.document_repository
+                ),
+            ]
+        )
 
         # Add codebase search tools if codebase is available (may move to dedicated Codebase investigation agent later)
         if self.codebase_integration:

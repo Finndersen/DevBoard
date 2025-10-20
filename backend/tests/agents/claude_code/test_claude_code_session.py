@@ -175,26 +175,30 @@ class TestClaudeCodeSessionService:
             {
                 "type": "user",
                 "uuid": "u1",
-                "timestamp": "2025-10-08T15:10:00.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:00.000Z",
+                "isSidechain": False,
                 "message": {"role": "user", "content": "Hello"},
             },
             {
                 "type": "assistant",
                 "uuid": "a1",
-                "timestamp": "2025-10-08T15:10:01.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:01.000Z",
+                "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]},
             },
             {"type": "summary", "summary": "Greeting", "leafUuid": "s1"},
             {
                 "type": "user",
                 "uuid": "u2",
-                "timestamp": "2025-10-08T15:10:05.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:05.000Z",
+                "isSidechain": False,
                 "message": {"role": "user", "content": "How are you?"},
             },
             {
                 "type": "assistant",
                 "uuid": "a2",
-                "timestamp": "2025-10-08T15:10:06.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:06.000Z",
+                "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "I'm doing well!"}]},
             },
         ]
@@ -286,13 +290,15 @@ class TestClaudeCodeSessionService:
             {
                 "type": "user",
                 "uuid": "u1",
-                "timestamp": "2025-10-08T15:10:00.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:00.000Z",
+                "isSidechain": False,
                 "message": {"role": "user", "content": "Hello"},
             },
             {
                 "type": "assistant",
                 "uuid": "a1",
-                "timestamp": "2025-10-08T15:10:01.000Z", "isSidechain": False,
+                "timestamp": "2025-10-08T15:10:01.000Z",
+                "isSidechain": False,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
             },
         ]

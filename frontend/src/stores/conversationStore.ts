@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import type { ConversationMessage } from '../lib/api'
+import type { ConversationEvent } from '../lib/api'
 import type { PendingApprovalWithContext } from '../contexts/ApprovalsContext'
 
 export interface ConversationState {
   id: number
-  messages: ConversationMessage[]
+  messages: ConversationEvent[]
   draftMessage: string
   scrollPosition: number
   isTyping: boolean
@@ -25,8 +25,8 @@ interface ConversationsActions {
   getConversation: (conversationId: number) => ConversationState | undefined
 
   // Message management
-  setMessages: (conversationId: number, messages: ConversationMessage[]) => void
-  addMessage: (conversationId: number, message: ConversationMessage) => void
+  setMessages: (conversationId: number, messages: ConversationEvent[]) => void
+  addMessage: (conversationId: number, message: ConversationEvent) => void
   clearMessages: (conversationId: number) => void
 
   // Draft message

@@ -14,8 +14,7 @@ from devboard.api.dependencies.services import (
 )
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
-    ConversationMessage,
-    PromptResponse,
+    ConversationEvent,
     ToolApprovalRequest,
 )
 from devboard.api.schemas.common import DeleteResponse
@@ -50,40 +49,49 @@ async def get_conversation(
     )
 
 
-@router.get("/{conversation_id}/messages", response_model=list[ConversationMessage])
+@router.get("/{conversation_id}/messages", response_model=list[ConversationEvent])
 async def get_conversation_messages(
     conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-) -> list[ConversationMessage]:
+) -> list[ConversationEvent]:
     """Get all messages for a conversation.
 
     Retrieves messages from database (PydanticAI) or session files (Claude Code)
     depending on the conversation's engine configuration.
+
+    Note: ToolCallRequest events are excluded as they are ephemeral approval
+    requests, not conversation history.
     """
     return await conversation_service.get_conversation_messages()
 
 
-@router.post("/{conversation_id}/messages", response_model=PromptResponse)
+@router.post("/{conversation_id}/messages", response_model=list[ConversationEvent])
 async def send_conversation_message(
     request: ChatRequest,
     conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-) -> PromptResponse:
+) -> list[ConversationEvent]:
     """Send message to any conversation.
 
     Uses the appropriate agent engine (PydanticAI or Claude Code) based on
     the conversation's configuration.
+
+    Returns all events generated from processing the message, including
+    tool calls, tool results, and the final response message.
     """
     return await conversation_service.send_message(message=request.message)
 
 
-@router.post("/{conversation_id}/approve-tools", response_model=PromptResponse)
+@router.post("/{conversation_id}/approve-tools", response_model=list[ConversationEvent])
 async def approve_conversation_tools(
     request: ToolApprovalRequest,
     conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-) -> PromptResponse:
+) -> list[ConversationEvent]:
     """Approve or deny tool calls for any conversation.
 
     Processes tool approval decisions and continues agent execution
     with the appropriate engine (PydanticAI or Claude Code).
+
+    Returns all events generated from processing the approvals, including
+    tool calls, tool results, and the final response message.
     """
     return await conversation_service.process_tool_approvals(approvals=request.approvals)
 
@@ -168,12 +176,12 @@ async def update_conversation_model(
     }
 
 
-@router.post("/{conversation_id}/prompt-action", response_model=PromptResponse)
+@router.post("/{conversation_id}/prompt-action", response_model=list[ConversationEvent])
 async def execute_prompt_action(
     request: PromptActionRequest,
     prompt_action_service: PromptActionService = Depends(get_prompt_action_service),
     conversation: Conversation = Depends(get_verified_conversation),
-) -> PromptResponse:
+) -> list[ConversationEvent]:
     """Execute a predefined prompt action on a conversation.
 
     Prompt actions are reusable, named operations that send predefined prompts
@@ -186,7 +194,7 @@ async def execute_prompt_action(
         conversation: Agent conversation
 
     Returns:
-        PromptResponse with the agent's response to the prompt
+        List of ConversationEvent objects from processing the prompt action
 
     Raises:
         HTTPException: 404 if action_key not found

@@ -2,9 +2,9 @@
 
 from devboard.agents.engines.claude_code.base_agent import (
     ClaudeCodeAgent,
-    create_set_document_content_function,
 )
 from devboard.agents.engines.claude_code.client import ClaudeCodeToolFunc
+from devboard.agents.engines.claude_code.tools import create_set_document_content_function
 from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentTool,
     SetDocumentContentTool,
@@ -187,6 +187,7 @@ class ClaudeImplementationAgent(ClaudeCodeAgent):
         task: Task,
         document_repository: DocumentRepository,
         model: LanguageModel,
+        session_id: str | None = None,
     ):
         """Initialize the implementation agent.
 
@@ -194,7 +195,7 @@ class ClaudeImplementationAgent(ClaudeCodeAgent):
             task: The task this agent is working on
             document_repository: Repository for document operations
             model: Language model instance
-            plan_mode: Whether to enable plan mode in Claude Code
+            session_id: Optional session ID to resume previous conversation
 
         Raises:
             ValueError: If task does not have an associated codebase
@@ -210,6 +211,7 @@ class ClaudeImplementationAgent(ClaudeCodeAgent):
             task=task,
             document_repository=document_repository,
             model=model,
+            session_id=session_id,
             include_builtin_system_prompt=True,
             include_claude_md=True,
         )

@@ -29,7 +29,7 @@ It should NOT include:
 - ❌ Full code change snippets or specific implementation details (implementation agent can decide)
 
 BEHAVIOUR GUIDELINES:
-- Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
+- Task and Project documents are internally managed and NOT stored on the filesystem so CANNOT be viewed or edited like normal files
 - Thoroughly analyze the task specification, codebase and any other relevant associated resources before proposing a plan
 - Research the existing codebase to understand current implementation patterns, conventions, and architecture
 - Ask clarifying questions about technical decisions, edge cases, or ambiguous requirements

@@ -584,9 +584,7 @@ class TestTaskStateTransition:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project", specification=spec_doc
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
 
         task_repo = TaskRepository(db_session)
         task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")  # Empty spec
@@ -622,9 +620,7 @@ class TestTaskStateTransition:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project", specification=spec_doc
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
 
         task_repo = TaskRepository(db_session)
         task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
@@ -664,9 +660,7 @@ class TestTaskStateTransition:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project", specification=spec_doc
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
 
         task_repo = TaskRepository(db_session)
         task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
@@ -720,9 +714,7 @@ class TestTaskStateTransition:
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
         spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project", specification=spec_doc
-        )
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
 
         task_repo = TaskRepository(db_session)
         task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification")

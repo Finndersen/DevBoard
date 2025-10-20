@@ -29,7 +29,7 @@ class ClaudeResponseParser:
 
     # XML marker patterns
     VALIDATION_ERROR_PATTERN = re.compile(
-        r"<validation_error>(.*?)</validation_error>",
+        r'<validation_error(?:\s+tool_name="([^"]+)")?\s*>(.*?)</validation_error>',
         re.DOTALL,
     )
     TOOL_RESULT_PATTERN = re.compile(
@@ -139,30 +139,6 @@ class ClaudeResponseParser:
         return VirtualToolCall.model_validate(json_data)
 
     @classmethod
-    def is_validation_error(cls, text: str) -> bool:
-        """Check if text contains a validation error marker.
-
-        Args:
-            text: Message text to check
-
-        Returns:
-            True if validation error marker found
-        """
-        return bool(cls.VALIDATION_ERROR_PATTERN.search(text))
-
-    @classmethod
-    def is_tool_result(cls, text: str) -> bool:
-        """Check if text contains a tool result marker.
-
-        Args:
-            text: Message text to check
-
-        Returns:
-            True if tool result marker found
-        """
-        return bool(cls.TOOL_RESULT_PATTERN.search(text))
-
-    @classmethod
     def extract_tool_result_info(cls, text: str) -> tuple[str, str] | None:
         """Extract tool name and result from a tool result message.
 
@@ -177,4 +153,21 @@ class ClaudeResponseParser:
             tool_name = match.group(1)
             result_text = match.group(2).strip()
             return (tool_name, result_text)
+        return None
+
+    @classmethod
+    def extract_validation_error_info(cls, text: str) -> tuple[str | None, str] | None:
+        """Extract tool name and error message from a validation error message.
+
+        Args:
+            text: Validation error message text
+
+        Returns:
+            Tuple of (tool_name or None, error_text) if found, None otherwise
+        """
+        match = cls.VALIDATION_ERROR_PATTERN.search(text)
+        if match:
+            tool_name = match.group(1)  # May be None if tool_name attribute not present
+            error_text = match.group(2).strip()
+            return (tool_name, error_text)
         return None

@@ -11,7 +11,6 @@ from devboard.agents.engines.claude_code.base_agent import (
     ClaudeCodeAgent,
     MessageResponse,
 )
-from devboard.agents.engines.claude_code.client import ClaudeCodeResult
 from devboard.agents.engines.claude_code.virtual_tools import (
     EditDocumentArgs,
     EditDocumentTool,
@@ -21,15 +20,12 @@ from devboard.agents.language_models import LanguageModel, LLMProvider, ModelTyp
 from devboard.db.models.task import Task
 
 
-def create_mock_result(text_content: str, session_id: str = "test-session") -> ClaudeCodeResult:
-    """Helper to create a ClaudeCodeResult with mock ResultMessage."""
+def create_mock_result(text_content: str, session_id: str = "test-session") -> ResultMessage:
+    """Helper to create a ResultMessage for testing."""
     mock_result_message = Mock(spec=ResultMessage)
     mock_result_message.session_id = session_id
-    return ClaudeCodeResult(
-        text_content=text_content,
-        result_message=mock_result_message,
-        session_id=session_id,
-    )
+    mock_result_message.result = text_content  # The text content is in the result attribute
+    return mock_result_message
 
 
 class MockAgent(ClaudeCodeAgent):
@@ -104,7 +100,6 @@ class TestValidMessageResponse:
 
         assert isinstance(response, MessageResponse)
         assert response.content == "Hello, world!"
-        assert response.session_id == "test-session"
 
 
 class TestValidToolCallResponse:
@@ -132,7 +127,6 @@ class TestValidToolCallResponse:
         assert len(response.calls) == 1
         assert response.calls[0].tool_name == "edit_task_specification"
         assert response.calls[0].arguments["edits"][0]["find"] == "old text"
-        assert response.session_id == "test-session"
 
 
 class TestInvalidJSONResponse:
@@ -148,7 +142,6 @@ class TestInvalidJSONResponse:
         # Non-JSON is now treated as a normal text message
         assert isinstance(response, MessageResponse)
         assert response.content == "This is not JSON at all"
-        assert response.session_id == "test-session"
 
     @pytest.mark.asyncio
     async def test_plain_text_message_no_validation(self, test_agent):
@@ -160,7 +153,6 @@ class TestInvalidJSONResponse:
         # Plain text should work fine as normal message
         assert isinstance(response, MessageResponse)
         assert "Hello! I've analyzed" in response.content
-        assert response.session_id == "test-session"
 
 
 class TestInvalidResponseStructure:
@@ -176,7 +168,6 @@ class TestInvalidResponseStructure:
         # JSON array should be treated as plain text message
         assert isinstance(response, MessageResponse)
         assert response.content == '["array", "not", "object"]'
-        assert response.session_id == "test-session"
 
     @pytest.mark.asyncio
     @patch.object(MockAgent, "run")
@@ -186,7 +177,6 @@ class TestInvalidResponseStructure:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -209,7 +199,6 @@ class TestInvalidMessageFormat:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -228,7 +217,6 @@ class TestInvalidMessageFormat:
         # Should return full text
         assert isinstance(response, MessageResponse)
         assert response.content == "Test message"
-        assert response.session_id == "test-session"
 
 
 class TestInvalidToolCallFormat:
@@ -242,7 +230,6 @@ class TestInvalidToolCallFormat:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -260,7 +247,6 @@ class TestInvalidToolCallFormat:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -279,7 +265,6 @@ class TestInvalidToolCallFormat:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -321,7 +306,6 @@ class TestUnknownTool:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -376,7 +360,6 @@ class TestInvalidToolArguments:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -407,7 +390,6 @@ class TestInvalidToolArguments:
 
         mock_run.return_value = MessageResponse(
             content="Fixed response",
-            session_id="test-session",
         )
 
         await test_agent._parse_response(result, retry_count=0)
@@ -447,15 +429,21 @@ class TestRetryMechanism:
     @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
     async def test_run_increments_retry_count(self, mock_client_class, test_agent):
         """Test that run() properly increments retry count."""
-        # Create mock client instance
+        # Create mock result message
+        mock_result_msg = create_mock_result("Success")
+
+        # Create mock client instance with stream method that yields ResultMessage
         mock_client = MagicMock()
-        mock_client.run = AsyncMock(return_value=create_mock_result("Success"))
+
+        async def mock_stream(user_query):
+            yield mock_result_msg
+
+        mock_client.stream = mock_stream
         mock_client_class.return_value = mock_client
 
         # Call run with retry count (using new parameter name)
         response = await test_agent.run(
             prompt_or_approvals="Test message",
-            session_id="test-session",
             _retry_count=2,
         )
 
@@ -467,13 +455,21 @@ class TestRetryMechanism:
     @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
     async def test_run_creates_new_client_each_time(self, mock_client_class, test_agent):
         """Test that run() creates a new client on each call (for fresh system prompt)."""
+        # Create mock result message
+        mock_result_msg = create_mock_result("Success")
+
+        # Create mock client instance with stream method
         mock_client = MagicMock()
-        mock_client.run = AsyncMock(return_value=create_mock_result("Success"))
+
+        async def mock_stream(user_query):
+            yield mock_result_msg
+
+        mock_client.stream = mock_stream
         mock_client_class.return_value = mock_client
 
         # Call run twice (using new parameter name)
-        await test_agent.run(prompt_or_approvals="Message 1", session_id="test-session")
-        await test_agent.run(prompt_or_approvals="Message 2", session_id="test-session")
+        await test_agent.run(prompt_or_approvals="Message 1")
+        await test_agent.run(prompt_or_approvals="Message 2")
 
         # Verify client was created twice
         assert mock_client_class.call_count == 2
