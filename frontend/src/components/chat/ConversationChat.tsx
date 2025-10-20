@@ -404,7 +404,7 @@ export default function ConversationChat({
       onClearHistory()
       return
     }
-    
+
     // Fallback to internal clear handler
     setClearing(true)
     try {
@@ -413,6 +413,8 @@ export default function ConversationChat({
       setMessages([])
       // Also clear pending messages
       clearConversationMessages(pendingKey)
+      // Clear pending tool approvals
+      clearApprovals(approvalKey)
       setShowClearModal(false)
     } catch (error) {
       console.error('Failed to clear chat history:', error)

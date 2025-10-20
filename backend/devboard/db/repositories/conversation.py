@@ -109,6 +109,31 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
+    def update_role_and_model(
+        self,
+        conversation: Conversation,
+        agent_role: AgentRole,
+        model_id: str,
+    ) -> Conversation:
+        """Update the agent role and model for a conversation.
+
+        Used when transitioning between task phases with the same agent engine,
+        allowing conversation reuse instead of archiving and creating a new one.
+
+        Args:
+            conversation: Conversation instance to update
+            agent_role: New agent role
+            model_id: New model identifier
+
+        Returns:
+            Updated Conversation instance
+        """
+        conversation.agent_role = agent_role
+        conversation.model_id = model_id
+        self.db.flush()
+
+        return conversation
+
     def get_active_for_entity(
         self,
         parent_type: ParentEntityType,

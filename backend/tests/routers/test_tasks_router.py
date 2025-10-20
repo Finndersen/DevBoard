@@ -655,7 +655,7 @@ class TestTaskStateTransition:
         assert updated_task["implementation_plan"]["document_type"] == "task_implementation_plan"
 
     def test_transition_creates_new_conversation_with_correct_role(self, client, db_session):
-        """Test that state transition creates new conversation with appropriate agent role."""
+        """Test that state transition updates conversation role when transitioning to PLANNING with same engine."""
         # Create task with specification content
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -691,22 +691,17 @@ class TestTaskStateTransition:
         assert response.status_code == 200
 
         updated_task = response.json()
-        new_conversation_id = updated_task["conversation_id"]
+        conversation_id = updated_task["conversation_id"]
 
-        # Verify new conversation was created
-        assert new_conversation_id != initial_conversation_id
+        # Verify conversation was reused (same ID) since both roles use INTERNAL engine
+        assert conversation_id == initial_conversation_id
 
-        # Verify new conversation has correct role
-        new_conversation = conversation_repo.get_by_id(new_conversation_id)
-        assert new_conversation is not None
-        assert new_conversation.agent_role == AgentRole.TASK_PLANNING
-        assert new_conversation.is_active is True
-
-        # Verify old conversation was archived
-        old_conversation = conversation_repo.get_by_id(initial_conversation_id)
-        assert old_conversation is not None
-        assert old_conversation.is_active is False
-        assert old_conversation.archived_at is not None
+        # Verify conversation has updated role
+        conversation = conversation_repo.get_by_id(conversation_id)
+        assert conversation is not None
+        assert conversation.agent_role == AgentRole.TASK_PLANNING
+        assert conversation.is_active is True
+        assert conversation.archived_at is None  # Should not be archived
 
     def test_transition_planning_to_implementing_without_plan(self, client, db_session):
         """Test transitioning from PLANNING to IMPLEMENTING without implementation plan fails."""
@@ -744,3 +739,109 @@ class TestTaskStateTransition:
         )
         assert response.status_code == 400
         assert "implementation plan" in response.json()["detail"].lower()
+
+    def test_transition_defining_to_planning_reuses_conversation_same_engine(self, client, db_session):
+        """Test transitioning from DEFINING to PLANNING reuses conversation when engine is same."""
+        # Create task with specification content
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=None,
+        )
+
+        # Create conversation with INTERNAL engine (both roles use same engine by default)
+        conversation_repo = ConversationRepository(db_session)
+        initial_conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+        initial_conversation_id = initial_conversation.id
+
+        # Transition to PLANNING
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.PLANNING.value},
+        )
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        conversation_id = updated_task["conversation_id"]
+
+        # Verify conversation was reused (same ID)
+        assert conversation_id == initial_conversation_id
+
+        # Verify conversation was updated with new role
+        conversation = conversation_repo.get_by_id(conversation_id)
+        assert conversation is not None
+        assert conversation.agent_role == AgentRole.TASK_PLANNING
+        assert conversation.is_active is True
+        assert conversation.archived_at is None  # Should not be archived
+
+    def test_transition_defining_to_planning_creates_new_conversation_different_engine(self, client, db_session):
+        """Test transitioning from DEFINING to PLANNING creates new conversation when engine changes."""
+        # Create task with specification content
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(name="Test Project", description="A test project", specification=spec_doc)
+
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "# Task Specification\n\nTest content")
+        created_task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            implementation_plan=None,
+        )
+
+        # Create conversation with CLAUDE_CODE engine
+        # Note: In real scenario, the new role would use different engine from config
+        conversation_repo = ConversationRepository(db_session)
+        initial_conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRole.TASK_SPECIFICATION,
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id="anthropic:claude-sonnet-4",
+        )
+        db_session.commit()
+        initial_conversation_id = initial_conversation.id
+
+        # Transition to PLANNING (assuming PLANNING uses INTERNAL engine, different from CLAUDE_CODE)
+        response = client.post(
+            f"/api/tasks/{created_task.id}/state-transition",
+            json={"new_state": TaskStatus.PLANNING.value},
+        )
+        assert response.status_code == 200
+
+        updated_task = response.json()
+        new_conversation_id = updated_task["conversation_id"]
+
+        # Verify new conversation was created (different ID)
+        assert new_conversation_id != initial_conversation_id
+
+        # Verify new conversation has correct role and engine
+        new_conversation = conversation_repo.get_by_id(new_conversation_id)
+        assert new_conversation is not None
+        assert new_conversation.agent_role == AgentRole.TASK_PLANNING
+        assert new_conversation.is_active is True
+
+        # Verify old conversation was archived
+        old_conversation = conversation_repo.get_by_id(initial_conversation_id)
+        assert old_conversation is not None
+        assert old_conversation.is_active is False
+        assert old_conversation.archived_at is not None

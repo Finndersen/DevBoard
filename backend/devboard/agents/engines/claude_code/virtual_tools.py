@@ -8,11 +8,13 @@ Read-only tools (file search, codebase search, etc.) use Claude Code's built-in
 tool system and do not require virtual tool calling.
 """
 
+import json
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
 
+from devboard.agents.prompts import DOCUMENT_EDIT_PROMPT
 from devboard.api.schemas import DocumentEdit
 from devboard.services.document_editor import DocumentEditorService
 
@@ -50,16 +52,16 @@ class SetContentArgs(BaseModel):
 TOOL_RESPONSE_FORMAT = """
 # TOOL USAGE INSTRUCTIONS:
 
-1. STANDARD READ-ONLY TOOLS (file search, codebase search, etc.):
+1. STANDARD TOOLS (file search, codebase search, set empty document content, etc.):
    Use these tools NORMALLY via your built-in tool system.
    No special format required - just call them as you would any tool.
 
-2. DOCUMENT EDITING TOOLS (edit_*, set_*_content):
+2. VIRTUAL TOOLS (edit_*, set_*_content (when non-empty), etc):
    These tools require approval and must use the VIRTUAL TOOL CALLING format below.
 
-## VIRTUAL TOOL CALLING FORMAT (for document editing tools that require approval only):
+## VIRTUAL TOOL CALLING FORMAT (for tools that require approval only):
 
-For document editing tool calls, respond with JSON content ONLY (no other text in your message):
+For virtual tool calls, respond with JSON content ONLY (no other text in your message):
 {
   "tool_name": "<tool_name>",
   "arguments": {
@@ -88,8 +90,7 @@ Assistant: 'I will update the task specification. Here's the updated content:
 }'
 
 IMPORTANT:
-- You can only make ONE document editing tool call at a time
-- ONLY make edits to task documents when specifically asked by the user, or after asking and receiving confirmation
+- You can only make ONE virtual tool call at a time
 - After the tool executes, you will receive the result wrapped in <tool_call_result> tags
 - Standard build-in tools can be used freely without any special format
 - When making virtual tool calls, your message must consist of JSON content ONLY (NO OTHER TEXT).
@@ -149,7 +150,7 @@ class VirtualTool(ABC):
             Formatted tool schema string
         """
         return f"""
-AVAILABLE TOOL: {self.tool_name}
+AVAILABLE VIRTUAL TOOL: {self.tool_name}
 
 Description: {self.description}
 
@@ -171,8 +172,6 @@ Example tool call:
         Returns:
             JSON schema as formatted string
         """
-        import json
-
         schema = self.args_model.model_json_schema()
         return json.dumps(schema, indent=2)
 
@@ -259,11 +258,7 @@ class EditDocumentTool(VirtualTool):
 
     def _format_additional_notes(self) -> str:
         """Format additional notes/warnings for the schema."""
-        return """IMPORTANT:
-- find must match EXACTLY (including all whitespace, newlines, indentation)
-- If find is not found, the edit will fail
-- Make edits atomic - one logical change per edit
-- Always provide enough context in find to make matches unique"""
+        return DOCUMENT_EDIT_PROMPT
 
 
 class SetDocumentContentTool(VirtualTool):
@@ -347,6 +342,9 @@ def build_virtual_tool_schemas_section(tools: list[VirtualTool]) -> str:
     Returns:
         Complete formatted tool schemas section
     """
+    if not tools:
+        return ""
+
     schemas = [TOOL_RESPONSE_FORMAT]
 
     for tool in tools:

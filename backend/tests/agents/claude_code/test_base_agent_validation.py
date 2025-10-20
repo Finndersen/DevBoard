@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from claude_agent_sdk import ResultMessage
+
 from devboard.agents.engines.claude_code.base_agent import (
     MAX_RETRY_ATTEMPTS,
     ClaudeCodeAgent,

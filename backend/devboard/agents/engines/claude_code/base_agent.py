@@ -22,7 +22,6 @@ from devboard.agents.engines.claude_code.virtual_tools import (
     build_virtual_tool_schemas_section,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
-from devboard.agents.prompts import DOCUMENT_EDIT_PROMPT
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
 from devboard.db.models.task import Task
 from devboard.db.repositories.document import DocumentRepository
@@ -113,13 +112,13 @@ class ClaudeCodeAgent(ABC):
         role_description = self._get_role_description()
 
         # Build tool schemas from virtual tools
-        tool_schemas = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
+        virtual_tool_prompt = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
 
         # Get current state/context
         state_context = self._get_state_context()
 
         # Combine all parts
-        return "\n\n".join([role_description, DOCUMENT_EDIT_PROMPT, tool_schemas, state_context])
+        return "\n\n".join([role_description, virtual_tool_prompt, state_context])
 
     @abstractmethod
     def _get_role_description(self) -> str:

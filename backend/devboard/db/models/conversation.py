@@ -32,7 +32,7 @@ class Conversation(Base):
     phase-based conversation management for tasks.
 
     Each conversation snapshots its agent configuration at creation time:
-    - agent_role: Immutable (PROJECT, TASK_SPECIFICATION, TASK_PLANNING, etc.)
+    - agent_role: Generally immutable, but can be updated when transitioning task phases with same engine
     - engine: Immutable (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
     - model_id: Mutable (can be changed within same engine)
 

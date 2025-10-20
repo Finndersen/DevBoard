@@ -171,36 +171,57 @@ class TaskService:
     ):
         """Create conversation for task phase with appropriate agent config.
 
-        Archives current conversation if exists, derives agent role from status,
-        gets effective config from AgentConfigService, and creates new conversation
-        with config snapshot.
+        When transitioning from DEFINING to PLANNING, if the agent engine remains the same,
+        the current conversation is reused by updating its role and model instead of
+        archiving and creating a new one.
+
+        For other transitions, archives current conversation if exists, derives agent role
+        from status, gets effective config from AgentConfigService, and creates new
+        conversation with config snapshot.
 
         Args:
             task: The task transitioning phases
             new_status: The new status being transitioned to
 
         Returns:
-            New Conversation instance for the phase
+            Conversation instance for the phase (either updated or newly created)
         """
-        # Archive current conversation
+        # Get current conversation
         current = self.conversation_repo.get_active_for_entity(ParentEntityType.TASK, task.id)
+
+        # Derive agent role from new task status
+        new_agent_role = self._get_agent_role_for_status(new_status)
+
+        # Get effective config for new role
+        new_agent_config = self.agent_config_service.get_agent_configuration(new_agent_role)
+        new_config = new_agent_config.config
+
+        # Check if we can reuse the conversation
+        # Reuse if: transitioning from DEFINING to PLANNING AND same engine
+        if (
+            current
+            and current.agent_role == AgentRole.TASK_SPECIFICATION
+            and new_agent_role == AgentRole.TASK_PLANNING
+            and current.engine == new_config.engine
+        ):
+            # Reuse conversation by updating role and model
+            return self.conversation_repo.update_role_and_model(
+                conversation=current,
+                agent_role=new_agent_role,
+                model_id=new_config.model_id,
+            )
+
+        # Archive current conversation if it exists
         if current:
             self.conversation_repo.archive(current.id)
 
-        # Derive agent role from task status
-        agent_role = self._get_agent_role_for_status(new_status)
-
-        # Get effective config for role
-        agent_config = self.agent_config_service.get_agent_configuration(agent_role)
-        config = agent_config.config
-
-        # Create conversation with config snapshot (external_session_id will be set later if needed)
+        # Create new conversation with config snapshot (external_session_id will be set later if needed)
         return self.conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
-            agent_role=agent_role,
-            engine=config.engine,
-            model_id=config.model_id,
+            agent_role=new_agent_role,
+            engine=new_config.engine,
+            model_id=new_config.model_id,
             external_session_id=None,
         )
 

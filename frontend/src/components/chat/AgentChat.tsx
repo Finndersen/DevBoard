@@ -9,7 +9,8 @@ import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ConversationResponse } from '../../lib/api'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
-import { createConversationPendingKey } from '../../utils/approvalKeys'
+import { useApprovals } from '../../contexts/ApprovalsContext'
+import { createConversationPendingKey, createConversationApprovalKey } from '../../utils/approvalKeys'
 import { useModal, useAsyncOperation } from '../../hooks'
 import { formatAgentRoleDisplayName } from '../../utils/agentRoles'
 
@@ -40,6 +41,7 @@ export default function AgentChat({
   const clearChatModal = useModal()
   const sessionIdModal = useModal()
   const { clearConversationMessages } = usePendingMessages()
+  const { clearApprovals } = useApprovals()
 
   // Fetch conversation details to get agent role
   useEffect(() => {
@@ -73,6 +75,9 @@ export default function AgentChat({
       // Also clear pending messages
       const pendingKey = createConversationPendingKey(conversationId)
       clearConversationMessages(pendingKey)
+      // Clear pending tool approvals
+      const approvalKey = createConversationApprovalKey(conversationId)
+      clearApprovals(approvalKey)
       clearChatModal.close()
       // Force refresh the conversation chat component
       window.location.reload() // Simple approach - could be optimized to just refresh the chat
