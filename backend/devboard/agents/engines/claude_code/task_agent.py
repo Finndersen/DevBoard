@@ -186,7 +186,7 @@ class ClaudeImplementationAgent(ClaudeCodeAgent):
         self,
         task: Task,
         document_repository: DocumentRepository,
-        model: LanguageModel,
+        model: LanguageModel | None,
         session_id: str | None = None,
     ):
         """Initialize the implementation agent.
@@ -194,7 +194,7 @@ class ClaudeImplementationAgent(ClaudeCodeAgent):
         Args:
             task: The task this agent is working on
             document_repository: Repository for document operations
-            model: Language model instance
+            model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
 
         Raises:

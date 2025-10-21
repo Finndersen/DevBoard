@@ -132,6 +132,10 @@ A **reference to external content** that can be shared across multiple projects 
   - **Agent Roles**: PROJECT, TASK_SPECIFICATION, TASK_PLANNING, TASK_IMPLEMENTATION, INVESTIGATION
   - **Execution Engines**: INTERNAL (PydanticAI), CLAUDE_CODE (Anthropic CLI), GEMINI_CLI (Google CLI)
   - **Model Selection**: Provider-filtered model lists (e.g., Claude Code supports only Anthropic models)
+    - **Engine-Specific Requirements**: Some engines require explicit model selection, others support default
+    - **Default Model Option**: External engines (Claude Code, Gemini CLI) can use engine's default model
+    - **Required Selection**: INTERNAL engine requires explicit model choice from configured providers
+    - **UI Indication**: Frontend shows "Default" option in dropdowns for engines supporting it
   - **Intelligent Defaults**: Automatic selection of REASONING models for planning roles, FAST models for quick tasks
   - **Role-Based Restrictions**: Each agent role has allowed engines (e.g., PROJECT role requires INTERNAL engine for tool approval)
 - **Resource Management**: Add and organize context provider links across projects and tasks

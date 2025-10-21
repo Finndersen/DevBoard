@@ -91,7 +91,7 @@ class TestAgentConfigService:
 
     def test_get_default_model_for_agent_role(self, agent_config_service):
         """_get_default_model_for_agent_role should select model based on agent role's recommended type."""
-        # PROJECT role recommends REASONING models
+        # PROJECT role recommends REASONING models (INTERNAL engine requires selection)
         project_default = agent_config_service._get_default_model_for_agent_role_and_engine(
             AgentRole.PROJECT, AgentEngine.INTERNAL
         )
@@ -102,7 +102,7 @@ class TestAgentConfigService:
         assert model is not None
         assert model.type == ModelType.REASONING
 
-        # INVESTIGATION role recommends FAST models
+        # INVESTIGATION role recommends FAST models (INTERNAL engine requires selection)
         investigation_default = agent_config_service._get_default_model_for_agent_role_and_engine(
             AgentRole.INVESTIGATION, AgentEngine.INTERNAL
         )
@@ -112,17 +112,6 @@ class TestAgentConfigService:
         model = agent_config_service.llm_registry.get(investigation_default)
         assert model is not None
         assert model.type == ModelType.FAST
-
-        # External engines should also work and select by recommended type
-        task_impl_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.TASK_IMPLEMENTATION, AgentEngine.CLAUDE_CODE
-        )
-        # Should return an Anthropic model (Claude Code only supports Anthropic)
-        assert task_impl_default.startswith("anthropic:")
-        # Should be a REASONING model (recommended for TASK_IMPLEMENTATION)
-        model = agent_config_service.llm_registry.get(task_impl_default)
-        assert model is not None
-        assert model.type == ModelType.REASONING
 
     def test_update_agent_configuration_validates_model(self, agent_config_service):
         """update_agent_configuration should validate model is available for engine."""
@@ -179,3 +168,70 @@ class TestAgentConfigService:
         assert gpt5 is not None
         assert gpt5.full_name is None
         assert gpt5.display_full_name == "gpt-5"
+
+    def test_default_model_for_engines_not_requiring_selection(self, agent_config_service):
+        """Engines that don't require model selection should return None as default."""
+        # Claude Code doesn't require model selection
+        claude_code_default = agent_config_service._get_default_model_for_agent_role_and_engine(
+            AgentRole.TASK_IMPLEMENTATION, AgentEngine.CLAUDE_CODE
+        )
+        assert claude_code_default is None
+
+        # Gemini CLI doesn't require model selection
+        gemini_default = agent_config_service._get_default_model_for_agent_role_and_engine(
+            AgentRole.TASK_IMPLEMENTATION, AgentEngine.GEMINI_CLI
+        )
+        assert gemini_default is None
+
+        # INTERNAL engine requires model selection, should return a model ID
+        internal_default = agent_config_service._get_default_model_for_agent_role_and_engine(
+            AgentRole.PROJECT, AgentEngine.INTERNAL
+        )
+        assert internal_default is not None
+        assert ":" in internal_default
+
+    def test_update_config_with_none_model_for_claude_code(self, agent_config_service):
+        """Update configuration with None model_id for Claude Code should succeed."""
+        config = AgentEngineModelConfig(
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id=None,
+        )
+        result = agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+        assert result.config.engine == AgentEngine.CLAUDE_CODE
+        assert result.config.model_id is None
+
+    def test_update_config_with_none_model_for_internal_fails(self, agent_config_service):
+        """Update configuration with None model_id for INTERNAL should fail validation."""
+        config = AgentEngineModelConfig(
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        with pytest.raises(ValueError, match="requires explicit model selection"):
+            agent_config_service.update_agent_configuration(AgentRole.PROJECT, config)
+
+    def test_engine_info_includes_requires_model_selection(self, agent_config_service):
+        """Engine info should include requires_model_selection field."""
+        # Get configuration for a role that supports multiple engines
+        config = agent_config_service.get_agent_configuration(AgentRole.TASK_IMPLEMENTATION)
+
+        # Check that engines have the requires_model_selection field
+        for engine_info in config.available_engines:
+            assert hasattr(engine_info, "requires_model_selection")
+            if engine_info.engine == "claude_code" or engine_info.engine == "gemini_cli":
+                assert engine_info.requires_model_selection is False
+            elif engine_info.engine == "internal":
+                assert engine_info.requires_model_selection is True
+
+    def test_get_effective_config_returns_none_for_claude_code_default(self, agent_config_service):
+        """get_effective_config should return None model_id for Claude Code when not explicitly set."""
+        # Set engine to Claude Code without selecting a model
+        config = AgentEngineModelConfig(
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id=None,
+        )
+        agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+
+        # Get effective config should return None model_id
+        effective_config = agent_config_service.get_effective_config(AgentRole.TASK_IMPLEMENTATION)
+        assert effective_config.engine == AgentEngine.CLAUDE_CODE
+        assert effective_config.model_id is None

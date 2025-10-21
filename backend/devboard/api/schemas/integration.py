@@ -49,13 +49,14 @@ class AgentEngineInfo(BaseModel):
     engine: str
     display_name: str
     description: str
+    requires_model_selection: bool
 
 
 class AgentEngineModelConfigSchema(BaseModel):
     """Combined engine and model configuration."""
 
     engine: str
-    model_id: str
+    model_id: str | None
 
 
 class AgentConfigurationResponse(BaseModel):
@@ -70,7 +71,7 @@ class UpdateAgentConfigurationRequest(BaseModel):
     """Request to update agent configuration."""
 
     engine: str
-    model_id: str
+    model_id: str | None
 
 
 class AvailableModelsByEngineResponse(BaseModel):
@@ -82,4 +83,4 @@ class AvailableModelsByEngineResponse(BaseModel):
 class UpdateConversationModelRequest(BaseModel):
     """Request to update conversation model."""
 
-    model_id: str
+    model_id: str | None

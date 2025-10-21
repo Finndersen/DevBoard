@@ -133,7 +133,7 @@ class LLMRegistry(Registry[LanguageModel]):
         Returns:
             Recommended ModelType for the agent
         """
-        return RECOMMENDED_AGENT_MODEL_TYPES.get(agent_role, ModelType.REASONING)
+        return RECOMMENDED_AGENT_MODEL_TYPES[agent_role]
 
 
 # Recommended model types for different agent roles

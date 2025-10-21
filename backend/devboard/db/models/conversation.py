@@ -64,7 +64,7 @@ class Conversation(Base):
     # Agent configuration snapshot (immutable after creation, except model_id)
     agent_role: Mapped[AgentRole] = mapped_column(Enum(AgentRole), nullable=False)
     engine: Mapped[AgentEngine] = mapped_column(Enum(AgentEngine), nullable=False)
-    model_id: Mapped[str] = mapped_column(nullable=False)  # e.g., "anthropic:claude-sonnet-4"
+    model_id: Mapped[str | None] = mapped_column(nullable=True)  # e.g., "anthropic:claude-sonnet-4", or None for engine default
 
     # External session management
     external_session_id: Mapped[str | None] = mapped_column(nullable=True)

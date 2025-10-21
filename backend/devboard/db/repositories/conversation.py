@@ -55,7 +55,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         parent_entity_id: int,
         agent_role: AgentRole,
         engine: AgentEngine,
-        model_id: str,
+        model_id: str | None,
         external_session_id: str | None = None,
         is_active: bool = True,
     ) -> Conversation:
@@ -70,7 +70,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             parent_entity_id: ID of parent entity
             agent_role: Agent role for this conversation
             engine: Agent engine powering this conversation
-            model_id: Model identifier (e.g., "anthropic:claude-sonnet-4")
+            model_id: Model identifier (e.g., "anthropic:claude-sonnet-4") or None for default
             external_session_id: Optional external session ID for Claude Code/Gemini
             is_active: Whether this is the active conversation (default True)
 
@@ -92,14 +92,14 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
-    def update_model(self, conversation: Conversation, model_id: str) -> Conversation:
+    def update_model(self, conversation: Conversation, model_id: str | None) -> Conversation:
         """Update the model for a conversation.
 
         Model can be changed within the same engine (e.g., Opus → Sonnet in Claude Code).
 
         Args:
             conversation: Conversation instance to update
-            model_id: New model identifier
+            model_id: New model identifier or None for default
 
         Returns:
             Updated Conversation instance
@@ -113,7 +113,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         self,
         conversation: Conversation,
         agent_role: AgentRole,
-        model_id: str,
+        model_id: str | None,
     ) -> Conversation:
         """Update the agent role and model for a conversation.
 
@@ -123,7 +123,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         Args:
             conversation: Conversation instance to update
             agent_role: New agent role
-            model_id: New model identifier
+            model_id: New model identifier or None for default
 
         Returns:
             Updated Conversation instance
@@ -172,14 +172,14 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation.archived_at = datetime.datetime.now(datetime.UTC)
             self.db.flush()
 
-    def update_external_session_id(self, conversation: Conversation, session_id: str) -> None:
+    def update_external_session_id(self, conversation: Conversation, session_id: str | None) -> None:
         """Update the external session ID for a conversation.
 
         Used by Claude Code and other external engines to persist session continuity.
 
         Args:
             conversation: Conversation instance to update
-            session_id: New session ID from external engine
+            session_id: New session ID from external engine or None to clear
         """
         conversation.external_session_id = session_id
         self.db.flush()

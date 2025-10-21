@@ -200,11 +200,12 @@ export interface AgentEngineInfo {
   engine: string
   display_name: string
   description: string
+  requires_model_selection: boolean
 }
 
 export interface AgentEngineModelConfig {
   engine: string
-  model_id: string
+  model_id: string | null
 }
 
 export interface AgentConfigurationResponse {
@@ -215,7 +216,7 @@ export interface AgentConfigurationResponse {
 
 export interface UpdateAgentConfigurationRequest {
   engine: string
-  model_id: string
+  model_id: string | null
 }
 
 export interface AvailableModelsByEngineResponse {
@@ -223,7 +224,7 @@ export interface AvailableModelsByEngineResponse {
 }
 
 export interface UpdateConversationModelRequest {
-  model_id: string
+  model_id: string | null
 }
 
 export interface ConversationResponse {
@@ -232,7 +233,7 @@ export interface ConversationResponse {
   parent_entity_id: number
   agent_role: string
   engine: string
-  model_id: string
+  model_id: string | null
   is_active: boolean
   external_session_id: string | null
   created_at: string

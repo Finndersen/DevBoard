@@ -154,16 +154,18 @@ async def update_conversation_model(
     if not conversation.is_active:
         raise HTTPException(status_code=400, detail="Cannot update model for archived conversation")
 
-    # Validate model is available for the conversation's engine (provider configured)
-    available_models_by_engine = agent_config_service.get_available_models_by_engine()
-    engine_models = available_models_by_engine.models_by_engine.get(conversation.engine.value, [])
+    # Validate model is available for the conversation's engine
+    # None is allowed for engines that don't require model selection
+    if request.model_id is not None:
+        available_models_by_engine = agent_config_service.get_available_models_by_engine()
+        engine_models = available_models_by_engine.models_by_engine.get(conversation.engine.value, [])
 
-    if not any(m.id == request.model_id for m in engine_models):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model '{request.model_id}' not available for engine '{conversation.engine.value}'. "
-            f"Ensure the provider is configured with valid API credentials.",
-        )
+        if not any(m.id == request.model_id for m in engine_models):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{request.model_id}' not available for engine '{conversation.engine.value}'. "
+                f"Ensure the provider is configured with valid API credentials.",
+            )
 
     # Update model
     updated = conversation_repo.update_model(conversation, request.model_id)

@@ -43,10 +43,16 @@ def create_task_conversation_service(
     agent_role = conversation.agent_role
     agent_engine = conversation.engine
     model_id = conversation.model_id
-    model = llm_registry.get(model_id)
+    model = llm_registry.get(model_id) if model_id else None
     # TODO: I think it actually makes more sense for ConversationService to construct its own agent, but not sure about
     # a sensible way of handling dependencies. For now, we'll pass them in here.
     if agent_engine == AgentEngine.INTERNAL:
+        # INTERNAL engine requires explicit model selection
+        if not model:
+            raise ValueError(
+                f"INTERNAL engine requires explicit model selection, but conversation {conversation.id} has no model configured"
+            )
+
         # Create PydanticAI agent based on role
         if agent_role == AgentRole.TASK_SPECIFICATION:
             agent = TaskSpecificationAgent(

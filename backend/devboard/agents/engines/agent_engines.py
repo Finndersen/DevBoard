@@ -33,6 +33,7 @@ class AgentEngineDefinition:
         display_name: Human-readable name for UI display
         description: Brief description of the engine's purpose
         available_provider: Single LLM provider this engine supports (None = all configured providers)
+        requires_model_selection: Whether engine requires explicit model selection (False = can use engine default)
         supports_tool_approval: Whether engine requires explicit tool approval
         stores_messages_in_db: Whether messages are stored in database vs external
     """
@@ -41,6 +42,7 @@ class AgentEngineDefinition:
     display_name: str
     description: str
     available_provider: LLMProvider | None  # None means all configured providers
+    requires_model_selection: bool  # False means engine can use its own default model
 
 
 # Global registry of all engines with their capabilities
@@ -50,18 +52,21 @@ ALL_ENGINES: list[AgentEngineDefinition] = [
         display_name="Internal",
         description="Internal agent framework",
         available_provider=None,  # Supports all configured providers
+        requires_model_selection=True,  # Must select from configured providers
     ),
     AgentEngineDefinition(
         engine=AgentEngine.CLAUDE_CODE,
         display_name="Claude Code",
         description="Anthropic's official CLI agent",
         available_provider=LLMProvider.ANTHROPIC,  # Only supports Anthropic models
+        requires_model_selection=False,  # Can use Claude Code's default model
     ),
     AgentEngineDefinition(
         engine=AgentEngine.GEMINI_CLI,
         display_name="Gemini CLI",
         description="Google's Gemini command-line interface",
         available_provider=LLMProvider.GOOGLE,  # Only supports Google models
+        requires_model_selection=False,  # Can use Gemini CLI's default model
     ),
 ]
 

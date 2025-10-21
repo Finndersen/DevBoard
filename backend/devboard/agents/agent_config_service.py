@@ -32,10 +32,11 @@ class AgentEngineModelConfig(BaseModel):
     Attributes:
         engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
         model_id: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4")
+                  or None to use engine's default model
     """
 
     engine: AgentEngine
-    model_id: str
+    model_id: str | None
 
 
 class ModelInfo(BaseModel):
@@ -61,11 +62,13 @@ class AgentEngineInfo(BaseModel):
         engine: The agent execution engine value (e.g., "internal", "claude_code")
         display_name: Human-readable name for display in UI
         description: Description of what the engine does
+        requires_model_selection: Whether this engine requires explicit model selection
     """
 
     engine: AgentEngine
     display_name: str
     description: str
+    requires_model_selection: bool
 
 
 class AgentConfiguration(BaseModel):
@@ -136,6 +139,7 @@ class AgentConfigService:
                 engine=defn.engine,
                 display_name=defn.display_name,
                 description=defn.description,
+                requires_model_selection=defn.requires_model_selection,
             )
             for defn in self.engine_registry.get_available_engines_for_agent_role(agent_role)
         ]
@@ -203,13 +207,27 @@ class AgentConfigService:
                 f"Allowed engines: {', '.join(allowed_names)}"
             )
 
-        # Validate model available for engine
-        available_models = self._get_available_models_for_engine(config.engine)
-        if not any(m.id == config.model_id for m in available_models):
-            raise ValueError(
-                f"Model '{config.model_id}' not available for engine '{config.engine.value}'. "
-                f"Ensure the provider is configured."
-            )
+        # Get engine definition to check if model selection is required
+        engine_def = self.engine_registry.get(config.engine)
+        if engine_def is None:
+            raise ValueError(f"Invalid engine: {config.engine}")
+
+        # Validate model selection based on engine requirements
+        if config.model_id is None:
+            # None model_id is only allowed for engines that don't require selection
+            if engine_def.requires_model_selection:
+                raise ValueError(
+                    f"Engine '{config.engine.value}' requires explicit model selection. "
+                    f"Please select a model from the available options."
+                )
+        else:
+            # If model_id is provided, validate it's available for the engine
+            available_models = self._get_available_models_for_engine(config.engine)
+            if not any(m.id == config.model_id for m in available_models):
+                raise ValueError(
+                    f"Model '{config.model_id}' not available for engine '{config.engine.value}'. "
+                    f"Ensure the provider is configured."
+                )
 
         # Update AgentConfig
         config_key = f"agent.{agent_role.value}.default"
@@ -276,7 +294,7 @@ class AgentConfigService:
         if engine == AgentEngine.INTERNAL:
             # For INTERNAL engine, return all configured models (API key check)
             # None means all providers are supported
-            return self._get_all_available_models()
+            return self._get_all_available_internal_models()
         else:
             # Get engine's supported provider
             engine_def = self.engine_registry.get(engine)
@@ -291,8 +309,8 @@ class AgentConfigService:
                 # Return models from the specific provider
                 return self.llm_registry.get_models_for_provider(engine_def.available_provider)
 
-    def _get_all_available_models(self) -> list[LanguageModel]:
-        """Get all models from configured providers.
+    def _get_all_available_internal_models(self) -> list[LanguageModel]:
+        """Get all models from configured providers for the internal engine.
 
         Returns:
             List of LanguageModel objects from all configured providers
@@ -307,21 +325,31 @@ class AgentConfigService:
         # Return models from working providers
         return [model for model in self.llm_registry.get_all_models() if model.provider in working_providers]
 
-    def _get_default_model_for_agent_role_and_engine(self, agent_role: AgentRole, engine: AgentEngine) -> str:
+    def _get_default_model_for_agent_role_and_engine(self, agent_role: AgentRole, engine: AgentEngine) -> str | None:
         """Get default model for an agent role and engine.
 
         Selects the first available model of the recommended type for the agent role.
+        For engines that don't require model selection, returns None (use engine default).
 
         Args:
             agent_role: The agent role to get default model for
             engine: The engine to get default model for
 
         Returns:
-            Model ID in "provider:model" format
+            Model ID in "provider:model" format, or None if engine doesn't require selection
 
         Raises:
-            ValueError: If no models are available for the engine
+            ValueError: If no models are available for an engine that requires selection
         """
+        # Get engine definition to check if model selection is required
+        engine_def = self.engine_registry.get(engine)
+        if engine_def is None:
+            raise ValueError(f"Invalid engine: {engine}")
+
+        # If engine doesn't require model selection, return None (use engine default)
+        if not engine_def.requires_model_selection:
+            return None
+
         # Get available models for this engine
         available = self._get_available_models_for_engine(engine)
         if not available:

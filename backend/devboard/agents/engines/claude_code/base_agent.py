@@ -47,7 +47,7 @@ class ClaudeCodeAgent(ABC):
         self,
         task: Task,
         document_repository: DocumentRepository,
-        model: LanguageModel,
+        model: LanguageModel | None,
         session_id: str | None = None,
         include_builtin_system_prompt: bool = False,
         include_claude_md: bool = False,
@@ -57,12 +57,12 @@ class ClaudeCodeAgent(ABC):
         Args:
             task: The task this agent is working on
             document_repository: Repository for document operations
-            model: Language model instance
+            model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
             include_builtin_system_prompt: Whether to include Claude's built-in system prompt
             include_claude_md: Whether to include CLAUDE.md file in system prompt
         """
-        if not model.provider == LLMProvider.ANTHROPIC:
+        if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
 
         self.task = task
@@ -93,7 +93,7 @@ class ClaudeCodeAgent(ABC):
             system_prompt=system_prompt,
             tools=self._get_function_tools(),
             allowed_builtin_tools=self._get_allowed_builtin_tools(),
-            model=self.model.display_full_name,
+            model=self.model.display_full_name if self.model else None,
             cwd=cwd,
             include_builtin_system_prompt=self.include_builtin_system_prompt,
             include_claude_md=self.include_claude_md,

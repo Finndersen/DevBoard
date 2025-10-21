@@ -12,7 +12,7 @@ import { apiClient } from '../../lib/api'
 interface AgentConfigurationSelectorProps {
   agentRole: string
   agentName: string
-  onConfigChange?: (agentRole: string, engine: string, modelId: string) => void
+  onConfigChange?: (agentRole: string, engine: string, modelId: string | null) => void
 }
 
 export function AgentConfigurationSelector({ agentRole, agentName, onConfigChange }: AgentConfigurationSelectorProps) {
@@ -74,9 +74,22 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
   }, [isEngineOpen, isModelOpen])
 
   const handleEngineChange = async (engine: string) => {
-    if (saving || !availableModels) return
+    if (saving || !availableModels || !configuration) return
 
-    // Get the first model for the selected engine as default
+    // Find the engine info to check if it requires model selection
+    const engineInfo = configuration.available_engines.find(e => e.engine === engine)
+    if (!engineInfo) {
+      setError(`Engine ${engine} not found`)
+      return
+    }
+
+    // If engine doesn't require model selection, use null (default)
+    if (!engineInfo.requires_model_selection) {
+      await handleConfigChange(engine, null)
+      return
+    }
+
+    // Otherwise, get the first model for the selected engine as default
     const modelsForEngine = availableModels.models_by_engine[engine]
     if (!modelsForEngine || modelsForEngine.length === 0) {
       setError(`No models available for engine ${engine}`)
@@ -87,12 +100,12 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
     await handleConfigChange(engine, defaultModel)
   }
 
-  const handleModelChange = async (modelId: string) => {
+  const handleModelChange = async (modelId: string | null) => {
     if (saving || !selectedEngine) return
     await handleConfigChange(selectedEngine, modelId)
   }
 
-  const handleConfigChange = async (engine: string, modelId: string) => {
+  const handleConfigChange = async (engine: string, modelId: string | null) => {
     try {
       setSaving(true)
       const request: UpdateAgentConfigurationRequest = { engine, model_id: modelId }
@@ -138,6 +151,17 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
   const getAvailableModelsForSelectedEngine = (): ModelInfo[] => {
     if (!availableModels || !selectedEngine) return []
     return availableModels.models_by_engine[selectedEngine] || []
+  }
+
+  const selectedEngineRequiresModelSelection = (): boolean => {
+    const engineInfo = getSelectedEngineInfo()
+    return engineInfo?.requires_model_selection ?? true
+  }
+
+  const getModelDisplayText = (): string => {
+    if (selectedModel === null) return 'Default'
+    const modelInfo = getSelectedModelInfo()
+    return modelInfo ? getModelDisplayName(modelInfo) : selectedModel
   }
 
   if (loading) {
@@ -232,13 +256,13 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
               <button
               type="button"
               onClick={() => setIsModelOpen(!isModelOpen)}
-              disabled={saving || availableModelsForEngine.length === 0}
+              disabled={saving}
               className={`relative w-60 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
-                saving || availableModelsForEngine.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                saving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
               <span className="block truncate">
-                {selectedModelInfo ? getModelDisplayName(selectedModelInfo) : selectedModel}
+                {getModelDisplayText()}
               </span>
               <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
                 {saving ? (
@@ -251,6 +275,25 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
 
             {isModelOpen && (
               <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+                {/* Show "Default" option for engines that don't require model selection */}
+                {!selectedEngineRequiresModelSelection() && (
+                  <button
+                    type="button"
+                    onClick={() => handleModelChange(null)}
+                    className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                      selectedModel === null
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                        : 'text-gray-900 dark:text-gray-100'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-medium">Default</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Use engine's default model
+                      </div>
+                    </div>
+                  </button>
+                )}
                 {availableModelsForEngine.map((model) => (
                   <button
                     key={model.id}

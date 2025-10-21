@@ -808,7 +808,10 @@ Session message loading (`get_conversation_messages()`) converts stored SessionM
 Implements polymorphic conversation architecture supporting all entity types (Projects, Tasks, Codebases) through unified models:
 
 **Conversation Model (`conversation.py`)**:
-Container model with polymorphic parent entity association using `parent_entity_type` enum (PROJECT, TASK, CODEBASE) and `parent_entity_id`. Enforces one conversation per entity via unique constraint on (parent_entity_type, parent_entity_id). Supports nested conversations through `parent_conversation_id` for future agent-to-agent communication. Conversations are created lazily via `get_or_create_for_entity()` when accessing entity details, ensuring every entity has an associated conversation without explicit API calls.
+Container model with polymorphic parent entity association using `parent_entity_type` enum (PROJECT, TASK, CODEBASE) and `parent_entity_id`. Enforces one conversation per entity via unique constraint on (parent_entity_type, parent_entity_id). Supports nested conversations through `parent_conversation_id` for future agent-to-agent communication. Stores agent configuration with `agent_role`, `engine`, and `model_id` (nullable string allowing None for engines supporting default model selection). Conversations are created lazily via `get_or_create_for_entity()` when accessing entity details, ensuring every entity has an associated conversation without explicit API calls.
+
+**Model Selection Flexibility**:
+The `model_id` field is nullable to support engines that manage their own model selection (Claude Code, Gemini CLI). When `model_id` is None, the engine uses its default model. INTERNAL engine requires explicit `model_id` and this constraint is enforced at the service layer during conversation creation and model updates.
 
 **ConversationMessage Model (`messages.py`)**:
 Unified message model storing all conversation messages with support for structured PydanticAI message format. Fields include `message_type` enum (USER_PROMPT, TEXT_RESPONSE, TOOL_CALL, TOOL_RESULT, STRUCTURED_RESPONSE), `pydantic_content` JSON storage for complete message structure, and `text_content` for quick text access. Provides temporal ordering and role-based messaging across all entity types.
@@ -868,7 +871,7 @@ Represents functional agent responsibilities with defined lifecycle roles (PROJE
 #### Configuration Structures
 
 **AgentEngineModelConfig Pydantic Model**:
-Combined engine and model configuration structure representing the atomic unit of agent configuration. Fields include `engine` (AgentEngine enum) and `model_id` (string in "provider:model" format). Used throughout system for type-safe configuration passing, validation, and persistence. Replaces previous dictionary-based configuration with proper type checking.
+Combined engine and model configuration structure representing the atomic unit of agent configuration. Fields include `engine` (AgentEngine enum) and `model_id` (string in "provider:model" format or None for engine default). Used throughout system for type-safe configuration passing, validation, and persistence. Replaces previous dictionary-based configuration with proper type checking. When `model_id` is None, the engine uses its own default model selection.
 
 **AgentConfiguration Pydantic Model**:
 Complete agent configuration response structure containing `agent_role` (AgentRole enum), `config` (AgentEngineModelConfig), and `available_engines` (list of AgentEngineInfo). Provides complete configuration context including current settings and available options for UI rendering.
@@ -881,13 +884,13 @@ Language model metadata structure with `id` (provider:model format), `provider` 
 #### Engine Definition System (`devboard/agents/agent_engines.py`)
 
 **AgentEngineDefinition Dataclass**:
-Defines engine capabilities with `engine` (identifier), `display_name` (UI label), `description` (purpose explanation), and `available_provider` (supported LLM provider or None for all). Provides metadata for UI rendering and validation logic.
+Defines engine capabilities with `engine` (identifier), `display_name` (UI label), `description` (purpose explanation), `available_provider` (supported LLM provider or None for all), and `requires_model_selection` (boolean indicating if explicit model selection is mandatory). Provides metadata for UI rendering and validation logic.
 
 **Engine Registry**:
 Global `ALL_ENGINES` list defines all available engines:
-- **INTERNAL**: PydanticAI-based engine supporting all configured providers with tool approval workflows
-- **CLAUDE_CODE**: Anthropic CLI integration supporting only Anthropic models with native tool capabilities
-- **GEMINI_CLI**: Google CLI integration supporting only Google models with specialized command execution
+- **INTERNAL**: PydanticAI-based engine supporting all configured providers with tool approval workflows (requires_model_selection=True)
+- **CLAUDE_CODE**: Anthropic CLI integration supporting only Anthropic models with native tool capabilities (requires_model_selection=False)
+- **GEMINI_CLI**: Google CLI integration supporting only Google models with specialized command execution (requires_model_selection=False)
 
 **Role-Based Engine Restrictions**:
 `ALLOWED_ENGINES_BY_AGENT_ROLE` dictionary enforces architectural boundaries:
@@ -954,11 +957,12 @@ Returns active configuration even when stored config is invalid, ensuring agents
 **update_agent_configuration(agent_role, config)**:
 Updates role-level configuration with validation:
 1. Validate engine allowed for agent role (via engine repository)
-2. Validate model available for engine (via available models list)
-3. Store configuration to database (via ConfigService)
-4. Return updated AgentConfiguration
+2. **Check model requirements**: If model_id is None, validate that engine allows default model (raises error for INTERNAL engine)
+3. Validate model available for engine if model_id is provided (via available models list)
+4. Store configuration to database (via ConfigService)
+5. Return updated AgentConfiguration
 
-Raises ValueError for validation failures with detailed error messages.
+Raises ValueError for validation failures with detailed error messages. Specifically prevents None model_id for engines requiring explicit selection (INTERNAL), while allowing it for engines that support default selection (Claude Code, Gemini CLI).
 
 **Model Availability Filtering**:
 
@@ -975,13 +979,14 @@ Helper method for INTERNAL engine returning models from configured providers. It
 **Default Model Selection**:
 
 **_get_default_model_for_agent_role_and_engine(agent_role, engine)**:
-Intelligent model selection based on agent role's recommended model type:
-1. Get available models for engine (respecting provider filtering)
-2. Get recommended model type for agent role (REASONING or FAST)
-3. Search available models for match on recommended type
-4. Fall back to first available model if no type match found
+Intelligent model selection based on agent role's recommended model type and engine requirements:
+1. **Check engine requirements**: If engine doesn't require model selection (e.g., Claude Code, Gemini CLI), return None to use engine's default
+2. **Get available models**: Retrieve models for engine (respecting provider filtering)
+3. **Match recommended type**: Get agent role's recommended model type (REASONING or FAST)
+4. **Select model**: Search available models for match on recommended type
+5. **Fallback**: Use first available model if no type match found
 
-Raises ValueError if no models available for engine, ensuring configuration always valid.
+Raises ValueError if no models available for INTERNAL engine (which requires explicit selection). External engines (Claude Code, Gemini CLI) can return None to delegate model selection to the CLI tool itself.
 
 **get_available_models_by_engine()**:
 Returns complete mapping of engines to their available models for UI rendering. Structures as AvailableModelsByEngine Pydantic model with `models_by_engine` dictionary. Enables frontend to display appropriate model choices filtered by selected engine.
@@ -1029,18 +1034,51 @@ Dot notation keys (e.g., "agent.project.default") automatically map to environme
 #### Agent Configuration UI (`frontend/src/components/configuration/AgentConfigurationSelector.tsx`)
 
 **Configuration Selection Interface**:
-React component providing agent configuration selection with role-based engine filtering and dynamic model selection. Displays available engines for selected role with descriptions and filters model list based on selected engine's supported provider.
+React component providing agent configuration selection with role-based engine filtering and dynamic model selection. Displays available engines for selected role with descriptions and filters model list based on selected engine's supported provider. Supports default model selection for engines that manage their own model choice.
 
 **Configuration Flow**:
 1. User selects agent role (PROJECT, TASK_SPECIFICATION, etc.)
 2. Component fetches available engines for role via GET /api/agents/{role}/configuration
 3. User selects engine from filtered list
 4. Component fetches available models for engine via GET /api/agents/available-models
-5. User selects model from provider-filtered list
+5. User selects model from provider-filtered list or "Default" option for engines supporting it
 6. Component saves configuration via PUT /api/agents/{role}/configuration
 
+**Default Model Selection**:
+- Engines specify `requires_model_selection` field in their definition
+- When `false` (Claude Code, Gemini CLI), dropdown includes "Default" option at top
+- Selecting "Default" sets `model_id` to `null` in configuration
+- Display shows "Default" text when `model_id` is `null`
+- INTERNAL engine (`requires_model_selection: true`) does not show "Default" option
+
 **Real-Time Validation**:
-UI provides immediate feedback for invalid selections using TypeScript type guards and API validation responses. Prevents submission of invalid configurations with clear error messaging.
+UI provides immediate feedback for invalid selections using TypeScript type guards and API validation responses. Prevents submission of invalid configurations with clear error messaging. Validates that None model_id is only allowed for engines supporting default selection.
+
+#### Conversation Model Selector UI (`frontend/src/components/chat/ConversationModelSelector.tsx`)
+
+**In-Conversation Model Switching**:
+React component enabling users to change the model for an active conversation without changing the global agent configuration. Displays current engine and model with inline dropdown for quick model changes.
+
+**Component Features**:
+- **Engine Display**: Shows conversation's engine (non-interactive, set at conversation creation)
+- **Model Dropdown**: Interactive selector showing available models for conversation's engine
+- **Default Option**: Displays "Default" option for engines supporting default model selection
+- **Real-Time Updates**: Immediately updates conversation when model selection changes
+- **Engine Info Fetching**: Retrieves agent configuration to determine if engine supports default
+
+**Model Selection Flow**:
+1. Component fetches conversation details (engine, current model_id)
+2. Fetches agent configuration for conversation's agent role to get engine info
+3. Fetches available models for conversation's engine
+4. Displays dropdown with "Default" option (if engine supports it) plus all available models
+5. User selection updates conversation via PUT /api/conversations/{id}/model
+6. Notifies parent component of model change for UI updates
+
+**UI Behavior**:
+- Shows "Default" when `model_id` is `null`
+- Highlights currently selected model in dropdown
+- Disables dropdown when no models available (for engines requiring selection)
+- Shows chevron icon only when model selection is available
 
 ## Database Schema & Models Implementation
 
