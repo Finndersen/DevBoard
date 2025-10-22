@@ -1,22 +1,19 @@
 """Tests for BaseClaudeAgent validation and retry logic."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from claude_agent_sdk import ResultMessage
+from pydantic_ai import Tool
 
-from devboard.agents.engines.claude_code.base_agent import (
+from devboard.agents.engines.claude_code.agent import (
     MAX_RETRY_ATTEMPTS,
     ClaudeCodeAgent,
 )
 from devboard.agents.engines.claude_code.message_parser import TextResponse, VirtualToolRequests
-from devboard.agents.engines.claude_code.virtual_tools import (
-    EditDocumentArgs,
-    EditDocumentTool,
-)
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
-from devboard.db.models.task import Task
+from devboard.agents.roles.base import Role
 
 
 def create_mock_result(text_content: str, session_id: str = "test-session") -> ResultMessage:
@@ -27,64 +24,44 @@ def create_mock_result(text_content: str, session_id: str = "test-session") -> R
     return mock_result_message
 
 
-class MockAgent(ClaudeCodeAgent):
-    """Mock implementation of BaseClaudeAgent for testing."""
+class MockRole(Role):
+    """Mock role implementation for testing."""
 
-    def __init__(self, task, document_repo, virtual_tools=None, model=None):
-        self._test_virtual_tools = virtual_tools or []
-        if model is None:
-            model = LanguageModel(
-                provider=LLMProvider.ANTHROPIC,
-                name="claude-sonnet-4",
-                type=ModelType.REASONING,
-                full_name="claude-sonnet-4-20250514",
-            )
-        super().__init__(task, document_repo, model)
+    def __init__(self, tools=None):
+        self._test_tools = tools or []
 
-    def _get_role_description(self) -> str:
-        return "Test agent role description"
+    def get_system_prompt(self) -> str:
+        return "Test agent role description\n\nTest state context"
 
-    def _get_state_context(self) -> str:
-        return "Test state context"
+    def get_tools(self) -> list[Tool]:
+        return self._test_tools
 
-    def _get_virtual_tools(self):
-        return self._test_virtual_tools
-
-
-@pytest.fixture
-def mock_task():
-    """Create a mock task."""
-    task = Mock(spec=Task)
-    task.specification = Mock()
-    task.specification.content = "Test content"
-    task.specification.document_type = Mock(value="task_specification")
-    task.implementation_plan = Mock()
-    task.implementation_plan.content = ""
-    task.implementation_plan.document_type = Mock(value="task_implementation_plan")
-    return task
-
-
-@pytest.fixture
-def mock_document_repo():
-    """Create a mock document repository."""
-    return Mock()
+    async def get_context_content(self) -> str:
+        return "Test context"
 
 
 @pytest.fixture
 def mock_edit_tool():
-    """Create a mock edit tool."""
-    tool = Mock(spec=EditDocumentTool)
-    tool.tool_name = "edit_task_specification"
-    tool.args_model = EditDocumentArgs
-    tool.execute = AsyncMock(return_value="Edit successful")
-    tool.get_schema = Mock(return_value="Mock tool schema")
+    """Create a mock PydanticAI Tool that requires approval."""
+
+    def edit_document_fn(edits: list, reasoning: str = "") -> str:
+        return "Edit successful"
+
+    tool = Tool(function=edit_document_fn, name="edit_task_specification", requires_approval=True)
     return tool
 
 
 @pytest.fixture
-def test_agent(mock_task, mock_document_repo, mock_edit_tool):
+def test_agent(mock_edit_tool):
     """Create a test agent with a mock tool."""
-    return MockAgent(mock_task, mock_document_repo, virtual_tools=[mock_edit_tool])
+    model = LanguageModel(
+        provider=LLMProvider.ANTHROPIC,
+        name="claude-sonnet-4",
+        type=ModelType.REASONING,
+        full_name="claude-sonnet-4-20250514",
+    )
+    role = MockRole(tools=[mock_edit_tool])
+    return ClaudeCodeAgent(role=role, model=model)
 
 
 class TestValidMessageResponse:
@@ -169,7 +146,7 @@ class TestInvalidResponseStructure:
         assert response.content == '["array", "not", "object"]'
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_json_object_without_tool_fields_triggers_retry(self, mock_run, test_agent):
         """Test that JSON object without tool_name/arguments triggers validation error and retry."""
         result = create_mock_result('{"content": "Hello", "no_tool_fields": true}')
@@ -191,7 +168,7 @@ class TestInvalidMessageFormat:
     """Tests for JSON objects that fail validation."""
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_json_object_triggers_validation(self, mock_run, test_agent):
         """Test that JSON object triggers validation (and retry if invalid)."""
         result = create_mock_result('{"type": "message"}')
@@ -222,7 +199,7 @@ class TestInvalidToolCallFormat:
     """Tests for invalid tool call format validation."""
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_tool_call_missing_tool_name_triggers_retry(self, mock_run, test_agent):
         """Test that JSON with arguments but no tool_name triggers a retry."""
         result = create_mock_result('{"arguments": {}}')
@@ -239,7 +216,7 @@ class TestInvalidToolCallFormat:
         assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_tool_call_missing_arguments_triggers_retry(self, mock_run, test_agent):
         """Test that JSON with tool_name but no arguments triggers structural validation retry."""
         result = create_mock_result('{"tool_name": "edit_task_specification"}')
@@ -256,7 +233,7 @@ class TestInvalidToolCallFormat:
         assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_tool_call_invalid_structure_triggers_retry(self, mock_run, test_agent):
         """Test that tool call with invalid structure triggers a retry."""
         # Tool call detected (has tool_name and arguments) but structure is invalid
@@ -290,7 +267,7 @@ class TestUnknownTool:
     """Tests for unknown tool validation."""
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_unknown_tool_triggers_retry(self, mock_run, test_agent):
         """Test that unknown tool name triggers a retry with available tools list."""
         result = create_mock_result(
@@ -341,7 +318,7 @@ class TestInvalidToolArguments:
     """Tests for invalid tool argument validation."""
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_invalid_tool_arguments_trigger_retry(self, mock_run, test_agent):
         """Test that invalid tool arguments trigger a retry with validation errors."""
         result = create_mock_result(
@@ -371,7 +348,7 @@ class TestInvalidToolArguments:
         assert call_args.kwargs["_retry_count"] == 1
 
     @pytest.mark.asyncio
-    @patch.object(MockAgent, "run")
+    @patch.object(ClaudeCodeAgent, "run")
     async def test_wrong_type_arguments_trigger_retry(self, mock_run, test_agent):
         """Test that arguments with wrong types trigger a retry."""
         result = create_mock_result(
@@ -425,7 +402,7 @@ class TestRetryMechanism:
     """Tests for the retry mechanism."""
 
     @pytest.mark.asyncio
-    @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
     async def test_run_increments_retry_count(self, mock_client_class, test_agent):
         """Test that run() properly increments retry count."""
         # Create mock result message
@@ -451,7 +428,7 @@ class TestRetryMechanism:
         assert response.content == "Success"
 
     @pytest.mark.asyncio
-    @patch("devboard.agents.engines.claude_code.base_agent.ClaudeClient")
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
     async def test_run_creates_new_client_each_time(self, mock_client_class, test_agent):
         """Test that run() creates a new client on each call (for fresh system prompt)."""
         # Create mock result message

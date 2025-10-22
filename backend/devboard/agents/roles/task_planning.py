@@ -1,4 +1,17 @@
+from pydantic_ai import Tool
+
+from devboard.agents.roles.base import Role
+from devboard.agents.tools import (
+    create_code_structure_search_tool,
+    create_directory_tree_tool,
+    create_document_edit_tool,
+    create_file_search_tool,
+    create_set_document_content_tool,
+    create_text_search_tool,
+)
 from devboard.db.models import Task
+from devboard.db.repositories import DocumentRepository
+from devboard.integrations.codebase import CodebaseIntegration
 
 PLANNING_ROLE_PROMPT = """
 You are a Task Planning Assistant for DevBoard, helping developers create an implementation plan for a task.
@@ -84,3 +97,59 @@ RELEVANT CODEBASE:
 """
 
     return context
+
+
+class TaskPlanningRole(Role):
+    """Role for task implementation planning."""
+
+    def __init__(self, task: Task, document_repository: DocumentRepository):
+        """Initialize task planning role.
+
+        Args:
+            task: Task instance
+            document_repository: Repository for document operations
+        """
+        self.task = task
+        self.document_repository = document_repository
+        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
+
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for task planning role."""
+        return PLANNING_ROLE_PROMPT
+
+    def get_tools(self) -> list[Tool]:
+        """Get tools for task planning role.
+
+        Returns:
+            List of document editing tools for both specification and implementation plan,
+            plus codebase search tools (if codebase available)
+        """
+        tools: list[Tool] = [
+            # Tools for task specification document
+            create_set_document_content_tool(self.task.specification, self.document_repository),
+            create_document_edit_tool(self.task.specification, self.document_repository),
+            # Tools for implementation plan document
+            create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
+            create_document_edit_tool(self.task.implementation_plan, self.document_repository),
+        ]
+
+        # Add codebase search tools if codebase is configured
+        if self.codebase_integration:
+            tools.extend(
+                [
+                    create_text_search_tool(self.codebase_integration),
+                    create_file_search_tool(self.codebase_integration),
+                    create_code_structure_search_tool(self.codebase_integration),
+                    create_directory_tree_tool(self.codebase_integration),
+                ]
+            )
+
+        return tools
+
+    async def get_context_content(self) -> str:
+        """Get context content for task planning role.
+
+        Returns:
+            Formatted context containing task details, project spec, task spec, and implementation plan
+        """
+        return build_task_planning_context(self.task)

@@ -5,7 +5,7 @@ import pytest
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
 from devboard.agents.engines.agent_engines import AgentEngine, agent_engine_registry
 from devboard.agents.language_models import ModelType, llm_registry
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 
 
 class TestAgentConfigService:
@@ -93,7 +93,7 @@ class TestAgentConfigService:
         """_get_default_model_for_agent_role should select model based on agent role's recommended type."""
         # PROJECT role recommends REASONING models (INTERNAL engine requires selection)
         project_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.PROJECT, AgentEngine.INTERNAL
+            AgentRoleType.PROJECT, AgentEngine.INTERNAL
         )
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
@@ -104,7 +104,7 @@ class TestAgentConfigService:
 
         # INVESTIGATION role recommends FAST models (INTERNAL engine requires selection)
         investigation_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.INVESTIGATION, AgentEngine.INTERNAL
+            AgentRoleType.INVESTIGATION, AgentEngine.INTERNAL
         )
         # Should return a valid model ID in provider:model format
         assert ":" in investigation_default
@@ -120,7 +120,7 @@ class TestAgentConfigService:
             engine=AgentEngine.CLAUDE_CODE,
             model_id="anthropic:claude-sonnet-4.5",
         )
-        result = agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+        result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
         assert result.config.model_id == "anthropic:claude-sonnet-4.5"
 
         # Should reject model from unsupported provider for engine
@@ -129,12 +129,12 @@ class TestAgentConfigService:
             model_id="google:gemini-2.5-pro",  # Google model for Anthropic-only engine
         )
         with pytest.raises(ValueError, match="not available for engine"):
-            agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+            agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
 
     def test_get_agent_configuration_returns_effective_config(self, agent_config_service):
         """get_agent_configuration should return effective engine and model config."""
         # Test PROJECT role (INTERNAL engine)
-        project_config = agent_config_service.get_agent_configuration(AgentRole.PROJECT)
+        project_config = agent_config_service.get_agent_configuration(AgentRoleType.PROJECT)
         assert project_config.agent_role == "project"
         assert project_config.config.engine is not None
         assert project_config.config.model_id is not None
@@ -145,7 +145,7 @@ class TestAgentConfigService:
         assert project_config.available_engines[0].engine == "internal"
 
         # Test TASK_IMPLEMENTATION role (Claude Code by default)
-        task_impl_config = agent_config_service.get_agent_configuration(AgentRole.TASK_IMPLEMENTATION)
+        task_impl_config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
         assert task_impl_config.agent_role == "task_implementation"
 
         # TASK_IMPLEMENTATION should allow multiple engines
@@ -173,19 +173,19 @@ class TestAgentConfigService:
         """Engines that don't require model selection should return None as default."""
         # Claude Code doesn't require model selection
         claude_code_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.TASK_IMPLEMENTATION, AgentEngine.CLAUDE_CODE
+            AgentRoleType.TASK_IMPLEMENTATION, AgentEngine.CLAUDE_CODE
         )
         assert claude_code_default is None
 
         # Gemini CLI doesn't require model selection
         gemini_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.TASK_IMPLEMENTATION, AgentEngine.GEMINI_CLI
+            AgentRoleType.TASK_IMPLEMENTATION, AgentEngine.GEMINI_CLI
         )
         assert gemini_default is None
 
         # INTERNAL engine requires model selection, should return a model ID
         internal_default = agent_config_service._get_default_model_for_agent_role_and_engine(
-            AgentRole.PROJECT, AgentEngine.INTERNAL
+            AgentRoleType.PROJECT, AgentEngine.INTERNAL
         )
         assert internal_default is not None
         assert ":" in internal_default
@@ -196,7 +196,7 @@ class TestAgentConfigService:
             engine=AgentEngine.CLAUDE_CODE,
             model_id=None,
         )
-        result = agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+        result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
         assert result.config.engine == AgentEngine.CLAUDE_CODE
         assert result.config.model_id is None
 
@@ -207,12 +207,12 @@ class TestAgentConfigService:
             model_id=None,
         )
         with pytest.raises(ValueError, match="requires explicit model selection"):
-            agent_config_service.update_agent_configuration(AgentRole.PROJECT, config)
+            agent_config_service.update_agent_configuration(AgentRoleType.PROJECT, config)
 
     def test_engine_info_includes_requires_model_selection(self, agent_config_service):
         """Engine info should include requires_model_selection field."""
         # Get configuration for a role that supports multiple engines
-        config = agent_config_service.get_agent_configuration(AgentRole.TASK_IMPLEMENTATION)
+        config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
 
         # Check that engines have the requires_model_selection field
         for engine_info in config.available_engines:
@@ -229,9 +229,9 @@ class TestAgentConfigService:
             engine=AgentEngine.CLAUDE_CODE,
             model_id=None,
         )
-        agent_config_service.update_agent_configuration(AgentRole.TASK_IMPLEMENTATION, config)
+        agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
 
         # Get effective config should return None model_id
-        effective_config = agent_config_service.get_effective_config(AgentRole.TASK_IMPLEMENTATION)
+        effective_config = agent_config_service.get_effective_config(AgentRoleType.TASK_IMPLEMENTATION)
         assert effective_config.engine == AgentEngine.CLAUDE_CODE
         assert effective_config.model_id is None

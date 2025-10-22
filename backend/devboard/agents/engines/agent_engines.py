@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from devboard.agents.language_models import LLMProvider
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.core.registry import Registry
 
 
@@ -75,12 +75,12 @@ ALL_ENGINES: list[AgentEngineDefinition] = [
 # PROJECT, SPECIFICATION, and PLANNING require tool approval (PydanticAI only)
 # IMPLEMENTATION can use any external engine for full capabilities
 # First engine in the list is the recommended one for each role
-ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRole, list[AgentEngine]] = {
-    AgentRole.PROJECT: [AgentEngine.INTERNAL],
-    AgentRole.TASK_SPECIFICATION: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
-    AgentRole.TASK_PLANNING: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
-    AgentRole.TASK_IMPLEMENTATION: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],
-    AgentRole.INVESTIGATION: [AgentEngine.INTERNAL],
+ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRoleType, list[AgentEngine]] = {
+    AgentRoleType.PROJECT: [AgentEngine.INTERNAL],
+    AgentRoleType.TASK_SPECIFICATION: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
+    AgentRoleType.TASK_PLANNING: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
+    AgentRoleType.TASK_IMPLEMENTATION: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],
+    AgentRoleType.INVESTIGATION: [AgentEngine.INTERNAL],
 }
 
 
@@ -91,7 +91,7 @@ class AgentEngineRegistry(Registry[AgentEngineDefinition]):
         """Initialize registry with engine definitions."""
         super().__init__(engines, key_attr="engine")
 
-    def get_available_engines_for_agent_role(self, agent_role: AgentRole) -> list[AgentEngineDefinition]:
+    def get_available_engines_for_agent_role(self, agent_role: AgentRoleType) -> list[AgentEngineDefinition]:
         """Get all engines allowed for a given agent role.
 
         Args:
@@ -103,7 +103,7 @@ class AgentEngineRegistry(Registry[AgentEngineDefinition]):
         allowed = ALLOWED_ENGINES_BY_AGENT_ROLE.get(agent_role, [])
         return [defn for engine in allowed if (defn := self.get(engine)) is not None]
 
-    def get_default_engine_for_agent_role(self, agent_role: AgentRole) -> AgentEngine:
+    def get_default_engine_for_agent_role(self, agent_role: AgentRoleType) -> AgentEngine:
         """Get recommended engine for a given agent role.
 
         Args:
@@ -114,7 +114,7 @@ class AgentEngineRegistry(Registry[AgentEngineDefinition]):
         """
         return ALLOWED_ENGINES_BY_AGENT_ROLE[agent_role][0]
 
-    def validate_engine_for_agent_role(self, engine: AgentEngine, agent_role: AgentRole) -> bool:
+    def validate_engine_for_agent_role(self, engine: AgentEngine, agent_role: AgentRoleType) -> bool:
         """Check if engine is allowed for given agent role.
 
         Args:

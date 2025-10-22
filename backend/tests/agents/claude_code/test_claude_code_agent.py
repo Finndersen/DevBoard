@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
@@ -48,7 +49,10 @@ class TestClaudeClient:
             """
             return f"Hello {name}! " * count
 
-        agent = ClaudeClient(tools=[custom_tool])
+        # Create PydanticAI Tool instance
+        tool = Tool(custom_tool, name="custom_tool")
+
+        agent = ClaudeClient(tools=[tool])
         assert agent.options.mcp_servers is not None
         assert "devboard_tools" in agent.options.mcp_servers
         assert len(agent.options.allowed_tools) == 1
@@ -246,6 +250,7 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_string_return(self):
         """Test that tool wrapper correctly handles string returns."""
+        from pydantic_ai import Tool
 
         def simple_tool(text: str) -> str:
             """A simple tool that returns a string.
@@ -255,16 +260,11 @@ class TestClaudeClient:
             """
             return f"Processed: {text}"
 
-        from pydantic.json_schema import GenerateJsonSchema
-        from pydantic_ai._function_schema import function_schema
+        # Create PydanticAI Tool instance
+        pydantic_tool = Tool(simple_tool, name="simple_tool")
 
-        # Create schema and wrapper
-        schema = function_schema(
-            function=simple_tool,
-            schema_generator=GenerateJsonSchema,
-            takes_ctx=False,
-        )
-        wrapper = ClaudeClient._create_tool_wrapper(simple_tool, schema)
+        # Create wrapper
+        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
 
         # Test the wrapper
         result = await wrapper({"text": "hello"})
@@ -275,6 +275,7 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_dict_return(self):
         """Test that tool wrapper correctly handles dict returns with content."""
+        from pydantic_ai import Tool
 
         async def dict_tool(value: int) -> dict[str, Any]:
             """A tool that returns a dict.
@@ -284,16 +285,11 @@ class TestClaudeClient:
             """
             return {"content": [{"type": "text", "text": f"Value: {value}"}]}
 
-        from pydantic.json_schema import GenerateJsonSchema
-        from pydantic_ai._function_schema import function_schema
+        # Create PydanticAI Tool instance
+        pydantic_tool = Tool(dict_tool, name="dict_tool")
 
-        # Create schema and wrapper
-        schema = function_schema(
-            function=dict_tool,
-            schema_generator=GenerateJsonSchema,
-            takes_ctx=False,
-        )
-        wrapper = ClaudeClient._create_tool_wrapper(dict_tool, schema)
+        # Create wrapper
+        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
 
         # Test the wrapper
         result = await wrapper({"value": 42})
@@ -302,6 +298,8 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_validates_arguments(self):
         """Test that tool wrapper validates arguments using schema."""
+        from pydantic_ai import Tool
+        from pydantic_core import ValidationError
 
         def typed_tool(count: int, name: str) -> str:
             """A tool with typed parameters.
@@ -312,17 +310,11 @@ class TestClaudeClient:
             """
             return f"{name}: {count}"
 
-        from pydantic.json_schema import GenerateJsonSchema
-        from pydantic_ai._function_schema import function_schema
-        from pydantic_core import ValidationError
+        # Create PydanticAI Tool instance
+        pydantic_tool = Tool(typed_tool, name="typed_tool")
 
-        # Create schema and wrapper
-        schema = function_schema(
-            function=typed_tool,
-            schema_generator=GenerateJsonSchema,
-            takes_ctx=False,
-        )
-        wrapper = ClaudeClient._create_tool_wrapper(typed_tool, schema)
+        # Create wrapper
+        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
 
         # Test with valid arguments
         result = await wrapper({"count": 5, "name": "test"})

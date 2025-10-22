@@ -5,7 +5,7 @@ Ensures proper agent configuration for project-level conversations.
 """
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.project import Project
@@ -65,13 +65,13 @@ class ProjectService:
         )
 
         # Get effective config for PROJECT role
-        config = self.agent_config_service.get_effective_config(AgentRole.PROJECT)
+        config = self.agent_config_service.get_effective_config(AgentRoleType.PROJECT)
 
         # Create initial conversation (external_session_id will be set later if needed)
         self.conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=project.id,
-            agent_role=AgentRole.PROJECT,
+            agent_role=AgentRoleType.PROJECT,
             engine=config.engine,
             model_id=config.model_id,
             external_session_id=None,

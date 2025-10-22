@@ -1,6 +1,5 @@
-from pydantic_ai import ApprovalRequired, RunContext, Tool
+from pydantic_ai import Tool
 
-from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models.document import Document
 from devboard.db.repositories.document import DocumentRepository
@@ -9,24 +8,28 @@ from devboard.services.document_editor import DocumentEditorService
 
 
 def create_document_edit_tool(document: Document, document_repo: DocumentRepository) -> Tool:
-    """Create a document editing tool.
-    First, the edits are validated to ensure they can be applied. If validation passes,
-    the tool will request approval before applying the edits.
+    """Create an engine-agnostic document editing tool.
+
+    The tool validates edits before applying them and requires approval for execution.
 
     Args:
         document: Document model to edit
         document_repo: Repository for document operations
     """
 
-    def edit_document_tool(ctx: RunContext[BaseDeps], edits: list[DocumentEdit], reasoning: str = "") -> str:
-        """Edit document with the provided edits.
+    def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
+        """
+        Apply edits to the document.
+
+        DOCUMENT EDITING RULES:
+        1. Make precise find-replace edits using DocumentEdit objects
+        2. Use exact text matches for 'find' - the text must exist exactly as written
+        3. Preserve markdown formatting and structure
+        4. When adding new content, find a logical insertion point and replace with expanded content
 
         Args:
             edits: List of find-replace edits to apply
             reasoning: Optional CONCISE reasoning for why these edits are being made
-
-        Returns:
-            Success message or error details
         """
         # Create document editor service
         editor_service = DocumentEditorService()
@@ -38,23 +41,18 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
             # Return error immediately, no deferral needed
             return error_msg
 
-        if not ctx.tool_call_approved:
-            # This will show the edits to the user for approval
-            raise ApprovalRequired()
-
         # Update document content and hash using repository
         document_repo.update_content(document, edit_result.content)
 
         return f"Edits applied successfully to {document.document_type}."
 
     return Tool(
-        function=edit_document_tool,
-        name=f"edit_{document.document_type}",
+        function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True, takes_ctx=False
     )
 
 
 def create_set_document_content_tool(document: Document, document_repo: DocumentRepository) -> Tool:
-    """Create a tool for setting the content of a document.
+    """Create an engine-agnostic tool for setting the content of a document.
 
     This tool can be used on both blank and non-blank documents:
     - For blank documents: No approval required (non-destructive)
@@ -65,7 +63,7 @@ def create_set_document_content_tool(document: Document, document_repo: Document
         document_repo: Repository for document operations
     """
 
-    def set_document_content_tool(ctx: RunContext[BaseDeps], content: str, reasoning: str = "") -> str:
+    def set_document_content_tool(content: str, reasoning: str = "") -> str:
         """Set the content of a document.
 
         Args:
@@ -76,47 +74,21 @@ def create_set_document_content_tool(document: Document, document_repo: Document
             Success message or error details
         """
         # Validate content is not empty
-        if not content or not content.strip():
+        if not content.strip():
             return "Error: Content cannot be empty."
-
-        # Check if document has existing content (destructive operation)
-        document_has_content = document.content and document.content.strip()
-
-        # Request approval only if document already has content (destructive)
-        if document_has_content and not ctx.tool_call_approved:
-            raise ApprovalRequired()
 
         # Update document content and hash using repository
         document_repo.update_content(document, content)
 
         return f"Content set successfully for {document.document_type}."
 
+    document_has_content = bool(document.content and document.content.strip())
     return Tool(
         function=set_document_content_tool,
         name=f"set_{document.document_type}_content",
+        requires_approval=document_has_content,
+        takes_ctx=False,
     )
-
-
-async def get_relevant_context(ctx: RunContext[BaseDeps], resource_uri: str, query: str) -> str:
-    """Get focused context from an ON_DEMAND resource.
-
-    Use this tool when you need specific information from a resource that's
-    only available as a description in the on_demand_resources list.
-
-    Args:
-        resource_uri: The URI of the resource to query (must be from on_demand_resources)
-        query: Specific question about the resource
-
-    Returns:
-        Focused context relevant to your query
-    """
-    # Verify the resource is available
-    available_uris = [res.uri for res in ctx.deps.on_demand_resources]
-    if resource_uri not in available_uris:
-        return f"Error: Resource {resource_uri} not available for this project"
-
-    result = await ctx.deps.context_service.get_on_demand_context(resource_uri, query)
-    return result
 
 
 def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -133,7 +105,6 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """
 
     async def search_text_in_files(
-        ctx: RunContext[BaseDeps],
         query: str,
         file_pattern: str | None = None,
         case_sensitive: bool = False,
@@ -199,7 +170,6 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """
 
     async def search_files_by_name(
-        ctx: RunContext[BaseDeps],
         pattern: str,
         extension: str | None = None,
         exclude_pattern: str | None = None,
@@ -273,7 +243,6 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     """
 
     async def search_code_structure(
-        ctx: RunContext[BaseDeps],
         pattern: str,
         language: str | None = None,
     ) -> str:
@@ -335,7 +304,6 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
     """
 
     async def show_directory_tree(
-        ctx: RunContext[BaseDeps],
         max_depth: int | None = None,
         subdirectory: str | None = None,
     ) -> str:

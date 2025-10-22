@@ -8,7 +8,7 @@ from sqlalchemy import Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 
 from .base import Base
 
@@ -62,9 +62,11 @@ class Conversation(Base):
     parent_conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"), nullable=True)
 
     # Agent configuration snapshot (immutable after creation, except model_id)
-    agent_role: Mapped[AgentRole] = mapped_column(Enum(AgentRole), nullable=False)
+    agent_role: Mapped[AgentRoleType] = mapped_column(Enum(AgentRoleType), nullable=False)
     engine: Mapped[AgentEngine] = mapped_column(Enum(AgentEngine), nullable=False)
-    model_id: Mapped[str | None] = mapped_column(nullable=True)  # e.g., "anthropic:claude-sonnet-4", or None for engine default
+    model_id: Mapped[str | None] = mapped_column(
+        nullable=True
+    )  # e.g., "anthropic:claude-sonnet-4", or None for engine default
 
     # External session management
     external_session_id: Mapped[str | None] = mapped_column(nullable=True)

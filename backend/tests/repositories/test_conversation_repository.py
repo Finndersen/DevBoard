@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository
@@ -32,7 +32,7 @@ class TestConversationRepository:
         conversation = repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=project.id,
-            agent_role=AgentRole.PROJECT,
+            agent_role=AgentRoleType.PROJECT,
             engine=AgentEngine.INTERNAL,
             model_id="anthropic:claude-3-5-sonnet-20241022",
         )
@@ -48,7 +48,7 @@ class TestConversationRepository:
         conversation = repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=project.id,
-            agent_role=AgentRole.PROJECT,
+            agent_role=AgentRoleType.PROJECT,
             engine=AgentEngine.INTERNAL,
             model_id="anthropic:claude-3-5-sonnet-20241022",
         )
@@ -58,7 +58,7 @@ class TestConversationRepository:
         assert conversation.parent_entity_type == ParentEntityType.PROJECT
         assert conversation.parent_entity_id == project.id
         assert conversation.parent_conversation_id is None
-        assert conversation.agent_role == AgentRole.PROJECT.value
+        assert conversation.agent_role == AgentRoleType.PROJECT.value
         assert conversation.engine == AgentEngine.INTERNAL
         assert conversation.model_id == "anthropic:claude-3-5-sonnet-20241022"
 
@@ -73,7 +73,7 @@ class TestConversationRepository:
         conversation1 = repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=project.id,
-            agent_role=AgentRole.PROJECT,
+            agent_role=AgentRoleType.PROJECT,
             engine=AgentEngine.INTERNAL,
             model_id="anthropic:claude-3-5-sonnet-20241022",
         )

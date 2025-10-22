@@ -3,7 +3,7 @@
 from typing import ClassVar
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.config.base import BaseConfig
 
 
@@ -16,7 +16,7 @@ class AgentConfig(BaseConfig):
         selected_model: User's preferred model override (provider:model format)
     """
 
-    agent_type: ClassVar[AgentRole]
+    agent_type: ClassVar[AgentRoleType]
 
     selected_engine: AgentEngine | None = None  # User's preferred engine override
     selected_model: str | None = None  # User's preferred model override
@@ -30,29 +30,29 @@ class AgentConfig(BaseConfig):
 class ProjectAgentConfig(AgentConfig):
     """Configuration for Project Q&A Agent."""
 
-    agent_type = AgentRole.PROJECT
+    agent_type = AgentRoleType.PROJECT
 
 
 # TODO: Keep these two task agents seperate or combine?
 class TaskSpecificationAgentConfig(AgentConfig):
     """Configuration for Task Planning Agent."""
 
-    agent_type = AgentRole.TASK_SPECIFICATION
+    agent_type = AgentRoleType.TASK_SPECIFICATION
 
 
 class TaskPlanningAgentConfig(AgentConfig):
     """Configuration for Task Planning Agent."""
 
-    agent_type = AgentRole.TASK_PLANNING
+    agent_type = AgentRoleType.TASK_PLANNING
 
 
 class TaskImplementationAgentConfig(AgentConfig):
     """Configuration for Task Implementation Agent."""
 
-    agent_type = AgentRole.TASK_IMPLEMENTATION
+    agent_type = AgentRoleType.TASK_IMPLEMENTATION
 
 
 class InvestigationAgentConfig(AgentConfig):
     """Configuration for Context Investigation/Gathering Agent."""
 
-    agent_type = AgentRole.INVESTIGATION
+    agent_type = AgentRoleType.INVESTIGATION

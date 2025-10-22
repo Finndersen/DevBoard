@@ -6,7 +6,7 @@ from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from sqlalchemy import delete, select
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
 
@@ -53,7 +53,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         self,
         parent_entity_type: ParentEntityType,
         parent_entity_id: int,
-        agent_role: AgentRole,
+        agent_role: AgentRoleType,
         engine: AgentEngine,
         model_id: str | None,
         external_session_id: str | None = None,
@@ -112,7 +112,7 @@ class ConversationRepository(BaseRepository[Conversation]):
     def update_role_and_model(
         self,
         conversation: Conversation,
-        agent_role: AgentRole,
+        agent_role: AgentRoleType,
         model_id: str | None,
     ) -> Conversation:
         """Update the agent role and model for a conversation.

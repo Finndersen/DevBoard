@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.core.registry import Registry
 
 
@@ -124,7 +124,7 @@ class LLMRegistry(Registry[LanguageModel]):
         """
         return self.list_values()
 
-    def get_recommended_model_type_for_agent(self, agent_role: AgentRole) -> ModelType:
+    def get_recommended_model_type_for_agent(self, agent_role: AgentRoleType) -> ModelType:
         """Get the recommended model type for an agent role.
 
         Args:
@@ -138,11 +138,11 @@ class LLMRegistry(Registry[LanguageModel]):
 
 # Recommended model types for different agent roles
 RECOMMENDED_AGENT_MODEL_TYPES = {
-    AgentRole.PROJECT: ModelType.REASONING,
-    AgentRole.TASK_SPECIFICATION: ModelType.REASONING,
-    AgentRole.TASK_PLANNING: ModelType.REASONING,
-    AgentRole.TASK_IMPLEMENTATION: ModelType.REASONING,
-    AgentRole.INVESTIGATION: ModelType.FAST,
+    AgentRoleType.PROJECT: ModelType.REASONING,
+    AgentRoleType.TASK_SPECIFICATION: ModelType.REASONING,
+    AgentRoleType.TASK_PLANNING: ModelType.REASONING,
+    AgentRoleType.TASK_IMPLEMENTATION: ModelType.REASONING,
+    AgentRoleType.INVESTIGATION: ModelType.FAST,
 }
 # Global default LLM registry instance
 llm_registry = LLMRegistry(ALL_MODELS)

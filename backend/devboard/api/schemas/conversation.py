@@ -13,7 +13,7 @@ class ConversationResponse(BaseModel):
     parent_entity_id: int
     agent_role: str
     engine: str
-    model_id: str
+    model_id: str | None
     is_active: bool
     external_session_id: str | None
     created_at: datetime.datetime

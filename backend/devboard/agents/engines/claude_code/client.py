@@ -20,8 +20,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from pydantic.json_schema import GenerateJsonSchema
-from pydantic_ai._function_schema import function_schema
+from pydantic_ai import Tool
 
 # StreamEvent is not exported from public API, import from types module
 try:
@@ -52,10 +51,6 @@ class ClaudeToolContent(TypedDict):
     content: list[ClaudeToolTextBlock]
 
 
-# Type alias for custom tool functions - can be sync or async functions returning str
-type ClaudeCodeToolFunc = Callable[..., str | Awaitable[str]]
-
-
 class ClaudeClient:
     """Low-level client wrapping ClaudeSDKClient for Claude Code CLI integration.
 
@@ -76,7 +71,7 @@ class ClaudeClient:
         session_id: str | None = None,
         system_prompt: str | None = None,
         include_builtin_system_prompt: bool = False,
-        tools: list[ClaudeCodeToolFunc] | None = None,
+        tools: list[Tool] | None = None,
         allowed_builtin_tools: list[str] | None = None,
         model: str | None = None,
         cwd: str | None = None,
@@ -89,9 +84,7 @@ class ClaudeClient:
             session_id: Optional session ID to resume a previous conversation
             system_prompt: Optional system prompt to include in all runs
             include_builtin_system_prompt: Whether to include the built-in system prompt
-            tools: Optional list of sync or async Python functions to expose as tools.
-                   Each function should accept keyword arguments matching its signature
-                   and return a string result.
+            tools: Optional list of PydanticAI Tool instances to expose as tools.
             allowed_builtin_tools: Optional list of allowed tool names (e.g., ["Read", "Bash", "Grep"]).
                            If tools are provided, this will be extended with the custom tool names.
             model: Optional model to use (e.g., "claude-sonnet-4-5-20250929")
@@ -139,36 +132,28 @@ class ClaudeClient:
 
     def _build_mcp_servers(
         self,
-        tools: list[ClaudeCodeToolFunc],
+        tools: list[Tool],
     ) -> tuple[dict[str, Any], list[str]]:
-        """Build MCP servers from custom Python tools.
+        """Build MCP servers from PydanticAI Tool instances.
 
         Args:
-            tools: List of sync or async Python functions to expose as custom tools
+            tools: List of PydanticAI Tool instances
 
         Returns:
-            Tuple of (mcp_servers dict or None, list of custom tool names)
+            Tuple of (mcp_servers dict, list of custom tool names)
         """
         # Wrap tools with SDK's @tool decorator
         sdk_tools = []
         custom_tool_names = []
 
-        for tool_func in tools:
-            # Use PydanticAI's function_schema to extract metadata
-            schema = function_schema(
-                function=tool_func,
-                schema_generator=GenerateJsonSchema,
-                takes_ctx=False,
-                docstring_format="auto",
-            )
-
-            # Extract function metadata
-            tool_name = tool_func.__name__
-            tool_description = schema.description or f"Tool: {tool_name}"
-            input_schema = schema.json_schema
+        for pydantic_tool in tools:
+            # Extract metadata from PydanticAI Tool's function_schema
+            tool_name = pydantic_tool.name
+            tool_description = pydantic_tool.description
+            input_schema = pydantic_tool.function_schema.json_schema
 
             # Create wrapper that converts the function to Claude Code format
-            wrapper_func = self._create_tool_wrapper(tool_func, schema)
+            wrapper_func = self._create_tool_wrapper(pydantic_tool)
 
             # Wrap with the @tool decorator
             sdk_tool = tool(tool_name, tool_description, input_schema)(wrapper_func)
@@ -187,27 +172,26 @@ class ClaudeClient:
 
     @staticmethod
     def _create_tool_wrapper(
-        func: ClaudeCodeToolFunc, func_schema: Any
+        pydantic_tool: Tool,
     ) -> Callable[[dict[str, Any]], Awaitable[ClaudeToolContent]]:
-        """Create a wrapper function that converts a sync/async function to Claude Code tool format.
+        """Create a wrapper function that converts a PydanticAI Tool to Claude Code tool format.
 
         Args:
-            func: The original sync or async function to wrap (should return str)
-            func_schema: The FunctionSchema containing validation and metadata
+            pydantic_tool: PydanticAI Tool instance
 
         Returns:
             An async function that accepts a dict of arguments and returns ClaudeToolContent
         """
 
         async def wrapper(args: dict[str, Any]) -> ClaudeToolContent:
-            # Validate arguments using the function schema
-            validated_args = func_schema.validator.validate_python(args)
+            # Validate arguments using the tool's schema validator
+            validated_args = pydantic_tool.function_schema.validator.validate_python(args)
 
-            # Call the original function
-            if func_schema.is_async:
-                result = await func(**validated_args)
+            # Call the tool function
+            if pydantic_tool.function_schema.is_async:
+                result = await pydantic_tool.function(**validated_args)
             else:
-                result = func(**validated_args)
+                result = pydantic_tool.function(**validated_args)
 
             # Convert result to Claude Code format
             if isinstance(result, dict) and "content" in result:

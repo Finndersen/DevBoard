@@ -1,4 +1,17 @@
+from pydantic_ai import Tool
+
+from devboard.agents.roles.base import Role
+from devboard.agents.tools import (
+    create_code_structure_search_tool,
+    create_directory_tree_tool,
+    create_document_edit_tool,
+    create_file_search_tool,
+    create_set_document_content_tool,
+    create_text_search_tool,
+)
 from devboard.db.models import Task
+from devboard.db.repositories import DocumentRepository
+from devboard.integrations.codebase import CodebaseIntegration
 
 SPECIFICATION_ROLE_PROMPT = """
 You are a Task Specification Assistant for DevBoard, helping developers craft detailed task specifications.
@@ -71,3 +84,54 @@ TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
     """
 
     return context
+
+
+class TaskSpecificationRole(Role):
+    """Role for task specification creation and management."""
+
+    def __init__(self, task: Task, document_repository: DocumentRepository):
+        """Initialize task specification role.
+
+        Args:
+            task: Task instance
+            document_repository: Repository for document operations
+        """
+        self.task = task
+        self.document_repository = document_repository
+        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
+
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for task specification role."""
+        return SPECIFICATION_ROLE_PROMPT
+
+    def get_tools(self) -> list[Tool]:
+        """Get tools for task specification role.
+
+        Returns:
+            List of document editing tools and codebase search tools (if codebase available)
+        """
+        tools: list[Tool] = [
+            create_set_document_content_tool(self.task.specification, self.document_repository),
+            create_document_edit_tool(self.task.specification, self.document_repository),
+        ]
+
+        # Add codebase search tools if codebase is configured
+        if self.codebase_integration:
+            tools.extend(
+                [
+                    create_text_search_tool(self.codebase_integration),
+                    create_file_search_tool(self.codebase_integration),
+                    create_code_structure_search_tool(self.codebase_integration),
+                    create_directory_tree_tool(self.codebase_integration),
+                ]
+            )
+
+        return tools
+
+    async def get_context_content(self) -> str:
+        """Get context content for task specification role.
+
+        Returns:
+            Formatted context containing task details, project spec, and task spec
+        """
+        return build_task_specification_context(self.task)

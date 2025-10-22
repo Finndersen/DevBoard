@@ -1,9 +1,8 @@
 """Base agent service with shared functionality for PydanticAI message handling."""
 
-from abc import ABCMeta, abstractmethod
 from collections.abc import AsyncIterator
 
-from pydantic_ai import Agent, AgentRunResultEvent, AgentStreamEvent, Tool
+from pydantic_ai import Agent, AgentRunResultEvent, AgentStreamEvent
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -17,44 +16,47 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
     DeferredToolRequests,
     DeferredToolResults,
-    ToolFuncEither,
 )
 
 from devboard.agents.engines.internal.deps import BaseDeps
 from devboard.agents.language_models import LanguageModel
-from devboard.agents.prompts import DOCUMENT_EDIT_PROMPT
-from devboard.agents.roles.types import AgentRole
-from devboard.services.context_assembly import (
-    ContextAssemblyService,
-    ProjectContextData,
-)
+from devboard.agents.roles.base import Role
+from devboard.services.context_assembly import ProjectContextData
 
 
-class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
-    """Base class for all internal agent definitions using PydanticAI."""
+class InternalAgent[TDeps: BaseDeps]:
+    """PydanticAI-based agent that delegates behavior to a Role.
 
-    agent_role: AgentRole
-    deps_type: type[TDeps]
+    This agent uses a Role instance to define its system prompt, tools, and context,
+    making the agent behavior completely determined by the role configuration.
+    """
 
     def __init__(
         self,
-        context_service: ContextAssemblyService,
+        role: Role,
         model: LanguageModel,
+        deps_type: type[TDeps] = BaseDeps,
     ):
-        self.context_service = context_service
+        """Initialize internal agent with role.
+
+        Args:
+            role: Role defining agent behavior (prompts, tools, context)
+            model: Language model to use
+            deps_type: Dependencies type for PydanticAI agent
+        """
+        self.role = role
         self.model = model
+        self.deps_type = deps_type
 
     def _create_agent(self) -> Agent[TDeps]:
-        """Create the PydanticAI agent with context tools."""
-
+        """Create PydanticAI agent using role's configuration."""
         agent = Agent[TDeps](
             self._get_model(),
             deps_type=self.deps_type,
-            system_prompt=self._get_role_prompt(),
-            tools=self._get_tools(),
+            system_prompt=self.role.get_system_prompt(),
+            tools=self.role.get_tools(),
             output_type=DeferredToolRequests | str,
         )
-
         return agent
 
     def _get_model(self) -> str:
@@ -65,34 +67,19 @@ class InternalAgent[TDeps: BaseDeps](metaclass=ABCMeta):
         # Replace google with google-gla for compatibility with PydanticAI
         return self.model.id.replace("google", "google-gla")
 
-    def _get_system_prompt(self) -> str:
-        return "\n\n".join([self._get_role_prompt(), DOCUMENT_EDIT_PROMPT])
-
-    @abstractmethod
-    def _get_role_prompt(self) -> str:
-        """Get the system prompt for this agent."""
-        pass
-
-    @abstractmethod
-    def _get_tools(self) -> list[Tool | ToolFuncEither]:
-        """Get the tools for this agent."""
-        pass
-
-    @abstractmethod
-    async def _get_context_message_content(self, deps: TDeps) -> str:
-        """Construct the first user message that contains context information for the agent."""
-        pass
-
     async def build_system_and_context_messages(self, deps: TDeps) -> ModelRequest:
-        """
-        Build the initial system and context messages, which will be prepended to the conversation history.
-        :param deps:
-        :return:
-        """
-        parts: list[ModelRequestPart] = [SystemPromptPart(content=self._get_role_prompt())]
+        """Build initial system and context messages from role.
 
-        context_msg_content = await self._get_context_message_content(deps)
-        parts.append(UserPromptPart(content="CURRENT STATE AND CONTEXT:\n" + context_msg_content))
+        Args:
+            deps: Agent dependencies
+
+        Returns:
+            Model request with system prompt and context message
+        """
+        parts: list[ModelRequestPart] = [SystemPromptPart(content=self.role.get_system_prompt())]
+
+        context_content = await self.role.get_context_content()
+        parts.append(UserPromptPart(content="CURRENT STATE AND CONTEXT:\n" + context_content))
 
         return ModelRequest(parts=parts)
 

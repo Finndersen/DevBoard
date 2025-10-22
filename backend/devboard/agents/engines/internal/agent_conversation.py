@@ -14,8 +14,10 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.internal.base_agent import InternalAgent
+from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.language_models import llm_registry
+from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
     ConversationEvent,
     ConversationMessage,
@@ -39,25 +41,25 @@ class PydanticAIConversationService(BaseAgentConversationService):
 
     Attributes:
         conversation: The conversation instance (from base class)
-        agent: The PydanticAI agent instance
+        role: The Role defining agent behavior
         conversation_repo: Repository for database operations
     """
 
     def __init__(
         self,
         conversation: Conversation,
-        agent: InternalAgent,
+        role: Role,
         conversation_repository: ConversationRepository,
     ):
         """Initialize PydanticAI conversation service.
 
         Args:
             conversation: The conversation instance to manage
-            agent: The PydanticAI agent instance
+            role: The Role defining agent behavior
             conversation_repository: Repository for conversation database operations
         """
         super().__init__(conversation, conversation_repository)
-        self.agent = agent
+        self.role = role
 
     @property
     def conversation_id(self) -> int:
@@ -103,6 +105,21 @@ class PydanticAIConversationService(BaseAgentConversationService):
             tool_approval_results = self._create_deferred_results(approvals)
             return await self._handle_message_or_approval(message_or_approvals=tool_approval_results)
 
+    def _get_agent(self) -> InternalAgent:
+        """Create and return an agent instance.
+
+        This method can be patched in tests to return a mock agent.
+
+        Returns:
+            InternalAgent instance configured with role and model
+        """
+        model = llm_registry.get(self.conversation.model_id)
+        return InternalAgent(
+            role=self.role,
+            model=model,
+            deps_type=BaseDeps,
+        )
+
     async def _handle_message_or_approval(
         self, message_or_approvals: str | DeferredToolResults
     ) -> list[ConversationEvent]:
@@ -129,11 +146,13 @@ class PydanticAIConversationService(BaseAgentConversationService):
 
         message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
 
+        agent = self._get_agent()
+
         # Process with agent using streaming
         events: list[ConversationEvent] = []
         agent_run_result = None
 
-        async for event in self.agent.stream_events(
+        async for event in agent.stream_events(
             prompt_or_approvals=message_or_approvals,
             conversation_history=message_history,
             deps=BaseDeps(),

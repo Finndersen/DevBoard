@@ -1,13 +1,13 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
-from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 import logfire
 from claude_agent_sdk import Message, ResultMessage
 from pydantic import ValidationError
+from pydantic_ai import Tool
 
-from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeToolFunc
+from devboard.agents.engines.claude_code.client import ClaudeClient
 from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
     TextResponse,
@@ -22,9 +22,8 @@ from devboard.agents.engines.claude_code.virtual_tools import (
     build_virtual_tool_schemas_section,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
+from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision
-from devboard.db.models.task import Task
-from devboard.db.repositories.document import DocumentRepository
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
@@ -32,49 +31,71 @@ MAX_RETRY_ATTEMPTS = 3
 FinalResult = TextResponse | VirtualToolRequests
 
 
-class ClaudeCodeAgent(ABC):
-    """Base class for Claude Code agents using virtual tool calling.
+class ClaudeCodeAgent:
+    """Claude Code agent that delegates behavior to a Role.
 
-    This class provides the foundation for application-level agents that use
-    Claude Code with a virtual tool calling pattern (JSON-structured responses).
-
-    Subclasses should implement:
-    - _build_system_prompt(): Construct the system prompt with tool schemas and context
-    - _get_virtual_tools(): Return list of VirtualTool instances for this agent
+    This agent uses a Role instance to define its system prompt, tools (virtual and function),
+    and context, making the agent behavior completely determined by the role configuration.
     """
 
     def __init__(
         self,
-        task: Task,
-        document_repository: DocumentRepository,
+        role: Role,
         model: LanguageModel | None,
         session_id: str | None = None,
+        codebase_path: str | None = None,
         include_builtin_system_prompt: bool = False,
         include_claude_md: bool = False,
     ):
-        """Initialize the base Claude agent.
+        """Initialize Claude Code agent with role.
 
         Args:
-            task: The task this agent is working on
-            document_repository: Repository for document operations
+            role: Role defining agent behavior (prompts, tools, context)
             model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
+            codebase_path: Optional path to codebase directory
             include_builtin_system_prompt: Whether to include Claude's built-in system prompt
             include_claude_md: Whether to include CLAUDE.md file in system prompt
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
 
-        self.task = task
-        self.document_repo = document_repository
+        self.role = role
         self.model = model
         self.session_id = session_id
-        self._virtual_tools = {tool.tool_name: tool for tool in self._get_virtual_tools()}
+        self.codebase_path = codebase_path
         self.session_service = ClaudeCodeSessionService()
         self.include_builtin_system_prompt = include_builtin_system_prompt
         self.include_claude_md = include_claude_md
 
-    def _create_client(self) -> ClaudeClient:
+        # Convert PydanticAI tools to virtual tools and function tools
+        self._virtual_tools, self._function_tools = self._convert_tools_from_role()
+
+    def _convert_tools_from_role(self) -> tuple[dict[str, VirtualTool], list[Tool]]:
+        """Convert PydanticAI tools from role into virtual tools and function tools.
+
+        Tools with requires_approval=True become virtual tools.
+        Tools with requires_approval=False become regular Tool instances (passed to ClaudeClient).
+
+        Returns:
+            Tuple of (virtual_tools dict, function_tools list of Tool instances)
+        """
+
+        virtual_tools: dict[str, VirtualTool] = {}
+        function_tools: list[Tool] = []
+
+        for tool in self.role.get_tools():
+            if tool.requires_approval:
+                # Convert to virtual tool
+                virtual_tool = VirtualTool(tool)
+                virtual_tools[virtual_tool.tool_name] = virtual_tool
+            else:
+                # Add as regular Tool instance (ClaudeClient will handle it)
+                function_tools.append(tool)
+
+        return virtual_tools, function_tools if function_tools else None
+
+    async def _create_client(self) -> ClaudeClient:
         """Create a Claude client with the current system prompt and session ID.
 
         This is called on each run to ensure the system prompt includes
@@ -83,95 +104,38 @@ class ClaudeCodeAgent(ABC):
         Returns:
             Configured ClaudeClient instance
         """
-        system_prompt = self._build_system_prompt()
-
-        # Use codebase directory if available
-        cwd = self.task.codebase.local_path if self.task.codebase else None
+        system_prompt = await self._build_system_prompt()
 
         return ClaudeClient(
             session_id=self.session_id,
             system_prompt=system_prompt,
-            tools=self._get_function_tools(),
+            tools=self._function_tools,
             allowed_builtin_tools=self._get_allowed_builtin_tools(),
             model=self.model.display_full_name if self.model else None,
-            cwd=cwd,
+            cwd=self.codebase_path,
             include_builtin_system_prompt=self.include_builtin_system_prompt,
             include_claude_md=self.include_claude_md,
         )
 
-    def _build_system_prompt(self) -> str:
-        """Build the system prompt for this agent.
+    async def _build_system_prompt(self) -> str:
+        """Build the system prompt from role.
 
         Combines role description, tool schemas, and state/context data.
-        Subclasses should implement _get_role_description() and _get_state_context().
 
         Returns:
             Complete system prompt string
         """
-        # Get components from subclass
-        role_description = self._get_role_description()
+        # Get system prompt from role
+        role_prompt = self.role.get_system_prompt()
 
         # Build tool schemas from virtual tools
         virtual_tool_prompt = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
 
-        # Get current state/context
-        state_context = self._get_state_context()
+        # Get current state/context from role (async operation)
+        state_context = await self.role.get_context_content()
 
         # Combine all parts
-        return "\n\n".join([role_description, virtual_tool_prompt, state_context])
-
-    @abstractmethod
-    def _get_role_description(self) -> str:
-        """Get the agent role description and behavioral guidelines.
-
-        This should describe:
-        - The agent's purpose and role
-        - Guidelines for behavior and interaction
-        - Any specific rules or constraints
-
-        Returns:
-            Role description string
-        """
-        pass
-
-    @abstractmethod
-    def _get_state_context(self) -> str:
-        """Get the current state and context information for the agent.
-
-        This should provide:
-        - Current task information (name, status, etc.)
-        - Document states (which documents and their content)
-        - Any other relevant context
-
-        Returns:
-            State/context string
-        """
-        pass
-
-    @abstractmethod
-    def _get_virtual_tools(self) -> list[VirtualTool]:
-        """Get the list of virtual tools for this agent.
-
-        This should return initialized VirtualTool instances that will be
-        used to build the system prompt and execute approved tool calls.
-
-        Returns:
-            List of VirtualTool instances
-        """
-        pass
-
-    def _get_function_tools(self) -> list[ClaudeCodeToolFunc] | None:
-        """Get the list of regular function tools for this agent.
-
-        These are tools that don't require approval and will be passed to
-        ClaudeClient as normal tools (not virtual tools requiring JSON responses).
-
-        Override this method to provide regular tools. By default returns None.
-
-        Returns:
-            List of sync or async functions that return strings, or None
-        """
-        return None
+        return "\n\n".join([role_prompt, virtual_tool_prompt, state_context])
 
     def get_virtual_tool(self, tool_name: str) -> VirtualTool | None:
         """Get a virtual tool by name.
@@ -227,7 +191,7 @@ class ClaudeCodeAgent(ABC):
             user_message = prompt_or_approvals
 
         # Create fresh client with current system prompt, document state, and session ID
-        client = self._create_client()
+        client = await self._create_client()
 
         # Stream messages from the client
         result_message = None
@@ -490,8 +454,8 @@ class ClaudeCodeAgent(ABC):
 
         # Validate tool arguments against the tool's schema
         try:
-            # Use the tool's args_model to validate
-            virtual_tool.args_model.model_validate(tool_call.arguments)
+            # Use the tool's validate_args method
+            virtual_tool.validate_args(tool_call.arguments)
         except ValidationError as e:
             error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
             error_msg = (

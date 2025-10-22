@@ -5,7 +5,7 @@ Ensures proper agent configuration and conversation state throughout the task li
 """
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
@@ -200,8 +200,8 @@ class TaskService:
         # Reuse if: transitioning from DEFINING to PLANNING AND same engine
         if (
             current
-            and current.agent_role == AgentRole.TASK_SPECIFICATION
-            and new_agent_role == AgentRole.TASK_PLANNING
+            and current.agent_role == AgentRoleType.TASK_SPECIFICATION
+            and new_agent_role == AgentRoleType.TASK_PLANNING
             and current.engine == new_config.engine
         ):
             # Reuse conversation by updating role and model
@@ -226,7 +226,7 @@ class TaskService:
         )
 
     @staticmethod
-    def _get_agent_role_for_status(status: TaskStatus) -> AgentRole:
+    def _get_agent_role_for_status(status: TaskStatus) -> AgentRoleType:
         """Map task status to agent role.
 
         Args:
@@ -236,9 +236,9 @@ class TaskService:
             Corresponding AgentRole
         """
         mapping = {
-            TaskStatus.DEFINING: AgentRole.TASK_SPECIFICATION,
-            TaskStatus.PLANNING: AgentRole.TASK_PLANNING,
-            TaskStatus.IMPLEMENTING: AgentRole.TASK_IMPLEMENTATION,
-            TaskStatus.REVIEWING: AgentRole.TASK_IMPLEMENTATION,  # Same agent for review
+            TaskStatus.DEFINING: AgentRoleType.TASK_SPECIFICATION,
+            TaskStatus.PLANNING: AgentRoleType.TASK_PLANNING,
+            TaskStatus.IMPLEMENTING: AgentRoleType.TASK_IMPLEMENTATION,
+            TaskStatus.REVIEWING: AgentRoleType.TASK_IMPLEMENTATION,  # Same agent for review
         }
-        return mapping.get(status, AgentRole.TASK_SPECIFICATION)
+        return mapping.get(status, AgentRoleType.TASK_SPECIFICATION)

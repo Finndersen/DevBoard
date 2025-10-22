@@ -10,7 +10,7 @@ from devboard.agents.agent_config_service import (
 )
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.roles.types import (
-    AgentRole,
+    AgentRoleType,
 )
 from devboard.api.dependencies.services import get_agent_config_service
 from devboard.api.schemas import UpdateAgentConfigurationRequest
@@ -36,9 +36,9 @@ async def get_agent_configuration(
         Agent configuration with effective values and available options
     """
     try:
-        role = AgentRole(agent_role)
+        role = AgentRoleType(agent_role)
     except ValueError:
-        valid_roles = [r.value for r in AgentRole]
+        valid_roles = [r.value for r in AgentRoleType]
         raise HTTPException(
             status_code=400,
             detail=f"Invalid agent role: {agent_role}. Must be one of: {', '.join(valid_roles)}",
@@ -71,7 +71,7 @@ async def update_agent_configuration(
         HTTPException: 400 if validation fails
     """
     try:
-        role = AgentRole(agent_role)
+        role = AgentRoleType(agent_role)
         config = AgentEngineModelConfig(
             engine=AgentEngine(request.engine),
             model_id=request.model_id,

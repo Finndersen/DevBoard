@@ -1,34 +1,48 @@
 """Tests for conversations router."""
 
+from collections.abc import Iterator
 from unittest.mock import Mock
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
+from starlette.testclient import TestClient
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.project_qa import ProjectQARole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.services import get_agent_conversation_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
-from devboard.db.repositories import ConversationRepository, ProjectRepository
+from devboard.db.models.document import DocumentType
+from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository
 
 
 @pytest.fixture
-def mock_agent_conversation_service(mock_agent, test_conversation, db_session):
-    """Create a mock conversation service wrapping the mock agent."""
+def mock_agent_conversation_service(mock_agent, test_conversation, test_project, db_session, monkeypatch):
+    """Create a conversation service with mocked agent."""
     conversation_repo = ConversationRepository(db_session)
-    return PydanticAIConversationService(
+    document_repo = DocumentRepository(db_session)
+
+    # Create role for the service
+    role = ProjectQARole(project=test_project, document_repository=document_repo)
+
+    service = PydanticAIConversationService(
         conversation=test_conversation,
-        agent=mock_agent,
+        role=role,
         conversation_repository=conversation_repo,
     )
 
+    # Patch the _get_agent method to return our mock
+    monkeypatch.setattr(service, "_get_agent", lambda: mock_agent)
+
+    return service
+
 
 @pytest.fixture
-def client_with_mock_agent(client, mock_agent_conversation_service):
+def client_with_mock_agent(client, mock_agent_conversation_service) -> Iterator[TestClient]:
     """Client with mocked conversation service."""
     app.dependency_overrides[get_agent_conversation_service] = lambda: mock_agent_conversation_service
     yield client
@@ -39,9 +53,6 @@ def client_with_mock_agent(client, mock_agent_conversation_service):
 @pytest.fixture
 def test_project(db_session) -> Project:
     """Create a test project."""
-    from devboard.db.models.document import DocumentType
-    from devboard.db.repositories.document import DocumentRepository
-
     document_repo = DocumentRepository(db_session)
     specification_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
 
@@ -62,7 +73,7 @@ def test_conversation(db_session, test_project) -> Conversation:
     conversation = conversation_repo.create(
         parent_entity_type=ParentEntityType.PROJECT,
         parent_entity_id=test_project.id,
-        agent_role=AgentRole.PROJECT,
+        agent_role=AgentRoleType.PROJECT,
         engine=AgentEngine.INTERNAL,
         model_id="anthropic:claude-sonnet-4.5",
         is_active=True,
@@ -343,7 +354,7 @@ class TestConversationsRouter:
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=test_project.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.CLAUDE_CODE,
             model_id="anthropic:claude-sonnet-4.5",
             is_active=True,

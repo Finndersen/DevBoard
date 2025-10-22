@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from unittest.mock import AsyncMock, Mock
 
 from fastapi.testclient import TestClient
@@ -83,7 +83,7 @@ def db_session(db_connection: Connection, db_tables) -> Generator[Session, None,
 
 
 @fixture
-def client(db_session):
+def client(db_session) -> Iterator[TestClient]:
     """FastAPI test client with database setup."""
 
     def override_get_db():

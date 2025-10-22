@@ -77,7 +77,7 @@ class TestProjectsRouter:
     def test_get_project_success(self, client, db_session, test_project_data):
         """Test getting a specific project."""
         from devboard.agents.engines.agent_engines import AgentEngine
-        from devboard.agents.roles.types import AgentRole
+        from devboard.agents.roles.types import AgentRoleType
         from devboard.db.models import ParentEntityType
         from devboard.db.repositories import ConversationRepository
 
@@ -94,7 +94,7 @@ class TestProjectsRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=created_project.id,
-            agent_role=AgentRole.PROJECT,
+            agent_role=AgentRoleType.PROJECT,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
             is_active=True,
@@ -337,7 +337,7 @@ class TestProjectTasksRouter:
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
         from devboard.agents.engines.agent_engines import AgentEngine
-        from devboard.agents.roles.types import AgentRole
+        from devboard.agents.roles.types import AgentRoleType
         from devboard.db.models import ParentEntityType
         from devboard.db.repositories import ConversationRepository
 
@@ -376,14 +376,14 @@ class TestProjectTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task1.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task2.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )

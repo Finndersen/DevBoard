@@ -1,4 +1,12 @@
+from pydantic_ai import Tool
+
+from devboard.agents.roles.base import Role
+from devboard.agents.tools import (
+    create_document_edit_tool,
+    create_set_document_content_tool,
+)
 from devboard.db.models import Task
+from devboard.db.repositories import DocumentRepository
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
 You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
@@ -63,3 +71,46 @@ IMPLEMENTATION PLAN:
 {task.implementation_plan.content if task.implementation_plan else "<EMPTY>"}
 ```
 """
+
+
+class TaskImplementationRole(Role):
+    """Role for task implementation in a codebase."""
+
+    def __init__(self, task: Task, document_repository: DocumentRepository):
+        """Initialize task implementation role.
+
+        Args:
+            task: Task instance
+            document_repository: Repository for document operations
+        """
+        self.task = task
+        self.document_repository = document_repository
+
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for task implementation role."""
+        return IMPLEMENTATION_SYSTEM_PROMPT
+
+    def get_tools(self) -> list[Tool]:
+        """Get tools for task implementation role.
+
+        Returns:
+            List of document editing tools for specification and implementation plan.
+            Note: Codebase editing tools (Edit/Write) are provided directly by the
+            underlying agent (ClaudeCode), not through this role.
+        """
+        return [
+            # Tools for task specification document
+            create_set_document_content_tool(self.task.specification, self.document_repository),
+            create_document_edit_tool(self.task.specification, self.document_repository),
+            # Tools for implementation plan document
+            create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
+            create_document_edit_tool(self.task.implementation_plan, self.document_repository),
+        ]
+
+    async def get_context_content(self) -> str:
+        """Get context content for task implementation role.
+
+        Returns:
+            Formatted context containing task details, specification, and implementation plan
+        """
+        return build_task_implementation_context(self.task)

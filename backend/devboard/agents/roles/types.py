@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 
-class AgentRole(StrEnum):
+class AgentRoleType(StrEnum):
     """Available agent roles in the system.
 
     Each role represents a specific responsibility or function that an agent

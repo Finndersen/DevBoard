@@ -3,7 +3,7 @@
 import pytest
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRole
+from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -97,7 +97,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -144,7 +144,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -244,7 +244,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -302,7 +302,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -539,7 +539,7 @@ class TestTaskStateTransition:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -600,7 +600,7 @@ class TestTaskStateTransition:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -636,7 +636,7 @@ class TestTaskStateTransition:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -676,7 +676,7 @@ class TestTaskStateTransition:
         initial_conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -699,7 +699,7 @@ class TestTaskStateTransition:
         # Verify conversation has updated role
         conversation = conversation_repo.get_by_id(conversation_id)
         assert conversation is not None
-        assert conversation.agent_role == AgentRole.TASK_PLANNING
+        assert conversation.agent_role == AgentRoleType.TASK_PLANNING
         assert conversation.is_active is True
         assert conversation.archived_at is None  # Should not be archived
 
@@ -726,7 +726,7 @@ class TestTaskStateTransition:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_PLANNING,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -763,7 +763,7 @@ class TestTaskStateTransition:
         initial_conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -786,7 +786,7 @@ class TestTaskStateTransition:
         # Verify conversation was updated with new role
         conversation = conversation_repo.get_by_id(conversation_id)
         assert conversation is not None
-        assert conversation.agent_role == AgentRole.TASK_PLANNING
+        assert conversation.agent_role == AgentRoleType.TASK_PLANNING
         assert conversation.is_active is True
         assert conversation.archived_at is None  # Should not be archived
 
@@ -814,7 +814,7 @@ class TestTaskStateTransition:
         initial_conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRole.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
             engine=AgentEngine.CLAUDE_CODE,
             model_id="anthropic:claude-sonnet-4",
         )
@@ -837,7 +837,7 @@ class TestTaskStateTransition:
         # Verify new conversation has correct role and engine
         new_conversation = conversation_repo.get_by_id(new_conversation_id)
         assert new_conversation is not None
-        assert new_conversation.agent_role == AgentRole.TASK_PLANNING
+        assert new_conversation.agent_role == AgentRoleType.TASK_PLANNING
         assert new_conversation.is_active is True
 
         # Verify old conversation was archived

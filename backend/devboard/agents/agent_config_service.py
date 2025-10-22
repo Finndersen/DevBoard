@@ -14,9 +14,7 @@ from devboard.agents.language_models import (
     LLMRegistry,
     ModelType,
 )
-from devboard.agents.roles.types import (
-    AgentRole,
-)
+from devboard.agents.roles.types import AgentRoleType
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.services.config_service import ConfigService
@@ -80,7 +78,7 @@ class AgentConfiguration(BaseModel):
         available_engines: List of engines available for this agent role
     """
 
-    agent_role: AgentRole
+    agent_role: AgentRoleType
     config: AgentEngineModelConfig
     available_engines: list[AgentEngineInfo]
 
@@ -121,7 +119,7 @@ class AgentConfigService:
         self.llm_registry = llm_registry
         self.engine_registry = engine_registry
 
-    def get_agent_configuration(self, agent_role: AgentRole) -> AgentConfiguration:
+    def get_agent_configuration(self, agent_role: AgentRoleType) -> AgentConfiguration:
         """Get role-level configuration with effective config and available engines.
 
         Args:
@@ -179,7 +177,7 @@ class AgentConfigService:
 
     def update_agent_configuration(
         self,
-        agent_role: AgentRole,
+        agent_role: AgentRoleType,
         config: AgentEngineModelConfig,
     ) -> AgentConfiguration:
         """Update role-level configuration.
@@ -239,7 +237,7 @@ class AgentConfigService:
 
         return self.get_agent_configuration(agent_role)
 
-    def get_effective_config(self, agent_role: AgentRole) -> AgentEngineModelConfig:
+    def get_effective_config(self, agent_role: AgentRoleType) -> AgentEngineModelConfig:
         """Resolve effective engine and model from stored config or defaults.
 
         Args:
@@ -325,7 +323,9 @@ class AgentConfigService:
         # Return models from working providers
         return [model for model in self.llm_registry.get_all_models() if model.provider in working_providers]
 
-    def _get_default_model_for_agent_role_and_engine(self, agent_role: AgentRole, engine: AgentEngine) -> str | None:
+    def _get_default_model_for_agent_role_and_engine(
+        self, agent_role: AgentRoleType, engine: AgentEngine
+    ) -> str | None:
         """Get default model for an agent role and engine.
 
         Selects the first available model of the recommended type for the agent role.

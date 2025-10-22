@@ -6,7 +6,7 @@ import logfire
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.claude_code.base_agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
     TextResponse,
@@ -19,6 +19,8 @@ from devboard.agents.engines.claude_code.session import (
     SessionMessage,
     SessionMessageRole,
 )
+from devboard.agents.language_models import llm_registry
+from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
     ConversationEvent,
     ConversationMessage,
@@ -47,18 +49,21 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
     def __init__(
         self,
         conversation: Conversation,
-        agent: ClaudeCodeAgent,
+        role: Role,
         conversation_repository: ConversationRepository,
+        codebase_path: str | None = None,
     ):
         """Initialize Claude Code conversation service.
 
         Args:
             conversation: Conversation instance with session tracking
-            agent: Claude Code agent (TaskSpecificationAgent, TaskPlanningAgent, etc.)
+            role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations (saving session ID)
+            codebase_path: Optional path to codebase directory
         """
         super().__init__(conversation, conversation_repository)
-        self.agent = agent
+        self.role = role
+        self.codebase_path = codebase_path
 
     @property
     def session_id(self) -> str | None:
@@ -102,6 +107,22 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
 
             return await self._handle_agent_execution(prompt_or_approvals=approvals)
 
+    def _get_agent(self) -> ClaudeCodeAgent:
+        """Create and return an agent instance.
+
+        This method can be patched in tests to return a mock agent.
+
+        Returns:
+            ClaudeCodeAgent instance configured with role, model, and session
+        """
+        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
+        return ClaudeCodeAgent(
+            role=self.role,
+            model=model,
+            session_id=self.conversation.external_session_id,
+            codebase_path=self.codebase_path,
+        )
+
     async def _handle_agent_execution(
         self, prompt_or_approvals: str | dict[str, ToolApprovalDecision]
     ) -> list[ConversationEvent]:
@@ -117,8 +138,10 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         """
         events: list[ConversationEvent] = []
 
+        agent = self._get_agent()
+
         # Stream events from agent
-        async for event in self.agent.stream_events(prompt_or_approvals=prompt_or_approvals):
+        async for event in agent.stream_events(prompt_or_approvals=prompt_or_approvals):
             timestamp = datetime.datetime.now(datetime.UTC)
             # Convert stream events to conversation events
             # Extract tool calls from AssistantMessage if present
@@ -183,8 +206,8 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                     )
 
         # After execution, update session_id in conversation if it changed
-        if self.agent.session_id != self.conversation.external_session_id:
-            self.conversation_repo.update_external_session_id(self.conversation, self.agent.session_id)
+        if agent.session_id != self.conversation.external_session_id:
+            self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
 
         return events
 
