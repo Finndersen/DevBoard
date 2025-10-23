@@ -48,8 +48,25 @@ class VirtualToolResult(BaseModel):
         return self.outcome == ToolCallOutcome.SUCCESS
 
 
-class VirtualToolCall(BaseModel):
+class VirtualToolCallSchema(BaseModel):
+    """Base tool call structure for JSON parsing.
+
+    This represents the core JSON schema for a tool call:
+    - tool_name: The name of the tool to invoke
+    - arguments: The arguments dict to pass to the tool
+    """
+
+    tool_name: str = Field(description="Name of the tool to call")
+    arguments: dict[str, Any] = Field(description="Arguments for the tool")
+
+
+class VirtualToolCall(VirtualToolCallSchema):
     """Represents a single virtual tool call request from Claude.
+
+    Extends ToolCall with additional metadata for the virtual tool calling workflow:
+    - valid: Whether the tool call structure is valid
+    - validation_error: Error message if validation failed
+    - preamble: Optional text content before the tool call JSON
 
     This model handles both valid and invalid tool call attempts:
     - For valid calls: tool_name and arguments are properly populated, valid=True
@@ -59,10 +76,9 @@ class VirtualToolCall(BaseModel):
     is allowed at a time. The backend uses tool_name as the identifier.
     """
 
-    tool_name: str = Field(description="Name of the tool to call")
-    arguments: dict[str, Any] = Field(description="Arguments for the tool")
     valid: bool = Field(default=True, description="Whether the tool call passed structural validation")
     validation_error: str | None = Field(default=None, description="Validation error message if valid=False")
+    preamble: str | None = Field(default=None, description="Text content before the tool call JSON")
 
 
 class VirtualToolRequests(BaseModel):
@@ -80,45 +96,92 @@ class ClaudeResponseParser:
         re.DOTALL,
     )
 
-    # JSON code block patterns
-    JSON_CODE_BLOCK_PATTERN = re.compile(
-        r"```(?:json)?\s*\n(.*?)\n```",
+    # Tool call pattern with optional preamble
+    # Captures:
+    # - Group 1 (optional): Preamble text before the tool call
+    # - Group 2: The JSON content (must contain "tool_name" field somewhere)
+    # This pattern looks for JSON objects in code blocks or plain text
+    TOOL_CALL_PATTERN = re.compile(
+        r"^(.*?)?"  # Optional preamble (non-greedy)
+        r"(?:```(?:json)?\s*\n)?"  # Optional code block start (non-capturing)
+        r'(\{.*?"tool_name":.*\})'  # JSON object containing "tool_name" field
+        r"(?:\n```)?"  # Optional code block end (non-capturing)
+        r"\s*$",  # End of string (allowing trailing whitespace)
         re.DOTALL,
     )
 
     @classmethod
-    def extract_json(cls, text: str) -> dict | None:
-        """Extract JSON from text, supporting plain JSON and code blocks.
+    def _detect_virtual_tool_call(cls, text: str) -> VirtualToolCall | None:
+        """Detect and parse a virtual tool call with optional preamble.
 
-        Tries multiple strategies:
-        1. Parse as plain JSON
-        2. Extract from ```json...``` code block
-        3. Extract from ```...``` generic code block
+        Uses regex to match tool calls in various formats:
+        - Plain JSON: {"tool_name": "...", "arguments": {...}}
+        - JSON with preamble: Some text\n{"tool_name": ...}
+        - JSON in code block: ```json\n{"tool_name": ...}\n```
+        - JSON in code block with preamble: Some text\n```json\n{"tool_name": ...}\n```
 
         Args:
-            text: Text potentially containing JSON
+            text: Text potentially containing a tool call
 
         Returns:
-            Parsed JSON dict if found and valid, None otherwise
+            VirtualToolCall (valid or invalid) if JSON tool call detected, None otherwise
         """
         text = text.strip()
 
-        # Try plain JSON first
+        # Try regex pattern first (handles all formats with preamble)
+        match = cls.TOOL_CALL_PATTERN.match(text)
+        if not match:
+            # No match - not a tool call
+            return None
+
+        # Extract preamble if present
+        preamble = stripped_text if (stripped_text := match.group(1).strip()) else None
+
+        # Extract JSON content
+        json_str = match.group(2).strip()
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+            json_data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # Malformed JSON in what appears to be a tool call - return invalid tool call
+            return VirtualToolCall(
+                tool_name="invalid_tool_call",
+                arguments={},
+                valid=False,
+                validation_error=f"Malformed JSON in tool call: {str(e)}",
+                preamble=preamble,
+            )
 
-        # Try extracting from code block
-        match = cls.JSON_CODE_BLOCK_PATTERN.search(text)
-        if match:
-            code_content = match.group(1).strip()
-            try:
-                return json.loads(code_content)
-            except json.JSONDecodeError:
-                pass
+        # Ensure we have a dict
+        if not isinstance(json_data, dict):
+            return VirtualToolCall(
+                tool_name="invalid_tool_call",
+                arguments={},
+                valid=False,
+                validation_error="Tool call JSON must be an object, not an array or primitive",
+                preamble=preamble,
+            )
 
-        return None
+        # Try to parse as ToolCall (validates tool_name and arguments structure)
+        try:
+            tool_call = VirtualToolCallSchema.model_validate(json_data)
+            # Convert to VirtualToolCall with preamble
+            return VirtualToolCall(
+                tool_name=tool_call.tool_name,
+                arguments=tool_call.arguments,
+                valid=True,
+                preamble=preamble,
+            )
+        except ValidationError as e:
+            # Return invalid tool call with preamble
+            tool_name = json_data.get("tool_name")
+            error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            return VirtualToolCall(
+                tool_name=tool_name or "invalid_tool_call",
+                arguments={},
+                valid=False,
+                validation_error=f"Invalid tool call format:\n{error_details}",
+                preamble=preamble,
+            )
 
     @classmethod
     def parse_message(cls, text: str) -> TextResponse | VirtualToolCall | VirtualToolResult:
@@ -127,14 +190,14 @@ class ClaudeResponseParser:
         This is the unified parsing method that should be used throughout the codebase
         to consistently handle all message types. Detects and returns:
         - VirtualToolResult: XML-marked tool results (success, validation_error, or denied)
-        - VirtualToolCall: JSON tool call requests (both valid and invalid)
-        - TextMessage: Regular text messages
+        - VirtualToolCall: JSON tool call requests (both valid and invalid, with optional preamble)
+        - TextResponse: Regular text messages
 
         Args:
             text: Message text to parse
 
         Returns:
-            One of: TextMessage, VirtualToolCall (valid or invalid), or VirtualToolResult
+            One of: TextResponse, VirtualToolCall (valid or invalid), or VirtualToolResult
             Never raises exceptions - all errors create invalid VirtualToolCall instances
         """
         # Check for tool result XML marker first (takes precedence)
@@ -151,25 +214,10 @@ class ClaudeResponseParser:
                 outcome = ToolCallOutcome.VALIDATION_ERROR
             return VirtualToolResult(tool_name=tool_name, outcome=outcome, content=result_text)
 
-        # Try to extract JSON for virtual tool calls
-        json_data = cls.extract_json(text)
+        # Try to detect virtual tool call (with preamble)
+        tool_call = cls._detect_virtual_tool_call(text)
+        if tool_call:
+            return tool_call
 
-        # If no JSON or not a dict, treat as normal message
-        if not json_data or not isinstance(json_data, dict):
-            return TextResponse(content=text)
-
-        # Try to validate as tool call - catch ValidationError and return invalid VirtualToolCall
-        try:
-            # VirtualToolCall.valid will be True if is validation succeeds,
-            # even though the arguments may still be invalid for the particular tool
-            return VirtualToolCall.model_validate(json_data)
-        except ValidationError as e:
-            # Extract tool_name from JSON if present, otherwise use generic name
-            tool_name = json_data.get("tool_name")
-            error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-            return VirtualToolCall(
-                tool_name=tool_name or "invalid_tool_call",
-                arguments={},
-                valid=False,
-                validation_error=f"Invalid tool call format:\n{error_details}",
-            )
+        # No tool call detected - treat as normal message
+        return TextResponse(content=text)

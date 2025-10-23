@@ -1,4 +1,4 @@
-from pydantic_ai import Tool
+from pydantic_ai import ModelRetry, Tool
 
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models.document import Document
@@ -37,9 +37,7 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
         # Pre-validate edits can be applied
         edit_result = editor_service.apply_edits(document.content, edits)
         if not edit_result.success:
-            error_msg = f"Failed to apply edits to document: {'; '.join(edit_result.errors)}"
-            # Return error immediately, no deferral needed
-            return error_msg
+            raise ModelRetry(f"Failed to apply edits to document: {'; '.join(edit_result.errors)}")
 
         # Update document content and hash using repository
         document_repo.update_content(document, edit_result.content)
@@ -75,7 +73,7 @@ def create_set_document_content_tool(document: Document, document_repo: Document
         """
         # Validate content is not empty
         if not content.strip():
-            return "Error: Content cannot be empty."
+            raise ModelRetry("Error: Content cannot be empty.")
 
         # Update document content and hash using repository
         document_repo.update_content(document, content)

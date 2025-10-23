@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 import logfire
 from claude_agent_sdk import Message, ResultMessage
 from pydantic import ValidationError
-from pydantic_ai import Tool
+from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.engines.claude_code.client import ClaudeClient
 from devboard.agents.engines.claude_code.message_parser import (
@@ -17,7 +17,6 @@ from devboard.agents.engines.claude_code.message_parser import (
 )
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.engines.claude_code.virtual_tools import (
-    ToolCallError,
     VirtualTool,
     build_virtual_tool_schemas_section,
 )
@@ -296,9 +295,9 @@ class ClaudeCodeAgent:
                 try:
                     result_content = await virtual_tool.execute(tool_call.arguments)
                     outcome = ToolCallOutcome.SUCCESS
-                except ToolCallError as e:
+                except ModelRetry as e:
                     # Tool execution failed
-                    result_content = str(e)
+                    result_content = e.message
                     outcome = ToolCallOutcome.ERROR
                     logfire.warning(
                         f"Tool execution failed for {tool_call.tool_name}: {e}",

@@ -9,24 +9,9 @@ tool system and do not require virtual tool calling.
 """
 
 import json
+from typing import Any
 
 from pydantic_ai import Tool
-
-
-class ToolCallError(Exception):
-    """Exception raised when a virtual tool execution fails.
-
-    This exception should be raised by VirtualTool.execute() methods when
-    tool execution fails for any reason (validation errors, operation failures,
-    resource issues, etc.). The error message will be returned to the agent
-    as a failed tool result.
-
-    Example:
-        raise ToolCallError("Failed to update document: file not found")
-    """
-
-    pass
-
 
 # Tool response format instructions for system prompts
 TOOL_RESPONSE_FORMAT = """
@@ -42,32 +27,16 @@ TOOL_RESPONSE_FORMAT = """
 ## VIRTUAL TOOL CALLING FORMAT (for tools that require approval only):
 
 For virtual tool calls, respond with JSON content ONLY (no other text in your message):
-{
-  "tool_name": "<tool_name>",
-  "arguments": {
-    ...
-  }
-}
+{"tool_name": "<tool_name>", "arguments": {...}}
 
 ## CORRECT Tool Call Example (ONLY JSON content) ✅:
 User: 'Update the task specification with the details we have discussed'
-Assistant: '
-{
-  "tool_name": "<tool_name>",
-  "arguments": {
-    ...
-  }
-}'
+Assistant: '{"tool_name": "<tool_name>", "arguments": {...}}'
 
 ## INCORRECT Tool Call Example (containing other text) ❌:
 User: 'Update the task specification with the details we have discussed. Also, fix the indentation.'
 Assistant: 'I will update the task specification. Here's the updated content:
-{
-  "tool_name": "<tool_name>",
-  "arguments": {
-    ...
-  }
-}'
+{"tool_name": "<tool_name>", "arguments": {...}}'
 
 IMPORTANT:
 - You can only make ONE virtual tool call at a time
@@ -107,14 +76,14 @@ class VirtualTool:
         """Return the tool description."""
         return self.pydantic_tool.description
 
-    def validate_args(self, arguments: dict) -> dict:
-        """Validate arguments using the PydanticAI tool's schema validator.
+    def validate_args(self, arguments: dict) -> Any:
+        """Validate and convert arguments using the PydanticAI tool's schema validator.
 
         Args:
             arguments: Raw arguments dict to validate
 
         Returns:
-            Validated arguments dict
+            Validated arguments data (converted to appropriate input types of the tool function)
 
         Raises:
             ValidationError: If validation fails
@@ -133,17 +102,9 @@ class VirtualTool:
         Raises:
             ToolCallError: If execution fails
         """
-        try:
-            # Call the tool function directly with arguments
-            if self.pydantic_tool.function_schema.is_async:
-                result = await self.pydantic_tool.function(**arguments)
-            else:
-                result = self.pydantic_tool.function(**arguments)
-
-            return str(result)
-
-        except Exception as e:
-            raise ToolCallError(f"Tool execution failed: {str(e)}") from e
+        validated_args = self.validate_args(arguments)
+        result = await self.pydantic_tool.function_schema.call(validated_args, ctx=None)
+        return str(result)
 
     def get_schema(self) -> str:
         """Generate the schema string for system prompt.

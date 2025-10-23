@@ -146,42 +146,30 @@ class TestInvalidResponseStructure:
         assert response.content == '["array", "not", "object"]'
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_json_object_without_tool_fields_triggers_retry(self, mock_run, test_agent):
-        """Test that JSON object without tool_name/arguments triggers validation error and retry."""
+    async def test_json_object_without_tool_fields_treated_as_message(self, test_agent):
+        """Test that JSON object without tool_name field is treated as plain text message."""
         result = create_mock_result('{"content": "Hello", "no_tool_fields": true}')
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        response = await test_agent._parse_response(result, retry_count=0)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        # JSON object should trigger validation and retry
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
-        assert call_args.kwargs["_retry_count"] == 1
+        # JSON without tool_name is treated as plain text message (no retry)
+        assert isinstance(response, TextResponse)
+        assert response.content == '{"content": "Hello", "no_tool_fields": true}'
 
 
 class TestInvalidMessageFormat:
     """Tests for JSON objects that fail validation."""
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_json_object_triggers_validation(self, mock_run, test_agent):
-        """Test that JSON object triggers validation (and retry if invalid)."""
+    async def test_json_object_without_tool_name_treated_as_message(self, test_agent):
+        """Test that JSON object without tool_name is treated as plain text message."""
         result = create_mock_result('{"type": "message"}')
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        response = await test_agent._parse_response(result, retry_count=0)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        # JSON object should trigger validation and retry
-        mock_run.assert_called_once()
-        assert "ERROR: Invalid tool call format" in mock_run.call_args.kwargs["prompt_or_approvals"]
+        # JSON without tool_name is treated as plain text message (no validation/retry)
+        assert isinstance(response, TextResponse)
+        assert response.content == '{"type": "message"}'
 
     @pytest.mark.asyncio
     async def test_message_with_content_works(self, test_agent):
@@ -199,21 +187,15 @@ class TestInvalidToolCallFormat:
     """Tests for invalid tool call format validation."""
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_tool_call_missing_tool_name_triggers_retry(self, mock_run, test_agent):
-        """Test that JSON with arguments but no tool_name triggers a retry."""
+    async def test_tool_call_missing_tool_name_treated_as_message(self, test_agent):
+        """Test that JSON with arguments but no tool_name is treated as plain text message."""
         result = create_mock_result('{"arguments": {}}')
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        response = await test_agent._parse_response(result, retry_count=0)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        # JSON object should trigger validation and retry
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
+        # JSON without tool_name is treated as plain text message (no validation/retry)
+        assert isinstance(response, TextResponse)
+        assert response.content == '{"arguments": {}}'
 
     @pytest.mark.asyncio
     @patch.object(ClaudeCodeAgent, "run")

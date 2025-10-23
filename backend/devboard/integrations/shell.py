@@ -126,4 +126,3 @@ async def execute_shell_command(
     except FileNotFoundError as e:
         logfire.error(f"Shell command not found: {command[0]}")
         raise ShellCommandNotFoundError(f"Command not found: {command[0]}") from e
-

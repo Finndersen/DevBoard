@@ -196,6 +196,16 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             elif isinstance(event, VirtualToolRequests):
                 # Virtual tool call requests - convert to ToolCallRequest events
                 for call in event.calls:
+                    # Generate preamble message if present
+                    if call.preamble:
+                        events.append(
+                            ConversationMessage(
+                                role=MessageRole.AGENT,
+                                text_content=call.preamble,
+                                timestamp=timestamp,
+                            )
+                        )
+                    # Generate tool call request
                     events.append(
                         ToolCallRequest(
                             tool_call_id=call.tool_name,  # For virtual tools, tool_name is the ID
@@ -283,6 +293,16 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
 
                     elif isinstance(parsed, VirtualToolCall):
                         # Virtual tool call - convert to ToolCall event (for both invalid and valid calls)
+                        # Generate preamble message if present
+                        if parsed.preamble:
+                            events.append(
+                                ConversationMessage(
+                                    role=MessageRole.AGENT,
+                                    text_content=parsed.preamble,
+                                    timestamp=session_msg.timestamp,
+                                )
+                            )
+                        # Generate tool call event
                         events.append(
                             ToolCall(
                                 tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools

@@ -70,15 +70,9 @@ ALL_MODELS = [
     ),
     LanguageModel(
         provider=LLMProvider.ANTHROPIC,
-        name="claude-sonnet-3.7",
-        type=ModelType.REASONING,
-        full_name="claude-3-7-sonnet-20250219",
-    ),
-    LanguageModel(
-        provider=LLMProvider.ANTHROPIC,
-        name="claude-haiku-3.5",
+        name="claude-haiku-4-5",
         type=ModelType.FAST,
-        full_name="claude-3-5-haiku-20241022",
+        full_name="claude-haiku-4-5-20251001",
     ),
     # Google Models
     LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-pro", type=ModelType.REASONING),

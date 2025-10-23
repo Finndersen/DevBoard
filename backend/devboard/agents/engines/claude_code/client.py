@@ -186,12 +186,7 @@ class ClaudeClient:
         async def wrapper(args: dict[str, Any]) -> ClaudeToolContent:
             # Validate arguments using the tool's schema validator
             validated_args = pydantic_tool.function_schema.validator.validate_python(args)
-
-            # Call the tool function
-            if pydantic_tool.function_schema.is_async:
-                result = await pydantic_tool.function(**validated_args)
-            else:
-                result = pydantic_tool.function(**validated_args)
+            result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
 
             # Convert result to Claude Code format
             if isinstance(result, dict) and "content" in result:
