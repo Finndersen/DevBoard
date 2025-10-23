@@ -131,21 +131,16 @@ class CodebaseIntegration:
 
         cmd.append(query)
 
-        try:
-            result = await execute_shell_command(
-                cmd,
-                working_dir=self.codebase_path,
-                timeout=30.0,
-                raise_on_error=False,
-            )
+        result = await execute_shell_command(
+            cmd,
+            working_dir=self.codebase_path,
+            timeout=30.0,
+            raise_on_error=False,
+        )
 
-            if result.success and result.stdout:
-                return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-            return []
-
-        except Exception as e:
-            logfire.error(f"Error searching file content with ripgrep: {e}")
-            return []
+        if result.success and result.stdout:
+            return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+        return []
 
     async def search_files(
         self,
@@ -177,24 +172,18 @@ class CodebaseIntegration:
             cmd.extend(["--exclude", exclude_pattern])
 
         cmd.append(pattern)
+        result = await execute_shell_command(
+            cmd,
+            working_dir=self.codebase_path,
+            timeout=30.0,
+            raise_on_error=False,
+        )
 
-        try:
-            result = await execute_shell_command(
-                cmd,
-                working_dir=self.codebase_path,
-                timeout=30.0,
-                raise_on_error=False,
-            )
+        if result.success and result.stdout:
+            files = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+            return sorted(files)
 
-            if result.success and result.stdout:
-                files = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-                return sorted(files)
-
-            return []
-
-        except Exception as e:
-            logfire.error(f"Error searching files with fd: {e}")
-            return []
+        return []
 
     async def search_code_structure(self, pattern: str, language: str | None = None) -> list[str]:
         """Search for code structure patterns using ast-grep.
@@ -224,21 +213,16 @@ class CodebaseIntegration:
         if language:
             cmd.extend(["--lang", language])
 
-        try:
-            result = await execute_shell_command(
-                cmd,
-                working_dir=self.codebase_path,
-                timeout=30.0,
-                raise_on_error=False,
-            )
+        result = await execute_shell_command(
+            cmd,
+            working_dir=self.codebase_path,
+            timeout=30.0,
+            raise_on_error=False,
+        )
 
-            if result.success and result.stdout:
-                return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-            return []
-
-        except Exception as e:
-            logfire.error(f"Error searching code structure with ast-grep: {e}")
-            return []
+        if result.success and result.stdout:
+            return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+        return []
 
     async def get_directory_tree(self, max_depth: int | None = None, subdirectory: str | None = None) -> str:
         """Get git-tracked file tree structure using piped git ls-files | tree command.
@@ -269,22 +253,17 @@ class CodebaseIntegration:
 
         piped_cmd = f"{git_cmd} | {tree_args}"
 
-        try:
-            result = await execute_shell_command(
-                [piped_cmd],
-                working_dir=self.codebase_path,
-                timeout=30.0,
-                raise_on_error=False,
-            )
+        result = await execute_shell_command(
+            [piped_cmd],
+            working_dir=self.codebase_path,
+            timeout=30.0,
+            raise_on_error=False,
+        )
 
-            if result.success:
-                return result.stdout
-            else:
-                return f"Error generating file tree: {result.stderr}"
-
-        except Exception as e:
-            logfire.error(f"Error getting file tree: {e}")
-            return f"Error: {str(e)}"
+        if result.success:
+            return result.stdout
+        else:
+            return f"Error generating file tree: {result.stderr}"
 
     async def get_git_log(self, max_count: int = 10, file_path: str | None = None) -> list[dict[str, str]]:
         """Get git commit history.
@@ -399,21 +378,16 @@ class CodebaseIntegration:
             "is_dir": full_path.is_dir(),
         }
 
-        try:
-            git_log = self._run_git_command(
-                ["log", "-1", "--pretty=format:%H|%an|%ad|%s", "--date=iso", "--", file_path]
-            )
-            if git_log:
-                parts = git_log.split("|", 3)
-                if len(parts) >= 4:
-                    info["git"] = {
-                        "last_commit": parts[0],
-                        "last_author": parts[1],
-                        "last_modified": parts[2],
-                        "last_message": parts[3],
-                    }
-        except Exception:
-            pass
+        git_log = self._run_git_command(["log", "-1", "--pretty=format:%H|%an|%ad|%s", "--date=iso", "--", file_path])
+        if git_log:
+            parts = git_log.split("|", 3)
+            if len(parts) >= 4:
+                info["git"] = {
+                    "last_commit": parts[0],
+                    "last_author": parts[1],
+                    "last_modified": parts[2],
+                    "last_message": parts[3],
+                }
 
         return info
 
@@ -426,24 +400,20 @@ class CodebaseIntegration:
         Returns:
             Relative path from codebase root, or None if invalid
         """
+        if url.startswith("file://"):
+            file_path = url[7:]
+        elif url.startswith("/"):
+            file_path = url
+        else:
+            return url
+
+        full_path = Path(file_path).resolve()
+
         try:
-            if url.startswith("file://"):
-                file_path = url[7:]
-            elif url.startswith("/"):
-                file_path = url
-            else:
-                return url
-
-            full_path = Path(file_path).resolve()
-
-            try:
-                relative_path = full_path.relative_to(self.codebase_path)
-                return str(relative_path)
-            except ValueError:
-                logfire.warning(f"File path outside codebase directory: {file_path}")
-                return None
-
-        except Exception:
+            relative_path = full_path.relative_to(self.codebase_path)
+            return str(relative_path)
+        except ValueError:
+            logfire.warning(f"File path outside codebase directory: {file_path}")
             return None
 
 

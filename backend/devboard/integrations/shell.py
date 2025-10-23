@@ -53,7 +53,9 @@ async def execute_shell_command(
     """Execute a shell command asynchronously.
 
     Args:
-        command: Command and arguments as a list (e.g., ['ls', '-la'])
+        command: Command and arguments as a list (e.g., ['ls', '-la']).
+                If the list contains a single string with shell syntax (pipes, redirects),
+                it will be executed through a shell.
         working_dir: Working directory for the command (default: current directory)
         timeout: Command timeout in seconds (default: 30)
         raise_on_error: Whether to raise exception on non-zero return code (default: True)
@@ -76,16 +78,27 @@ async def execute_shell_command(
     else:
         cwd = str(Path.cwd())
 
-    logfire.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
-
+    # Determine if we need shell execution (single string with shell syntax)
+    use_shell = len(command) == 1 and ("|" in command[0] or ">" in command[0] or "<" in command[0])
     try:
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.DEVNULL,
-        )
+        if use_shell:
+            logfire.debug(f"Executing shell command in {cwd}: {command[0]}, timeout {timeout}s")
+            process = await asyncio.create_subprocess_shell(
+                command[0],
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+            )
+        else:
+            logfire.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+            )
 
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
@@ -96,7 +109,6 @@ async def execute_shell_command(
             except ProcessLookupError:
                 pass
 
-            logfire.error(f"Shell command timed out after {timeout}s: {' '.join(command)}")
             raise ShellCommandTimeoutError(f"Command timed out after {timeout} seconds: {command[0]}") from e
 
         stdout_text = stdout.decode("utf-8")
@@ -111,7 +123,7 @@ async def execute_shell_command(
 
         logfire.debug(f"Shell command completed successfully: {command[0]}")
         return result
-
     except FileNotFoundError as e:
         logfire.error(f"Shell command not found: {command[0]}")
         raise ShellCommandNotFoundError(f"Command not found: {command[0]}") from e
+

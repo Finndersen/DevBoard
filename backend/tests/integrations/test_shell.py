@@ -157,3 +157,55 @@ class TestExecuteShellCommand:
             with patch("asyncio.wait_for", side_effect=TimeoutError()):
                 with pytest.raises(ShellCommandTimeoutError):
                     await execute_shell_command(["sleep", "10"], timeout=0.1)
+
+    @pytest.mark.asyncio
+    async def test_shell_command_with_pipe(self):
+        """Test shell command with pipe uses create_subprocess_shell."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"filtered output", b""))
+
+        with patch("asyncio.create_subprocess_shell", return_value=mock_process) as mock_shell:
+            result = await execute_shell_command(["echo test | grep test"])
+
+            assert result.success is True
+            assert result.stdout == "filtered output"
+
+            # Verify create_subprocess_shell was called (not create_subprocess_exec)
+            mock_shell.assert_called_once()
+            call_args = mock_shell.call_args
+            assert call_args[0][0] == "echo test | grep test"
+
+    @pytest.mark.asyncio
+    async def test_shell_command_with_redirect(self):
+        """Test shell command with redirect uses create_subprocess_shell."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"", b""))
+
+        with patch("asyncio.create_subprocess_shell", return_value=mock_process) as mock_shell:
+            result = await execute_shell_command(["echo test > /tmp/output.txt"])
+
+            assert result.success is True
+
+            # Verify create_subprocess_shell was called
+            mock_shell.assert_called_once()
+            call_args = mock_shell.call_args
+            assert call_args[0][0] == "echo test > /tmp/output.txt"
+
+    @pytest.mark.asyncio
+    async def test_regular_command_uses_exec_not_shell(self):
+        """Test regular command without shell syntax uses create_subprocess_exec."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            with patch("asyncio.create_subprocess_shell") as mock_shell:
+                result = await execute_shell_command(["echo", "test"])
+
+                assert result.success is True
+
+                # Verify create_subprocess_exec was called, not create_subprocess_shell
+                mock_exec.assert_called_once()
+                mock_shell.assert_not_called()
