@@ -1,7 +1,7 @@
 """Tests for tool approvals API router."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -133,8 +133,6 @@ class TestToolApprovalsRouterEndpoints:
 
     async def test_get_approval_stats_endpoint(self):
         """Test get_approval_stats endpoint."""
-        from unittest.mock import Mock
-
         mock_manager = Mock()  # Use Mock instead of AsyncMock since get_stats is sync
         mock_manager.get_stats.return_value = {
             "pending_count": 5,

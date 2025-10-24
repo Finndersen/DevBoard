@@ -1,31 +1,15 @@
 """PydanticAI agent conversation service with deferred tools support."""
 
-import datetime
-
 import logfire
-from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent, FunctionToolResultEvent
-from pydantic_ai.messages import AgentStreamEvent, ModelMessage, RetryPromptPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.tools import (
-    DeferredToolApprovalResult,
-    DeferredToolRequests,
-    DeferredToolResults,
-    ToolApproved,
-    ToolDenied,
-)
+from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.internal.agent import InternalAgent
-from devboard.agents.engines.internal.deps import BaseDeps
+from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
-    ConversationEvent,
-    ConversationMessage,
-    MessageRole,
-    ToolApprovalDecision,
-    ToolCall,
-    ToolCallRequest,
-    ToolResult,
+    ToolApprovals,
 )
 from devboard.db.models import Conversation
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
@@ -58,80 +42,62 @@ class PydanticAIConversationService(BaseAgentConversationService):
             role: The Role defining agent behavior
             conversation_repository: Repository for conversation database operations
         """
-        super().__init__(conversation, conversation_repository)
-        self.role = role
+        super().__init__(conversation, role, conversation_repository)
 
     @property
     def conversation_id(self) -> int:
         """Get the conversation ID from the conversation instance."""
         return self.conversation.id
 
-    async def send_message(
+    async def send_message_or_approval(
         self,
-        message: str,
+        message_or_approvals: str | ToolApprovals,
     ) -> list[ConversationEvent]:
-        """Process a message and return conversation events.
+        """Send a message or process tool approvals through the agent.
 
         Args:
-            message: User's message
+            message_or_approvals: Either a user message string or ToolApprovals model
 
         Returns:
-            List of conversation events including tool calls, results, and final message
+            List of conversation events generated during agent execution
         """
+        is_approval = isinstance(message_or_approvals, ToolApprovals)
+
         with logfire.span(
-            "agent_conversation.send_message",
+            "agent_conversation.send_message_or_approval",
             conversation_id=self.conversation.id,
-            message_length=len(message),
+            is_approval=is_approval,
         ):
-            return await self._handle_message_or_approval(message_or_approvals=message)
+            return await self._handle_message_or_approval(message_or_approvals=message_or_approvals)
 
-    async def process_tool_approvals(
-        self,
-        approvals: dict[str, ToolApprovalDecision],
-    ) -> list[ConversationEvent]:
-        """Process tool approval/denial and continue agent execution.
-
-        Args:
-            approvals: User's approval decisions
-
-        Returns:
-            List of conversation events including tool calls, results, and final message
-        """
-        with logfire.span(
-            "agent_conversation.process_tool_approval",
-            conversation_id=self.conversation.id,
-            approval_count=len(approvals),
-        ):
-            tool_approval_results = self._create_deferred_results(approvals)
-            return await self._handle_message_or_approval(message_or_approvals=tool_approval_results)
-
-    def _get_agent(self) -> InternalAgent:
+    def _get_agent(self, conversation_history: list[ModelMessage]) -> InternalAgent:
         """Create and return an agent instance.
 
         This method can be patched in tests to return a mock agent.
 
+        Args:
+            conversation_history: Previous conversation messages
+
         Returns:
-            InternalAgent instance configured with role and model
+            InternalAgent instance configured with role, model, and history
         """
         model = llm_registry.get(self.conversation.model_id)
         return InternalAgent(
             role=self.role,
             model=model,
-            deps_type=BaseDeps,
+            conversation_history=conversation_history,
         )
 
-    async def _handle_message_or_approval(
-        self, message_or_approvals: str | DeferredToolResults
-    ) -> list[ConversationEvent]:
+    async def _handle_message_or_approval(self, message_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
         """
         Handle either a new user message or tool approval result.
-        :param message_or_approvals: User message/prompt or tool approval results
+        :param message_or_approvals: User message/prompt or tool approval model
         :return: List of conversation events
         """
         # Load conversation history
         existing_messages = self._get_message_history()
         # Verify integrity of message history
-        if isinstance(message_or_approvals, DeferredToolResults):
+        if isinstance(message_or_approvals, ToolApprovals):
             if not existing_messages:
                 raise ValueError("No existing messages found for processing tool approvals.")
             if existing_messages[-1].message_type != MessageType.TOOL_CALL:
@@ -146,129 +112,17 @@ class PydanticAIConversationService(BaseAgentConversationService):
 
         message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
 
-        agent = self._get_agent()
+        # Create agent with history and deps
+        agent = self._get_agent(conversation_history=message_history)
 
-        # Process with agent using streaming
-        events: list[ConversationEvent] = []
-        agent_run_result = None
+        # Execute agent
+        events = await agent.run(message_or_approvals)
 
-        async for event in agent.stream_events(
-            prompt_or_approvals=message_or_approvals,
-            conversation_history=message_history,
-            deps=BaseDeps(),
-        ):
-            # Capture final result
-            if isinstance(event, AgentRunResultEvent):
-                agent_run_result = event.result
-            else:
-                # Collect events for batch processing
-                converted_event = self._convert_stream_event(event)
-                if converted_event is not None:
-                    events.append(converted_event)
-
-        if agent_run_result is None:
-            raise ValueError("Agent execution did not produce a result")
-
-        # Store and process results
-        saved_messages = self._store_new_messages(new_messages=agent_run_result.new_messages())
-
-        # Add final message or tool requests to events
-        output = agent_run_result.output
-        if isinstance(output, DeferredToolRequests):
-            # Add tool requests to events
-            timestamp = datetime.datetime.now(datetime.UTC)
-            for tr in output.approvals:
-                # Convert args to dict if it's a string (JSON-encoded)
-                tool_args: dict | None = tr.args if isinstance(tr.args, dict) else None
-                events.append(
-                    ToolCallRequest(
-                        tool_call_id=tr.tool_call_id,
-                        tool_name=tr.tool_name,
-                        tool_args=tool_args,
-                        timestamp=timestamp,
-                    )
-                )
-        elif isinstance(output, str):
-            # Add final message to events
-            agent_final_message = saved_messages[-1]
-            events.append(
-                ConversationMessage(
-                    role=MessageRole.AGENT,
-                    text_content=output,
-                    timestamp=agent_final_message.timestamp,
-                )
-            )
-        else:
-            raise ValueError(f"Unexpected agent result: {output}")
+        # Persist new messages
+        new_messages = agent.get_new_messages()
+        self._store_new_messages(new_messages=new_messages)
 
         return events
-
-    def _convert_stream_event(self, event: AgentStreamEvent) -> ConversationEvent | None:
-        """Convert a PydanticAI stream event to our ConversationEvent type.
-
-        Args:
-            event: Stream event from PydanticAI
-
-        Returns:
-            ConversationEvent instance or None if this event type should be ignored
-        """
-        timestamp = datetime.datetime.now(datetime.UTC)
-
-        if isinstance(event, FunctionToolCallEvent):
-            # Extract tool call information
-            part = event.part
-            return ToolCall(
-                tool_call_id=part.tool_call_id,
-                tool_name=part.tool_name,
-                tool_args=part.args,
-                timestamp=timestamp,
-            )
-
-        elif isinstance(event, FunctionToolResultEvent):
-            # Extract tool result information
-            result_part = event.result
-            is_error = isinstance(result_part, RetryPromptPart)
-            result_content = str(result_part.content)
-
-            return ToolResult(
-                tool_call_id=result_part.tool_call_id,
-                result_content=result_content,
-                is_error=is_error,
-                timestamp=timestamp,
-            )
-
-        # Ignore other event types:
-        # - AgentRunResultEvent: Handled separately in main flow
-        # - PartStartEvent, PartDeltaEvent: For future real-time streaming
-
-        return None
-
-    def _create_deferred_results(self, approvals: dict[str, ToolApprovalDecision]) -> DeferredToolResults:
-        """Create deferred tool results from user approvals.
-
-        Args:
-            approvals: User's approval decisions
-
-        Returns:
-            PydanticAI DeferredToolResults object to continue agent execution
-        """
-        converted_approvals: dict[str, DeferredToolApprovalResult] = {}
-        for tool_call_id, decision in approvals.items():
-            if decision.approved:
-                # For approved tools, set approval to True
-                converted_approvals[tool_call_id] = ToolApproved()
-                logfire.info(f"Tool {tool_call_id} approved")
-            else:
-                # For denied tools, set approval to False or use ToolDenied
-                if decision.feedback:
-                    message = f"Tool call DENIED with feedback: {decision.feedback}"
-                else:
-                    message = "The tool call was DENIED."
-
-                converted_approvals[tool_call_id] = ToolDenied(message=message)
-                logfire.info(f"Tool {tool_call_id} denied with feedback: {decision.feedback}")
-
-        return DeferredToolResults(approvals=converted_approvals)
 
     def _get_message_history(self) -> list[DbConversationMessage]:
         return self.conversation_repo.get_messages(self.conversation.id)

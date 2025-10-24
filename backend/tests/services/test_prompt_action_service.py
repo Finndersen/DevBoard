@@ -12,7 +12,7 @@ from devboard.services.prompt_action_service import PromptActionNotFoundError, P
 def mock_conversation_service():
     """Mock BaseAgentConversationService."""
     service = MagicMock()
-    service.send_message = AsyncMock(
+    service.send_message_or_approval = AsyncMock(
         return_value=PromptResponse(
             type="message",
             message={"role": "agent", "text_content": "Mock response", "timestamp": "2024-01-01T00:00:00Z"},
@@ -53,9 +53,9 @@ class TestPromptActionService:
         assert result.type == "message"
         assert result.message is not None
         # Verify conversation service was called with the prompt template
-        mock_conversation_service.send_message.assert_called_once()
-        call_args = mock_conversation_service.send_message.call_args
-        assert "implementation plan" in call_args[1]["message"].lower()
+        mock_conversation_service.send_message_or_approval.assert_called_once()
+        call_args = mock_conversation_service.send_message_or_approval.call_args
+        assert "implementation plan" in call_args[1]["message_or_approvals"].lower()
 
     @pytest.mark.asyncio
     async def test_execute_action_not_found(self, prompt_action_service):

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 from pydantic_ai import Tool
+from pydantic_core import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
@@ -250,7 +251,6 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_string_return(self):
         """Test that tool wrapper correctly handles string returns."""
-        from pydantic_ai import Tool
 
         def simple_tool(text: str) -> str:
             """A simple tool that returns a string.
@@ -275,7 +275,6 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_with_dict_return(self):
         """Test that tool wrapper correctly handles dict returns with content."""
-        from pydantic_ai import Tool
 
         async def dict_tool(value: int) -> dict[str, Any]:
             """A tool that returns a dict.
@@ -298,8 +297,6 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_tool_wrapper_validates_arguments(self):
         """Test that tool wrapper validates arguments using schema."""
-        from pydantic_ai import Tool
-        from pydantic_core import ValidationError
 
         def typed_tool(count: int, name: str) -> str:
             """A tool with typed parameters.

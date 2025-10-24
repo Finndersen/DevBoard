@@ -5,7 +5,13 @@ from urllib.parse import urlparse
 
 import logfire
 
+from devboard.config.integration_configs import SlackIntegrationConfig
+
+# Get database session and create config service
+from devboard.db.database import get_db
+from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.slack import SlackIntegration
+from devboard.services.config_service import ConfigService
 
 from .base import (
     BaseContextProvider,
@@ -35,14 +41,7 @@ class SlackContextProvider(BaseContextProvider):
             ContextProviderUnavailable: If Slack configuration is missing or invalid
         """
         try:
-            from devboard.config.integration_configs import SlackIntegrationConfig
-
-            # Get database session and create config service
-            from devboard.db.database import get_db_session
-            from devboard.db.repositories import ConfigurationRepository
-            from devboard.services.config_service import ConfigService
-
-            session = next(get_db_session())
+            session = next(get_db())
             config_repo = ConfigurationRepository(session)
             config_service = ConfigService(config_repo)
 

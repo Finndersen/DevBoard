@@ -8,10 +8,10 @@ from claude_agent_sdk import ResultMessage
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import (
-    MAX_RETRY_ATTEMPTS,
     ClaudeCodeAgent,
+    InvalidVirtualToolCallError,
 )
-from devboard.agents.engines.claude_code.message_parser import TextResponse, VirtualToolRequests
+from devboard.agents.events import ConversationMessage, MessageRole, ToolCallRequest
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 
@@ -72,10 +72,13 @@ class TestValidMessageResponse:
         """Test parsing a plain text message response."""
         result = create_mock_result("Hello, world!")
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
-        assert isinstance(response, TextResponse)
-        assert response.content == "Hello, world!"
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].role == MessageRole.AGENT
+        assert response[0].text_content == "Hello, world!"
 
 
 class TestValidToolCallResponse:
@@ -97,12 +100,13 @@ class TestValidToolCallResponse:
             )
         )
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
-        assert isinstance(response, VirtualToolRequests)
-        assert len(response.calls) == 1
-        assert response.calls[0].tool_name == "edit_task_specification"
-        assert response.calls[0].arguments["edits"][0]["find"] == "old text"
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ToolCallRequest)
+        assert response[0].tool_name == "edit_task_specification"
+        assert response[0].tool_args["edits"][0]["find"] == "old text"
 
 
 class TestInvalidJSONResponse:
@@ -113,22 +117,26 @@ class TestInvalidJSONResponse:
         """Test that non-JSON responses are treated as normal messages (no retry)."""
         result = create_mock_result("This is not JSON at all")
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # Non-JSON is now treated as a normal text message
-        assert isinstance(response, TextResponse)
-        assert response.content == "This is not JSON at all"
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == "This is not JSON at all"
 
     @pytest.mark.asyncio
     async def test_plain_text_message_no_validation(self, test_agent):
         """Test that plain text messages work without JSON format."""
         result = create_mock_result("Hello! I've analyzed the task and here's what I found...")
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # Plain text should work fine as normal message
-        assert isinstance(response, TextResponse)
-        assert "Hello! I've analyzed" in response.content
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert "Hello! I've analyzed" in response[0].text_content
 
 
 class TestInvalidResponseStructure:
@@ -139,22 +147,26 @@ class TestInvalidResponseStructure:
         """Test that JSON array (not object) is treated as normal message."""
         result = create_mock_result('["array", "not", "object"]')
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # JSON array should be treated as plain text message
-        assert isinstance(response, TextResponse)
-        assert response.content == '["array", "not", "object"]'
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == '["array", "not", "object"]'
 
     @pytest.mark.asyncio
     async def test_json_object_without_tool_fields_treated_as_message(self, test_agent):
         """Test that JSON object without tool_name field is treated as plain text message."""
         result = create_mock_result('{"content": "Hello", "no_tool_fields": true}')
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # JSON without tool_name is treated as plain text message (no retry)
-        assert isinstance(response, TextResponse)
-        assert response.content == '{"content": "Hello", "no_tool_fields": true}'
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == '{"content": "Hello", "no_tool_fields": true}'
 
 
 class TestInvalidMessageFormat:
@@ -165,22 +177,26 @@ class TestInvalidMessageFormat:
         """Test that JSON object without tool_name is treated as plain text message."""
         result = create_mock_result('{"type": "message"}')
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # JSON without tool_name is treated as plain text message (no validation/retry)
-        assert isinstance(response, TextResponse)
-        assert response.content == '{"type": "message"}'
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == '{"type": "message"}'
 
     @pytest.mark.asyncio
     async def test_message_with_content_works(self, test_agent):
         """Test that plain text message works correctly."""
         result = create_mock_result("Test message")
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # Should return full text
-        assert isinstance(response, TextResponse)
-        assert response.content == "Test message"
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == "Test message"
 
 
 class TestInvalidToolCallFormat:
@@ -191,67 +207,58 @@ class TestInvalidToolCallFormat:
         """Test that JSON with arguments but no tool_name is treated as plain text message."""
         result = create_mock_result('{"arguments": {}}')
 
-        response = await test_agent._parse_response(result, retry_count=0)
+        response = await test_agent._parse_claude_result(result)
 
         # JSON without tool_name is treated as plain text message (no validation/retry)
-        assert isinstance(response, TextResponse)
-        assert response.content == '{"arguments": {}}'
+        assert isinstance(response, list)
+        assert len(response) == 1
+        assert isinstance(response[0], ConversationMessage)
+        assert response[0].text_content == '{"arguments": {}}'
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_tool_call_missing_arguments_triggers_retry(self, mock_run, test_agent):
-        """Test that JSON with tool_name but no arguments triggers structural validation retry."""
+    async def test_tool_call_missing_arguments_raises_validation_error(self, test_agent):
+        """Test that JSON with tool_name but no arguments raises validation error."""
         result = create_mock_result('{"tool_name": "edit_task_specification"}')
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        # Should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        # Should trigger structural validation error and retry
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
+        assert "Invalid tool call format" in exc_info.value.error_message
+        assert exc_info.value.tool_name == "edit_task_specification"
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_tool_call_invalid_structure_triggers_retry(self, mock_run, test_agent):
-        """Test that tool call with invalid structure triggers a retry."""
+    async def test_tool_call_invalid_structure_raises_validation_error(self, test_agent):
+        """Test that tool call with invalid structure raises validation error."""
         # Tool call detected (has tool_name and arguments) but structure is invalid
         result = create_mock_result('{"tool_name": "edit_task_specification", "arguments": "not a dict"}')
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        # Should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        # Check keyword argument
-        assert "ERROR: Invalid tool call format" in call_args.kwargs["prompt_or_approvals"]
-        assert call_args.kwargs["_retry_count"] == 1
+        assert "Invalid tool call format" in exc_info.value.error_message
+        assert exc_info.value.tool_name == "edit_task_specification"
 
     @pytest.mark.asyncio
-    async def test_tool_call_validation_max_retries_raises_error(self, test_agent):
-        """Test that tool call validation raises error after max retries."""
+    async def test_tool_call_validation_error_raised(self, test_agent):
+        """Test that tool call validation raises InvalidVirtualToolCallError."""
         result = create_mock_result('{"tool_name": "edit_task_specification", "arguments": "not a dict"}')
 
-        with pytest.raises(ValueError) as exc_info:
-            await test_agent._parse_response(result, retry_count=MAX_RETRY_ATTEMPTS)
+        # _parse_response() should raise InvalidVirtualToolCallError (not ValueError)
+        # stream_events() catches this and retries, raising ValueError after max attempts
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        assert "Tool call validation failed" in str(exc_info.value)
-        assert f"after {MAX_RETRY_ATTEMPTS} attempts" in str(exc_info.value)
+        assert "Invalid tool call format" in exc_info.value.error_message
 
 
 class TestUnknownTool:
     """Tests for unknown tool validation."""
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_unknown_tool_triggers_retry(self, mock_run, test_agent):
-        """Test that unknown tool name triggers a retry with available tools list."""
+    async def test_unknown_tool_raises_validation_error(self, test_agent):
+        """Test that unknown tool name raises validation error with available tools list."""
         result = create_mock_result(
             json.dumps(
                 {
@@ -262,23 +269,18 @@ class TestUnknownTool:
             )
         )
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        # Should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        # Check keyword argument
-        assert "ERROR: Unknown tool 'nonexistent_tool'" in call_args.kwargs["prompt_or_approvals"]
-        assert "Available tools:" in call_args.kwargs["prompt_or_approvals"]
-        assert "edit_task_specification" in call_args.kwargs["prompt_or_approvals"]
-        assert call_args.kwargs["_retry_count"] == 1
+        assert "Unknown tool 'nonexistent_tool'" in exc_info.value.error_message
+        assert "Available tools:" in exc_info.value.error_message
+        assert "edit_task_specification" in exc_info.value.error_message
+        assert exc_info.value.tool_name == "nonexistent_tool"
 
     @pytest.mark.asyncio
-    async def test_unknown_tool_max_retries_raises_error(self, test_agent):
-        """Test that unknown tool raises error after max retries."""
+    async def test_unknown_tool_validation_error(self, test_agent):
+        """Test that unknown tool raises validation error."""
         result = create_mock_result(
             json.dumps(
                 {
@@ -289,20 +291,19 @@ class TestUnknownTool:
             )
         )
 
-        with pytest.raises(ValueError) as exc_info:
-            await test_agent._parse_response(result, retry_count=MAX_RETRY_ATTEMPTS)
+        # _parse_response() should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        assert "Unknown tool 'nonexistent_tool' after" in str(exc_info.value)
-        assert str(MAX_RETRY_ATTEMPTS) in str(exc_info.value)
+        assert "Unknown tool" in exc_info.value.error_message
 
 
 class TestInvalidToolArguments:
     """Tests for invalid tool argument validation."""
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_invalid_tool_arguments_trigger_retry(self, mock_run, test_agent):
-        """Test that invalid tool arguments trigger a retry with validation errors."""
+    async def test_invalid_tool_arguments_raise_validation_error(self, test_agent):
+        """Test that invalid tool arguments raise validation error with error details."""
         result = create_mock_result(
             json.dumps(
                 {
@@ -316,23 +317,17 @@ class TestInvalidToolArguments:
             )
         )
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        # Should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        # Check keyword argument
-        assert "ERROR: Invalid arguments for tool 'edit_task_specification'" in call_args.kwargs["prompt_or_approvals"]
-        assert "Validation errors:" in call_args.kwargs["prompt_or_approvals"]
-        assert call_args.kwargs["_retry_count"] == 1
+        assert "Invalid arguments for tool 'edit_task_specification'" in exc_info.value.error_message
+        assert "Validation errors:" in exc_info.value.error_message
+        assert exc_info.value.tool_name == "edit_task_specification"
 
     @pytest.mark.asyncio
-    @patch.object(ClaudeCodeAgent, "run")
-    async def test_wrong_type_arguments_trigger_retry(self, mock_run, test_agent):
-        """Test that arguments with wrong types trigger a retry."""
+    async def test_wrong_type_arguments_raise_validation_error(self, test_agent):
+        """Test that arguments with wrong types raise validation error."""
         result = create_mock_result(
             json.dumps(
                 {
@@ -346,21 +341,17 @@ class TestInvalidToolArguments:
             )
         )
 
-        mock_run.return_value = TextResponse(
-            content="Fixed response",
-        )
+        # Should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        await test_agent._parse_response(result, retry_count=0)
-
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        # Check keyword argument
-        assert "ERROR: Invalid arguments for tool 'edit_task_specification'" in call_args.kwargs["prompt_or_approvals"]
-        assert "Validation errors:" in call_args.kwargs["prompt_or_approvals"]
+        assert "Invalid arguments for tool 'edit_task_specification'" in exc_info.value.error_message
+        assert "Validation errors:" in exc_info.value.error_message
+        assert exc_info.value.tool_name == "edit_task_specification"
 
     @pytest.mark.asyncio
-    async def test_invalid_arguments_max_retries_raises_error(self, test_agent):
-        """Test that invalid arguments raise error after max retries."""
+    async def test_invalid_arguments_validation_error(self, test_agent):
+        """Test that invalid arguments raise validation error."""
         result = create_mock_result(
             json.dumps(
                 {
@@ -373,11 +364,11 @@ class TestInvalidToolArguments:
             )
         )
 
-        with pytest.raises(ValueError) as exc_info:
-            await test_agent._parse_response(result, retry_count=MAX_RETRY_ATTEMPTS)
+        # _parse_response() should raise InvalidVirtualToolCallError
+        with pytest.raises(InvalidVirtualToolCallError) as exc_info:
+            await test_agent._parse_claude_result(result)
 
-        assert "Tool arguments validation failed for 'edit_task_specification'" in str(exc_info.value)
-        assert f"after {MAX_RETRY_ATTEMPTS} attempts" in str(exc_info.value)
+        assert "Invalid arguments" in exc_info.value.error_message
 
 
 class TestRetryMechanism:
@@ -385,8 +376,8 @@ class TestRetryMechanism:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
-    async def test_run_increments_retry_count(self, mock_client_class, test_agent):
-        """Test that run() properly increments retry count."""
+    async def test_stream_events_yields_messages(self, mock_client_class, test_agent):
+        """Test that stream_events() properly yields conversation messages."""
         # Create mock result message
         mock_result_msg = create_mock_result("Success")
 
@@ -399,15 +390,18 @@ class TestRetryMechanism:
         mock_client.stream = mock_stream
         mock_client_class.return_value = mock_client
 
-        # Call run with retry count (using new parameter name)
-        response = await test_agent.run(
+        # Call stream_events
+        events = []
+        async for event in test_agent.stream_events(
             prompt_or_approvals="Test message",
-            _retry_count=2,
-        )
+        ):
+            events.append(event)
 
-        # Verify response is valid
-        assert isinstance(response, TextResponse)
-        assert response.content == "Success"
+        # Verify response is valid - should be a ConversationMessage
+        assert len(events) == 1
+        assert isinstance(events[0], ConversationMessage)
+        assert events[0].role == MessageRole.AGENT
+        assert events[0].text_content == "Success"
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")

@@ -3,9 +3,15 @@
 import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.roles.types import AgentRoleType
+from devboard.db.models import ParentEntityType
+from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
+    CodebaseRepository,
     ContextProviderResourceRepository,
+    ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
@@ -76,11 +82,6 @@ class TestProjectsRouter:
 
     def test_get_project_success(self, client, db_session, test_project_data):
         """Test getting a specific project."""
-        from devboard.agents.engines.agent_engines import AgentEngine
-        from devboard.agents.roles.types import AgentRoleType
-        from devboard.db.models import ParentEntityType
-        from devboard.db.repositories import ConversationRepository
-
         # Create test project
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -336,11 +337,6 @@ class TestProjectTasksRouter:
 
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
-        from devboard.agents.engines.agent_engines import AgentEngine
-        from devboard.agents.roles.types import AgentRoleType
-        from devboard.db.models import ParentEntityType
-        from devboard.db.repositories import ConversationRepository
-
         # Create test project
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -457,8 +453,6 @@ class TestProjectTasksRouter:
 
     def test_create_project_task_with_codebase(self, client, db_session, test_project_data):
         """Test creating a task with a codebase association."""
-        from devboard.db.models.codebase import Codebase
-        from devboard.db.repositories import CodebaseRepository
 
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -494,8 +488,6 @@ class TestProjectTasksRouter:
 
     def test_create_project_task_with_specification_and_codebase(self, client, db_session, test_project_data):
         """Test creating a task with both specification content and codebase."""
-        from devboard.db.models.codebase import Codebase
-        from devboard.db.repositories import CodebaseRepository
 
         # Create test project
         project_repo = ProjectRepository(db_session)

@@ -4,7 +4,7 @@ import pytest
 from pydantic_ai import Agent, Tool
 from pydantic_ai.tools import ToolFuncEither
 
-from devboard.agents.engines.internal import BaseDeps, InternalAgent
+from devboard.agents.engines.internal import InternalAgent
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 
@@ -45,20 +45,17 @@ class TestInternalAgent:
         return InternalAgent(
             role=mock_role,
             model=mock_model,
-            deps_type=BaseDeps,
         )
 
     def test_agent_initialization(self, agent, mock_role, mock_model):
         """Test agent initializes correctly with role and model."""
         assert agent.role == mock_role
         assert agent.model == mock_model
-        assert agent.deps_type == BaseDeps
 
     @pytest.mark.asyncio
     async def test_build_system_and_context_messages(self, agent, mock_role):
         """Test agent builds system and context messages from role."""
-        deps = BaseDeps()
-        request = await agent.build_system_and_context_messages(deps)
+        request = await agent.build_system_and_context_messages()
 
         # Should have system prompt and context message
         assert len(request.parts) == 2

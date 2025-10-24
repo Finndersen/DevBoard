@@ -45,7 +45,7 @@ class DocumentEditorService:
                 with logfire.span(
                     "document_editor.apply_single_edit",
                     edit_index=i,
-                    find_length=len(edit.find),
+                    find_length=len(edit.old_string),
                 ):
                     edit_result = self._apply_single_edit(current_content, edit)
                     if not edit_result.success:
@@ -84,14 +84,14 @@ class DocumentEditorService:
         Returns:
             EditResult with success status and updated content
         """
-        if not edit.find:
+        if not edit.old_string:
             return EditResult(success=False, content=content, errors=["'find' text cannot be empty"])
 
         # Check if the find text exists
-        if edit.find not in content:
+        if edit.old_string not in content:
             # Only add ... if text was actually truncated
-            display_text = edit.find[:100]
-            if len(edit.find) > 100:
+            display_text = edit.old_string[:100]
+            if len(edit.old_string) > 100:
                 display_text += "..."
             return EditResult(
                 success=False,
@@ -100,10 +100,10 @@ class DocumentEditorService:
             )
 
         # Check for ambiguous edits
-        occurrences = content.count(edit.find)
+        occurrences = content.count(edit.old_string)
         if occurrences > 1:
-            display_text = edit.find[:50]
-            if len(edit.find) > 50:
+            display_text = edit.old_string[:50]
+            if len(edit.old_string) > 50:
                 display_text += "..."
             return EditResult(
                 success=False,
@@ -114,10 +114,10 @@ class DocumentEditorService:
             )
 
         # Apply the replacement
-        new_content = content.replace(edit.find, edit.replace, 1)  # Replace only first occurrence
+        new_content = content.replace(edit.old_string, edit.new_string, 1)  # Replace only first occurrence
 
         # Check if find and replace are identical (no-op edit)
-        if edit.find == edit.replace:
+        if edit.old_string == edit.new_string:
             return EditResult(success=False, content=content, errors=["Edit did not change content"])
 
         # Verify the edit was applied (should not happen with valid find/replace)
@@ -128,7 +128,7 @@ class DocumentEditorService:
                 errors=["Edit did not change content - unexpected failure"],
             )
 
-        logfire.info("Edit applied", find_length=len(edit.find), replace_length=len(edit.replace))
+        logfire.info("Edit applied", find_length=len(edit.old_string), replace_length=len(edit.new_string))
 
         return EditResult(success=True, content=new_content)
 

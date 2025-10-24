@@ -45,8 +45,7 @@ class TestAgentConfigService:
             "anthropic:claude-opus-4.1",
             "anthropic:claude-opus-4",
             "anthropic:claude-sonnet-4",
-            "anthropic:claude-sonnet-3.7",
-            "anthropic:claude-haiku-3.5",
+            "anthropic:claude-haiku-4-5",
         ]
         assert set(claude_model_ids) == set(expected_claude_models)
 
@@ -155,8 +154,6 @@ class TestAgentConfigService:
 
     def test_language_model_full_name(self):
         """LanguageModel should have optional full_name attribute."""
-        from devboard.agents.language_models import llm_registry
-
         # Test Anthropic models have full_name
         claude_sonnet = llm_registry.get("anthropic:claude-sonnet-4.5")
         assert claude_sonnet is not None

@@ -188,17 +188,18 @@ class TestDocumentEditTool:
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
         # Invalid edit (text not found)
-        edits = [DocumentEdit(find="NonExistent", replace="Modified")]
+        edits = [DocumentEdit(old_string="NonExistent", new_string="Modified")]
 
-        # Should return error message
-        result = tool.function(edits, "Test edit")
-        assert "Failed to apply edits" in result
+        # Should raise ModelRetry for invalid edits
+        from pydantic_ai.exceptions import ModelRetry
+        with pytest.raises(ModelRetry, match="Failed to apply edits"):
+            tool.function(edits, "Test edit")
 
     def test_tool_applies_valid_edits(self, mock_document, mock_document_repo):
         """Test tool validates and applies valid edits successfully."""
         tool = create_document_edit_tool(mock_document, mock_document_repo)
 
-        edits = [DocumentEdit(find="Original", replace="Modified")]
+        edits = [DocumentEdit(old_string="Original", new_string="Modified")]
 
         # Tool function should execute successfully for valid edits
         result = tool.function(edits, "Test edit")
@@ -250,13 +251,14 @@ class TestSetDocumentContentTool:
         """Test tool rejects empty or whitespace-only content."""
         tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
 
-        # Empty content should return error
-        result = tool.function("")
-        assert "Error: Content cannot be empty" in result
+        # Empty content should raise ModelRetry
+        from pydantic_ai.exceptions import ModelRetry
+        with pytest.raises(ModelRetry, match="Content cannot be empty"):
+            tool.function("")
 
-        # Whitespace-only content should also return error
-        result = tool.function("   \n  ")
-        assert "Error: Content cannot be empty" in result
+        # Whitespace-only content should also raise ModelRetry
+        with pytest.raises(ModelRetry, match="Content cannot be empty"):
+            tool.function("   \n  ")
 
     def test_tool_sets_content_directly_for_blank_document(self, mock_blank_document, mock_document_repo):
         """Test tool sets content directly without requiring approval for blank documents."""
@@ -402,21 +404,21 @@ class TestDocumentEdit:
 
     def test_document_edit_creation(self):
         """Test creating DocumentEdit objects."""
-        edit = DocumentEdit(find="old text", replace="new text")
+        edit = DocumentEdit(old_string="old text", new_string="new text")
 
-        assert edit.find == "old text"
-        assert edit.replace == "new text"
+        assert edit.old_string == "old text"
+        assert edit.new_string == "new text"
 
     def test_document_edit_serialization(self):
         """Test DocumentEdit serialization."""
-        edit = DocumentEdit(find="find this", replace="replace with this")
+        edit = DocumentEdit(old_string="find this", new_string="replace with this")
 
         data = edit.model_dump()
-        assert data == {"find": "find this", "replace": "replace with this"}
+        assert data == {"old_string": "find this", "new_string": "replace with this"}
 
     def test_document_edit_empty_replace(self):
         """Test DocumentEdit allows empty replacement (deletion)."""
-        edit = DocumentEdit(find="remove this", replace="")
+        edit = DocumentEdit(old_string="remove this", new_string="")
 
-        assert edit.find == "remove this"
-        assert edit.replace == ""
+        assert edit.old_string == "remove this"
+        assert edit.new_string == ""

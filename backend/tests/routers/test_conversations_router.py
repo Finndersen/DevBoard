@@ -1,20 +1,20 @@
 """Tests for conversations router."""
 
+import datetime
 from collections.abc import Iterator
-from unittest.mock import Mock
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
-from pydantic_ai.run import AgentRunResult
-from pydantic_ai.tools import DeferredToolRequests
 from starlette.testclient import TestClient
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest
 from devboard.agents.roles.project_qa import ProjectQARole
 from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.services import get_agent_conversation_service
 from devboard.api.main import app
+from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository
@@ -35,8 +35,8 @@ def mock_agent_conversation_service(mock_agent, test_conversation, test_project,
         conversation_repository=conversation_repo,
     )
 
-    # Patch the _get_agent method to return our mock
-    monkeypatch.setattr(service, "_get_agent", lambda: mock_agent)
+    # Patch the _get_agent method to return our mock (accept conversation_history arg)
+    monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent)
 
     return service
 
@@ -160,40 +160,33 @@ class TestConversationsRouter:
         assert "I can help you analyze" in events[0]["text_content"]
 
         # Verify the mock agent was called correctly
-        mock_agent.stream_events.assert_called_once()
-        args, kwargs = mock_agent.stream_events.call_args
-        assert kwargs["prompt_or_approvals"] == "Help me analyze my project and answer questions."
+        mock_agent.run.assert_called_once()
+        args, kwargs = mock_agent.run.call_args
+        assert args[0] == "Help me analyze my project and answer questions."
 
     def test_send_conversation_message_returns_tool_request(
         self, client_with_mock_agent, test_conversation, mock_agent
     ):
         """Test sending a message that triggers a tool request."""
         # Mock the agent to return a tool request
-        tool_call_part = ToolCallPart(
-            tool_name="edit_document",
+        tool_call_event = ToolCall(
             tool_call_id="test_call_1",
-            args={"edits": [{"find": "old", "replace": "new"}]},
+            tool_name="edit_document",
+            tool_args={"edits": [{"find": "old", "replace": "new"}]},
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+        tool_call_request_event = ToolCallRequest(
+            tool_call_id="test_call_1",
+            tool_name="edit_document",
+            tool_args={"edits": [{"find": "old", "replace": "new"}]},
+            timestamp=datetime.datetime.now(datetime.UTC),
         )
 
-        mock_result = Mock(spec=AgentRunResult)
-        mock_result.output = DeferredToolRequests(approvals=[tool_call_part])
-        mock_result.new_messages = Mock(
-            return_value=[
-                ModelRequest(parts=[UserPromptPart(content="Edit the document")]),
-                ModelResponse(parts=[tool_call_part]),
-            ]
-        )
+        # Override the mock run side_effect to return tool events
+        async def tool_run_side_effect(prompt_or_approvals):
+            return [tool_call_event, tool_call_request_event]
 
-        # Override the side_effect to return our tool request result
-        async def tool_request_stream(**kwargs):
-            from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent
-
-            # Yield tool call event first
-            yield FunctionToolCallEvent(part=tool_call_part)
-            # Then yield the result
-            yield AgentRunResultEvent(result=mock_result)
-
-        mock_agent.stream_events.side_effect = tool_request_stream
+        mock_agent.run.side_effect = tool_run_side_effect
 
         message_request = {"message": "Please update the document with better content"}
 
@@ -229,16 +222,12 @@ class TestConversationsRouter:
         db_session.commit()
 
         # Mock the agent to return approval result
-        mock_result = Mock(spec=AgentRunResult)
-        mock_result.output = "Great! I've processed your tool approvals and made the requested edits."
-        mock_result.new_messages = Mock(
-            return_value=[
-                ModelResponse(
-                    parts=[TextPart(content="Great! I've processed your tool approvals and made the requested edits.")]
-                )
-            ]
+        agent_message_event = ConversationMessage(
+            role=MessageRole.AGENT,
+            text_content="Great! I've processed your tool approvals and made the requested edits.",
+            timestamp=datetime.datetime.now(datetime.UTC),
         )
-        mock_agent.stream_events.return_value = mock_result
+        mock_agent.run.return_value = [agent_message_event]
 
         approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
 
@@ -255,9 +244,10 @@ class TestConversationsRouter:
         assert "tool approvals" in events[0]["text_content"]
 
         # Verify the mock agent was called with tool approvals
-        mock_agent.stream_events.assert_called_once()
-        args, kwargs = mock_agent.stream_events.call_args
-        assert not isinstance(kwargs["prompt_or_approvals"], str)
+        mock_agent.run.assert_called_once()
+        args, kwargs = mock_agent.run.call_args
+        # First arg should be a ToolApprovals object
+        assert isinstance(args[0], ToolApprovals)
 
     def test_approve_conversation_tools_mixed_approvals(
         self, client_with_mock_agent, test_conversation, db_session, mock_agent
@@ -279,16 +269,12 @@ class TestConversationsRouter:
         db_session.commit()
 
         # Mock the agent to return approval result
-        mock_result = Mock(spec=AgentRunResult)
-        mock_result.output = "I've processed your approvals. I made the edit but skipped the deletion."
-        mock_result.new_messages = Mock(
-            return_value=[
-                ModelResponse(
-                    parts=[TextPart(content="I've processed your approvals. I made the edit but skipped the deletion.")]
-                )
-            ]
+        agent_message_event = ConversationMessage(
+            role=MessageRole.AGENT,
+            text_content="I've processed your approvals. I made the edit but skipped the deletion.",
+            timestamp=datetime.datetime.now(datetime.UTC),
         )
-        mock_agent.stream_events.return_value = mock_result
+        mock_agent.run.return_value = [agent_message_event]
 
         approval_request = {
             "approvals": {

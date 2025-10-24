@@ -1,8 +1,8 @@
 """Service for managing and executing prompt actions."""
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.events import ConversationEvent
 from devboard.agents.prompt_actions import PromptAction, prompt_action_registry
-from devboard.api.schemas.agent_conversation import ConversationEvent
 
 
 class PromptActionNotFoundError(Exception):
@@ -55,6 +55,6 @@ class PromptActionService:
             raise PromptActionNotFoundError(f"Prompt action '{action_key}' not found")
 
         # Send the prompt as a user message
-        result = await self.conversation_service.send_message(message=action.prompt_template)
+        result = await self.conversation_service.send_message_or_approval(message_or_approvals=action.prompt_template)
 
         return result

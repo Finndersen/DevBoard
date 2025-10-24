@@ -1,9 +1,10 @@
 """Tests for PydanticAIConversationService with Role-based architecture."""
 
-from unittest.mock import MagicMock, Mock
+import datetime
+from unittest.mock import Mock
 
 import pytest
-from pydantic_ai import AgentRunResultEvent, FunctionToolCallEvent, Tool
+from pydantic_ai import Tool
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -11,21 +12,20 @@ from pydantic_ai.messages import (
     ToolCallPart,
     UserPromptPart,
 )
-from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
-    DeferredToolRequests,
     ToolFuncEither,
 )
 from sqlalchemy.orm import Session
 
+from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest
 from devboard.agents.roles.base import Role
 from devboard.agents.roles.types import AgentRoleType
 from devboard.api.schemas.agent_conversation import (
-    MessageRole,
     ToolApprovalDecision,
 )
-from devboard.db.models import Conversation
+from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories.conversation import ConversationRepository
 
 
@@ -54,9 +54,6 @@ class TestPydanticAIConversationService:
     def conversation(self, db_session: Session) -> Conversation:
         """Create a test conversation."""
         conversation_repo = ConversationRepository(db_session)
-        from devboard.agents.engines.agent_engines import AgentEngine
-        from devboard.db.models import ParentEntityType
-
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=1,
@@ -91,26 +88,33 @@ class TestPydanticAIConversationService:
     @pytest.mark.asyncio
     async def test_send_message_text_response(self, service, monkeypatch):
         """Test sending a message that returns a text response."""
-        # Mock agent run to return a text response
-        mock_result = MagicMock(spec=AgentRunResult)
-        mock_result.output = "Test response"
-        mock_result.new_messages.return_value = [
-            ModelRequest(parts=[UserPromptPart(content="Test message")]),
-            ModelResponse(parts=[TextPart(content="Test response")]),
-        ]
 
-        # Create async generator for mock stream_events
-        async def mock_stream_events(**kwargs):
-            yield AgentRunResultEvent(result=mock_result)
+        # Mock agent run to return conversation events
+        async def mock_run(prompt_or_approvals):
+            return [
+                ConversationMessage(
+                    role=MessageRole.AGENT,
+                    text_content="Test response",
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+            ]
+
+        # Mock get_new_messages to return model messages
+        def mock_get_new_messages():
+            return [
+                ModelRequest(parts=[UserPromptPart(content="Test message")]),
+                ModelResponse(parts=[TextPart(content="Test response")]),
+            ]
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.stream_events = mock_stream_events
+        mock_agent_instance.run = mock_run
+        mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
 
-        events = await service.send_message(message="Test message")
+        events = await service.send_message_or_approval(message_or_approvals="Test message")
 
         assert isinstance(events, list)
         assert len(events) == 1
@@ -121,48 +125,49 @@ class TestPydanticAIConversationService:
     @pytest.mark.asyncio
     async def test_send_message_tool_request(self, service, monkeypatch):
         """Test sending a message that returns tool requests."""
-        # Create mock deferred tool requests
-        mock_tool_request = MagicMock()
-        mock_tool_request.tool_call_id = "tool_123"
-        mock_tool_request.tool_name = "edit_document"
-        mock_tool_request.args = {"edits": [{"find": "old", "replace": "new"}]}
 
-        mock_deferred = DeferredToolRequests(approvals=[mock_tool_request])
+        # Mock agent run to return conversation events including tool call request
+        async def mock_run(prompt_or_approvals):
+            timestamp = datetime.datetime.now(datetime.UTC)
+            return [
+                ToolCall(
+                    tool_call_id="tool_123",
+                    tool_name="edit_document",
+                    tool_args={"edits": [{"find": "old", "replace": "new"}]},
+                    timestamp=timestamp,
+                ),
+                ToolCallRequest(
+                    tool_call_id="tool_123",
+                    tool_name="edit_document",
+                    tool_args={"edits": [{"find": "old", "replace": "new"}]},
+                    timestamp=timestamp,
+                ),
+            ]
 
-        # Mock agent run to return deferred tool requests
-        mock_result = MagicMock(spec=AgentRunResult)
-        mock_result.output = mock_deferred
-        mock_result.new_messages.return_value = [
-            ModelRequest(parts=[UserPromptPart(content="Edit this")]),
-            ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        tool_name="edit_document",
-                        tool_call_id="tool_123",
-                        args={"edits": [{"find": "old", "replace": "new"}]},
-                    )
-                ]
-            ),
-        ]
-
-        # Create async generator for mock
-        async def mock_stream_events(**kwargs):
-            tool_call_part = ToolCallPart(
-                tool_name="edit_document",
-                tool_call_id="tool_123",
-                args={"edits": [{"find": "old", "replace": "new"}]},
-            )
-            yield FunctionToolCallEvent(part=tool_call_part)
-            yield AgentRunResultEvent(result=mock_result)
+        # Mock get_new_messages to return model messages
+        def mock_get_new_messages():
+            return [
+                ModelRequest(parts=[UserPromptPart(content="Edit this")]),
+                ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            tool_name="edit_document",
+                            tool_call_id="tool_123",
+                            args={"edits": [{"find": "old", "replace": "new"}]},
+                        )
+                    ]
+                ),
+            ]
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.stream_events = mock_stream_events
+        mock_agent_instance.run = mock_run
+        mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
 
-        events = await service.send_message(message="Edit this")
+        events = await service.send_message_or_approval(message_or_approvals="Edit this")
 
         assert isinstance(events, list)
         assert len(events) == 2
@@ -189,26 +194,32 @@ class TestPydanticAIConversationService:
         db_session.commit()
 
         # Mock agent run to return a text response after approval
-        mock_result = MagicMock(spec=AgentRunResult)
-        mock_result.output = "Document updated successfully"
-        mock_result.new_messages.return_value = [
-            ModelResponse(parts=[TextPart(content="Document updated successfully")]),
-        ]
+        async def mock_run(prompt_or_approvals):
+            return [
+                ConversationMessage(
+                    role=MessageRole.AGENT,
+                    text_content="Document updated successfully",
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+            ]
 
-        # Create async generator for mock
-        async def mock_stream_events(**kwargs):
-            yield AgentRunResultEvent(result=mock_result)
+        # Mock get_new_messages to return model messages
+        def mock_get_new_messages():
+            return [
+                ModelResponse(parts=[TextPart(content="Document updated successfully")]),
+            ]
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.stream_events = mock_stream_events
+        mock_agent_instance.run = mock_run
+        mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
 
         # Process approvals
         approvals = {"tool_123": ToolApprovalDecision(approved=True)}
-        events = await service.process_tool_approvals(approvals=approvals)
+        events = await service.send_message_or_approval(message_or_approvals=approvals)
 
         assert isinstance(events, list)
         assert len(events) >= 1

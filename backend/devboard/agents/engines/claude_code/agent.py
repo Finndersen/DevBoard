@@ -1,36 +1,63 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
-from collections.abc import AsyncIterator
+import datetime
+from collections.abc import AsyncIterator, Generator
 
 import logfire
-from claude_agent_sdk import Message, ResultMessage
+from claude_agent_sdk import AssistantMessage, Message, ResultMessage, ToolResultBlock, ToolUseBlock, UserMessage
 from pydantic import ValidationError
 from pydantic_ai import ModelRetry, Tool
 
+from devboard.agents.base_agent import BaseAgent
 from devboard.agents.engines.claude_code.client import ClaudeClient
 from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
     TextResponse,
     ToolCallOutcome,
     VirtualToolCall,
-    VirtualToolRequests,
 )
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualTool,
     build_virtual_tool_schemas_section,
 )
+from devboard.agents.events import (
+    ConversationEvent,
+    ConversationMessage,
+    MessageRole,
+    ToolCall,
+    ToolCallRequest,
+    ToolResult,
+)
 from devboard.agents.language_models import LanguageModel, LLMProvider
 from devboard.agents.roles.base import Role
-from devboard.api.schemas.agent_conversation import ToolApprovalDecision
+from devboard.api.schemas.agent_conversation import (
+    ToolApprovals,
+)
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
 
-FinalResult = TextResponse | VirtualToolRequests
+
+class InvalidVirtualToolCallError(Exception):
+    """Exception raised when a virtual tool call validation fails.
+
+    This exception is used to trigger retry logic in stream_events().
+    """
+
+    def __init__(self, tool_name: str, error_message: str):
+        """Initialize the exception.
+
+        Args:
+            tool_name: Name of the tool that failed validation
+            error_message: Detailed error message for the agent
+        """
+        self.tool_name = tool_name
+        self.error_message = error_message
+        super().__init__(f"Invalid virtual tool call for '{tool_name}': {error_message}")
 
 
-class ClaudeCodeAgent:
+class ClaudeCodeAgent(BaseAgent):
     """Claude Code agent that delegates behavior to a Role.
 
     This agent uses a Role instance to define its system prompt, tools (virtual and function),
@@ -159,93 +186,139 @@ class ClaudeCodeAgent:
         """
         return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch"]
 
-    async def stream_events(
-        self,
-        prompt_or_approvals: str | dict[str, ToolApprovalDecision],
-        _retry_count: int = 0,
-    ) -> AsyncIterator[Message | FinalResult]:
-        """Stream messages from Claude Code execution and parse final result.
+    def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
+        """Convert Claude SDK Message to ConversationEvent(s).
 
         Args:
-            prompt_or_approvals: Either a user message string or dict of tool approval decisions
-            _retry_count: Internal counter for retry attempts (not for external use)
-
-        Yields:
-            Message objects from Claude SDK, and final MessageResponse or VirtualToolRequests
-
-        Raises:
-            ValueError: If session_id missing when processing tool approvals
-        """
-        # Check if this is tool approvals
-        if isinstance(prompt_or_approvals, dict):
-            if not self.session_id:
-                raise ValueError("session_id required when processing tool approvals")
-
-            # Execute tools and format results
-            results = await self._process_tool_approvals(prompt_or_approvals)
-
-            # Send results back to Claude wrapped in XML markers
-            user_message = results
-        else:
-            user_message = prompt_or_approvals
-
-        # Create fresh client with current system prompt, document state, and session ID
-        client = await self._create_client()
-
-        # Stream messages from the client
-        result_message = None
-        async for message in client.stream(user_query=user_message):
-            # Capture the ResultMessage for parsing
-            if isinstance(message, ResultMessage):
-                result_message = message
-            else:
-                yield message
-
-        # Parse the final result
-        if not result_message:
-            raise RuntimeError("No ResultMessage received from Claude SDK")
-
-        # Update session_id from result if not already set
-        if not self.session_id:
-            self.session_id = result_message.session_id
-
-        parsed_result = await self._parse_response(result_message, _retry_count)
-        yield parsed_result
-
-    async def run(
-        self,
-        prompt_or_approvals: str | dict[str, ToolApprovalDecision],
-        _retry_count: int = 0,
-    ) -> FinalResult:
-        """Run the agent with either a user message or tool approval results.
-
-        Args:
-            prompt_or_approvals: Either a user message string or dict of tool approval decisions
-            _retry_count: Internal counter for retry attempts (not for external use)
+            message: Message from Claude SDK
 
         Returns:
-            Either a MessageResponse (normal message) or VirtualToolRequests (tool calls)
+            List of ConversationEvent instances
+        """
+        timestamp = datetime.datetime.now(datetime.UTC)
+
+        # Extract tool calls from AssistantMessage if present
+        if isinstance(message, AssistantMessage):
+            for content_block in message.content:
+                if isinstance(content_block, ToolUseBlock):
+                    yield ToolCall(
+                        tool_call_id=content_block.id,
+                        tool_name=content_block.name,
+                        tool_args=content_block.input,
+                        timestamp=timestamp,
+                    )
+        # Extract tool results from UserMessage if present
+        elif isinstance(message, UserMessage):
+            # UserMessage content can be str or list[ContentBlock]
+            if isinstance(message.content, list):
+                for content_block in message.content:
+                    if isinstance(content_block, ToolResultBlock):
+                        # Convert content to string
+                        if isinstance(content_block.content, list):
+                            # Join text blocks from the content
+                            text_parts = []
+                            for item in content_block.content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            result_str = "\n".join(text_parts)
+                        elif content_block.content is None:
+                            result_str = ""
+                        else:
+                            result_str = str(content_block.content)
+
+                        yield ToolResult(
+                            tool_call_id=content_block.tool_use_id,
+                            result_content=result_str,
+                            is_error=content_block.is_error or False,
+                            timestamp=timestamp,
+                        )
+
+    async def stream_events(
+        self,
+        prompt_or_approvals: str | ToolApprovals,
+    ) -> AsyncIterator[ConversationEvent]:
+        """Stream conversation events from agent execution.
+
+        Args:
+            prompt_or_approvals: Either a user message string or ToolApprovals model
+
+        Yields:
+            Conversation events as they are generated during agent execution
 
         Raises:
             ValueError: If session_id missing when processing tool approvals,
                        or if maximum retry attempts exceeded
         """
-        # Use stream_events and get the final parsed result
-        final_result = None
+        # Check if this is tool approvals
+        if isinstance(prompt_or_approvals, ToolApprovals):
+            if not self.session_id:
+                raise ValueError("session_id required when processing tool approvals")
 
-        async for event in self.stream_events(prompt_or_approvals, _retry_count):
-            # The last event will be the parsed MessageResponse or VirtualToolRequests
-            if isinstance(event, FinalResult):
-                final_result = event
+            # Execute tools and format results (convert ToolApprovals to dict)
+            tool_call_results = await self._process_tool_approvals(prompt_or_approvals)
 
-        if final_result is None:
-            raise RuntimeError("No final result received from stream_events")
+            # Send results back to Claude wrapped in XML markers
+            user_message = tool_call_results
+        else:
+            user_message = prompt_or_approvals
 
-        return final_result
+        current_message = user_message
+        # Create fresh client with current system prompt, document state, and session ID
+        client = await self._create_client()
+
+        # Retry loop for handling virtua tool call validation errors
+        for attempt in range(MAX_RETRY_ATTEMPTS + 1):
+            # Stream messages from the client
+            result_message = None
+            async for message in client.stream(user_query=current_message):
+                # Capture the ResultMessage for parsing
+                if isinstance(message, ResultMessage):
+                    result_message = message
+                else:
+                    # Convert Message events to ConversationEvent
+                    for conv_event in self._convert_claude_message_to_events(message):
+                        yield conv_event
+
+            # Parse the final result
+            if not result_message:
+                raise RuntimeError("No ResultMessage received from Claude SDK")
+
+            # Update session_id from result if not already set
+            if not self.session_id:
+                self.session_id = result_message.session_id
+
+            try:
+                # Parse and convert final result to ConversationEvent
+                events = await self._parse_claude_result(result_message)
+
+                # Yield all events
+                for event in events:
+                    yield event
+
+                # Success - exit retry loop
+                break
+
+            except InvalidVirtualToolCallError as e:
+                # Validation failed - prepare retry message
+                if attempt < MAX_RETRY_ATTEMPTS:
+                    # Format error message for retry
+                    current_message = self._format_tool_result(
+                        tool_name=e.tool_name,
+                        outcome=ToolCallOutcome.VALIDATION_ERROR,
+                        content=e.error_message,
+                    )
+                    logfire.warning(
+                        f"Tool call validation failed (attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS}): {e}",
+                        tool_name=e.tool_name,
+                    )
+                    # Continue to next iteration
+                else:
+                    # Max retries exceeded
+                    raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}")
 
     async def _process_tool_approvals(
         self,
-        approvals: dict[str, ToolApprovalDecision],
+        approvals: ToolApprovals,
     ) -> str:
         """Process tool approvals and execute approved virtual tools.
 
@@ -270,14 +343,14 @@ class ClaudeCodeAgent:
             raise ValueError("No messages in session - cannot process tool approvals")
 
         # Parse virtual tool call from message text content using centralized parser
-        tool_call = ClaudeResponseParser.parse_message(last_message.text_content)
+        tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)
         if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
 
         result_parts: list[str] = []
 
         # Should only ever actually be a single approval
-        for tool_call_id, decision in approvals.items():
+        for tool_call_id, decision in approvals.approvals.items():
             # tool_call_id should match tool_name
             if tool_call_id != tool_call.tool_name:
                 raise ValueError(
@@ -331,89 +404,91 @@ class ClaudeCodeAgent:
         outcome_str = outcome.value if isinstance(outcome, ToolCallOutcome) else outcome
         return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome_str}">\n{content}\n</tool_call_result>'
 
-    async def _retry_on_validation_error(
-        self,
-        error_message: str,
-        tool_name: str,
-        retry_count: int,
-        error_description: str,
-    ) -> FinalResult:
-        """Handle retry logic for validation errors.
-
-        Args:
-            error_message: The validation error message to send to the agent
-            tool_name: Tool name for XML marker and error messages
-            retry_count: Current retry count
-            error_description: Description of the error for logging and exception
-
-        Returns:
-            Result from retry attempt
-
-        Raises:
-            ValueError: If max retry attempts exceeded
-        """
-        if retry_count < MAX_RETRY_ATTEMPTS:
-            # Use validation_error outcome for the tool result
-            formatted_error = self._format_tool_result(
-                tool_name=tool_name, outcome=ToolCallOutcome.VALIDATION_ERROR, content=error_message
-            )
-            logfire.warning(f"{error_description} (attempt {retry_count + 1}/{MAX_RETRY_ATTEMPTS})")
-            return await self.run(prompt_or_approvals=formatted_error, _retry_count=retry_count + 1)
-        else:
-            raise ValueError(f"{error_description} after {MAX_RETRY_ATTEMPTS} attempts")
-
-    async def _parse_response(
+    async def _parse_claude_result(
         self,
         result_message: ResultMessage,
-        retry_count: int,
-    ) -> FinalResult:
-        """Parse the Claude response to detect virtual tool calls.
+    ) -> list[ConversationEvent]:
+        """Parse the Claude response and convert to conversation events.
 
         Uses the centralized parser to consistently handle both regular messages
-        and tool calls.
+        and tool calls, then converts them to appropriate ConversationEvent instances.
 
         Args:
             result_message: The ResultMessage from Claude SDK
-            retry_count: Current retry attempt number
 
         Returns:
-            Either a MessageResponse (normal message) or VirtualToolRequests
+            List of ConversationEvent instances (ConversationMessage or ToolCallRequest)
+
+        Raises:
+            InvalidVirtualToolCallError: If tool call validation fails
         """
         if not result_message.result:
             raise RuntimeError("ResultMessage has no result content")
 
+        # Generate timestamp for all events
+        timestamp = datetime.datetime.now(datetime.UTC)
+
         response_text = result_message.result.strip()
 
-        # Use unified parser to handle both messages and tool calls
-        parsed = ClaudeResponseParser.parse_message(response_text)
+        # Use unified parser to handle both normal messages and virtual tool calls
+        tool_call_or_text = ClaudeResponseParser.parse_message_content(response_text)
 
         # Handle each message type
-        if isinstance(parsed, VirtualToolCall):
-            # Tool call is valid - validate arguments and handle it
-            return await self._validate_virtual_tool_call_response(parsed, retry_count)
-        elif isinstance(parsed, TextResponse):
-            # Normal message
-            return parsed
+        if isinstance(tool_call_or_text, VirtualToolCall):
+            # Validate tool call (raises InvalidVirtualToolCallError if invalid)
+            await self._validate_virtual_tool_call_response(tool_call_or_text)
+
+            # Convert validated tool call to events
+            events: list[ConversationEvent] = []
+
+            # Generate preamble message if present
+            if tool_call_or_text.preamble:
+                events.append(
+                    ConversationMessage(
+                        role=MessageRole.AGENT,
+                        text_content=tool_call_or_text.preamble,
+                        timestamp=timestamp,
+                    )
+                )
+
+            # Generate tool call request
+            events.append(
+                ToolCallRequest(
+                    tool_call_id=tool_call_or_text.tool_name,  # For virtual tools, tool_name is the ID
+                    tool_name=tool_call_or_text.tool_name,
+                    tool_args=tool_call_or_text.arguments,
+                    timestamp=timestamp,
+                )
+            )
+            return events
+
+        elif isinstance(tool_call_or_text, TextResponse):
+            # Normal message - convert to ConversationMessage
+            return [
+                ConversationMessage(
+                    role=MessageRole.AGENT,
+                    text_content=tool_call_or_text.content,
+                    timestamp=timestamp,
+                )
+            ]
         else:
-            raise ValueError(f"Expected VirtualToolCall or TextMessage from agent response, got {type(parsed)}")
+            raise ValueError(
+                f"Expected VirtualToolCall or TextMessage from agent response, got {type(tool_call_or_text)}"
+            )
 
     async def _validate_virtual_tool_call_response(
         self,
         tool_call: VirtualToolCall,
-        retry_count: int,
-    ) -> FinalResult:
-        """
-        Validate a tool call response, making a retry request if there are any validation errors.
-        In this case, the model may respond with a standard message response instead of another tool call attempt.
-        These intermediate retry messages will not be streamed back to the caller.
+    ) -> None:
+        """Validate a virtual tool call response.
 
         Args:
             tool_call: Parsed and structurally validated VirtualToolCall
-            retry_count: Current retry attempt number
 
-        Returns:
-            VirtualToolRequests if valid, or MessageResponse on retry
+        Raises:
+            InvalidVirtualToolCallError: If validation fails
         """
+        tool_name = tool_call.tool_name
         # Check if tool call is structurally valid
         if not tool_call.valid:
             # Invalid tool call structure - provide feedback and retry
@@ -424,17 +499,13 @@ class ClaudeCodeAgent:
                 f'"arguments": {{"arg1": [...], "arg2": "..."}}}}\n\n'
                 f"Please correct these errors and try again."
             )
-            return await self._retry_on_validation_error(
+            raise InvalidVirtualToolCallError(
+                tool_name=tool_name,
                 error_message=error_msg,
-                tool_name=tool_call.tool_name,
-                retry_count=retry_count,
-                error_description=f"Tool call validation failed: {tool_call.validation_error}",
             )
 
         # Get the virtual tool and validate arguments
-        tool_name = tool_call.tool_name
         virtual_tool = self.get_virtual_tool(tool_name)
-
         if not virtual_tool:
             # Get available tool names for helpful error message
             available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
@@ -444,11 +515,9 @@ class ClaudeCodeAgent:
                 f"Available tools: {tools_list}\n\n"
                 f"Please use one of the available tools."
             )
-            return await self._retry_on_validation_error(
-                error_message=error_msg,
+            raise InvalidVirtualToolCallError(
                 tool_name=tool_name,
-                retry_count=retry_count,
-                error_description=f"Unknown tool '{tool_name}'",
+                error_message=error_msg,
             )
 
         # Validate tool arguments against the tool's schema
@@ -462,12 +531,7 @@ class ClaudeCodeAgent:
                 f"Validation errors:\n{error_details}\n\n"
                 f"Please check the tool schema and provide valid arguments."
             )
-            return await self._retry_on_validation_error(
-                error_message=error_msg,
+            raise InvalidVirtualToolCallError(
                 tool_name=tool_name,
-                retry_count=retry_count,
-                error_description=f"Tool arguments validation failed for '{tool_name}': {e}",
-            )
-
-        # All validations passed - return the tool call
-        return VirtualToolRequests(calls=[tool_call])
+                error_message=error_msg,
+            ) from e

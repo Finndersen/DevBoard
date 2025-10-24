@@ -267,8 +267,6 @@ class TestCodebaseContextProvider:
     @pytest.mark.asyncio
     async def test_get_relevant_context(self, provider, mock_integration):
         """Test getting relevant context via AI analysis."""
-        from unittest.mock import patch
-
         # Mock the execute_gemini_prompt function
         with patch(
             "devboard.context_providers.codebase.execute_gemini_prompt",

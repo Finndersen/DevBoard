@@ -1,8 +1,8 @@
+import datetime
 from collections.abc import Generator, Iterator
 from unittest.mock import AsyncMock, Mock
 
 from fastapi.testclient import TestClient
-from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.run import AgentRunResult
 from pytest import fixture
@@ -10,6 +10,9 @@ from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from devboard.agents.agent_config_service import AgentEngineModelConfig
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.events import ConversationMessage, MessageRole
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base, Codebase, Document, Task
@@ -151,9 +154,6 @@ def integration_service(configuration_repository):
 @fixture
 def mock_agent_config_service():
     """Mock AgentConfigService to avoid database dependencies."""
-    from devboard.agents.agent_config_service import AgentEngineModelConfig
-    from devboard.agents.engines.agent_engines import AgentEngine
-
     mock_service = Mock()
     # Return an AgentEngineModelConfig with model_id
     default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model_id="openai:gpt-4")
@@ -173,42 +173,41 @@ def mock_agent():
     mock_agent = Mock()
     mock_agent.run = AsyncMock()
 
-    # Create proper mock responses with new_messages() method
-    def create_mock_result(message_text):
-        mock_result = Mock(spec=AgentRunResult)
-        mock_result.output = message_text
+    # Create proper mock responses that return ConversationEvent lists
+    def create_mock_events(message_text):
+        return [
+            ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content=message_text,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+        ]
 
-        # Mock the new_messages() method to return a list containing the response
-        mock_response = ModelResponse(parts=[TextPart(content=message_text)])
-        mock_result.new_messages = Mock(return_value=[mock_response])
-
-        return mock_result
-
-    mock_message_result = create_mock_result(
+    mock_message_events = create_mock_events(
         "I can help you analyze your project and answer questions about your codebase, GitHub repositories, and Jira issues."
     )
 
-    mock_tool_approval_result = create_mock_result(
+    mock_tool_approval_events = create_mock_events(
         "Great! I've processed your tool approvals and retrieved the requested information."
     )
 
     # Set return value based on whether it's a string prompt or tool approvals
-    def run_side_effect(prompt_or_approvals, conversation_history, deps):
+    async def run_side_effect(prompt_or_approvals):
         if isinstance(prompt_or_approvals, str):
-            return mock_message_result
-        else:  # DeferredToolApprovalResult
-            return mock_tool_approval_result
+            return mock_message_events
+        else:  # ToolApprovals
+            return mock_tool_approval_events
 
     mock_agent.run.side_effect = run_side_effect
 
-    # Add stream_events method for PydanticAI conversation service
-    async def stream_events_side_effect(prompt_or_approvals, conversation_history, deps):
-        if isinstance(prompt_or_approvals, str):
-            yield AgentRunResultEvent(result=mock_message_result)
-        else:  # DeferredToolApprovalResult
-            yield AgentRunResultEvent(result=mock_tool_approval_result)
+    # Also need to support get_new_messages for compatibility with old tests
+    mock_message_result = Mock(spec=AgentRunResult)
+    mock_message_result.output = "I can help you analyze your project and answer questions about your codebase, GitHub repositories, and Jira issues."
+    mock_response = ModelResponse(parts=[TextPart(content=mock_message_result.output)])
+    mock_message_result.new_messages = Mock(return_value=[mock_response])
 
-    mock_agent.stream_events = Mock(side_effect=stream_events_side_effect)
+    mock_agent.last_run_result = mock_message_result
+    mock_agent.get_new_messages = Mock(return_value=[mock_response])
 
     return mock_agent
 

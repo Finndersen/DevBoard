@@ -13,10 +13,13 @@
 - Show unified diff view by default when showing code changes
 - allow configuring which patterns to exclude from directory tree view
 - Integrate memory (maybe with https://github.com/mem0ai/mem0)
-- Change implementation of Project Specification toa more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
+- Change implementation of Project Specification to a more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
 - streaming: Initially just stream final result content using agent.run_stream(), then can stream tool calls etc as well as final content using agent.run_stream_events() (for PydanticAI)
 - Handle CladueCOde error responses like: API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4.5"},"request_id":"req_011CU9vQ1DSP73cZHsQ62QNL"}
 - Do not clear conversation between Specification and Planning if same agent engine
+- Add framework for "actions" - prompt templates with optional extra user message, some special cases with associated backend behaviour, can also have model overrides
+- CLAUDE.md prompt management and continuous feedback (https://www.reddit.com/r/ClaudeAI/comments/1laby6h/i_discovered_a_powerful_way_to_continuously/)
+
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

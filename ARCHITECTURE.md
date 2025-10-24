@@ -630,42 +630,77 @@ Relationships between entities (e.g., Projects having Tasks, Projects having Res
 
 ### Agent Architecture Implementation
 
-The DevBoard AI agent system is built on **PydanticAI framework** with specialized agent types that understand project context and collaborate through structured document editing. Additionally, the system integrates **Claude Code CLI agents** that provide direct access to file operations, shell commands, and developer tools through a virtual tool calling pattern.
+The DevBoard AI agent system is built on **PydanticAI framework** with a unified agent interface and role-based architecture. Agent behavior is completely determined by **Role** configurations, while **Agent Engines** (Internal, Claude Code) handle execution. This separation enables the same role to run on different engines with automatic tool conversion.
 
-#### Core Agent Implementation
+#### Core Agent Interface
 
-**BaseAgent Class (`devboard/agents/base_agent.py`)**:
-The foundation class providing common functionality for all AI agents including LLM service integration, configuration management, and conversation history tracking. Handles context assembly, prompt construction, and response generation patterns.
+**BaseAgent Abstract Class (`devboard/agents/base_agent.py`)**:
+Unified interface for all agent implementations providing consistent API across different engines:
+- **`run(prompt_or_approvals)`**: Execute agent with user message or tool approvals, returns `list[ConversationEvent]`
+- **`stream_events(prompt_or_approvals)`**: Stream conversation events as they're generated (async generator)
+- **Parameter**: `prompt_or_approvals: str | ToolApprovals` - either user message or tool approval results
+- **Return Type**: `ConversationEvent` objects (ConversationMessage, ToolCallRequest, ToolCall, ToolResult)
+- **Event Parsing**: Each agent implementation converts its native format to ConversationEvents internally
+- **Timestamp Generation**: Events include timestamps generated during parsing for chronological ordering
 
-**Agent Configuration System**:
-- **Multi-Provider Support**: Configurable LLM providers (OpenAI, Anthropic, Google) managed via `devboard/config/llm_config.py`
-- **Model Hierarchy**: Fallback configuration with preferred models defined in agent-specific configurations
-- **Agent-Specific Settings**: Temperature, max tokens, and behavior parameters stored in database configurations
-- **Dynamic Model Selection**: Runtime model switching based on availability implemented in `LLMService`
+**Agent Engine Implementations**:
+Two concrete implementations of BaseAgent interface:
+- **InternalAgent** (`devboard/agents/engines/internal/agent.py`): PydanticAI-native agent with built-in tool execution
+- **ClaudeCodeAgent** (`devboard/agents/engines/claude_code/agent.py`): Claude Code CLI integration with virtual tool calling
 
-#### Implemented Agent Types
+#### Role-Based Architecture
 
-**Project Q&A Agent (`devboard/agents/project_agent.py`)**:
-Specialized agent for handling project-level questions and collaborative specification editing. Assembles context from multiple sources (GitHub, Jira, Slack, codebases) and generates contextually aware responses. Supports conversational document editing workflows with user approval patterns.
+**Role Abstract Class (`devboard/agents/roles/base.py`)**:
+Defines agent behavior independently of execution engine. Roles encapsulate:
+- **`get_system_prompt()`**: Returns complete system prompt with role description and instructions
+- **`get_tools()`**: Returns tool definitions in engine-agnostic PydanticAI `Tool` format
+- **`get_context_content()`**: Returns formatted context string (entity state, documents, etc.)
+- **Engine Agnostic**: Same role can run on Internal or Claude Code engines
+- **Tool Conversion**: Each engine converts PydanticAI tools to its native format automatically
 
-**Task Planning Agents (`devboard/agents/task_agent.py`)**:
-- **Specification Agent**: Active during task definition phase, focuses on requirements gathering and task specification development
-- **Planning Agent**: Creates detailed implementation strategies during planning phase
-- **State-Aware Prompting**: Different behaviors and prompting strategies based on task lifecycle phase
+**Implemented Roles** (`devboard/agents/roles/`):
+- **TaskSpecificationRole**: Guides task requirement gathering and specification writing
+- **TaskPlanningRole**: Creates implementation plans and technical strategies
+- **TaskImplementationRole**: Assists with code implementation and testing
+- **ProjectQARole**: Answers project questions and edits project specifications
 
-**Codebase Investigation Agent (`devboard/services/codebase_investigation.py`)**:
-Analyzes code repositories to generate and maintain living architecture documentation. Performs comprehensive code analysis, generates structured documentation using templates from `devboard/services/template_service.py`, and supports incremental updates based on codebase changes.
+**Tool System**:
+Tools are defined once in PydanticAI format within Role classes:
+- **Definition Location**: `devboard/agents/tools.py` (moved from engine-specific locations)
+- **PydanticAI Format**: Uses `Tool` class with function, docstrings, and `requires_approval` flag
+- **Engine Conversion**:
+  - **InternalAgent**: Uses PydanticAI tools directly with built-in validation
+  - **ClaudeCodeAgent**: Converts to VirtualTools (if `requires_approval=True`) or function tools
+- **Available Tools**: `edit_task_specification`, `set_task_specification_content`, `edit_implementation_plan`, `set_implementation_plan_content`, `edit_project_specification`, `search_codebase`, `read_codebase_files`, `execute_shell_command`
+
+**Agent Construction**:
+Agents are initialized with a Role and optional model configuration:
+```python
+agent = ClaudeCodeAgent(
+    role=TaskPlanningRole(task),  # Role defines behavior
+    model=language_model,          # Optional (None uses engine default)
+    session_id=session_id          # For Claude Code continuity
+)
+```
+
+**Dynamic Role Selection** (`devboard/api/dependencies/services.py`):
+Dependency injection factories create appropriate roles based on entity type and state:
+- **get_agent_role()**: Factory function selecting role class based on conversation's parent entity
+- **Project Conversations**: Always use ProjectQARole
+- **Task Conversations**: Select TaskSpecificationRole, TaskPlanningRole, or TaskImplementationRole based on task.state
+- **Codebase Conversations**: Reserved for future investigation agent roles
 
 #### Claude Code Agent Implementation
 
-**Base Claude Agent Class (`devboard/agents/claude_code/base_agent.py`)**:
-Foundation class for Claude Code agents using virtual tool calling pattern. Provides common functionality including:
-- **Client Creation**: Creates `ClaudeClient` instances with current system prompt, session ID, and configuration
-- **System Prompt Building**: Combines role description, virtual tool schemas, and state/context data
-- **Virtual Tool Management**: Maintains registry of VirtualTool instances for this agent
-- **Tool Approval Processing**: Parses tool calls from session history, executes approved tools, returns results
-- **Response Parsing**: Unified parsing detecting both regular messages and JSON tool calls with validation
-- **Retry Logic**: Automatic retry on validation errors with detailed feedback (max 3 attempts)
+**ClaudeCodeAgent Class (`devboard/agents/engines/claude_code/agent.py`)**:
+Implements BaseAgent interface for Claude Code CLI integration using virtual tool calling pattern. Provides:
+- **Role Integration**: Accepts `Role` instance to define behavior, tools, and prompts
+- **Client Creation**: Creates `ClaudeClient` instances with system prompt from role and session ID
+- **System Prompt Building**: Combines role's system prompt, virtual tool schemas, and context content
+- **Virtual Tool Management**: Converts PydanticAI tools from role to VirtualTools (if `requires_approval=True`)
+- **Tool Approval Processing**: Parses tool calls from responses, executes approved tools, returns results
+- **Response Parsing**: `_parse_claude_result()` converts ResultMessage to `list[ConversationEvent]` with timestamps
+- **Retry Logic**: Automatic retry on validation errors with detailed feedback (max 3 attempts using `InvalidVirtualToolCallError`)
 
 **Virtual Tool Calling Architecture**:
 The virtual tool calling pattern enables Claude Code agents to request user approval before executing operations:
@@ -676,27 +711,27 @@ The virtual tool calling pattern enables Claude Code agents to request user appr
 - **Tool Execution**: Abstract `execute(args)` method implemented by concrete tool classes
 - **Type Safety**: Pydantic models ensure runtime type checking and validation
 
-**Message Type Models (`devboard/agents/claude_code/virtual_tools.py`)**:
-Pydantic models representing different message types returned by `parse_message()`:
-- **TextMessage**: Regular text message with `content` field
-- **VirtualToolCall**: Validated tool call request with `tool_name` and `arguments` fields
-- **VirtualToolResult**: Tool execution result with `tool_name` and `result_content` (parsed from XML markers)
-- **VirtualToolError**: Validation/execution error with `tool_name`, `error_message`, and `error_type` (parsed from XML markers)
+**Message Type Models (`devboard/agents/claude_code/message_parser.py`)**:
+Pydantic models representing different message types returned by `parse_message_content()`:
+- **TextResponse**: Regular text message with `content` field
+- **VirtualToolCall**: Tool call request with `tool_name`, `arguments`, `valid` flag, `validation_error`, and `preamble` (optional text before tool call)
+- **VirtualToolResult**: Tool execution result with `tool_name`, `content`, and `outcome` enum (success/validation_error/error/denied)
 
-**VirtualToolRequests Response Type (`devboard/agents/claude_code/virtual_tools.py`)**:
-- Container for tool approval requests: list of `VirtualToolCall` instances
-- Returned by agent.run() when virtual tool call detected in response
-- Signals to conversation service that user approval workflow needed
+**Preamble Support**:
+Virtual tool calls can include preamble text before the tool call JSON, enabling agent explanation:
+- **Detection**: `TOOL_CALL_PATTERN` regex captures optional preamble before JSON
+- **Storage**: `VirtualToolCall.preamble` field stores text content if present
+- **Event Generation**: Preamble creates separate ConversationMessage event before ToolCallRequest event
 
 **ClaudeResponseParser (`devboard/agents/claude_code/message_parser.py`)**:
-Centralized message parsing with XML marker support:
-- **JSON Extraction**: `extract_json()` supports plain JSON and code block formats (```json ... ```)
-- **Unified Parsing**: `parse_message()` returns typed message objects: `TextMessage`, `VirtualToolCall`, `VirtualToolResult`, or `VirtualToolError`
-  - Detects XML markers for tool results and validation errors
-  - Parses JSON for virtual tool calls with Pydantic validation
-  - Returns TextMessage for regular text content
-- **Type-Safe Parsing**: Message types are Pydantic models that can be differentiated using `isinstance()` checks
-- **XML Markers**: Recognizes `<validation_error>`, `<tool_call_result tool_name="...">` for internal communication
+Centralized message parsing with XML marker and preamble support:
+- **Unified Parsing**: `parse_message_content()` returns `TextResponse | VirtualToolCall | VirtualToolResult`
+  - Detects XML markers: `<tool_call_result tool_name="..." outcome="...">` for tool results
+  - Parses JSON tool calls with `TOOL_CALL_PATTERN` regex (supports code blocks and preambles)
+  - Returns TextResponse for regular text content
+- **Tool Call Detection**: `_detect_virtual_tool_call()` validates structure and extracts preamble
+- **Type-Safe Parsing**: Message types are Pydantic models differentiated using `isinstance()` checks
+- **Invalid Tool Calls**: Returns `VirtualToolCall` with `valid=False` and `validation_error` message
 
 **Claude Code Session Service (`devboard/agents/claude_code/session.py`)**:
 Service for reading and parsing Claude Code session history from JSONL files:
@@ -756,43 +791,49 @@ Specialized conversation service for Claude Code agents:
 Central orchestration service managing agent conversations with persistence and tool approval workflows. Constructor takes `conversation_id` as first parameter, eliminating need to pass it to each method call. Key methods include `send_message(message)` for user prompts (returns `list[ConversationEvent]`), `process_tool_approvals(approvals)` for deferred tool execution (returns `list[ConversationEvent]`), `store_new_messages(messages)` for persistence, and `clear_messages()` for conversation history deletion. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Automatically detects and cleans up pending tool calls when user sends new message instead of approving tools. Integrates with unified `ConversationRepository` and PydanticAI framework for structured agent interactions.
 
 **Event-Based Response Architecture**:
-Agent methods return `list[ConversationEvent]` instead of single responses, providing complete conversation timeline. Event lists include all new events generated during agent execution: text messages, tool calls, tool results, and tool approval requests. Events are generated during streaming from agent execution, with immediate conversion from SDK messages (AssistantMessage, UserMessage) to ConversationEvent types. This architecture enables transparent agent operation visibility and real-time progress tracking.
+Agent methods return `list[ConversationEvent]` directly, providing complete conversation timeline. Event parsing moved into agent implementations (`_parse_claude_result()` for ClaudeCodeAgent, InternalAgent uses PydanticAI messages directly). Conversation services now act as thin orchestration layer, passing events through to API without additional transformation. This architecture enables transparent agent operation visibility and real-time progress tracking with consistent event types across all engines.
 
 #### Conversation Event System
 
-**ConversationEvent Types (`devboard/api/schemas/agent_conversation.py`)**:
-Polymorphic event system using Pydantic discriminated unions for type-safe event handling. Base `ConversationEvent` class with `event_type` discriminator field enabling automatic type resolution. Concrete event types include:
+**ConversationEvent Types (`devboard/agents/events.py`)**:
+Polymorphic event system using Pydantic discriminated unions for type-safe event handling. Uses `event_type` discriminator field for automatic type resolution. Concrete event types include:
 
 **ConversationMessage**:
-- **Fields**: `event_type="text_message"`, `role` (USER/AGENT), `text_content`, `timestamp`
+- **Fields**: `event_type="message"`, `role` (USER/AGENT), `text_content`, `timestamp`
 - **Purpose**: Standard conversational messages from user or agent
 - **Display**: Rendered as chat bubbles in conversation interface
+- **Generation**: Created by agents for text responses and preambles
 
 **ToolCall**:
 - **Fields**: `event_type="tool_call"`, `tool_call_id`, `tool_name`, `tool_args` (dict), `timestamp`
-- **Purpose**: Agent's request to execute a tool (from AssistantMessage ToolUseBlock)
+- **Purpose**: Agent's request to execute a tool (from InternalAgent AssistantMessage ToolUseBlock)
 - **Display**: Expandable tool call panel with arguments and status indicator
 - **Matching**: Paired with ToolResult by tool_call_id for chronological result display
+- **Engine**: Only generated by InternalAgent (ClaudeCodeAgent uses ToolCallRequest for approval)
 
 **ToolResult**:
 - **Fields**: `event_type="tool_result"`, `tool_call_id`, `result_content` (string), `is_error` (bool), `timestamp`
-- **Purpose**: Execution result from completed tool call (from UserMessage ToolResultBlock)
+- **Purpose**: Execution result from completed tool call (from InternalAgent UserMessage ToolResultBlock)
 - **Display**: Shown in tool call panel's result section with success/error styling
-- **Result Matching**: Frontend searches forward from ToolCall position to find matching ToolResult, supporting non-unique tool_call_ids for virtual tools
+- **Result Matching**: Frontend searches forward from ToolCall position to find matching ToolResult
 
 **ToolCallRequest**:
-- **Fields**: `event_type="tool_call_request"`, `tool_call_id`, `tool_name`, `tool_args` (dict), `timestamp`
-- **Purpose**: Virtual tool call requiring user approval before execution
+- **Fields**: `event_type="tool_call_request"`, `tool_call_id`, `tool_name`, `tool_args` (dict/str), `timestamp`
+- **Purpose**: Virtual tool call requiring user approval before execution (ClaudeCodeAgent only)
 - **Display**: Triggers approval workflow UI with approve/deny actions
+- **Tool Call ID**: For virtual tools, `tool_name` is used as `tool_call_id` since only one tool call at a time
 
 **Event Stream Generation**:
-Agent conversation services convert agent SDK messages to ConversationEvent objects during streaming. `_handle_agent_execution()` iterates through agent.stream_events(), extracting:
-- `AssistantMessage` content blocks → ToolCall events (from ToolUseBlock)
-- `UserMessage` content blocks → ToolResult events (from ToolResultBlock)
-- `MessageResponse` content → ConversationMessage events (filtered by message type)
-- `VirtualToolRequests` → ToolCallRequest events (for approval workflow)
-
-Session message loading (`get_conversation_messages()`) converts stored SessionMessage objects to ConversationEvent timeline including text blocks, tool_use blocks, and tool_result blocks with appropriate event type classification.
+Agents generate ConversationEvent objects internally during execution:
+- **ClaudeCodeAgent**: `_parse_claude_result()` converts ResultMessage to events list
+  - TextResponse → ConversationMessage
+  - VirtualToolCall with preamble → ConversationMessage (preamble) + ToolCallRequest
+  - VirtualToolCall without preamble → ToolCallRequest
+- **InternalAgent**: Converts PydanticAI messages to events using message parts
+  - TextPart → ConversationMessage
+  - ToolUseBlock → ToolCall
+  - ToolResultBlock → ToolResult
+- **Timestamp Generation**: Each event includes timestamp generated during parsing (multiple events may share timestamp)
 
 #### Context Assembly Implementation
 

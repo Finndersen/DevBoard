@@ -81,12 +81,6 @@ class VirtualToolCall(VirtualToolCallSchema):
     preamble: str | None = Field(default=None, description="Text content before the tool call JSON")
 
 
-class VirtualToolRequests(BaseModel):
-    """Container for virtual tool call requests."""
-
-    calls: list[VirtualToolCall]
-
-
 class ClaudeResponseParser:
     """Parser for Claude Code agent responses with XML marker support."""
 
@@ -184,8 +178,8 @@ class ClaudeResponseParser:
             )
 
     @classmethod
-    def parse_message(cls, text: str) -> TextResponse | VirtualToolCall | VirtualToolResult:
-        """Parse a message and return the appropriate message type.
+    def parse_message_content(cls, text: str) -> TextResponse | VirtualToolCall | VirtualToolResult:
+        """Parse a message and return the appropriate message type (Detecting virtual tool calls and responses)
 
         This is the unified parsing method that should be used throughout the codebase
         to consistently handle all message types. Detects and returns:

@@ -1,4 +1,10 @@
 import pytest
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines.agent_engines import AgentEngine
@@ -6,6 +12,7 @@ from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories.project import ProjectRepository
 
 
 class TestConversationRepository:
@@ -18,8 +25,6 @@ class TestConversationRepository:
     @pytest.fixture
     def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
         """Create a test project for conversation relationships."""
-        from devboard.db.repositories.project import ProjectRepository
-
         project_repo = ProjectRepository(db_session)
         spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
         project = project_repo.create(name="Test Project", description="", specification=spec_doc)
@@ -112,8 +117,6 @@ class TestConversationRepository:
         db_session,
     ):
         """Test creating a new message."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
-
         pydantic_message = ModelRequest(parts=[UserPromptPart(content="Test message")])
         created = repo.create_message(conversation.id, pydantic_message)
         db_session.commit()
@@ -129,13 +132,6 @@ class TestConversationRepository:
         db_session,
     ):
         """Test getting all messages for a conversation."""
-        from pydantic_ai.messages import (
-            ModelRequest,
-            ModelResponse,
-            TextPart,
-            UserPromptPart,
-        )
-
         # Create messages
         message1 = ModelRequest(parts=[UserPromptPart(content="First message")])
         message2 = ModelResponse(parts=[TextPart(content="Second message")])
@@ -156,8 +152,6 @@ class TestConversationRepository:
         db_session,
     ):
         """Test getting messages excluding tool calls."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
-
         # Create user message
         message1 = ModelRequest(parts=[UserPromptPart(content="User message")])
         repo.create_message(conversation.id, message1)
@@ -176,8 +170,6 @@ class TestConversationRepository:
         db_session,
     ):
         """Test deleting all messages in a conversation."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
-
         # Create messages
         message1 = ModelRequest(parts=[UserPromptPart(content="Message 1")])
         message2 = ModelRequest(parts=[UserPromptPart(content="Message 2")])
@@ -203,8 +195,6 @@ class TestConversationRepository:
         db_session,
     ):
         """Test converting database messages to pydantic messages."""
-        from pydantic_ai.messages import ModelRequest, UserPromptPart
-
         # Create message
         pydantic_message = ModelRequest(parts=[UserPromptPart(content="Test message")])
         repo.create_message(conversation.id, pydantic_message)

@@ -35,10 +35,10 @@ class DocumentUpdate(BaseModel):
 class DocumentEdit(BaseModel):
     """Schema for a single document edit."""
 
-    find: Annotated[
+    old_string: Annotated[
         str,
         Field(
             description="Text to find in the document to replace with new text. Use the MINIMUM necessary text to uniquely identify the location to replace.",
         ),
     ]
-    replace: Annotated[str, Field(description="New text to replace the found text with.")]
+    new_string: Annotated[str, Field(description="New text to replace the found text with.")]

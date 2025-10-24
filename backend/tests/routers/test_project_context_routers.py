@@ -7,6 +7,8 @@ import pytest
 from devboard.api.dependencies.services import get_context_assembly_service
 from devboard.api.main import app
 from devboard.context_providers import ContextStrategy
+from devboard.db.models.document import DocumentType
+from devboard.db.repositories import DocumentRepository, ProjectRepository
 from devboard.services.context_assembly import (
     EagerContextData,
     NoProviderFound,
@@ -20,9 +22,6 @@ from devboard.services.context_assembly import (
 def sample_project(db_session):
     """Sample project for testing."""
     # Use repository to create project properly
-    from devboard.db.models.document import DocumentType
-    from devboard.db.repositories import DocumentRepository, ProjectRepository
-
     document_repo = DocumentRepository(db_session)
     project_repo = ProjectRepository(db_session)
 

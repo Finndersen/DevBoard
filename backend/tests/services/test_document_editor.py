@@ -14,7 +14,7 @@ class TestDocumentEditorService:
     def test_apply_single_edit_success(self):
         """Test applying a single successful edit."""
         content = "Hello world! This is a test document."
-        edit = DocumentEdit(find="world", replace="universe")
+        edit = DocumentEdit(old_string="world", new_string="universe")
 
         result = self.editor.apply_edits(content, [edit])
 
@@ -26,9 +26,9 @@ class TestDocumentEditorService:
         """Test applying multiple edits successfully."""
         content = "The quick brown fox jumps over the lazy dog."
         edits = [
-            DocumentEdit(find="quick", replace="fast"),
-            DocumentEdit(find="brown", replace="red"),
-            DocumentEdit(find="lazy", replace="sleepy"),
+            DocumentEdit(old_string="quick", new_string="fast"),
+            DocumentEdit(old_string="brown", new_string="red"),
+            DocumentEdit(old_string="lazy", new_string="sleepy"),
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -40,7 +40,7 @@ class TestDocumentEditorService:
     def test_apply_edit_text_not_found(self):
         """Test applying edit when find text doesn't exist."""
         content = "Hello world!"
-        edit = DocumentEdit(find="nonexistent", replace="something")
+        edit = DocumentEdit(old_string="nonexistent", new_string="something")
 
         result = self.editor.apply_edits(content, [edit])
 
@@ -52,7 +52,7 @@ class TestDocumentEditorService:
     def test_apply_edit_empty_find_text(self):
         """Test applying edit with empty find text."""
         content = "Hello world!"
-        edit = DocumentEdit(find="", replace="something")
+        edit = DocumentEdit(old_string="", new_string="something")
 
         result = self.editor.apply_edits(content, [edit])
 
@@ -64,7 +64,7 @@ class TestDocumentEditorService:
     def test_apply_edit_identical_find_replace(self):
         """Test applying edit where find and replace are identical."""
         content = "Hello world!"
-        edit = DocumentEdit(find="world", replace="world")
+        edit = DocumentEdit(old_string="world", new_string="world")
 
         result = self.editor.apply_edits(content, [edit])
 
@@ -87,7 +87,7 @@ class TestDocumentEditorService:
         """Test that ambiguous edits are treated as errors."""
         content = "abc abc abc"
         edits = [
-            DocumentEdit(find="abc", replace="xyz"),  # Should fail due to ambiguity
+            DocumentEdit(old_string="abc", new_string="xyz"),  # Should fail due to ambiguity
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -104,7 +104,7 @@ class TestDocumentEditorService:
         long_text = "a" * 60  # Longer than 50 character limit
         content = f"{long_text} some text {long_text} more text {long_text}"
         edits = [
-            DocumentEdit(find=long_text, replace="short"),
+            DocumentEdit(old_string=long_text, new_string="short"),
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -117,9 +117,9 @@ class TestDocumentEditorService:
         """Test that edit failures are collected and processing continues."""
         content = "Hello world!"
         edits = [
-            DocumentEdit(find="Hello", replace="Hi"),  # Should succeed
-            DocumentEdit(find="nonexistent", replace="x"),  # Should fail
-            DocumentEdit(find="!", replace="?"),  # Should succeed
+            DocumentEdit(old_string="Hello", new_string="Hi"),  # Should succeed
+            DocumentEdit(old_string="nonexistent", new_string="x"),  # Should fail
+            DocumentEdit(old_string="!", new_string="?"),  # Should succeed
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -133,10 +133,12 @@ class TestDocumentEditorService:
         """Test that apply_edits collects all errors when multiple edits fail."""
         content = "Hello world!"
         edits = [
-            DocumentEdit(find="Hello", replace="Hi"),  # Valid
-            DocumentEdit(find="", replace="something"),  # Invalid: empty find
-            DocumentEdit(find="nonexistent", replace="x"),  # Invalid: text not found
-            DocumentEdit(find="universe", replace="cosmos"),  # Invalid: 'universe' not found in modified content
+            DocumentEdit(old_string="Hello", new_string="Hi"),  # Valid
+            DocumentEdit(old_string="", new_string="something"),  # Invalid: empty find
+            DocumentEdit(old_string="nonexistent", new_string="x"),  # Invalid: text not found
+            DocumentEdit(
+                old_string="universe", new_string="cosmos"
+            ),  # Invalid: 'universe' not found in modified content
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -152,9 +154,9 @@ class TestDocumentEditorService:
         """Test that edits with unique find text succeed."""
         content = "Hello wonderful world"
         edits = [
-            DocumentEdit(find="Hello", replace="Hi"),  # Unique
-            DocumentEdit(find="wonderful", replace="amazing"),  # Unique
-            DocumentEdit(find="world", replace="universe"),  # Unique
+            DocumentEdit(old_string="Hello", new_string="Hi"),  # Unique
+            DocumentEdit(old_string="wonderful", new_string="amazing"),  # Unique
+            DocumentEdit(old_string="world", new_string="universe"),  # Unique
         ]
 
         result = self.editor.apply_edits(content, edits)
@@ -177,12 +179,12 @@ Create a new authentication system.
 
         edits = [
             DocumentEdit(
-                find="Create a new authentication system.",
-                replace="Implement OAuth 2.0 authentication with JWT tokens.",
+                old_string="Create a new authentication system.",
+                new_string="Implement OAuth 2.0 authentication with JWT tokens.",
             ),
             DocumentEdit(
-                find="- Use JWT tokens\n- Support multiple providers",
-                replace="- Implement OAuth 2.0 flow\n- Support Google, GitHub, and Microsoft providers\n- Use refresh tokens for session management",
+                old_string="- Use JWT tokens\n- Support multiple providers",
+                new_string="- Implement OAuth 2.0 flow\n- Support Google, GitHub, and Microsoft providers\n- Use refresh tokens for session management",
             ),
         ]
 
@@ -199,8 +201,8 @@ Create a new authentication system.
         large_replacement = "Replaced\n" + "\n".join([f"New line {i}" for i in range(50)])
 
         edit = DocumentEdit(
-            find="\n".join([f"Line {i}" for i in range(10, 20)]),
-            replace=large_replacement,
+            old_string="\n".join([f"Line {i}" for i in range(10, 20)]),
+            new_string=large_replacement,
         )
 
         result = self.editor.apply_edits(content, [edit])

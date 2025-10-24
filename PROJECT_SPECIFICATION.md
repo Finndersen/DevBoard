@@ -212,51 +212,72 @@ A **reference to external content** that can be shared across multiple projects 
 ## AI Agent System Design
 
 ### Agent Architecture Philosophy
-The system employs **specialized AI agents** that understand project context and can assist with different aspects of development work. Each agent is designed for specific responsibilities while sharing common capabilities for context awareness and document collaboration.
+The system employs a **role-based agent architecture** with a unified interface. Agent behavior is determined by **Roles** (system prompts, tools, context), while **Agent Engines** (Internal, Claude Code) handle execution. This separation enables the same role to run on different engines with automatic tool conversion.
 
-### Core Agent Types
+### Core Components
 
-#### Project Q&A Agent
-**Purpose**: Answer questions about project status, context, and progress through conversational interface.
+#### BaseAgent Interface
+All agents implement a unified interface with two core methods:
+- **`run(prompt_or_approvals)`**: Execute agent synchronously, returns `list[ConversationEvent]`
+- **`stream_events(prompt_or_approvals)`**: Stream events asynchronously as they're generated
 
-**Capabilities**:
-- Query project specifications and task status
-- Research context from linked external resources
-- Collaboratively edit project documentation
-- Provide insights based on full project context
+Both methods accept either a user message string or tool approval results, and generate ConversationEvent objects (messages, tool calls, tool results).
 
-**Behavior**: Maintains conversation history while focusing on project-level queries and documentation updates.
+#### Agent Engines
+Two concrete implementations of the BaseAgent interface:
 
-#### Task Planning Agents
-**Purpose**: Assist in developing task specifications and implementation plans through conversational workflow.
+**InternalAgent** (`INTERNAL` engine):
+- Native PydanticAI agent with built-in tool execution
+- Tools execute automatically with validation
+- Generates ToolCall and ToolResult events for completed executions
 
-**State-Based Specialization**:
-- **Specification Agent**: Active during task definition phase, focuses on requirements gathering
-- **Planning Agent**: Active during planning phase, creates detailed implementation strategies
+**ClaudeCodeAgent** (`CLAUDE_CODE` engine):
+- Integration with Claude Code CLI via `claude-agent-sdk`
+- Converts Role tools to "virtual tools" requiring user approval
+- Generates ToolCallRequest events for approval workflow
+- Supports session resumption and full Claude Code capabilities
 
-**Capabilities**:
-- Interactive document refinement through conversation
-- Context research using external resources
-- Structured editing with user approval workflow
-- State-aware prompting based on task lifecycle phase
+#### Agent Roles
+Roles define agent behavior independently of execution engine:
 
-#### Codebase Investigation Agent
-**Purpose**: Analyze code repositories and maintain living architecture documentation.
+**ProjectQARole**:
+- **Purpose**: Answer project questions and edit project specifications
+- **Context**: Project details, specifications, linked resources
+- **Tools**: `edit_project_specification`, `search_codebase`, `read_codebase_files`
+- **Engine Support**: INTERNAL or CLAUDE_CODE
 
-**Capabilities**:
-- Generate comprehensive architecture documentation
-- Perform incremental updates based on code changes
-- Understand project structure and patterns
-- Maintain consistency across documentation
+**TaskSpecificationRole**:
+- **Purpose**: Guide task requirement gathering during SPECIFICATION phase
+- **Context**: Task details, specification document, project context
+- **Tools**: `edit_task_specification`, `set_task_specification_content`, `search_codebase`, `read_codebase_files`
+- **Engine Support**: INTERNAL or CLAUDE_CODE
 
-#### Implementation Agent
-**Purpose**: Execute approved implementation plans with direct code and system access.
+**TaskPlanningRole**:
+- **Purpose**: Create implementation plans during PLANNING phase
+- **Context**: Task specification, implementation plan document
+- **Tools**: `edit_implementation_plan`, `set_implementation_plan_content`, `search_codebase`, `read_codebase_files`, `execute_shell_command`
+- **Engine Support**: INTERNAL or CLAUDE_CODE
 
-**Planned Capabilities**:
-- File system operations and code modifications
-- Command execution and testing
-- External system integration (Jira updates, GitHub PRs)
-- Real-time progress reporting
+**TaskImplementationRole**:
+- **Purpose**: Assist with code implementation during IMPLEMENTATION phase
+- **Context**: Task specification, implementation plan, codebase structure
+- **Tools**: `search_codebase`, `read_codebase_files`, `execute_shell_command`
+- **Engine Support**: INTERNAL or CLAUDE_CODE
+
+### Tool System
+Tools are defined once in engine-agnostic PydanticAI format within roles, then automatically converted:
+- **InternalAgent**: Uses PydanticAI tools directly with built-in validation and execution
+- **ClaudeCodeAgent**: Converts tools with `requires_approval=True` to virtual tools (JSON-based approval workflow)
+
+**Available Tools**:
+- `edit_task_specification`: Find-and-replace edits with approval
+- `set_task_specification_content`: Full document replacement with approval
+- `edit_implementation_plan`: Find-and-replace edits with approval
+- `set_implementation_plan_content`: Full document replacement with approval
+- `edit_project_specification`: Find-and-replace edits with approval
+- `search_codebase`: Semantic code search using embeddings
+- `read_codebase_files`: Read file contents by path
+- `execute_shell_command`: Execute shell commands with approval
 
 #### Claude Code Agent
 **Purpose**: Provide access to Claude Code's full CLI capabilities including file operations, shell commands, and developer tools.

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import (
@@ -14,8 +15,7 @@ from devboard.api.dependencies.services import (
 )
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
-    ConversationEvent,
-    ToolApprovalRequest,
+    ToolApprovals,
 )
 from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
@@ -77,12 +77,12 @@ async def send_conversation_message(
     Returns all events generated from processing the message, including
     tool calls, tool results, and the final response message.
     """
-    return await conversation_service.send_message(message=request.message)
+    return await conversation_service.send_message_or_approval(message_or_approvals=request.message)
 
 
 @router.post("/{conversation_id}/approve-tools", response_model=list[ConversationEvent])
 async def approve_conversation_tools(
-    request: ToolApprovalRequest,
+    request: ToolApprovals,
     conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
 ) -> list[ConversationEvent]:
     """Approve or deny tool calls for any conversation.
@@ -93,7 +93,7 @@ async def approve_conversation_tools(
     Returns all events generated from processing the approvals, including
     tool calls, tool results, and the final response message.
     """
-    return await conversation_service.process_tool_approvals(approvals=request.approvals)
+    return await conversation_service.send_message_or_approval(message_or_approvals=request)
 
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)

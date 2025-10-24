@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from devboard.db.models import Project
 from devboard.db.models.document import DocumentType
+from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import DocumentRepository, TaskRepository
+from devboard.db.repositories.project import ProjectRepository
 
 
 class TestTaskRepository:
@@ -16,8 +18,6 @@ class TestTaskRepository:
     @pytest.fixture
     def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
         """Create a test project for task relationships."""
-        from devboard.db.repositories.project import ProjectRepository
-
         project_repo = ProjectRepository(db_session)
         spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
         project = project_repo.create(name="Test Project", description="", specification=spec_doc)
@@ -62,8 +62,6 @@ class TestTaskRepository:
         self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
     ):
         """Test getting all tasks without project filter."""
-        from devboard.db.models.task import TaskStatus
-
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
@@ -89,8 +87,6 @@ class TestTaskRepository:
         self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session: Session
     ):
         """Test getting all tasks filtered by project."""
-        from devboard.db.repositories.project import ProjectRepository
-
         # Create another project
         project_repo = ProjectRepository(db_session)
         spec_doc_p2 = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
@@ -115,8 +111,6 @@ class TestTaskRepository:
         self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
     ):
         """Test getting tasks by project."""
-        from devboard.db.models.task import TaskStatus
-
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
@@ -139,8 +133,6 @@ class TestTaskRepository:
 
     def test_update_task(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test updating a task."""
-        from devboard.db.models.task import TaskStatus
-
         created = repo.create(**sample_task_data)
         db_session.commit()
         created.title = "Updated Task"

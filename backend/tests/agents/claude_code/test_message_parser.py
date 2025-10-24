@@ -18,7 +18,7 @@ class TestPreambleHandling:
         """Test plain JSON without preamble."""
         text = json.dumps({"tool_name": "edit_task_specification", "arguments": {"edits": []}})
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -30,7 +30,7 @@ class TestPreambleHandling:
 
 {"tool_name": "edit_task_specification", "arguments": {"edits": [{"find": "old text", "replace": "new text"}]}}"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -48,7 +48,7 @@ First, I'll update the task specification to remove the duplication.
 
 { "tool_name": "edit_task_specification", "arguments": {"edits": []}}"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -72,7 +72,7 @@ First, I'll update the task specification to remove the duplication."""
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -93,7 +93,7 @@ First, I'll update the task specification to remove the duplication."""
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -112,7 +112,7 @@ First, I'll update the task specification to remove the duplication."""
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -128,7 +128,7 @@ First, I'll update the task specification to remove the duplication."""
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.valid is False
@@ -151,7 +151,7 @@ Then we can update the implementation plan accordingly.
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.tool_name == "edit_task_specification"
@@ -174,7 +174,7 @@ Then we can update the implementation plan accordingly."""
 }
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.preamble is None
@@ -187,7 +187,7 @@ class TestTextResponseWithoutToolCall:
         """Test text message containing JSON-like content but not a tool call."""
         text = 'The configuration should include {"key": "value"} in the settings.'
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, TextResponse)
         assert parsed.content == text
@@ -196,7 +196,7 @@ class TestTextResponseWithoutToolCall:
         """Test plain text message without any JSON."""
         text = "I've analyzed the task and here's what I found..."
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, TextResponse)
         assert parsed.content == text
@@ -210,7 +210,7 @@ def hello():
     print("Hello, world!")
 ```"""
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, TextResponse)
         assert parsed.content == text
@@ -223,7 +223,7 @@ class TestToolResultParsing:
         """Test parsing successful tool result."""
         text = '<tool_call_result tool_name="edit_task_specification" outcome="success">\nEdit completed successfully\n</tool_call_result>'
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolResult)
         assert parsed.tool_name == "edit_task_specification"
@@ -235,7 +235,7 @@ class TestToolResultParsing:
         """Test parsing validation error tool result."""
         text = '<tool_call_result tool_name="edit_task_specification" outcome="validation_error">\nInvalid arguments provided\n</tool_call_result>'
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolResult)
         assert parsed.outcome == ToolCallOutcome.VALIDATION_ERROR
@@ -245,7 +245,7 @@ class TestToolResultParsing:
         """Test parsing denied tool result."""
         text = '<tool_call_result tool_name="edit_task_specification" outcome="denied">\nUser denied the operation\n</tool_call_result>'
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolResult)
         assert parsed.outcome == ToolCallOutcome.DENIED
@@ -255,7 +255,7 @@ class TestToolResultParsing:
         """Test parsing error tool result."""
         text = '<tool_call_result tool_name="edit_task_specification" outcome="error">\nTool execution failed: file not found\n</tool_call_result>'
 
-        parsed = ClaudeResponseParser.parse_message(text)
+        parsed = ClaudeResponseParser.parse_message_content(text)
 
         assert isinstance(parsed, VirtualToolResult)
         assert parsed.outcome == ToolCallOutcome.ERROR

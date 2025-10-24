@@ -2,7 +2,9 @@
 
 from abc import ABC, abstractmethod
 
-from devboard.api.schemas.agent_conversation import ConversationEvent, ToolApprovalDecision
+from devboard.agents.events import ConversationEvent
+from devboard.agents.roles.base import Role
+from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
 
@@ -22,39 +24,38 @@ class BaseAgentConversationService(ABC):
 
     Attributes:
         conversation: The conversation instance this service manages
+        role: The Role defining agent behavior
     """
 
-    def __init__(self, conversation: Conversation, conversation_repository: ConversationRepository):
+    def __init__(
+        self,
+        conversation: Conversation,
+        role: Role,
+        conversation_repository: ConversationRepository,
+    ):
         """Initialize the conversation service with a conversation instance.
 
         Args:
             conversation: The conversation instance to manage
+            role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations
         """
         self.conversation = conversation
+        self.role = role
         self.conversation_repo = conversation_repository
 
     @abstractmethod
-    async def send_message(self, message: str) -> list[ConversationEvent]:
-        """Send a message to the agent and get a response.
+    async def send_message_or_approval(
+        self,
+        message_or_approvals: str | ToolApprovals,
+    ) -> list[ConversationEvent]:
+        """Send a message or process tool approvals through the agent.
 
         Args:
-            message: The user's message
+            message_or_approvals: Either a user message string or ToolApprovals model
 
         Returns:
-            PromptResponse containing either a message or tool approval requests
-        """
-        pass
-
-    @abstractmethod
-    async def process_tool_approvals(self, approvals: dict[str, ToolApprovalDecision]) -> list[ConversationEvent]:
-        """Process user's tool approval decisions and continue agent execution.
-
-        Args:
-            approvals: Map of tool_call_id to approval decision
-
-        Returns:
-            PromptResponse with agent's next message or additional tool requests
+            List of conversation events generated during agent execution
         """
         pass
 
