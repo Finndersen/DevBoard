@@ -5,8 +5,8 @@
 import type { PendingApproval } from '../lib/api'
 
 export interface DocumentEdit {
-  find: string
-  replace: string
+  old_string: string
+  new_string: string
 }
 
 export function isSetContentTool(toolName: string): boolean {

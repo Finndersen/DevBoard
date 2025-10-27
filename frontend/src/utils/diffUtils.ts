@@ -29,8 +29,8 @@ export function generateUnifiedDiff(edits: DocumentEdit[]): string {
   let unifiedDiff = ''
   
   edits.forEach((edit, index) => {
-    const changes = diffLines(edit.find, edit.replace, { newlineIsToken: true })
-    
+    const changes = diffLines(edit.old_string, edit.new_string, { newlineIsToken: true })
+
     // Add header for each edit
     unifiedDiff += `@@ Edit ${index + 1}: Find and Replace @@\n`
     
@@ -105,7 +105,7 @@ export function createDocumentComparison(originalDocument: string, edits: Docume
 
   // Apply edits in order
   edits.forEach(edit => {
-    modifiedDocument = modifiedDocument.replace(edit.find, edit.replace)
+    modifiedDocument = modifiedDocument.replace(edit.old_string, edit.new_string)
   })
 
   return {
@@ -150,27 +150,27 @@ export function calculateDiffStats(edits: DocumentEdit[]): DiffStats {
   let linesRemoved = 0
 
   edits.forEach(edit => {
-    const oldLength = edit.find.length
-    const newLength = edit.replace.length
-    
+    const oldLength = edit.old_string.length
+    const newLength = edit.new_string.length
+
     if (newLength > oldLength) {
       charactersAdded += newLength - oldLength
     } else {
       charactersRemoved += oldLength - newLength
     }
 
-    const oldWords = edit.find.split(/\s+/).filter(w => w.length > 0)
-    const newWords = edit.replace.split(/\s+/).filter(w => w.length > 0)
-    
+    const oldWords = edit.old_string.split(/\s+/).filter(w => w.length > 0)
+    const newWords = edit.new_string.split(/\s+/).filter(w => w.length > 0)
+
     if (newWords.length > oldWords.length) {
       wordsAdded += newWords.length - oldWords.length
     } else {
       wordsRemoved += oldWords.length - newWords.length
     }
 
-    const oldLines = edit.find.split('\n')
-    const newLines = edit.replace.split('\n')
-    
+    const oldLines = edit.old_string.split('\n')
+    const newLines = edit.new_string.split('\n')
+
     if (newLines.length > oldLines.length) {
       linesAdded += newLines.length - oldLines.length
     } else {

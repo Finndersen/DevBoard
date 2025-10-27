@@ -148,7 +148,7 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
     return (
       <div className="space-y-4">
         {edits.map((edit, index) => {
-          const highlight = createInlineHighlight(edit.find, edit.replace)
+          const highlight = createInlineHighlight(edit.old_string, edit.new_string)
           const editStats = calculateDiffStats([edit])
 
           return (
@@ -164,8 +164,8 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
 
               {/* Enhanced comparison with highlighting */}
               <ChangeComparison
-                oldText={edit.find}
-                newText={edit.replace}
+                oldText={edit.old_string}
+                newText={edit.new_string}
                 changes={highlight.changes}
                 className="border-0 rounded-none"
               />

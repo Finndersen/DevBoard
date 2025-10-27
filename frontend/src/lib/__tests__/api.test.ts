@@ -806,13 +806,13 @@ describe('ApiClient', () => {
   describe('Document Edit Interface', () => {
     it('has simplified structure', () => {
       const edit: DocumentEdit = {
-        find: 'old text',
-        replace: 'new text'
+        old_string: 'old text',
+        new_string: 'new text'
       }
 
-      expect(edit.find).toBe('old text')
-      expect(edit.replace).toBe('new text')
-      
+      expect(edit.old_string).toBe('old text')
+      expect(edit.new_string).toBe('new text')
+
       // Ensure old fields are not present
       expect('context' in edit).toBe(false)
       expect('rationale' in edit).toBe(false)
@@ -820,12 +820,12 @@ describe('ApiClient', () => {
 
     it('allows empty replace text', () => {
       const edit: DocumentEdit = {
-        find: 'text to remove',
-        replace: ''
+        old_string: 'text to remove',
+        new_string: ''
       }
 
-      expect(edit.find).toBe('text to remove')
-      expect(edit.replace).toBe('')
+      expect(edit.old_string).toBe('text to remove')
+      expect(edit.new_string).toBe('')
     })
   })
 
