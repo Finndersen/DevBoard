@@ -1,4 +1,4 @@
-"""Tests for ClaudeResponseParser with preamble handling."""
+"""Tests for ClaudeResponseParser with preamble and postamble handling."""
 
 import json
 
@@ -178,6 +178,157 @@ Then we can update the implementation plan accordingly."""
 
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.preamble is None
+
+
+class TestPostambleHandling:
+    """Tests for postamble extraction in virtual tool calls."""
+
+    def test_plain_json_with_postamble(self):
+        """Test plain JSON with postamble text (no code block)."""
+        text = """{"tool_name": "edit_task_specification", "arguments": {"edits": []}}
+
+I'll update the implementation plan next."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+        assert parsed.preamble is None
+        assert parsed.postamble == "I'll update the implementation plan next."
+        assert parsed.valid is True
+
+    def test_plain_json_with_multiline_postamble(self):
+        """Test plain JSON with multiline postamble (no code block)."""
+        text = """{"tool_name": "edit_task_specification", "arguments": {"edits": []}}
+
+This will consolidate the documents.
+
+Let me know if you need any adjustments."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+        expected_postamble = """This will consolidate the documents.
+
+Let me know if you need any adjustments."""
+        assert parsed.postamble == expected_postamble
+
+    def test_code_block_json_with_postamble(self):
+        """Test JSON in code block with postamble text."""
+        text = """```json
+{
+  "tool_name": "edit_task_specification",
+  "arguments": {
+    "edits": []
+  }
+}
+```
+
+This should address all the duplication issues."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+        assert parsed.preamble is None
+        assert parsed.postamble == "This should address all the duplication issues."
+        assert parsed.valid is True
+
+    def test_preamble_and_postamble(self):
+        """Test tool call with both preamble and postamble."""
+        text = """Let me update the specification now.
+
+```json
+{
+  "tool_name": "edit_task_specification",
+  "arguments": {
+    "edits": []
+  }
+}
+```
+
+I'll verify the changes afterwards."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+        assert parsed.preamble == "Let me update the specification now."
+        assert parsed.postamble == "I'll verify the changes afterwards."
+        assert parsed.valid is True
+
+    def test_preamble_and_postamble_plain_json(self):
+        """Test plain JSON with both preamble and postamble (no code block)."""
+        text = """I'll start by editing the specification.
+
+{"tool_name": "edit_task_specification", "arguments": {"edits": []}}
+
+Then we can proceed with testing."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+        assert parsed.preamble == "I'll start by editing the specification."
+        assert parsed.postamble == "Then we can proceed with testing."
+        assert parsed.valid is True
+
+    def test_invalid_tool_call_with_postamble(self):
+        """Test invalid tool call structure with postamble."""
+        text = """```json
+{
+  "tool_name": "edit_task_specification"
+}
+```
+
+Let me know if you need changes."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.valid is False
+        assert parsed.preamble is None
+        assert parsed.postamble == "Let me know if you need changes."
+        assert "Invalid tool call format" in parsed.validation_error
+
+    def test_invalid_tool_call_with_preamble_and_postamble(self):
+        """Test invalid tool call with both preamble and postamble."""
+        text = """I'll fix this now.
+
+```json
+{
+  "tool_name": "edit_task_specification"
+}
+```
+
+This might need a retry."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.valid is False
+        assert parsed.preamble == "I'll fix this now."
+        assert parsed.postamble == "This might need a retry."
+        assert "Invalid tool call format" in parsed.validation_error
+
+    def test_empty_postamble_not_set(self):
+        """Test that whitespace-only postamble is not set."""
+        text = """```json
+{
+  "tool_name": "edit_task_specification",
+  "arguments": {
+    "edits": []
+  }
+}
+```
+
+        """
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.postamble is None
 
 
 class TestTextResponseWithoutToolCall:
@@ -411,3 +562,33 @@ class TestDetectVirtualToolCall:
         assert result.preamble == "Here's the implementation:"
         assert result.valid is True
         assert "nested" in result.arguments["metadata"]
+
+    def test_tool_call_with_postamble(self):
+        """Test tool call with postamble text."""
+        text = """{"tool_name": "test_tool", "arguments": {}}
+
+This will complete the task."""
+
+        result = ClaudeResponseParser._detect_virtual_tool_call(text)
+
+        assert isinstance(result, VirtualToolCall)
+        assert result.tool_name == "test_tool"
+        assert result.preamble is None
+        assert result.postamble == "This will complete the task."
+        assert result.valid is True
+
+    def test_tool_call_with_preamble_and_postamble(self):
+        """Test tool call with both preamble and postamble."""
+        text = """Let me create the file now.
+
+{"tool_name": "test_tool", "arguments": {}}
+
+I'll run the tests afterwards."""
+
+        result = ClaudeResponseParser._detect_virtual_tool_call(text)
+
+        assert isinstance(result, VirtualToolCall)
+        assert result.tool_name == "test_tool"
+        assert result.preamble == "Let me create the file now."
+        assert result.postamble == "I'll run the tests afterwards."
+        assert result.valid is True

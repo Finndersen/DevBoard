@@ -261,6 +261,66 @@ class TestStreamEventsVirtualToolCalls:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_virtual_tool_call_with_postamble(self, mock_client_class, agent_with_virtual_tool):
+        """Test virtual tool call with postamble text."""
+        # Postamble is text AFTER the JSON
+        tool_call_with_postamble = (
+            json.dumps(
+                {
+                    "type": "tool_call",
+                    "tool_name": "edit_document",
+                    "arguments": {"edits": [{"find": "old", "replace": "new"}]},
+                }
+            )
+            + "\nI'll verify the changes afterwards"
+        )
+        result_msg = create_mock_result_message(tool_call_with_postamble)
+        setup_mock_client(mock_client_class, result_msg)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have tool call request and postamble message
+        assert len(events) == 2
+        assert isinstance(events[0], ToolCallRequest)
+        assert events[0].tool_name == "edit_document"
+        assert isinstance(events[1], ConversationMessage)
+        assert events[1].text_content == "I'll verify the changes afterwards"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_virtual_tool_call_with_preamble_and_postamble(self, mock_client_class, agent_with_virtual_tool):
+        """Test virtual tool call with both preamble and postamble text."""
+        tool_call_with_both = (
+            "I'll edit the document now\n"
+            + json.dumps(
+                {
+                    "type": "tool_call",
+                    "tool_name": "edit_document",
+                    "arguments": {"edits": [{"find": "old", "replace": "new"}]},
+                }
+            )
+            + "\nThis should fix the issue"
+        )
+        result_msg = create_mock_result_message(tool_call_with_both)
+        setup_mock_client(mock_client_class, result_msg)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have preamble message, tool call request, and postamble message
+        assert len(events) == 3
+        assert isinstance(events[0], ConversationMessage)
+        assert events[0].text_content == "I'll edit the document now"
+        assert isinstance(events[1], ToolCallRequest)
+        assert events[1].tool_name == "edit_document"
+        assert isinstance(events[2], ConversationMessage)
+        assert events[2].text_content == "This should fix the issue"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
     async def test_unknown_virtual_tool_triggers_retry(self, mock_client_class, agent_with_virtual_tool):
         """Test that unknown virtual tool triggers retry and eventually raises error."""
         # First 4 attempts (initial + 3 retries) return unknown tool

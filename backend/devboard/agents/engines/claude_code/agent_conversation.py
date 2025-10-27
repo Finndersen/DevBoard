@@ -9,6 +9,7 @@ from devboard.agents.engines.claude_code.message_parser import (
     TextResponse,
     VirtualToolCall,
     VirtualToolResult,
+    convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session import (
     ClaudeCodeSessionService,
@@ -175,24 +176,14 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
 
                     elif isinstance(parsed, VirtualToolCall):
                         # Virtual tool call - convert to ToolCall event (for both invalid and valid calls)
-                        # Generate preamble message if present
-                        if parsed.preamble:
-                            events.append(
-                                ConversationMessage(
-                                    role=MessageRole.AGENT,
-                                    text_content=parsed.preamble,
-                                    timestamp=session_msg.timestamp,
-                                )
-                            )
-                        # Generate tool call event
-                        events.append(
-                            ToolCall(
-                                tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools
-                                tool_name=parsed.tool_name,
-                                tool_args=parsed.arguments,
-                                timestamp=session_msg.timestamp,
-                            )
+                        # Use helper function to convert to events
+                        # Use ToolCall (not ToolCallRequest) since this is historical data from session
+                        tool_call_events = convert_virtual_tool_call_to_events(
+                            tool_call=parsed,
+                            timestamp=session_msg.timestamp,
+                            use_tool_call_request=False,
                         )
+                        events.extend(tool_call_events)
 
                     elif isinstance(parsed, VirtualToolResult):
                         # Tool result - convert to ToolResult event

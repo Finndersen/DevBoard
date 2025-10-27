@@ -3,6 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
+from pydantic_ai.exceptions import ModelRetry
 
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.agents.roles.task_specification import TaskSpecificationRole
@@ -191,7 +192,6 @@ class TestDocumentEditTool:
         edits = [DocumentEdit(old_string="NonExistent", new_string="Modified")]
 
         # Should raise ModelRetry for invalid edits
-        from pydantic_ai.exceptions import ModelRetry
         with pytest.raises(ModelRetry, match="Failed to apply edits"):
             tool.function(edits, "Test edit")
 
@@ -253,6 +253,7 @@ class TestSetDocumentContentTool:
 
         # Empty content should raise ModelRetry
         from pydantic_ai.exceptions import ModelRetry
+
         with pytest.raises(ModelRetry, match="Content cannot be empty"):
             tool.function("")
 

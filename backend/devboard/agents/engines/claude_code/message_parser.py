@@ -5,6 +5,7 @@ responses, including JSON extraction, XML marker detection, and response type
 classification.
 """
 
+import datetime
 import json
 import re
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
+
+from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolCallRequest
 
 
 @dataclass
@@ -67,6 +70,7 @@ class VirtualToolCall(VirtualToolCallSchema):
     - valid: Whether the tool call structure is valid
     - validation_error: Error message if validation failed
     - preamble: Optional text content before the tool call JSON
+    - postamble: Optional text content after the tool call JSON
 
     This model handles both valid and invalid tool call attempts:
     - For valid calls: tool_name and arguments are properly populated, valid=True
@@ -79,6 +83,76 @@ class VirtualToolCall(VirtualToolCallSchema):
     valid: bool = Field(default=True, description="Whether the tool call passed structural validation")
     validation_error: str | None = Field(default=None, description="Validation error message if valid=False")
     preamble: str | None = Field(default=None, description="Text content before the tool call JSON")
+    postamble: str | None = Field(default=None, description="Text content after the tool call JSON")
+
+
+def convert_virtual_tool_call_to_events(
+    tool_call: VirtualToolCall,
+    timestamp: datetime.datetime,
+    use_tool_call_request: bool = False,
+) -> list[ConversationEvent]:
+    """Convert a VirtualToolCall to a list of ConversationEvent instances.
+
+    This helper function provides a consistent way to convert VirtualToolCall objects
+    into conversation events with proper ordering:
+    1. Preamble message (if present)
+    2. Tool call or tool call request
+    3. Postamble message (if present)
+
+    Args:
+        tool_call: The VirtualToolCall to convert
+        timestamp: Timestamp to use for all generated events
+        use_tool_call_request: If True, generates ToolCallRequest (for approval workflow),
+                               otherwise generates ToolCall (for history/recording)
+
+    Returns:
+        List of ConversationEvent instances (ConversationMessage and ToolCall/ToolCallRequest)
+    """
+    # Import here to avoid circular imports
+
+    events: list[ConversationEvent] = []
+
+    # Generate preamble message if present
+    if tool_call.preamble:
+        events.append(
+            ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content=tool_call.preamble,
+                timestamp=timestamp,
+            )
+        )
+
+    # Generate tool call event (request or regular call)
+    if use_tool_call_request:
+        events.append(
+            ToolCallRequest(
+                tool_call_id=tool_call.tool_name,  # For virtual tools, tool_name is the ID
+                tool_name=tool_call.tool_name,
+                tool_args=tool_call.arguments,
+                timestamp=timestamp,
+            )
+        )
+    else:
+        events.append(
+            ToolCall(
+                tool_call_id=tool_call.tool_name,  # Use tool_name as ID for virtual tools
+                tool_name=tool_call.tool_name,
+                tool_args=tool_call.arguments,
+                timestamp=timestamp,
+            )
+        )
+
+    # Generate postamble message if present
+    if tool_call.postamble:
+        events.append(
+            ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content=tool_call.postamble,
+                timestamp=timestamp,
+            )
+        )
+
+    return events
 
 
 class ClaudeResponseParser:
@@ -90,29 +164,33 @@ class ClaudeResponseParser:
         re.DOTALL,
     )
 
-    # Tool call pattern with optional preamble
+    # Tool call pattern with optional preamble and postamble
     # Captures:
     # - Group 1 (optional): Preamble text before the tool call
     # - Group 2: The JSON content (must contain "tool_name" field somewhere)
+    # - Group 3 (optional): Postamble text after the tool call
     # This pattern looks for JSON objects in code blocks or plain text
     TOOL_CALL_PATTERN = re.compile(
         r"^(.*?)?"  # Optional preamble (non-greedy)
         r"(?:```(?:json)?\s*\n)?"  # Optional code block start (non-capturing)
         r'(\{.*?"tool_name":.*\})'  # JSON object containing "tool_name" field
         r"(?:\n```)?"  # Optional code block end (non-capturing)
-        r"\s*$",  # End of string (allowing trailing whitespace)
+        r"(.*?)$",  # Optional postamble (non-greedy)
         re.DOTALL,
     )
 
     @classmethod
     def _detect_virtual_tool_call(cls, text: str) -> VirtualToolCall | None:
-        """Detect and parse a virtual tool call with optional preamble.
+        """Detect and parse a virtual tool call with optional preamble and postamble.
 
         Uses regex to match tool calls in various formats:
         - Plain JSON: {"tool_name": "...", "arguments": {...}}
         - JSON with preamble: Some text\n{"tool_name": ...}
+        - JSON with postamble: {"tool_name": ...}\nSome text
+        - JSON with preamble and postamble: Some text\n{"tool_name": ...}\nMore text
         - JSON in code block: ```json\n{"tool_name": ...}\n```
         - JSON in code block with preamble: Some text\n```json\n{"tool_name": ...}\n```
+        - JSON in code block with postamble: ```json\n{"tool_name": ...}\n```\nSome text
 
         Args:
             text: Text potentially containing a tool call
@@ -122,7 +200,7 @@ class ClaudeResponseParser:
         """
         text = text.strip()
 
-        # Try regex pattern first (handles all formats with preamble)
+        # Try regex pattern first (handles all formats with preamble and postamble)
         match = cls.TOOL_CALL_PATTERN.match(text)
         if not match:
             # No match - not a tool call
@@ -133,6 +211,9 @@ class ClaudeResponseParser:
 
         # Extract JSON content
         json_str = match.group(2).strip()
+
+        # Extract postamble if present
+        postamble = stripped_text if (stripped_text := match.group(3).strip()) else None
         try:
             json_data = json.loads(json_str)
         except json.JSONDecodeError as e:
@@ -143,6 +224,7 @@ class ClaudeResponseParser:
                 valid=False,
                 validation_error=f"Malformed JSON in tool call: {str(e)}",
                 preamble=preamble,
+                postamble=postamble,
             )
 
         # Ensure we have a dict
@@ -153,20 +235,22 @@ class ClaudeResponseParser:
                 valid=False,
                 validation_error="Tool call JSON must be an object, not an array or primitive",
                 preamble=preamble,
+                postamble=postamble,
             )
 
         # Try to parse as ToolCall (validates tool_name and arguments structure)
         try:
             tool_call = VirtualToolCallSchema.model_validate(json_data)
-            # Convert to VirtualToolCall with preamble
+            # Convert to VirtualToolCall with preamble and postamble
             return VirtualToolCall(
                 tool_name=tool_call.tool_name,
                 arguments=tool_call.arguments,
                 valid=True,
                 preamble=preamble,
+                postamble=postamble,
             )
         except ValidationError as e:
-            # Return invalid tool call with preamble
+            # Return invalid tool call with preamble and postamble
             tool_name = json_data.get("tool_name")
             error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
             return VirtualToolCall(
@@ -175,6 +259,7 @@ class ClaudeResponseParser:
                 valid=False,
                 validation_error=f"Invalid tool call format:\n{error_details}",
                 preamble=preamble,
+                postamble=postamble,
             )
 
     @classmethod

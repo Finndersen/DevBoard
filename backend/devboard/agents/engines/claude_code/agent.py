@@ -15,6 +15,7 @@ from devboard.agents.engines.claude_code.message_parser import (
     TextResponse,
     ToolCallOutcome,
     VirtualToolCall,
+    convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.engines.claude_code.virtual_tools import (
@@ -26,7 +27,6 @@ from devboard.agents.events import (
     ConversationMessage,
     MessageRole,
     ToolCall,
-    ToolCallRequest,
     ToolResult,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
@@ -438,29 +438,13 @@ class ClaudeCodeAgent(BaseAgent):
             # Validate tool call (raises InvalidVirtualToolCallError if invalid)
             await self._validate_virtual_tool_call_response(tool_call_or_text)
 
-            # Convert validated tool call to events
-            events: list[ConversationEvent] = []
-
-            # Generate preamble message if present
-            if tool_call_or_text.preamble:
-                events.append(
-                    ConversationMessage(
-                        role=MessageRole.AGENT,
-                        text_content=tool_call_or_text.preamble,
-                        timestamp=timestamp,
-                    )
-                )
-
-            # Generate tool call request
-            events.append(
-                ToolCallRequest(
-                    tool_call_id=tool_call_or_text.tool_name,  # For virtual tools, tool_name is the ID
-                    tool_name=tool_call_or_text.tool_name,
-                    tool_args=tool_call_or_text.arguments,
-                    timestamp=timestamp,
-                )
+            # Convert validated tool call to events using helper function
+            # Use ToolCallRequest since this is a new tool call requiring approval
+            return convert_virtual_tool_call_to_events(
+                tool_call=tool_call_or_text,
+                timestamp=timestamp,
+                use_tool_call_request=True,
             )
-            return events
 
         elif isinstance(tool_call_or_text, TextResponse):
             # Normal message - convert to ConversationMessage
