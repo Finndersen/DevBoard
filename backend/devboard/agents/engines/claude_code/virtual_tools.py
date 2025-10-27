@@ -24,7 +24,7 @@ TOOL_RESPONSE_FORMAT = """
 2. VIRTUAL TOOLS (edit_*, set_*_content (when non-empty), etc):
    These tools require approval and must use the VIRTUAL TOOL CALLING format below.
 
-## VIRTUAL TOOL CALLING FORMAT (for tools that require approval only):
+## VIRTUAL TOOL CALLING FORMAT:
 
 For virtual tool calls, respond with JSON content ONLY (no other text in your message):
 {"tool_name": "<tool_name>", "arguments": {...}}
@@ -40,9 +40,9 @@ Assistant: 'I will update the task specification. Here's the updated content:
 
 IMPORTANT:
 - You can only make ONE virtual tool call at a time
-- After the tool executes, you will receive the result wrapped in <tool_call_result> tags
 - Standard build-in tools can be used freely without any special format
 - When making virtual tool calls, your message must consist of JSON content ONLY (NO OTHER TEXT).
+- Sub-agents cannot make virtual tool calls. DO NOT create sub-agent tasks that require virtual tool calls.
 - For normal messages, respond naturally with plain text. No JSON format needed.
 """
 

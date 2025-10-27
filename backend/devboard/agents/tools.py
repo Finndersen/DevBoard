@@ -19,13 +19,15 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
 
     def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
         """
-        Apply edits to the document.
+        Apply edits to the virtual document.
+        This document DOES NOT exist on the file system, but is managed by the application.
 
         DOCUMENT EDITING RULES:
         1. Make precise find-replace edits using DocumentEdit objects
         2. Use exact text matches for 'find' - the text must exist exactly as written
-        3. Preserve markdown formatting and structure
-        4. When adding new content, find a logical insertion point and replace with expanded content
+        3. Use the MINIMUM necessary text to uniquely identify the location to replace
+        4. Preserve markdown formatting and structure
+        5. ONLY call this tool after discussing with the user and arriving at an understanding of the changes to be made
 
         Args:
             edits: List of find-replace edits to apply
@@ -62,7 +64,9 @@ def create_set_document_content_tool(document: Document, document_repo: Document
     """
 
     def set_document_content_tool(content: str, reasoning: str = "") -> str:
-        """Set the content of a document.
+        """Set the content of a virtual document.
+        This document DOES NOT exist on the file system, but managed by the application.
+        ONLY call this tool after discussing with the user and arriving at an understanding of the changes to be made.
 
         Args:
             content: The full content to set for the document

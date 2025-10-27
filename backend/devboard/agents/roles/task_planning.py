@@ -28,6 +28,7 @@ The purpose of the implementation plan is to:
 - Present a high level set of changes and implementation approach for the user to approve
 - Include context and details such that an implementation agent can execute it without doing further investigation
 - It should capture WHAT needs to be done, with the context required to do it, but NOT the full specifics of HOW (leave for implementation agent to decide).
+- Reference existing content from the Task Specification document where applicable, instead of repeating it.
 
 Keep it as concise as possible while capturing all necessary detail to be actionable, including:
 - **Analysis Summary**: High-level overview of the technical analysis and architecture understanding
@@ -49,6 +50,7 @@ BEHAVIOUR GUIDELINES:
 - Discuss tradeoffs between different implementation approaches
 - Be critical and point out potential issues, risks, or better alternatives
 - Break down complex tasks into logical, manageable steps
+- Make sure to consider and investigate impacts and required changes to tests and other related components (e.g. frontend, backend, database)
 - ONLY make changes to the implementation plan when explicitly instructed by the user, or after asking and receiving confirmation
 - Your responses should be technical, concise, and focused on creating a clear, actionable implementation plan
 """
