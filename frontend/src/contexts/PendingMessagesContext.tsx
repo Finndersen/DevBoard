@@ -207,19 +207,23 @@ export function PendingMessagesProvider({ children }: PendingMessagesProviderPro
     dispatch({ type: 'CLEAR_CONVERSATION_MESSAGES', payload: { key } })
   }, [])
 
-  const getPendingMessages = useCallback((key: string): PendingMessage[] => {
+  // Use getter functions instead of useCallback to avoid dependency on state.messages
+  // This prevents context value from changing on every state update
+  const getPendingMessages = (key: string): PendingMessage[] => {
     return state.messages[key] || []
-  }, [state.messages])
+  }
 
-  const hasPendingMessages = useCallback((key: string): boolean => {
+  const hasPendingMessages = (key: string): boolean => {
     const messages = state.messages[key]
     return messages && messages.length > 0
-  }, [state.messages])
+  }
 
   const retryMessage = useCallback((key: string, messageId: string) => {
     updateMessageStatus(key, messageId, 'pending')
   }, [updateMessageStatus])
 
+  // Stabilize context value by only including memoized callbacks
+  // getPendingMessages and hasPendingMessages are methods that read from closure
   const contextValue: PendingMessagesContextType = useMemo(() => ({
     state,
     addPendingMessage,
@@ -235,8 +239,6 @@ export function PendingMessagesProvider({ children }: PendingMessagesProviderPro
     updateMessageStatus,
     removeMessage,
     clearConversationMessages,
-    getPendingMessages,
-    hasPendingMessages,
     retryMessage
   ])
 

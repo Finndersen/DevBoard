@@ -1,15 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { flushSync } from 'react-dom'
-import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../../lib/api'
-import type { ConversationEvent, ToolCallRequest, ToolApprovalRequest, ToolResult } from '../../lib/api'
+import type { ConversationEvent, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
 import { usePendingMessages, type PendingMessage } from '../../contexts/PendingMessagesContext'
 import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
-import { standardChatInputClasses } from '../../styles/inputStyles'
-import ConversationMessageComponent from './ConversationMessage'
-import PendingMessageComponent from './PendingMessage'
+import ConversationMessageList from './ConversationMessageList'
+import ConversationInput from './ConversationInput'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 import { useUIStore } from '../../stores/uiStore'
@@ -35,14 +33,12 @@ export default function ConversationChat({
   transitionMessage = ''
 }: ConversationChatProps) {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
-  const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [showClearModal, setShowClearModal] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [approvalError, setApprovalError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   // Track removed pending message IDs locally to immediately hide them in UI
   // Use ref for synchronous updates without waiting for re-render
   const removedPendingIdsRef = useRef<Set<string>>(new Set())
@@ -94,36 +90,15 @@ export default function ConversationChat({
     }
   }, [loading, isTransitioning, pendingApprovals.length, updateCurrentTabStatus])
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
     }
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, pendingMessage, isTransitioning])
-
-  // Auto-resize textarea based on content
-  const adjustTextareaHeight = useCallback(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    // Reset height to calculate scrollHeight properly
-    textarea.style.height = 'auto'
-
-    // Calculate the number of lines based on line height
-    const lineHeight = parseInt(window.getComputedStyle(textarea).lineHeight)
-    const maxHeight = lineHeight * MAX_TEXTAREA_ROWS
-
-    // Set height to scrollHeight (content height) but cap at maxHeight
-    const newHeight = Math.min(textarea.scrollHeight, maxHeight)
-    textarea.style.height = `${newHeight}px`
   }, [])
 
   useEffect(() => {
-    adjustTextareaHeight()
-  }, [newMessage, adjustTextareaHeight])
+    scrollToBottom()
+  }, [messages, pendingMessage, isTransitioning, scrollToBottom])
 
   const fetchChatHistory = useCallback(async () => {
     try {
@@ -227,17 +202,8 @@ export default function ConversationChat({
     }
   }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
-
-    const messageText = newMessage.trim()
-    setNewMessage('') // Clear input immediately
-
-    // Reset textarea height after clearing
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+  const handleSendMessage = useCallback(async (messageText: string) => {
+    if (loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
 
     // Add message to pending state
     const pendingMessageId = addPendingMessage(pendingKey, {
@@ -246,15 +212,21 @@ export default function ConversationChat({
     })
 
     await processStreamedMessage(messageText, new Date().toISOString(), pendingMessageId)
-  }
+  }, [loading, pendingApprovals.length, pendingMessage, isTransitioning, pendingKey, conversationId, addPendingMessage, processStreamedMessage])
 
-  const handleRetryMessage = (messageId: string) => {
+  const handleRetryMessage = useCallback((messageId: string) => {
     const pendingMsg = pendingMessages.find(msg => msg.id === messageId)
     if (!pendingMsg) return
 
     retryMessage(pendingKey, messageId)
     processStreamedMessage(pendingMsg.text_content, pendingMsg.timestamp, pendingMsg.id)
-  }
+  }, [pendingMessages, pendingKey, retryMessage, processStreamedMessage])
+
+  // Memoize disabled state for input
+  const isInputDisabled = useMemo(
+    () => loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning,
+    [loading, pendingApprovals.length, pendingMessage, isTransitioning]
+  )
 
   const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApprovalWithContext[]> => {
     return toolRequests.map((request) => {
@@ -356,19 +328,6 @@ export default function ConversationChat({
     }
   }
 
-  // Helper to find matching tool result for a tool call
-  // Searches for the NEXT ToolResult with matching tool_call_id that comes AFTER the tool call
-  // This is important for virtual tool calls which may have non-unique tool_call_ids
-  const findToolResult = (toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
-    // Search only messages that come after the tool call
-    for (let i = toolCallIndex + 1; i < messages.length; i++) {
-      const msg = messages[i]
-      if (msg.event_type === 'tool_result' && msg.tool_call_id === toolCallId) {
-        return msg as ToolResult
-      }
-    }
-    return undefined
-  }
 
   const handleClearHistory = async () => {
     if (onClearHistory) {
@@ -399,40 +358,14 @@ export default function ConversationChat({
     <div className="flex flex-col h-full">
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">{/* Removed floating Clear History Button - now handled externally */}
-        
-        {messages.length === 0 && !pendingMessage ? (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-            <p className="text-sm">{emptyStateMessage}</p>
-            <p className="text-xs mt-2">I can help with code analysis, documentation, and project insights.</p>
-          </div>
-        ) : (
-          <>
-            {/* Render confirmed messages */}
-            {messages.map((message, index) => {
-              // For tool calls, find the matching result
-              const toolResult = message.event_type === 'tool_call'
-                ? findToolResult(message.tool_call_id, index)
-                : undefined
 
-              return (
-                <ConversationMessageComponent
-                  key={`${index}-${message.timestamp}`}
-                  message={message}
-                  toolResult={toolResult}
-                />
-              )
-            })}
-            
-            {/* Render pending message if exists */}
-            {pendingMessage && (
-              <PendingMessageComponent
-                key={pendingMessage.id}
-                message={pendingMessage}
-                onRetry={handleRetryMessage}
-              />
-            )}
-          </>
-        )}
+        <ConversationMessageList
+          messages={messages}
+          pendingMessage={pendingMessage}
+          onRetryMessage={handleRetryMessage}
+          emptyStateMessage={emptyStateMessage}
+          showEmptyState={messages.length === 0 && !pendingMessage}
+        />
         
         {/* Approval Error Message */}
         {approvalError && pendingApprovals.length > 0 && (
@@ -484,32 +417,11 @@ export default function ConversationChat({
 
       {/* Input */}
       <div className="border-t border-gray-200 dark:border-gray-600 p-4 flex-shrink-0">
-        <form onSubmit={handleSendMessage} className="flex space-x-2 items-end">
-          <textarea
-            ref={textareaRef}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              // Submit on Enter (without Shift)
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSendMessage(e)
-              }
-            }}
-            placeholder={placeholder}
-            disabled={loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
-            className={`flex-1 resize-none overflow-y-auto ${standardChatInputClasses}`}
-            rows={1}
-          />
-          <button
-            type="submit"
-            disabled={!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning}
-            aria-label="Send message"
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-          >
-            <PaperAirplaneIcon className="w-4 h-4" />
-          </button>
-        </form>
+        <ConversationInput
+          onSendMessage={handleSendMessage}
+          disabled={isInputDisabled}
+          placeholder={placeholder}
+        />
 
         {pendingApprovals.length > 0 && (
           <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">

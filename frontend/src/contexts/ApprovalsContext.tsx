@@ -159,14 +159,16 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
     dispatch({ type: 'CLEAR_APPROVALS', payload: { key } })
   }, [])
 
-  const getApprovals = useCallback((key: string): PendingApprovalWithContext[] => {
+  // Use direct getter functions instead of useCallback to avoid dependency issues
+  // This prevents context value from changing on every state update
+  const getApprovals = (key: string): PendingApprovalWithContext[] => {
     return state.approvals[key] || []
-  }, [state.approvals])
+  }
 
-  const hasApprovals = useCallback((key: string): boolean => {
+  const hasApprovals = (key: string): boolean => {
     const approvals = state.approvals[key]
     return approvals && approvals.length > 0
-  }, [state.approvals])
+  }
 
   const executeRefreshHandlers = useCallback(async (conversationId: number, toolNames: string[]): Promise<void> => {
     const handlers = refreshHandlers.get(conversationId)
