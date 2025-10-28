@@ -89,15 +89,13 @@ class TestPydanticAIConversationService:
     async def test_send_message_text_response(self, service, monkeypatch):
         """Test sending a message that returns a text response."""
 
-        # Mock agent run to return conversation events
-        async def mock_run(prompt_or_approvals):
-            return [
-                ConversationMessage(
-                    role=MessageRole.AGENT,
-                    text_content="Test response",
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-            ]
+        # Mock agent stream_events to yield conversation events
+        async def mock_stream_events(prompt_or_approvals):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="Test response",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
 
         # Mock get_new_messages to return model messages
         def mock_get_new_messages():
@@ -108,7 +106,7 @@ class TestPydanticAIConversationService:
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.run = mock_run
+        mock_agent_instance.stream_events = mock_stream_events
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
@@ -126,23 +124,21 @@ class TestPydanticAIConversationService:
     async def test_send_message_tool_request(self, service, monkeypatch):
         """Test sending a message that returns tool requests."""
 
-        # Mock agent run to return conversation events including tool call request
-        async def mock_run(prompt_or_approvals):
+        # Mock agent stream_events to yield conversation events including tool call request
+        async def mock_stream_events(prompt_or_approvals):
             timestamp = datetime.datetime.now(datetime.UTC)
-            return [
-                ToolCall(
-                    tool_call_id="tool_123",
-                    tool_name="edit_document",
-                    tool_args={"edits": [{"find": "old", "replace": "new"}]},
-                    timestamp=timestamp,
-                ),
-                ToolCallRequest(
-                    tool_call_id="tool_123",
-                    tool_name="edit_document",
-                    tool_args={"edits": [{"find": "old", "replace": "new"}]},
-                    timestamp=timestamp,
-                ),
-            ]
+            yield ToolCall(
+                tool_call_id="tool_123",
+                tool_name="edit_document",
+                tool_args={"edits": [{"find": "old", "replace": "new"}]},
+                timestamp=timestamp,
+            )
+            yield ToolCallRequest(
+                tool_call_id="tool_123",
+                tool_name="edit_document",
+                tool_args={"edits": [{"find": "old", "replace": "new"}]},
+                timestamp=timestamp,
+            )
 
         # Mock get_new_messages to return model messages
         def mock_get_new_messages():
@@ -161,7 +157,7 @@ class TestPydanticAIConversationService:
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.run = mock_run
+        mock_agent_instance.stream_events = mock_stream_events
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
@@ -193,15 +189,13 @@ class TestPydanticAIConversationService:
         conversation_repo.create_message(conversation.id, tool_call_pydantic_msg)
         db_session.commit()
 
-        # Mock agent run to return a text response after approval
-        async def mock_run(prompt_or_approvals):
-            return [
-                ConversationMessage(
-                    role=MessageRole.AGENT,
-                    text_content="Document updated successfully",
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-            ]
+        # Mock agent stream_events to yield a text response after approval
+        async def mock_stream_events(prompt_or_approvals):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="Document updated successfully",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
 
         # Mock get_new_messages to return model messages
         def mock_get_new_messages():
@@ -211,7 +205,7 @@ class TestPydanticAIConversationService:
 
         # Mock agent instance
         mock_agent_instance = Mock()
-        mock_agent_instance.run = mock_run
+        mock_agent_instance.stream_events = mock_stream_events
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock

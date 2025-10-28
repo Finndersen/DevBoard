@@ -1,6 +1,9 @@
 """Abstract base interface for agent conversation services."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+
+import logfire
 
 from devboard.agents.events import ConversationEvent
 from devboard.agents.roles.base import Role
@@ -44,18 +47,45 @@ class BaseAgentConversationService(ABC):
         self.role = role
         self.conversation_repo = conversation_repository
 
-    @abstractmethod
     async def send_message_or_approval(
         self,
         message_or_approvals: str | ToolApprovals,
     ) -> list[ConversationEvent]:
         """Send a message or process tool approvals through the agent.
 
+        Wraps the streaming method to collect all events into a list.
+
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
 
         Returns:
             List of conversation events generated during agent execution
+        """
+        is_approval = isinstance(message_or_approvals, ToolApprovals)
+
+        with logfire.span(
+            "agent_conversation.send_message_or_approval",
+            conversation_id=self.conversation.id,
+            is_approval=is_approval,
+        ):
+            # Collect all events from the stream
+            events: list[ConversationEvent] = []
+            async for event in self.stream_events_for_message_or_approval(message_or_approvals):
+                events.append(event)
+            return events
+
+    @abstractmethod
+    async def stream_events_for_message_or_approval(
+        self,
+        message_or_approvals: str | ToolApprovals,
+    ) -> AsyncIterator[ConversationEvent]:
+        """Stream conversation events from agent execution.
+
+        Args:
+            message_or_approvals: Either a user message string or ToolApprovals model
+
+        Yields:
+            ConversationEvent instances as they are generated during agent execution
         """
         pass
 

@@ -1,6 +1,7 @@
 """Tests for conversations router."""
 
 import datetime
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -14,7 +15,6 @@ from devboard.agents.roles.project_qa import ProjectQARole
 from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.services import get_agent_conversation_service
 from devboard.api.main import app
-from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository
@@ -159,11 +159,6 @@ class TestConversationsRouter:
         assert events[0]["role"] == "agent"
         assert "I can help you analyze" in events[0]["text_content"]
 
-        # Verify the mock agent was called correctly
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
-        assert args[0] == "Help me analyze my project and answer questions."
-
     def test_send_conversation_message_returns_tool_request(
         self, client_with_mock_agent, test_conversation, mock_agent
     ):
@@ -182,11 +177,12 @@ class TestConversationsRouter:
             timestamp=datetime.datetime.now(datetime.UTC),
         )
 
-        # Override the mock run side_effect to return tool events
-        async def tool_run_side_effect(prompt_or_approvals):
-            return [tool_call_event, tool_call_request_event]
+        # Override the mock stream_events to yield tool events
+        async def tool_stream_events_side_effect(prompt_or_approvals):
+            yield tool_call_event
+            yield tool_call_request_event
 
-        mock_agent.run.side_effect = tool_run_side_effect
+        mock_agent.stream_events = tool_stream_events_side_effect
 
         message_request = {"message": "Please update the document with better content"}
 
@@ -242,12 +238,6 @@ class TestConversationsRouter:
         assert events[0]["event_type"] == "message"
         assert events[0]["role"] == "agent"
         assert "tool approvals" in events[0]["text_content"]
-
-        # Verify the mock agent was called with tool approvals
-        mock_agent.run.assert_called_once()
-        args, kwargs = mock_agent.run.call_args
-        # First arg should be a ToolApprovals object
-        assert isinstance(args[0], ToolApprovals)
 
     def test_approve_conversation_tools_mixed_approvals(
         self, client_with_mock_agent, test_conversation, db_session, mock_agent
@@ -362,3 +352,209 @@ class TestConversationsRouter:
         # Verify session ID was reset
         db_session.refresh(conversation)
         assert conversation.external_session_id is None
+
+    def test_stream_conversation_message(self, client_with_mock_agent, test_conversation, mock_agent):
+        """Test streaming a message to a conversation."""
+        message_request = {"message": "Help me analyze my project and answer questions."}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
+        )
+        assert response.status_code == 200
+
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 1
+        assert events[0]["event_type"] == "message"
+        assert events[0]["role"] == "agent"
+        assert "I can help you analyze" in events[0]["text_content"]
+
+    def test_stream_conversation_message_returns_multiple_events(
+        self, client_with_mock_agent, test_conversation, mock_agent
+    ):
+        """Test streaming a message that yields multiple events."""
+        # Mock the agent to yield multiple events
+        async def multi_event_stream(prompt_or_approvals):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="First part of response",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield ToolCall(
+                tool_call_id="tool_123",
+                tool_name="edit_document",
+                tool_args={"content": "new"},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="Final response after tool call",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_agent.stream_events = multi_event_stream
+
+        message_request = {"message": "Edit the document and respond"}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
+        )
+        assert response.status_code == 200
+
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 3
+        assert events[0]["event_type"] == "message"
+        assert events[0]["text_content"] == "First part of response"
+        assert events[1]["event_type"] == "tool_call"
+        assert events[1]["tool_name"] == "edit_document"
+        assert events[2]["event_type"] == "message"
+        assert events[2]["text_content"] == "Final response after tool call"
+
+    def test_stream_conversation_message_with_tool_request(
+        self, client_with_mock_agent, test_conversation, mock_agent
+    ):
+        """Test streaming a message that triggers a tool request."""
+        # Mock the agent to yield a tool request
+        tool_call_event = ToolCall(
+            tool_call_id="test_call_1",
+            tool_name="edit_document",
+            tool_args={"edits": [{"find": "old", "replace": "new"}]},
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+        tool_call_request_event = ToolCallRequest(
+            tool_call_id="test_call_1",
+            tool_name="edit_document",
+            tool_args={"edits": [{"find": "old", "replace": "new"}]},
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        async def tool_stream_events(prompt_or_approvals):
+            yield tool_call_event
+            yield tool_call_request_event
+
+        mock_agent.stream_events = tool_stream_events
+
+        message_request = {"message": "Please update the document"}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
+        )
+        assert response.status_code == 200
+
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 2
+        assert events[0]["event_type"] == "tool_call"
+        assert events[0]["tool_name"] == "edit_document"
+        assert events[0]["tool_call_id"] == "test_call_1"
+        assert events[1]["event_type"] == "tool_call_request"
+        assert events[1]["tool_name"] == "edit_document"
+        assert events[1]["tool_call_id"] == "test_call_1"
+
+    def test_stream_approve_conversation_tools(self, client_with_mock_agent, test_conversation, db_session, mock_agent):
+        """Test streaming approval of tool calls in a conversation."""
+        conversation_repo = ConversationRepository(db_session)
+
+        # Setup: Add existing messages including a tool call message
+        user_msg = ModelRequest(parts=[UserPromptPart(content="Edit this document")])
+        tool_call_msg = ModelResponse(
+            parts=[ToolCallPart(tool_name="edit_document", tool_call_id="test_call_1", args={})]
+        )
+
+        conversation_repo.create_message(test_conversation.id, user_msg)
+        conversation_repo.create_message(test_conversation.id, tool_call_msg)
+        db_session.commit()
+
+        # Mock the agent to stream approval result
+        async def approval_stream_events(prompt_or_approvals):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="Great! I've processed your tool approvals and made the requested edits.",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_agent.stream_events = approval_stream_events
+
+        approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/approve-tools/stream", json=approval_request
+        )
+        assert response.status_code == 200
+
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 1
+        assert events[0]["event_type"] == "message"
+        assert events[0]["role"] == "agent"
+        assert "tool approvals" in events[0]["text_content"]
+
+    def test_stream_approve_conversation_tools_multiple_events(
+        self, client_with_mock_agent, test_conversation, db_session, mock_agent
+    ):
+        """Test streaming approvals that generate multiple events."""
+        conversation_repo = ConversationRepository(db_session)
+
+        # Setup: Add existing messages with multiple tool calls
+        user_msg = ModelRequest(parts=[UserPromptPart(content="Make several edits")])
+        tool_call_msg = ModelResponse(
+            parts=[
+                ToolCallPart(tool_name="edit_document", tool_call_id="call_1", args={}),
+                ToolCallPart(tool_name="delete_file", tool_call_id="call_2", args={}),
+            ]
+        )
+
+        conversation_repo.create_message(test_conversation.id, user_msg)
+        conversation_repo.create_message(test_conversation.id, tool_call_msg)
+        db_session.commit()
+
+        # Mock the agent to stream multiple events during approval
+        async def approval_multi_event_stream(prompt_or_approvals):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="Processing your approvals...",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield ToolCall(
+                tool_call_id="new_call_1",
+                tool_name="validate_changes",
+                tool_args={},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="I've completed the requested changes and validated them.",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_agent.stream_events = approval_multi_event_stream
+
+        approval_request = {
+            "approvals": {
+                "call_1": {"approved": True},
+                "call_2": {"approved": False, "feedback": "Don't delete this file"},
+            }
+        }
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/approve-tools/stream", json=approval_request
+        )
+        assert response.status_code == 200
+
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 3
+        assert events[0]["event_type"] == "message"
+        assert "Processing" in events[0]["text_content"]
+        assert events[1]["event_type"] == "tool_call"
+        assert events[1]["tool_name"] == "validate_changes"
+        assert events[2]["event_type"] == "message"
+        assert "completed" in events[2]["text_content"]

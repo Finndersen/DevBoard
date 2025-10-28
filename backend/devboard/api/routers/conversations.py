@@ -1,6 +1,9 @@
 """Unified conversation API router."""
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
@@ -80,6 +83,27 @@ async def send_conversation_message(
     return await conversation_service.send_message_or_approval(message_or_approvals=request.message)
 
 
+@router.post("/{conversation_id}/messages/stream")
+async def stream_conversation_message(
+    request: ChatRequest,
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+) -> StreamingResponse:
+    """Stream conversation events as they are generated.
+
+    Uses the appropriate agent engine (PydanticAI or Claude Code) based on
+    the conversation's configuration.
+
+    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
+    Each line is a JSON-serialized ConversationEvent.
+    """
+
+    async def event_generator():
+        async for event in conversation_service.stream_events_for_message_or_approval(request.message):
+            yield json.dumps(event.model_dump(mode="json")) + "\n"
+
+    return StreamingResponse(event_generator(), media_type="text/plain")
+
+
 @router.post("/{conversation_id}/approve-tools", response_model=list[ConversationEvent])
 async def approve_conversation_tools(
     request: ToolApprovals,
@@ -94,6 +118,27 @@ async def approve_conversation_tools(
     tool calls, tool results, and the final response message.
     """
     return await conversation_service.send_message_or_approval(message_or_approvals=request)
+
+
+@router.post("/{conversation_id}/approve-tools/stream")
+async def stream_approve_conversation_tools(
+    request: ToolApprovals,
+    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+) -> StreamingResponse:
+    """Stream tool approval events as they are generated.
+
+    Processes tool approval decisions and continues agent execution
+    with the appropriate engine (PydanticAI or Claude Code).
+
+    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
+    Each line is a JSON-serialized ConversationEvent.
+    """
+
+    async def event_generator():
+        async for event in conversation_service.stream_events_for_message_or_approval(request):
+            yield json.dumps(event.model_dump(mode="json")) + "\n"
+
+    return StreamingResponse(event_generator(), media_type="text/plain")
 
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)

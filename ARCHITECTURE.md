@@ -367,7 +367,7 @@ npm run type-check      # TypeScript compilation check
 ### Frontend
 -   **UI Component Library (`frontend/src/components/ui`)**: Standardized, reusable UI components with consistent theming, variants, and error handling. Includes Button, Card, Input, Modal, StatusBadge, and form components.
 -   **Layout Components (`frontend/src/components/layout`)**: Application shell and navigation components including AppShell, TabBar, Tab (with activity indicators), TopBar, NavigationMenu, and Layout wrapper.
--   **Chat Components (`frontend/src/components/chat`)**: Event-based agent conversation system rendering `list[ConversationEvent]` timelines. Includes AgentChat wrapper, ConversationChat core implementation with event type discrimination, message display components (ConversationMessage, PendingMessage), ToolCallDisplay for expandable tool panels with arguments/results, and AgentReasoning display. Uses TypeScript type guards for type-safe event rendering.
+-   **Chat Components (`frontend/src/components/chat`)**: Event-based agent conversation system with real-time streaming support. ConversationChat core component consumes streaming events via async generators, processing each event immediately for incremental UI updates. Renders `ConversationEvent` timelines with event type discrimination. Includes AgentChat wrapper, message display components (ConversationMessage, PendingMessage), ToolCallDisplay for expandable tool panels with arguments/results, and AgentReasoning display. Uses TypeScript type guards for type-safe event rendering. Refactored streaming logic eliminates code duplication and handles tool approval requests inline.
 -   **Approval System (`frontend/src/components/approvals`)**: Hierarchical tool approval architecture with generic approval UI (`approvals/common/`) for PendingApprovalsList and ApprovalActions, and document-specific handling (`approvals/documents/`) for DocumentEditApproval and DocumentApprovalModal.
 -   **Document Components (`frontend/src/components/documents`)**: Document viewing and editing with DocumentEditViewer (diff viewer with cards/unified modes), DocumentContentViewer, DocumentDiffModal, and InlineChangeHighlighter.
 -   **Configuration Components (`frontend/src/components/configuration`)**: Settings UI with ConfigurationForm, ConfigurationField, list views, and AgentModelSelector for agent configuration management.
@@ -375,7 +375,8 @@ npm run type-check      # TypeScript compilation check
 -   **Custom Hooks (`frontend/src/hooks`)**: Type-safe data fetching hooks that encapsulate API calls with loading states, error handling, and refetch capabilities. Includes generic `useApi` and domain-specific hooks like `useProjects`, `useTasks`.
 -   **Design System (`frontend/src/styles`)**: Centralized design tokens including color palette, typography scales, layout utilities, and standardized input styling for consistent theming across all components.
 -   **Views (`frontend/src/views`)**: Top-level components representing distinct pages (Home unified dashboard, ProjectDetail, TaskDetail, Settings). Refactored to use standardized UI components and custom hooks for consistent UX.
--   **API Client (`frontend/src/lib/api.ts`)**: Typed HTTP client with comprehensive TypeScript interfaces, abstracting API calls from UI components with proper error handling and response typing.
+-   **API Client (`frontend/src/lib/api.ts`)**: Typed HTTP client with comprehensive TypeScript interfaces, abstracting API calls from UI components with proper error handling and response typing. Includes both synchronous methods returning complete responses and async generator methods for streaming events.
+-   **Stream Parser (`frontend/src/lib/streaming.ts`)**: NDJSON parsing utility for consuming streaming responses. Handles ReadableStream chunking, line buffering, and JSON deserialization into typed ConversationEvent objects.
 
 ## API Endpoints
 
@@ -448,8 +449,10 @@ The backend exposes a RESTful API with the following main endpoint categories:
 **Unified conversation endpoints for all entity types (projects, tasks, codebases)**
 
 -   `GET /api/conversations/{conversation_id}/messages`: Retrieve conversation event history as chronological list.
--   `POST /api/conversations/{conversation_id}/messages`: Send a message to the agent, returns list of new events generated.
--   `POST /api/conversations/{conversation_id}/approve-tools`: Approve or deny tool execution requests, returns list of result events.
+-   `POST /api/conversations/{conversation_id}/messages`: Send a message to the agent, returns complete list of new events after execution.
+-   `POST /api/conversations/{conversation_id}/messages/stream`: Send a message and stream events as NDJSON as they're generated.
+-   `POST /api/conversations/{conversation_id}/approve-tools`: Approve or deny tool execution requests, returns complete list of result events.
+-   `POST /api/conversations/{conversation_id}/approve-tools/stream`: Approve tools and stream response events as NDJSON.
 -   `DELETE /api/conversations/{conversation_id}/messages`: Clear all messages in a conversation.
 
 **Request/Response Schemas (Pydantic)**:
@@ -464,6 +467,9 @@ The backend exposes a RESTful API with the following main endpoint categories:
 
 **Event-Based Response Pattern**:
 All conversation mutation endpoints (`POST /messages`, `POST /approve-tools`) return `list[ConversationEvent]` containing all new events generated during agent execution. This includes the agent's text response plus any tool calls, tool results, or approval requests created during processing. Frontend receives complete event timeline enabling immediate display of all agent activity without additional API calls.
+
+**Streaming Response Pattern** (New):
+Streaming endpoints (`POST /messages/stream`, `POST /approve-tools/stream`) use FastAPI's `StreamingResponse` to deliver events incrementally as they're generated. Events are serialized as newline-delimited JSON (NDJSON), with each line containing a complete `ConversationEvent` JSON object followed by a newline character. This enables real-time UI updates as the agent processes requests, providing immediate feedback without waiting for completion. Frontend uses `ReadableStreamDefaultReader` pattern to consume the stream and parse NDJSON incrementally.
 
 ### Other Routers
 -   `/api/settings`: For managing application settings (specific endpoints not detailed here).
@@ -787,11 +793,19 @@ Specialized conversation service for Claude Code agents:
 
 #### Agent Conversation Service Implementation
 
-**AgentConversationService (`devboard/services/agent_conversation.py`)**:
-Central orchestration service managing agent conversations with persistence and tool approval workflows. Constructor takes `conversation_id` as first parameter, eliminating need to pass it to each method call. Key methods include `send_message(message)` for user prompts (returns `list[ConversationEvent]`), `process_tool_approvals(approvals)` for deferred tool execution (returns `list[ConversationEvent]`), `store_new_messages(messages)` for persistence, and `clear_messages()` for conversation history deletion. Handles message processing with context assembly, tool call management with user approval workflows, and conversation persistence across sessions. Automatically detects and cleans up pending tool calls when user sends new message instead of approving tools. Integrates with unified `ConversationRepository` and PydanticAI framework for structured agent interactions.
+**BaseAgentConversationService (`devboard/agents/base_agent_conversation.py`)**:
+Abstract base class defining unified conversation interface for all agent engines. Provides two execution modes:
+- **Synchronous**: `send_message_or_approval(message_or_approvals)` returns complete `list[ConversationEvent]` after execution
+- **Streaming**: `stream_events_for_message_or_approval(message_or_approvals)` yields `AsyncIterator[ConversationEvent]` as events are generated
+
+Concrete implementations:
+- **PydanticAIConversationService**: Delegates to `InternalAgent`, streams events via `agent.stream_events()`, persists messages after completion
+- **ClaudeCodeConversationService**: Delegates to `ClaudeCodeAgent`, streams events from Claude Code CLI, updates session ID after execution
+
+Both implementations share common patterns: validate conversation state, create agent instance with history, stream/execute agent, persist results. Streaming enables real-time UI updates without waiting for agent completion.
 
 **Event-Based Response Architecture**:
-Agent methods return `list[ConversationEvent]` directly, providing complete conversation timeline. Event parsing moved into agent implementations (`_parse_claude_result()` for ClaudeCodeAgent, InternalAgent uses PydanticAI messages directly). Conversation services now act as thin orchestration layer, passing events through to API without additional transformation. This architecture enables transparent agent operation visibility and real-time progress tracking with consistent event types across all engines.
+Agent methods return `list[ConversationEvent]` or `AsyncIterator[ConversationEvent]`, providing complete conversation timeline. Event parsing moved into agent implementations (`_parse_claude_result()` for ClaudeCodeAgent, InternalAgent uses PydanticAI messages directly). Conversation services now act as thin orchestration layer, passing events through to API without additional transformation. This architecture enables transparent agent operation visibility and real-time progress tracking with consistent event types across all engines.
 
 #### Conversation Event System
 

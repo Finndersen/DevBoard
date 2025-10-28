@@ -9,6 +9,14 @@ import ConversationChat from '../chat/ConversationChat'
 describe('ConversationChat', () => {
   const mockConversationId = 1
 
+  // Helper to create NDJSON streaming response
+  const createStreamingResponse = (events: any[]) => {
+    const ndjson = events.map(e => JSON.stringify(e)).join('\n') + '\n'
+    return new HttpResponse(ndjson, {
+      headers: { 'Content-Type': 'text/plain' }
+    })
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     
@@ -81,11 +89,11 @@ describe('ConversationChat', () => {
 
   it('sends new message when form is submitted', async () => {
     const user = userEvent.setup()
-    
+
     server.use(
-      http.post('*/api/conversations/1/messages', async ({ request }) => {
+      http.post('*/api/conversations/1/messages/stream', async ({ request }) => {
         const { message } = await request.json() as { message: string }
-        return HttpResponse.json([
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: `AI response to: ${message}`,
@@ -127,8 +135,8 @@ describe('ConversationChat', () => {
     const user = userEvent.setup()
 
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: 'AI response',
@@ -159,9 +167,9 @@ describe('ConversationChat', () => {
     const user = userEvent.setup()
 
     server.use(
-      http.post('*/api/conversations/1/messages', async ({ request }) => {
+      http.post('*/api/conversations/1/messages/stream', async ({ request }) => {
         const { message } = await request.json() as { message: string }
-        return HttpResponse.json([
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: `Got: ${message}`,
@@ -225,9 +233,9 @@ describe('ConversationChat', () => {
 
     // Delay the API response to test loading state
     server.use(
-      http.post('*/api/conversations/1/messages', async () => {
+      http.post('*/api/conversations/1/messages/stream', async () => {
         await new Promise(resolve => setTimeout(resolve, 200))
-        return HttpResponse.json([
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: 'AI response',
@@ -288,7 +296,7 @@ describe('ConversationChat', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
+      http.post('*/api/conversations/1/messages/stream', () => {
         return new HttpResponse(null, { status: 500 })
       })
     )
@@ -357,8 +365,8 @@ describe('ConversationChat', () => {
     })
 
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: 'AI response',
@@ -433,8 +441,8 @@ describe('ConversationChat', () => {
 
     // Mock agent requesting tool approval
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'tool_call_request',
             tool_call_id: 'edit_123',
@@ -450,8 +458,8 @@ describe('ConversationChat', () => {
       }),
 
       // Mock approval endpoint
-      http.post('*/api/conversations/1/approve-tools', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/approve-tools/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: 'Successfully updated the project specification.',
@@ -503,8 +511,8 @@ describe('ConversationChat', () => {
     const user = userEvent.setup()
 
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'tool_call_request',
             tool_call_id: 'edit_123',
@@ -584,12 +592,12 @@ describe('ConversationChat', () => {
 
     let callCount = 0
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
+      http.post('*/api/conversations/1/messages/stream', () => {
         callCount++
         // Ensure unique timestamps by adding call count to milliseconds
         const now = new Date()
         now.setMilliseconds(now.getMilliseconds() + callCount)
-        return HttpResponse.json([
+        return createStreamingResponse([
           {
             event_type: 'message',
             text_content: 'AI response',
@@ -648,8 +656,8 @@ describe('ConversationChat', () => {
 
     // Mock agent requesting tool approval
     server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
           {
             event_type: 'tool_call_request',
             tool_call_id: 'edit_123',
@@ -701,5 +709,148 @@ describe('ConversationChat', () => {
     // Note: In the actual implementation, AgentChat calls clearApprovals
     // We're testing that the external handler is called correctly
     expect(mockOnClearHistory).toHaveBeenCalled()
+  })
+
+  it('converts pending message to confirmed message on first streamed event', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'message',
+            text_content: 'AI response after first event',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ])
+      })
+    )
+
+    render(<ConversationChat conversationId={mockConversationId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    await user.type(input, 'Test message conversion')
+    await user.click(sendButton)
+
+    // Wait for the response and verify no duplicate pending messages
+    await waitFor(() => {
+      expect(screen.getByText('AI response after first event')).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    // Verify the user message appears exactly once (as confirmed message, not pending)
+    const userMessages = screen.getAllByText('Test message conversion')
+    expect(userMessages).toHaveLength(1)
+  })
+
+  it('does not show duplicate user message during streaming', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'message',
+            text_content: 'Streaming response part 1',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          {
+            event_type: 'message',
+            text_content: 'Streaming response part 2',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ])
+      })
+    )
+
+    render(<ConversationChat conversationId={mockConversationId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    const messageText = 'User query for streaming test'
+    await user.type(input, messageText)
+    await user.click(sendButton)
+
+    // Wait for all responses to appear
+    await waitFor(() => {
+      expect(screen.getByText('Streaming response part 2')).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    // Verify user message appears only once
+    const userMessages = screen.queryAllByText(messageText)
+    expect(userMessages).toHaveLength(1)
+  })
+
+  it('handles tool approval with pending message conversion', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'tool_call_request',
+            tool_call_id: 'test_tool_1',
+            tool_name: 'edit_document',
+            tool_args: { content: 'new' }
+          }
+        ])
+      }),
+      http.post('*/api/conversations/1/approve-tools/stream', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'message',
+            text_content: 'Tool execution complete',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ])
+      })
+    )
+
+    render(<ConversationChat conversationId={mockConversationId} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    await user.type(input, 'Please edit the document')
+    await user.click(sendButton)
+
+    // Wait for tool approval to appear
+    await waitFor(() => {
+      expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
+    })
+
+    // Click approve button
+    const approveButton = screen.getByRole('button', { name: /approve/i })
+    await user.click(approveButton)
+
+    // Wait for approval response
+    await waitFor(() => {
+      expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    // Verify the input is enabled again (pending message has been cleared)
+    const finalInput = screen.getByPlaceholderText(/ask a question/i)
+    expect(finalInput).not.toBeDisabled()
+
+    // Verify the tool execution message is displayed
+    expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
   })
 })

@@ -150,7 +150,7 @@ export default function TaskDetail() {
     // Set appropriate message based on the new state
     const messages: Record<string, string> = {
       'planning': 'Generating Implementation Plan...',
-      'implementing': 'Preparing Implementation Environment...',
+      'implementing': 'Executing Implementation Plan...',
     }
     const message = messages[newState.toLowerCase()] || 'Processing...'
 

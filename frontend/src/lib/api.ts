@@ -1,3 +1,5 @@
+import { StreamParser } from './streaming'
+
 export interface Project {
   id: number
   name: string
@@ -337,11 +339,39 @@ export class ApiClient {
     })
   }
 
+  async *streamConversationMessage(
+    conversationId: number | string,
+    request: UserPrompt,
+  ): AsyncGenerator<ConversationEvent> {
+    yield* StreamParser.parseStream(
+      `${this.baseURL}/api/conversations/${conversationId}/messages/stream`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      },
+    )
+  }
+
   async approveConversationTools(conversationId: number | string, request: ToolApprovalRequest): Promise<ConversationEvent[]> {
     return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
+  }
+
+  async *streamApproveConversationTools(
+    conversationId: number | string,
+    request: ToolApprovalRequest,
+  ): AsyncGenerator<ConversationEvent> {
+    yield* StreamParser.parseStream(
+      `${this.baseURL}/api/conversations/${conversationId}/approve-tools/stream`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      },
+    )
   }
 
   async clearConversationMessages(conversationId: number | string): Promise<{ message: string; success: boolean }> {

@@ -19,7 +19,9 @@
 - Do not clear conversation between Specification and Planning if same agent engine
 - Add framework for "actions" - prompt templates with optional extra user message, some special cases with associated backend behaviour, can also have model overrides
 - CLAUDE.md prompt management and continuous feedback (https://www.reddit.com/r/ClaudeAI/comments/1laby6h/i_discovered_a_powerful_way_to_continuously/)
-
+- Try get & set Claude sessionID before getting final response (in case there is error)
+- Remove non-streaming agent chat implementations
+- Handle ClaudeCode compaction
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

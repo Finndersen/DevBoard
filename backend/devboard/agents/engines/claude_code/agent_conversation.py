@@ -1,5 +1,7 @@
 """Claude Code agent conversation service with virtual tool calling."""
 
+from collections.abc import AsyncIterator
+
 import logfire
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
@@ -61,22 +63,22 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
 
-    async def send_message_or_approval(
+    async def stream_events_for_message_or_approval(
         self,
         message_or_approvals: str | ToolApprovals,
-    ) -> list[ConversationEvent]:
-        """Send a message or process tool approvals through the agent.
+    ) -> AsyncIterator[ConversationEvent]:
+        """Stream conversation events from agent execution.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
 
-        Returns:
-            List of conversation events generated during agent execution
+        Yields:
+            ConversationEvent instances as they are generated during agent execution
         """
         is_approval = isinstance(message_or_approvals, ToolApprovals)
 
         with logfire.span(
-            "claude_code_conversation.send_message_or_approval",
+            "claude_code_conversation.stream_events_for_message_or_approval",
             conversation_id=self.conversation.id,
             is_approval=is_approval,
         ):
@@ -95,14 +97,13 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                 codebase_path=self.codebase_path,
             )
 
-            # Execute agent
-            events = await agent.run(message_or_approvals)
+            # Stream events from agent execution
+            async for event in agent.stream_events(message_or_approvals):
+                yield event
 
             # Update session_id if changed
             if agent.session_id != self.conversation.external_session_id:
                 self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
-
-            return events
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all events for the Claude Code conversation.

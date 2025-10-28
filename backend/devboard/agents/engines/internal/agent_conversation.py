@@ -1,5 +1,7 @@
 """PydanticAI agent conversation service with deferred tools support."""
 
+from collections.abc import AsyncIterator
+
 import logfire
 from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
 
@@ -49,26 +51,53 @@ class PydanticAIConversationService(BaseAgentConversationService):
         """Get the conversation ID from the conversation instance."""
         return self.conversation.id
 
-    async def send_message_or_approval(
+    async def stream_events_for_message_or_approval(
         self,
         message_or_approvals: str | ToolApprovals,
-    ) -> list[ConversationEvent]:
-        """Send a message or process tool approvals through the agent.
+    ) -> AsyncIterator[ConversationEvent]:
+        """Stream conversation events from agent execution.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
 
-        Returns:
-            List of conversation events generated during agent execution
+        Yields:
+            ConversationEvent instances as they are generated during agent execution
         """
         is_approval = isinstance(message_or_approvals, ToolApprovals)
 
         with logfire.span(
-            "agent_conversation.send_message_or_approval",
+            "agent_conversation.stream_events_for_message_or_approval",
             conversation_id=self.conversation.id,
             is_approval=is_approval,
         ):
-            return await self._handle_message_or_approval(message_or_approvals=message_or_approvals)
+            # Load conversation history
+            existing_messages = self._get_message_history()
+            # Verify integrity of message history
+            if isinstance(message_or_approvals, ToolApprovals):
+                if not existing_messages:
+                    raise ValueError("No existing messages found for processing tool approvals.")
+                if existing_messages[-1].message_type != MessageType.TOOL_CALL:
+                    raise ValueError("Last message is not a tool call; cannot process approvals.")
+            else:
+                if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
+                    # If there was an issue processing tool approvals or they were never provided,
+                    # need to clear the message history until previous message
+                    delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation.id)
+                    existing_messages = existing_messages[:-delete_count]
+                    logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
+
+            message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
+
+            # Create agent with history and deps
+            agent = self._get_agent(conversation_history=message_history)
+
+            # Stream events from agent execution
+            async for event in agent.stream_events(message_or_approvals):
+                yield event
+
+            # Persist new messages after streaming completes
+            new_messages = agent.get_new_messages()
+            self._store_new_messages(new_messages=new_messages)
 
     def _get_agent(self, conversation_history: list[ModelMessage]) -> InternalAgent:
         """Create and return an agent instance.
@@ -87,42 +116,6 @@ class PydanticAIConversationService(BaseAgentConversationService):
             model=model,
             conversation_history=conversation_history,
         )
-
-    async def _handle_message_or_approval(self, message_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
-        """
-        Handle either a new user message or tool approval result.
-        :param message_or_approvals: User message/prompt or tool approval model
-        :return: List of conversation events
-        """
-        # Load conversation history
-        existing_messages = self._get_message_history()
-        # Verify integrity of message history
-        if isinstance(message_or_approvals, ToolApprovals):
-            if not existing_messages:
-                raise ValueError("No existing messages found for processing tool approvals.")
-            if existing_messages[-1].message_type != MessageType.TOOL_CALL:
-                raise ValueError("Last message is not a tool call; cannot process approvals.")
-        else:
-            if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
-                # If there was an issue processing tool approvals or they were never provided,
-                # need to clear the message history until previous message
-                delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation.id)
-                existing_messages = existing_messages[:-delete_count]
-                logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
-
-        message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
-
-        # Create agent with history and deps
-        agent = self._get_agent(conversation_history=message_history)
-
-        # Execute agent
-        events = await agent.run(message_or_approvals)
-
-        # Persist new messages
-        new_messages = agent.get_new_messages()
-        self._store_new_messages(new_messages=new_messages)
-
-        return events
 
     def _get_message_history(self) -> list[DbConversationMessage]:
         return self.conversation_repo.get_messages(self.conversation.id)

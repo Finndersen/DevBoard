@@ -200,6 +200,14 @@ def mock_agent():
 
     mock_agent.run.side_effect = run_side_effect
 
+    # Mock stream_events to yield the same events
+    async def stream_events_side_effect(prompt_or_approvals):
+        events = mock_message_events if isinstance(prompt_or_approvals, str) else mock_tool_approval_events
+        for event in events:
+            yield event
+
+    mock_agent.stream_events = stream_events_side_effect
+
     # Also need to support get_new_messages for compatibility with old tests
     mock_message_result = Mock(spec=AgentRunResult)
     mock_message_result.output = "I can help you analyze your project and answer questions about your codebase, GitHub repositories, and Jira issues."

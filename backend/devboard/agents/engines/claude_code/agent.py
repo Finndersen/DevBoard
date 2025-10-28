@@ -4,7 +4,16 @@ import datetime
 from collections.abc import AsyncIterator, Generator
 
 import logfire
-from claude_agent_sdk import AssistantMessage, Message, ResultMessage, ToolResultBlock, ToolUseBlock, UserMessage
+from claude_agent_sdk import (
+    AssistantMessage,
+    Message,
+    ResultMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from pydantic import ValidationError
 from pydantic_ai import ModelRetry, Tool
 
@@ -205,6 +214,18 @@ class ClaudeCodeAgent(BaseAgent):
                         tool_call_id=content_block.id,
                         tool_name=content_block.name,
                         tool_args=content_block.input,
+                        timestamp=timestamp,
+                    )
+                elif isinstance(content_block, TextBlock):
+                    yield ConversationMessage(
+                        role=MessageRole.AGENT,
+                        text_content=content_block.text,
+                        timestamp=timestamp,
+                    )
+                elif isinstance(content_block, ThinkingBlock):
+                    yield ConversationMessage(
+                        role=MessageRole.AGENT,
+                        text_content="Thinking: " + content_block.thinking,
                         timestamp=timestamp,
                     )
         # Extract tool results from UserMessage if present

@@ -161,6 +161,72 @@ export default function ConversationChat({
     }
   }, [pendingMessages])
 
+  /**
+   * Core logic for processing streamed conversation events.
+   * Handles both regular messages and tool approval requests.
+   */
+  const processStreamedMessage = async (
+    messageText: string,
+    messageTimestamp: string,
+    pendingMessageId: string
+  ) => {
+    setLoading(true)
+
+    try {
+      updateMessageStatus(pendingKey, pendingMessageId, 'sent')
+
+      // Track whether we've received the first successful event
+      let firstEventReceived = false
+
+      // Stream and process events as they arrive
+      const toolRequests: ToolCallRequest[] = []
+      for await (const event of apiClient.streamConversationMessage(conversationId, {
+        message: messageText
+      })) {
+        // Add user message only after first successful event
+        if (!firstEventReceived) {
+          firstEventReceived = true
+          const userMessage: ConversationEvent = {
+            event_type: 'message',
+            role: 'user',
+            text_content: messageText,
+            timestamp: messageTimestamp
+          }
+          setMessages(prev => [...prev, userMessage])
+        }
+
+        // Handle tool approval requests separately
+        if (event.event_type === 'tool_call_request') {
+          toolRequests.push(event as ToolCallRequest)
+        } else {
+          // Add all other events to messages immediately for real-time display
+          setMessages(prev => [...prev, event])
+        }
+      }
+
+      // Handle tool approval requests if any
+      if (toolRequests.length > 0) {
+        updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
+        const approvals = await convertToolRequestsToApprovals(toolRequests)
+        setApprovals(approvalKey, approvals)
+      } else {
+        // Success: remove from pending after all events processed
+        removedPendingIdsRef.current.add(pendingMessageId)
+        removeMessage(pendingKey, pendingMessageId)
+
+        flushSync(() => {
+          setRenderCount(prev => prev + 1)
+        })
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() || loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
@@ -179,110 +245,15 @@ export default function ConversationChat({
       text_content: messageText
     })
 
-    setLoading(true)
-
-    try {
-      // Update status to 'sent' when making API call
-      updateMessageStatus(pendingKey, pendingMessageId, 'sent')
-
-      const events = await apiClient.sendConversationMessage(conversationId, {
-        message: messageText
-      })
-
-      // Check if we have any tool_call_request events (need approval)
-      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
-
-      if (toolRequests.length > 0) {
-        // Tool request: update status to awaiting_approval, DON'T remove from pending
-        updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
-        const approvals = await convertToolRequestsToApprovals(toolRequests)
-        setApprovals(approvalKey, approvals)
-      } else {
-        // Success: remove from pending FIRST, then add both user and agent messages to history
-        // Mark as removed locally for immediate UI update (synchronous ref update)
-        removedPendingIdsRef.current.add(pendingMessageId)
-        removeMessage(pendingKey, pendingMessageId)
-
-        // Use flushSync to force synchronous state updates and immediate re-render
-        flushSync(() => {
-          setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
-        })
-
-        // Now add the confirmed messages after pending is hidden
-        const userMessage: ConversationEvent = {
-          event_type: 'message',
-          role: 'user',
-          text_content: messageText,
-          timestamp: new Date().toISOString()
-        }
-        setMessages(prev => [...prev, userMessage, ...events])
-      }
-    } catch (error) {
-      console.error('Failed to send message:', error)
-      // Update pending message status to failed
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
-      updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
-    } finally {
-      setLoading(false)
-    }
+    await processStreamedMessage(messageText, new Date().toISOString(), pendingMessageId)
   }
 
   const handleRetryMessage = (messageId: string) => {
-    const pendingMessage = pendingMessages.find(msg => msg.id === messageId)
-    if (!pendingMessage) return
+    const pendingMsg = pendingMessages.find(msg => msg.id === messageId)
+    if (!pendingMsg) return
 
-    // Retry the message
     retryMessage(pendingKey, messageId)
-    
-    // Resend using the same flow as regular send
-    resendPendingMessage(pendingMessage)
-  }
-
-  const resendPendingMessage = async (pendingMessage: PendingMessage) => {
-    setLoading(true)
-
-    try {
-      updateMessageStatus(pendingKey, pendingMessage.id, 'sent')
-
-      const events = await apiClient.sendConversationMessage(conversationId, {
-        message: pendingMessage.text_content
-      })
-
-      // Check if we have any tool_call_request events (need approval)
-      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
-
-      if (toolRequests.length > 0) {
-        // Tool request: update status, DON'T remove
-        updateMessageStatus(pendingKey, pendingMessage.id, 'awaiting_approval')
-        const approvals = await convertToolRequestsToApprovals(toolRequests)
-        setApprovals(approvalKey, approvals)
-      } else {
-        // Success: remove from pending FIRST, then add both user and agent messages
-        // Mark as removed locally for immediate UI update (synchronous ref update)
-        removedPendingIdsRef.current.add(pendingMessage.id)
-        removeMessage(pendingKey, pendingMessage.id)
-
-        // Use flushSync to force synchronous state updates and immediate re-render
-        flushSync(() => {
-          setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
-        })
-
-        // Now add the confirmed messages after pending is hidden
-        const userMessage: ConversationEvent = {
-          event_type: 'message',
-          role: 'user',
-          text_content: pendingMessage.text_content,
-          timestamp: pendingMessage.timestamp
-        }
-        setMessages(prev => [...prev, userMessage, ...events])
-      }
-    } catch (error) {
-      console.error('Failed to retry message:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
-      updateMessageStatus(pendingKey, pendingMessage.id, 'failed', errorMessage)
-    } finally {
-      setLoading(false)
-    }
+    processStreamedMessage(pendingMsg.text_content, pendingMsg.timestamp, pendingMsg.id)
   }
 
   const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApprovalWithContext[]> => {
@@ -314,9 +285,9 @@ export default function ConversationChat({
     if (pendingApprovals.length === 0) return
 
     setLoading(true)
-    setApprovalError(null) // Clear any previous errors
+    setApprovalError(null)
 
-    // Extract tool names from pending approvals before clearing them (for refresh handlers)
+    // Extract approved tool names for refresh handlers
     const approvedToolNames: string[] = []
     Object.keys(approvalRequest.approvals).forEach(toolCallId => {
       const decision = approvalRequest.approvals[toolCallId]
@@ -329,56 +300,57 @@ export default function ConversationChat({
     })
 
     try {
-      const events = await apiClient.approveConversationTools(conversationId, approvalRequest)
+      // Track whether we've received the first successful event
+      let firstEventReceived = false
 
-      // Clear pending approvals after successful response
-      clearApprovals(approvalKey)
-
-      // Execute refresh handlers for approved tools after successful backend response
-      if (approvedToolNames.length > 0) {
-        console.log('ConversationChat: Executing refresh handlers for approved tools:', approvedToolNames)
-        await executeRefreshHandlers(conversationId, approvedToolNames)
-      }
-
-      // Check if we have any tool_call_request events (agent wants to use more tools)
-      const toolRequests = events.filter(e => e.event_type === 'tool_call_request') as ToolCallRequest[]
-
-      if (toolRequests.length > 0) {
-        // Agent wants to use more tools
-        const newApprovals = await convertToolRequestsToApprovals(toolRequests)
-        setApprovals(approvalKey, newApprovals)
-      } else {
-        // Agent provided response after tool execution
-        // If there's a pending message, remove it FIRST and add user message
-        // (The pending message is the original user message that triggered the tool request)
-        if (pendingMessage) {
-          // Mark as removed locally for immediate UI update (synchronous ref update)
-          removedPendingIdsRef.current.add(pendingMessage.id)
-          removeMessage(pendingKey, pendingMessage.id)
-
-          // Use flushSync to force synchronous state updates and immediate re-render
-          flushSync(() => {
-            setRenderCount(prev => prev + 1) // Force re-render to reflect removal immediately
-          })
-
-          // Now add the confirmed messages after pending is hidden
+      // Stream and process events as they arrive
+      const toolRequests: ToolCallRequest[] = []
+      for await (const event of apiClient.streamApproveConversationTools(conversationId, approvalRequest)) {
+        // Add user message only after first successful event (if pending message exists)
+        if (!firstEventReceived && pendingMessage) {
+          firstEventReceived = true
           const userMessage: ConversationEvent = {
             event_type: 'message',
             role: 'user',
             text_content: pendingMessage.text_content,
             timestamp: pendingMessage.timestamp
           }
-          setMessages(prev => [...prev, userMessage, ...events])
-        } else {
-          setMessages(prev => [...prev, ...events])
+          setMessages(prev => [...prev, userMessage])
         }
+
+        if (event.event_type === 'tool_call_request') {
+          toolRequests.push(event as ToolCallRequest)
+        } else {
+          setMessages(prev => [...prev, event])
+        }
+      }
+
+      // Clear pending approvals after successful response
+      clearApprovals(approvalKey)
+
+      // Execute refresh handlers for approved tools
+      if (approvedToolNames.length > 0) {
+        console.log('ConversationChat: Executing refresh handlers for approved tools:', approvedToolNames)
+        await executeRefreshHandlers(conversationId, approvedToolNames)
+      }
+
+      // Handle new tool requests if any
+      if (toolRequests.length > 0) {
+        const newApprovals = await convertToolRequestsToApprovals(toolRequests)
+        setApprovals(approvalKey, newApprovals)
+      } else if (pendingMessage) {
+        // Remove pending message after successful completion
+        removedPendingIdsRef.current.add(pendingMessage.id)
+        removeMessage(pendingKey, pendingMessage.id)
+
+        flushSync(() => {
+          setRenderCount(prev => prev + 1)
+        })
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
-      // Set error message to display above approvals, keep approvals visible
       const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred'
       setApprovalError(`Failed to process approval: ${errorMsg}. Please try again.`)
-      // DON'T clear approvals - keep them visible so user can retry
     } finally {
       setLoading(false)
     }
