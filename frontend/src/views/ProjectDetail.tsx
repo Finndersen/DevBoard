@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
 import { Button, Card, Input, Textarea, Modal, Markdown } from '../components/ui'
@@ -11,8 +11,11 @@ import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { useApprovals } from '../contexts/ApprovalsContext'
 
-export default function ProjectDetail() {
-  const { id } = useParams<{ id: string }>()
+interface ProjectDetailProps {
+  id: string
+}
+
+export default function ProjectDetail({ id }: ProjectDetailProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()

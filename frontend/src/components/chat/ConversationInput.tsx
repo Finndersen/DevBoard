@@ -20,7 +20,7 @@ export default function ConversationInput({
   // Cache line height to avoid repeated DOM queries on every keystroke
   const cachedLineHeightRef = useRef<number | null>(null)
   // Debounce timeout for textarea height adjustment
-  const heightAdjustmentTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const heightAdjustmentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Auto-resize textarea based on content (optimized to minimize layout thrashing)
   const adjustTextareaHeight = useCallback(() => {
@@ -67,13 +67,6 @@ export default function ConversationInput({
     setNewMessage(e.target.value)
   }, [])
 
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage(e as unknown as React.FormEvent)
-    }
-  }, [])
-
   const handleSendMessage = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     const messageText = newMessage.trim()
@@ -93,6 +86,13 @@ export default function ConversationInput({
     // Focus back to textarea
     textareaRef.current?.focus()
   }, [newMessage, onSendMessage])
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage(e as unknown as React.FormEvent)
+    }
+  }, [handleSendMessage])
 
   const isButtonDisabled = useMemo(
     () => !newMessage.trim() || disabled,

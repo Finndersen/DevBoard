@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import type { ConversationEvent, ToolResult } from '../../lib/api'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
@@ -25,6 +25,9 @@ function ConversationMessageList({
   emptyStateMessage,
   showEmptyState
 }: ConversationMessageListProps) {
+  // Cache for tool result lookups to avoid O(n²) searches on every render
+  const toolResultCache = useRef(new Map<string, ToolResult | undefined>())
+
   // Find matching tool result for a tool call
   // Searches for the NEXT ToolResult with matching tool_call_id that comes AFTER the tool call
   const findToolResult = useCallback((toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
@@ -37,6 +40,20 @@ function ConversationMessageList({
     }
     return undefined
   }, [messages])
+
+  // Populate cache when messages change
+  // This ensures lookups only happen once per tool_call message
+  useEffect(() => {
+    messages.forEach((message, index) => {
+      if (message.event_type === 'tool_call') {
+        const cacheKey = `${message.timestamp}-${message.event_type}-${index}`
+        if (!toolResultCache.current.has(cacheKey)) {
+          const result = findToolResult(message.tool_call_id, index)
+          toolResultCache.current.set(cacheKey, result)
+        }
+      }
+    })
+  }, [messages, findToolResult])
 
   if (showEmptyState) {
     return (
@@ -51,14 +68,15 @@ function ConversationMessageList({
     <>
       {/* Render confirmed messages with memoization to avoid unnecessary re-renders */}
       {messages.map((message, index) => {
-        // For tool calls, find the matching result
-        const toolResult = message.event_type === 'tool_call'
-          ? findToolResult(message.tool_call_id, index)
-          : undefined
-
         // Create a truly unique key combining timestamp and event type + index
         // This ensures uniqueness even for messages generated in the same millisecond
         const messageKey = `${message.timestamp}-${message.event_type}-${index}`
+
+        // For tool calls, look up the matching result from cache
+        // Cache is populated in useEffect, so lookups are O(1) instead of O(n)
+        const toolResult = message.event_type === 'tool_call'
+          ? toolResultCache.current.get(messageKey)
+          : undefined
 
         return (
           <MemoizedMessageComponent

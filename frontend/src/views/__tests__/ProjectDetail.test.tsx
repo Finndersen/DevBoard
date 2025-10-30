@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { screen, waitFor, render as rtlRender } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
@@ -16,11 +16,9 @@ const renderProjectDetail = (projectId: string = '1') => {
     <DarkModeProvider>
       <ApprovalsProvider>
         <PendingMessagesProvider>
-          <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
-            <Routes>
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-            </Routes>
-          </MemoryRouter>
+          <BrowserRouter>
+            <ProjectDetail id={projectId} />
+          </BrowserRouter>
         </PendingMessagesProvider>
       </ApprovalsProvider>
     </DarkModeProvider>

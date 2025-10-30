@@ -22,6 +22,10 @@
 - Try get & set Claude sessionID before getting final response (in case there is error)
 - Remove non-streaming agent chat implementations
 - Handle ClaudeCode compaction
+- Track important events (e.g. user document edits) and include as system messages to agent
+- Add tool for getting code skeleton/structure of a module
+- refresh documents when edited through non-approval tools
+- Create "Documentation Maintenance" and "Codebase analysis" sub-agents which can be called by other agents
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

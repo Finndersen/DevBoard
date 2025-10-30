@@ -19,7 +19,6 @@ vi.mock('../../../contexts/ApprovalsContext', async () => {
 describe('AgentChat', () => {
   const mockConversationId = 1
   const mockClearApprovals = vi.fn()
-  const mockClearConversationMessages = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -32,7 +31,8 @@ describe('AgentChat', () => {
 
     // Mock window.location.reload for jsdom
     delete (window as { location?: unknown }).location
-    window.location = { reload: vi.fn() } as unknown as Location
+    // @ts-ignore - mock location for testing
+    window.location = { reload: vi.fn() }
 
     // Reset server handlers
     server.resetHandlers()

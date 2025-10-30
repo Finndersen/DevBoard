@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
 import type { Project, Task, Codebase } from '../lib/api'
@@ -11,13 +11,16 @@ import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 
-export default function TaskDetail() {
-  const { id } = useParams<{ id: string }>()
-  const { data: task, loading, error, refetch } = useTask(id!)
+interface TaskDetailProps {
+  id: string
+}
+
+export default function TaskDetail({ id }: TaskDetailProps) {
+  const { data: task, loading, error, refetch } = useTask(id)
   const { setTask } = useDataStore()
   const { data: codebases } = useCodebases()
 
-  // Refetch task when ID changes (for tab switching)
+  // Fetch task when id changes (supports both initial mount and tab switching with keep-mounted components)
   useEffect(() => {
     refetch()
   }, [id, refetch])
@@ -166,9 +169,12 @@ export default function TaskDetail() {
       // Step 3: Get appropriate prompt action key for new state
       const actionKey = getPromptActionForState(newState)
 
-      // Step 4: Send initialization prompt to new conversation
+      // Step 4: Stream initialization prompt to new conversation
       if (actionKey && result.conversation_id) {
-        await apiClient.sendPromptAction(result.conversation_id, { action_key: actionKey })
+        for await (const _event of apiClient.streamPromptAction(result.conversation_id, { action_key: actionKey })) {
+          // Events are processed but not shown in UI - they're just for agent execution
+          // The conversation will be visible in the conversation chat once the stream completes
+        }
       }
     } catch (error) {
       console.error('Failed to transition task state:', error)

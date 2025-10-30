@@ -4,7 +4,7 @@ import { apiClient } from '../../lib/api'
 import type { ConversationEvent, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
-import { usePendingMessages, type PendingMessage } from '../../contexts/PendingMessagesContext'
+import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
@@ -21,8 +21,6 @@ interface ConversationChatProps {
   isTransitioning?: boolean
   transitionMessage?: string
 }
-
-const MAX_TEXTAREA_ROWS = 10
 
 export default function ConversationChat({
   conversationId,
@@ -97,7 +95,12 @@ export default function ConversationChat({
   }, [])
 
   useEffect(() => {
-    scrollToBottom()
+    // Defer scroll operation until after browser finishes layout recalculation
+    // This is particularly important when switching tabs, as the browser must
+    // recalculate layout from display:none to display:block
+    requestAnimationFrame(() => {
+      scrollToBottom()
+    })
   }, [messages, pendingMessage, isTransitioning, scrollToBottom])
 
   const fetchChatHistory = useCallback(async () => {
@@ -161,6 +164,16 @@ export default function ConversationChat({
         // Add user message only after first successful event
         if (!firstEventReceived) {
           firstEventReceived = true
+
+          // Remove pending message immediately when real message appears
+          removedPendingIdsRef.current.add(pendingMessageId)
+          removeMessage(pendingKey, pendingMessageId)
+
+          // Force immediate UI update to hide pending message
+          flushSync(() => {
+            setRenderCount(prev => prev + 1)
+          })
+
           const userMessage: ConversationEvent = {
             event_type: 'message',
             role: 'user',
@@ -184,14 +197,6 @@ export default function ConversationChat({
         updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
         const approvals = await convertToolRequestsToApprovals(toolRequests)
         setApprovals(approvalKey, approvals)
-      } else {
-        // Success: remove from pending after all events processed
-        removedPendingIdsRef.current.add(pendingMessageId)
-        removeMessage(pendingKey, pendingMessageId)
-
-        flushSync(() => {
-          setRenderCount(prev => prev + 1)
-        })
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -281,6 +286,16 @@ export default function ConversationChat({
         // Add user message only after first successful event (if pending message exists)
         if (!firstEventReceived && pendingMessage) {
           firstEventReceived = true
+
+          // Remove pending message immediately when real message appears
+          removedPendingIdsRef.current.add(pendingMessage.id)
+          removeMessage(pendingKey, pendingMessage.id)
+
+          // Force immediate UI update to hide pending message
+          flushSync(() => {
+            setRenderCount(prev => prev + 1)
+          })
+
           const userMessage: ConversationEvent = {
             event_type: 'message',
             role: 'user',
@@ -310,14 +325,6 @@ export default function ConversationChat({
       if (toolRequests.length > 0) {
         const newApprovals = await convertToolRequestsToApprovals(toolRequests)
         setApprovals(approvalKey, newApprovals)
-      } else if (pendingMessage) {
-        // Remove pending message after successful completion
-        removedPendingIdsRef.current.add(pendingMessage.id)
-        removeMessage(pendingKey, pendingMessage.id)
-
-        flushSync(() => {
-          setRenderCount(prev => prev + 1)
-        })
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)

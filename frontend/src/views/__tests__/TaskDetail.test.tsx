@@ -1,23 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { screen, waitFor, render } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
 import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import TaskDetail from '../TaskDetail'
 
-// Helper function to render TaskDetail with proper routing
+// Helper to create NDJSON streaming response
+const createStreamingResponse = (events: any[]) => {
+  const ndjson = events.map(e => JSON.stringify(e)).join('\n') + '\n'
+  return new HttpResponse(ndjson, {
+    headers: { 'Content-Type': 'text/plain' }
+  })
+}
+
+// Helper function to render TaskDetail with providers
 const renderTaskDetail = (taskId: string = '1') => {
   return render(
     <ApprovalsProvider>
       <PendingMessagesProvider>
-        <MemoryRouter initialEntries={[`/tasks/${taskId}`]}>
-          <Routes>
-            <Route path="/tasks/:id" element={<TaskDetail />} />
-          </Routes>
-        </MemoryRouter>
+        <BrowserRouter>
+          <TaskDetail id={taskId} />
+        </BrowserRouter>
       </PendingMessagesProvider>
     </ApprovalsProvider>
   )
@@ -137,6 +144,122 @@ describe('TaskDetail', () => {
 
     await waitFor(() => {
       expect(screen.getByText('None')).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('streams prompt action when transitioning to planning state', async () => {
+    const user = userEvent.setup()
+    const taskWithSpecification = createMockTask({
+      id: 1,
+      project_id: 1,
+      status: 'Defining',
+      specification: {
+        id: 3,
+        document_type: 'task_specification',
+        content: 'Test task specification content',
+        content_hash: 'task123',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    })
+    const updatedTask = createMockTask({
+      id: 1,
+      project_id: 1,
+      status: 'Planning',
+      specification: taskWithSpecification.specification,
+    })
+
+    server.use(
+      http.get('*/api/tasks/1', () => {
+        return HttpResponse.json(taskWithSpecification)
+      }),
+      http.post('*/api/tasks/1/state-transition', () => {
+        return HttpResponse.json({
+          ...updatedTask,
+          conversation_id: 2,
+        })
+      }),
+      http.post('*/api/conversations/2/prompt-action', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'message',
+            role: 'agent',
+            text_content: 'I will help you create an implementation plan.',
+            timestamp: '2024-01-01T00:00:00Z',
+          },
+        ])
+      })
+    )
+
+    renderTaskDetail()
+
+    // Wait for the Planning button to appear
+    await waitFor(() => {
+      const button = screen.queryByText('Begin Planning')
+      expect(button).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    const beginPlanningButton = screen.getByText('Begin Planning')
+    await user.click(beginPlanningButton)
+
+    // Wait for the stream to complete
+    await waitFor(() => {
+      // Component should remain functional after streaming
+      expect(screen.getByText('Test task specification content')).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('handles streaming errors during prompt action gracefully', async () => {
+    const user = userEvent.setup()
+    const taskWithSpecification = createMockTask({
+      id: 1,
+      project_id: 1,
+      status: 'Defining',
+      specification: {
+        id: 3,
+        document_type: 'task_specification',
+        content: 'Test task specification content',
+        content_hash: 'task123',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    })
+    const updatedTask = createMockTask({
+      id: 1,
+      project_id: 1,
+      status: 'Planning',
+      specification: taskWithSpecification.specification,
+    })
+
+    server.use(
+      http.get('*/api/tasks/1', () => {
+        return HttpResponse.json(taskWithSpecification)
+      }),
+      http.post('*/api/tasks/1/state-transition', () => {
+        return HttpResponse.json({
+          ...updatedTask,
+          conversation_id: 2,
+        })
+      }),
+      http.post('*/api/conversations/2/prompt-action', () => {
+        return new HttpResponse(null, { status: 404 })
+      })
+    )
+
+    renderTaskDetail()
+
+    // Wait for the Planning button to appear
+    await waitFor(() => {
+      const button = screen.queryByText('Begin Planning')
+      expect(button).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    const beginPlanningButton = screen.getByText('Begin Planning')
+    await user.click(beginPlanningButton)
+
+    // Verify component continues to function despite error
+    await waitFor(() => {
+      expect(screen.getByText('Test task specification content')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 })

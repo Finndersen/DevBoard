@@ -380,11 +380,18 @@ export class ApiClient {
     })
   }
 
-  async sendPromptAction(conversationId: number | string, request: PromptActionRequest): Promise<ConversationEvent[]> {
-    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/prompt-action`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    })
+  async *streamPromptAction(
+    conversationId: number | string,
+    request: PromptActionRequest,
+  ): AsyncGenerator<ConversationEvent> {
+    yield* StreamParser.parseStream(
+      `${this.baseURL}/api/conversations/${conversationId}/prompt-action`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      },
+    )
   }
 
   // Settings

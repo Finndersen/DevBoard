@@ -182,7 +182,6 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
   }
 
   const selectedEngineInfo = getSelectedEngineInfo()
-  const selectedModelInfo = getSelectedModelInfo()
   const availableModelsForEngine = getAvailableModelsForSelectedEngine()
 
   return (
