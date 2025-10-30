@@ -1,5 +1,7 @@
 """Service for managing and executing prompt actions."""
 
+from collections.abc import AsyncIterator
+
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.events import ConversationEvent
 from devboard.agents.prompt_actions import PromptAction, prompt_action_registry
@@ -37,14 +39,14 @@ class PromptActionService:
         """
         return prompt_action_registry.get(action_key)
 
-    async def execute_action(self, action_key: str) -> list[ConversationEvent]:
-        """Execute a prompt action by sending its prompt to a conversation.
+    async def stream_action(self, action_key: str) -> AsyncIterator[ConversationEvent]:
+        """Stream events from executing a prompt action.
 
         Args:
             action_key: The unique identifier for the action to execute
 
-        Returns:
-            List of ConversationEvent objects from processing the prompt action
+        Yields:
+            ConversationEvent objects as they are generated from processing the prompt action
 
         Raises:
             PromptActionNotFoundError: If the action_key does not exist
@@ -54,7 +56,6 @@ class PromptActionService:
         if action is None:
             raise PromptActionNotFoundError(f"Prompt action '{action_key}' not found")
 
-        # Send the prompt as a user message
-        result = await self.conversation_service.send_message_or_approval(message_or_approvals=action.prompt_template)
-
-        return result
+        # Stream events from sending the prompt as a user message
+        async for event in self.conversation_service.stream_events_for_message_or_approval(action.prompt_template):
+            yield event

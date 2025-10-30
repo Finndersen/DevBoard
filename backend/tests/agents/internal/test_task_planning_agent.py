@@ -3,6 +3,8 @@
 from unittest.mock import Mock
 
 import pytest
+from pydantic_ai.exceptions import ModelRetry
+
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.agents.roles.task_specification import TaskSpecificationRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
@@ -11,8 +13,6 @@ from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import DocumentRepository
-from pydantic_ai.exceptions import ModelRetry
-
 from tests.conftest import create_mock_task
 
 

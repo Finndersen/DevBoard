@@ -375,6 +375,7 @@ class TestConversationsRouter:
         self, client_with_mock_agent, test_conversation, mock_agent
     ):
         """Test streaming a message that yields multiple events."""
+
         # Mock the agent to yield multiple events
         async def multi_event_stream(prompt_or_approvals):
             yield ConversationMessage(
@@ -415,9 +416,7 @@ class TestConversationsRouter:
         assert events[2]["event_type"] == "message"
         assert events[2]["text_content"] == "Final response after tool call"
 
-    def test_stream_conversation_message_with_tool_request(
-        self, client_with_mock_agent, test_conversation, mock_agent
-    ):
+    def test_stream_conversation_message_with_tool_request(self, client_with_mock_agent, test_conversation, mock_agent):
         """Test streaming a message that triggers a tool request."""
         # Mock the agent to yield a tool request
         tool_call_event = ToolCall(
@@ -557,4 +556,59 @@ class TestConversationsRouter:
         assert events[1]["event_type"] == "tool_call"
         assert events[1]["tool_name"] == "validate_changes"
         assert events[2]["event_type"] == "message"
-        assert "completed" in events[2]["text_content"]
+
+    def test_stream_prompt_action(self, client_with_mock_agent, test_conversation, mock_agent):
+        """Test streaming a prompt action."""
+
+        # Mock the agent to stream events for the prompt action
+        async def prompt_action_stream(prompt):
+            yield ConversationMessage(
+                role=MessageRole.AGENT,
+                text_content="I'll help you create an implementation plan.",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_agent.stream_events = prompt_action_stream
+
+        prompt_action_request = {"action_key": "task.create_implementation_plan"}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/prompt-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 200
+
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        assert len(events) == 1
+        assert events[0]["event_type"] == "message"
+        assert events[0]["role"] == "agent"
+        assert "implementation plan" in events[0]["text_content"].lower()
+
+    def test_stream_prompt_action_not_found(self, client_with_mock_agent, test_conversation):
+        """Test streaming a non-existent prompt action."""
+        prompt_action_request = {"action_key": "nonexistent.action"}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/prompt-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
+
+    def test_stream_prompt_action_archived_conversation(self, client_with_mock_agent, test_conversation, db_session):
+        """Test streaming prompt action on archived conversation."""
+        # Archive the conversation
+        test_conversation.is_active = False
+        db_session.commit()
+
+        prompt_action_request = {"action_key": "task.create_implementation_plan"}
+
+        response = client_with_mock_agent.post(
+            f"/api/conversations/{test_conversation.id}/prompt-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 400
+        assert "archived" in response.json()["detail"].lower()

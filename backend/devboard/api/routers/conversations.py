@@ -26,7 +26,7 @@ from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.api.schemas.prompt_action import PromptActionRequest
 from devboard.db.models import Conversation
 from devboard.db.repositories.conversation import ConversationRepository
-from devboard.services.prompt_action_service import PromptActionNotFoundError, PromptActionService
+from devboard.services.prompt_action_service import PromptActionService
 
 router = APIRouter()
 
@@ -223,25 +223,25 @@ async def update_conversation_model(
     }
 
 
-@router.post("/{conversation_id}/prompt-action", response_model=list[ConversationEvent])
+@router.post("/{conversation_id}/prompt-action")
 async def execute_prompt_action(
     request: PromptActionRequest,
     prompt_action_service: PromptActionService = Depends(get_prompt_action_service),
     conversation: Conversation = Depends(get_verified_conversation),
-) -> list[ConversationEvent]:
-    """Execute a predefined prompt action on a conversation.
+) -> StreamingResponse:
+    """Stream a predefined prompt action on a conversation.
 
     Prompt actions are reusable, named operations that send predefined prompts
     to agent conversations. This endpoint looks up the action by key and sends
     the associated prompt as a user message.
 
+    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
+    Each line is a JSON-serialized ConversationEvent.
+
     Args:
         request: Request with action_key to execute
         prompt_action_service: Service for managing prompt actions
         conversation: Agent conversation
-
-    Returns:
-        List of ConversationEvent objects from processing the prompt action
 
     Raises:
         HTTPException: 404 if action_key not found
@@ -251,7 +251,12 @@ async def execute_prompt_action(
     if not conversation.is_active:
         raise HTTPException(status_code=400, detail="Cannot execute prompt action on archived conversation")
 
-    try:
-        return await prompt_action_service.execute_action(request.action_key)
-    except PromptActionNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from None
+    # Validate action exists before starting stream
+    if prompt_action_service.get_action(request.action_key) is None:
+        raise HTTPException(status_code=404, detail=f"Prompt action '{request.action_key}' not found")
+
+    async def event_generator():
+        async for event in prompt_action_service.stream_action(request.action_key):
+            yield json.dumps(event.model_dump(mode="json")) + "\n"
+
+    return StreamingResponse(event_generator(), media_type="text/plain")

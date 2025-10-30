@@ -1,24 +1,27 @@
 """Tests for PromptActionService."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
-from devboard.api.schemas.agent_conversation import PromptResponse
+from devboard.agents.events import ConversationMessage
 from devboard.services.prompt_action_service import PromptActionNotFoundError, PromptActionService
 
 
 @pytest.fixture
 def mock_conversation_service():
     """Mock BaseAgentConversationService."""
-    service = MagicMock()
-    service.send_message_or_approval = AsyncMock(
-        return_value=PromptResponse(
-            type="message",
-            message={"role": "agent", "text_content": "Mock response", "timestamp": "2024-01-01T00:00:00Z"},
-            tool_requests=None,
+
+    async def mock_stream_events():
+        yield ConversationMessage(
+            event_type="message",
+            role="agent",
+            text_content="Mock response",
+            timestamp="2024-01-01T00:00:00Z",
         )
-    )
+
+    service = MagicMock()
+    service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream_events())
     return service
 
 
@@ -46,19 +49,23 @@ class TestPromptActionService:
         assert action is None
 
     @pytest.mark.asyncio
-    async def test_execute_action_success(self, prompt_action_service, mock_conversation_service):
-        """Test executing a valid action."""
-        result = await prompt_action_service.execute_action("task.create_implementation_plan")
+    async def test_stream_action_success(self, prompt_action_service, mock_conversation_service):
+        """Test streaming a valid action."""
+        events = []
+        async for event in prompt_action_service.stream_action("task.create_implementation_plan"):
+            events.append(event)
 
-        assert result.type == "message"
-        assert result.message is not None
+        assert len(events) == 1
+        assert isinstance(events[0], ConversationMessage)
+        assert events[0].role == "agent"
         # Verify conversation service was called with the prompt template
-        mock_conversation_service.send_message_or_approval.assert_called_once()
-        call_args = mock_conversation_service.send_message_or_approval.call_args
-        assert "implementation plan" in call_args[1]["message_or_approvals"].lower()
+        mock_conversation_service.stream_events_for_message_or_approval.assert_called_once()
+        call_args = mock_conversation_service.stream_events_for_message_or_approval.call_args
+        assert "implementation plan" in call_args[0][0].lower()
 
     @pytest.mark.asyncio
-    async def test_execute_action_not_found(self, prompt_action_service):
-        """Test executing a non-existent action raises error."""
+    async def test_stream_action_not_found(self, prompt_action_service):
+        """Test streaming a non-existent action raises error."""
         with pytest.raises(PromptActionNotFoundError, match="nonexistent.action"):
-            await prompt_action_service.execute_action("nonexistent.action")
+            async for _ in prompt_action_service.stream_action("nonexistent.action"):
+                pass
