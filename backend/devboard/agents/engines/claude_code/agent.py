@@ -46,6 +46,7 @@ from devboard.api.schemas.agent_conversation import (
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
+CLAUDE_COMPACTION_PROMPT = "Your context window will be automatically compacted as it approaches its limit, allowing you to continue working indefinitely from where you left off. Therefore, do not stop tasks early due to token budget concerns. Always be as persistent and autonomous as possible and complete tasks fully, even if the end of your budget is approaching. Never artificially stop any task early regardless of the context remaining."
 
 
 class InvalidVirtualToolCallError(Exception):
@@ -143,7 +144,7 @@ class ClaudeCodeAgent(BaseAgent):
 
         return ClaudeClient(
             session_id=self.session_id,
-            system_prompt=system_prompt,
+            system_prompt=system_prompt + "\n\n" + CLAUDE_COMPACTION_PROMPT,
             tools=self._function_tools,
             allowed_builtin_tools=self._get_allowed_builtin_tools(),
             model=self.model.display_full_name if self.model else None,
@@ -193,7 +194,7 @@ class ClaudeCodeAgent(BaseAgent):
         Returns:
             List of tool names or None to allow all tools
         """
-        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch"]
+        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task"]
 
     def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
         """Convert Claude SDK Message to ConversationEvent(s).

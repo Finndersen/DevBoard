@@ -7,6 +7,7 @@ from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.internal.agent import InternalAgent
+from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.base import Role
@@ -187,7 +188,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
                         ToolCall(
                             tool_call_id=part.tool_call_id,
                             tool_name=part.tool_name,
-                            tool_args=part.args,
+                            tool_args=convert_tool_args(part.args),
                             timestamp=msg.timestamp,
                         )
                     )

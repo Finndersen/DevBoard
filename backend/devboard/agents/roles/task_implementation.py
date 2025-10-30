@@ -2,11 +2,14 @@ from pydantic_ai import Tool
 
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import (
+    create_code_structure_search_tool,
+    create_directory_tree_tool,
     create_document_edit_tool,
     create_set_document_content_tool,
 )
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
+from devboard.integrations.codebase import CodebaseIntegration
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
 You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
@@ -85,6 +88,7 @@ class TaskImplementationRole(Role):
         """
         self.task = task
         self.document_repository = document_repository
+        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -98,7 +102,8 @@ class TaskImplementationRole(Role):
             Note: Codebase editing tools (Edit/Write) are provided directly by the
             underlying agent (ClaudeCode), not through this role.
         """
-        return [
+
+        tools = [
             # Tools for task specification document
             create_set_document_content_tool(self.task.specification, self.document_repository),
             create_document_edit_tool(self.task.specification, self.document_repository),
@@ -106,6 +111,13 @@ class TaskImplementationRole(Role):
             create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
             create_document_edit_tool(self.task.implementation_plan, self.document_repository),
         ]
+        if self.codebase_integration:
+            tools += [
+                create_code_structure_search_tool(self.codebase_integration),
+                create_directory_tree_tool(self.codebase_integration),
+            ]
+
+        return tools
 
     async def get_context_content(self) -> str:
         """Get context content for task implementation role.

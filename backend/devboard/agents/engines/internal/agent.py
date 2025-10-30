@@ -24,6 +24,7 @@ from pydantic_ai.tools import (
 )
 
 from devboard.agents.base_agent import BaseAgent
+from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import (
     ConversationEvent,
     ConversationMessage,
@@ -136,7 +137,7 @@ class InternalAgent(BaseAgent):
             yield ToolCall(
                 tool_call_id=part.tool_call_id,
                 tool_name=part.tool_name,
-                tool_args=part.args,
+                tool_args=convert_tool_args(part.args),
                 timestamp=timestamp,
             )
 
