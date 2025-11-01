@@ -168,8 +168,73 @@ When agent encounters tool requiring approval:
 
 **Pattern**: Two-phase streaming: initial request stream pauses at approval, approval response stream continues to completion.
 
-## See Also
+## Multitasking and Streaming State Preservation
 
-- [Components](./components.md) - Chat component implementation
-- [Patterns](./patterns.md) - Frontend development patterns
-- [Backend API Reference](../backend/api-reference.md) - Streaming endpoints
+**Challenge**: In a multitasking environment with multiple tabs, switching between tabs must not interrupt or lose streaming state.
+
+### Implementation Strategy
+
+**Location**: `frontend/src/components/chat/ConversationChat.tsx`, `frontend/src/views/TaskDetail.tsx`, `frontend/src/views/ProjectDetail.tsx`, `frontend/src/components/layout/TabContentContainer.tsx`
+
+#### Component Memoization
+
+All view components (TaskDetail, ProjectDetail) are wrapped with `React.memo()` and custom comparison functions:
+
+```typescript
+export default memo(TaskDetail, (prevProps, nextProps) => {
+  return prevProps.id === nextProps.id
+})
+```
+
+**Effect**: Only re-renders when entity ID changes, not when other tabs switch. Preserves all component state including active streaming sessions.
+
+#### Conversation History Fetch Optimization
+
+ConversationChat tracks which conversations have been fetched to prevent unnecessary refetches:
+
+```typescript
+const lastFetchedConversationIdRef = useRef<number | null>(null)
+
+const fetchChatHistory = useCallback(async () => {
+  // Only fetch if we haven't already fetched for this conversation
+  if (lastFetchedConversationIdRef.current === conversationId) {
+    return
+  }
+
+  const data = await apiClient.getConversationMessages(conversationId)
+  setMessages(data)
+  lastFetchedConversationIdRef.current = conversationId
+}, [conversationId])
+```
+
+**Effect**: Prevents overwriting client-side streaming messages with incomplete backend history when tabs switch.
+
+#### Tab Container Optimization
+
+TabContentContainer uses `useMemo` to prevent unnecessary re-render cascades:
+
+```typescript
+const renderedTabs = useMemo(() => {
+  return tabs.map(tab => {
+    const isActive = tab.id === activeTabId
+    return <div style={{ visibility: isActive ? 'visible' : 'hidden' }}>
+      {/* tab content */}
+    </div>
+  })
+}, [tabs, activeTabId])
+```
+
+**Effect**: Minimizes re-renders when switching tabs. Combined with component memoization, ensures inactive tabs don't re-render unnecessarily.
+
+### State Preservation Guarantees
+
+With these optimizations:
+- ✓ Streaming messages remain in client state when switching tabs
+- ✓ No refetch of conversation history on tab switch
+- ✓ Active streaming connections maintained (subject to browser throttling)
+- ✓ Minimal re-renders across all mounted components
+- ✓ Seamless multitasking experience
+
+### Browser Considerations
+
+Modern browsers may throttle or suspend fetch requests for hidden tabs. While components stay mounted and state preserved, the underlying network connection may be affected by browser optimizations. The application maintains message state regardless of connection status.

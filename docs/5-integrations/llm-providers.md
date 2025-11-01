@@ -115,7 +115,3 @@
 **Config**: `backend/devboard/config/llm_providers.py`, `backend/devboard/services/config_service.py`, `backend/devboard/agents/agent_config_service.py`
 
 **API**: `backend/devboard/api/routers/agents.py`
-
-## See Also
-
-[Agent Configuration](../4-ai-agents/configuration.md) | [Agent Architecture](../4-ai-agents/agent-architecture.md)

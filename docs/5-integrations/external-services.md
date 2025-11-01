@@ -132,7 +132,3 @@
 **Config**: `backend/devboard/config/integration_configs.py`, `backend/devboard/services/config_service.py`
 
 **Testing**: `backend/devboard/api/routers/settings.py`
-
-## See Also
-
-[Context Providers](./context-providers.md) | [Context Assembly](../4-ai-agents/context-assembly.md)

@@ -182,9 +182,3 @@ Fixes #123
 ## Maintenance
 
 See [MAINTENANCE_GUIDE.md](../../MAINTENANCE_GUIDE.md) for dependency updates, security patches, performance optimization, technical debt management.
-
-## See Also
-
-- [Getting Started](./getting-started.md) - Development environment setup
-- [Testing](./testing.md) - Testing guidelines
-- [Deployment](./deployment.md) - Deployment procedures

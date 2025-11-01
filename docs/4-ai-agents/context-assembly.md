@@ -102,7 +102,3 @@
 **Providers**: `backend/devboard/context_providers/{base.py, github.py, jira.py, slack.py, codebase.py, webpage.py, registry.py}`
 
 **Integrations**: `backend/devboard/integrations/`
-
-## See Also
-
-[Context Providers](../5-integrations/context-providers.md) | [External Services](../5-integrations/external-services.md) | [Agent Architecture](./agent-architecture.md) | [Project Management](../2-features/project-management.md)

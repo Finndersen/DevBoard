@@ -174,11 +174,3 @@ Direct external API communication, authentication, rate limiting, error handling
 - **shell.py**: Shell command execution integration
 
 **Pattern**: Integration layer handles API specifics. Context providers use integrations to fetch and transform data.
-
-## See Also
-
-- [Directory Structure](./directory-structure.md) - Code organization
-- [Patterns](./patterns.md) - Development patterns
-- [API Reference](./api-reference.md) - Endpoint documentation
-- [Database Schema](../database-schema.md) - Data models
-- [AI Agents](../../4-ai-agents/INDEX.md) - Agent system

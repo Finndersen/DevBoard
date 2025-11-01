@@ -181,10 +181,3 @@ Pytest fixtures for test setup (`backend/tests/`).
 **Database Fixtures**: Test database with sample data
 **Repository Testing**: Test data access independently
 **Router Testing**: TestClient with mocked dependencies
-
-## See Also
-
-- [Directory Structure](./directory-structure.md) - Code organization
-- [Components](./components.md) - Component details
-- [API Reference](./api-reference.md) - Endpoint documentation
-- [Database Schema](../database-schema.md) - Data models

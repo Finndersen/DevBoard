@@ -113,12 +113,3 @@ See how tasks relate to overall project goals:
 2. Review task distribution across states
 3. Identify blocked or delayed work
 4. Generate status updates for stakeholders
-
-## See Also
-
-- [Key Concepts - Project](../1-overview/key-concepts.md#1-project): Domain model definition
-- [Task Management](./task-management.md): How tasks work within projects
-- [Document Collaboration](./document-collaboration.md): Document editing patterns
-- [Backend Components - Project Service](../3-architecture/backend/components.md): Implementation details
-- [Backend API Reference - Projects API](../3-architecture/backend/api-reference.md): API endpoints
-- [Agent Architecture - Project QA Role](../4-ai-agents/agent-architecture.md): Agent supporting projects

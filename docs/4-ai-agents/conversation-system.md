@@ -101,7 +101,3 @@
 **Database**: `backend/devboard/db/models/{conversation.py, messages.py}`, `backend/devboard/db/repositories/conversation.py`
 
 **API**: `backend/devboard/api/routers/conversations.py`, `backend/devboard/api/schemas/conversation.py`
-
-## See Also
-
-[Agent Architecture](./agent-architecture.md) | [Tools and Capabilities](./tools-and-capabilities.md) | [Claude Code Integration](./claude-code-integration.md) | [Database Schema](../3-architecture/database-schema.md)

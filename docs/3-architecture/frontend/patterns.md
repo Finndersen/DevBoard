@@ -92,7 +92,60 @@ Map-based entity storage (`Map<number, Entity>`) prevents data duplication and e
 
 ## Performance Optimization
 
-**Memoization**: `React.memo` for components, `useMemo` for expensive computations.
+### Component Memoization for Multitasking
+
+**Challenge**: With multiple tabs mounted simultaneously, tab switching must not trigger re-renders of inactive tabs.
+
+**Solution**: All view components wrapped with `React.memo()` and custom comparison:
+
+```typescript
+// TaskDetail.tsx, ProjectDetail.tsx
+export default memo(TaskDetail, (prevProps, nextProps) => {
+  return prevProps.id === nextProps.id
+})
+```
+
+**Effect**: Components only re-render when their entity ID changes, not when other tabs become active/inactive. Critical for preserving streaming state and preventing unnecessary API calls.
+
+### Tab Container Optimization
+
+TabContentContainer uses `useMemo` to memoize rendered tabs:
+
+```typescript
+const renderedTabs = useMemo(() => {
+  return tabs.map(tab => {
+    const isActive = tab.id === activeTabId
+    return <div style={{ visibility: isActive ? 'visible' : 'hidden' }}>
+      {/* tab content */}
+    </div>
+  })
+}, [tabs, activeTabId])
+```
+
+**Effect**: Prevents re-render cascades when switching tabs. Combined with component memoization, ensures minimal re-renders.
+
+### Data Fetching Optimization
+
+ConversationChat uses refs to track fetched conversations and prevent refetches:
+
+```typescript
+const lastFetchedConversationIdRef = useRef<number | null>(null)
+
+const fetchChatHistory = useCallback(async () => {
+  if (lastFetchedConversationIdRef.current === conversationId) {
+    return // Already fetched
+  }
+  const data = await apiClient.getConversationMessages(conversationId)
+  setMessages(data)
+  lastFetchedConversationIdRef.current = conversationId
+}, [conversationId])
+```
+
+**Effect**: Prevents overwriting client-side streaming messages with backend data on re-renders.
+
+### General Optimization Patterns
+
+**Memoization**: `React.memo` for components, `useMemo` for expensive computations, `useCallback` for stable function references.
 
 **Lazy Loading**: Route-based code splitting with `React.lazy` and `Suspense`.
 
@@ -144,10 +197,3 @@ Map-based entity storage (`Map<number, Entity>`) prevents data duplication and e
 **API Client**: Async generator methods for streaming endpoints. Parse NDJSON line-by-line, yield `ConversationEvent` objects.
 
 **Pattern**: `for await (const event of apiClient.sendMessageStream(...))` for real-time event processing in React components.
-
-## See Also
-
-- [Directory Structure](./directory-structure.md) - Code organization
-- [Components](./components.md) - Component implementations
-- [Streaming](./streaming.md) - Real-time updates
-- [System Design](../system-design.md) - Overall architecture

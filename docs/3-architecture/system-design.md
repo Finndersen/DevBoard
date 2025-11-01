@@ -109,7 +109,3 @@
 4. Assemble package
 5. Cache with TTL
 6. Provide on-demand references
-
-## See Also
-
-[Vision and Goals](../1-overview/vision-and-goals.md) | [Database Schema](./database-schema.md) | [API Design](./api-design.md) | [Backend INDEX](./backend/INDEX.md) | [Frontend INDEX](./frontend/INDEX.md) | [Getting Started](../6-development/getting-started.md)

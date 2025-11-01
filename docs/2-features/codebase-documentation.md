@@ -159,12 +159,3 @@ Agent tools for working with codebases:
 3. Analyze patterns and implementations
 4. Document findings in task specification
 5. Update architecture doc if needed
-
-## See Also
-
-- [Key Concepts - Codebase](../1-overview/key-concepts.md#3-codebase): Domain model definition
-- [Project Management](./project-management.md): Linking codebases to projects
-- [Task Management](./task-management.md): Using codebase context in tasks
-- [Agent Architecture](../4-ai-agents/agent-architecture.md): Agent tools for codebases
-- [Context Providers - Codebase Provider](../5-integrations/context-providers.md): Technical implementation
-- [Backend Components - Codebase Service](../3-architecture/backend/components.md): Service implementation

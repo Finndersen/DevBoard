@@ -112,7 +112,3 @@
 **API**: `backend/devboard/api/routers/agents.py`
 
 **Frontend**: `frontend/src/components/configuration/AgentConfigurationSelector.tsx`
-
-## See Also
-
-[Agent Architecture](./agent-architecture.md) | [Claude Code Integration](./claude-code-integration.md) | [LLM Providers](../5-integrations/llm-providers.md)

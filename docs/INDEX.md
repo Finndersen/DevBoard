@@ -6,22 +6,6 @@ DevBoard is a **developer command center** application that serves as a comprehe
 
 The system runs locally on your machine while integrating with cloud-based developer tools, combining the benefits of local-first architecture with the power of distributed development ecosystems. DevBoard uses sophisticated AI agents that understand your complete project context to help with specification writing, implementation planning, code analysis, and development execution.
 
-## Navigation Guide
-
-Choose your path based on your role and objectives:
-
-### 🎯 For Product Managers & Project Leads
-Start with **[1. Overview](./1-overview/INDEX.md)** to understand DevBoard's vision, goals, and core concepts, then explore **[2. Features](./2-features/INDEX.md)** to learn about project management, task workflows, and configuration capabilities.
-
-### 👨‍💻 For New Developers
-Begin with **[6. Development](./6-development/INDEX.md)** for setup instructions, then review **[3. Architecture](./3-architecture/INDEX.md)** to understand the system design, and finally dive into **[4. AI Agents](./4-ai-agents/INDEX.md)** to learn how the agent system works.
-
-### 🤖 For AI Agents Researching the Codebase
-Load **[3. Architecture](./3-architecture/INDEX.md)** for technical implementation details, **[4. AI Agents](./4-ai-agents/INDEX.md)** for agent system specifics, and **[1. Overview - Key Concepts](./1-overview/key-concepts.md)** for domain model understanding.
-
-### 🔧 For Contributors
-Start with **[6. Development - Contributing](./6-development/contributing.md)** for development workflow, then review **[MAINTENANCE_GUIDE.md](./MAINTENANCE_GUIDE.md)** for documentation maintenance guidelines.
-
 ## Documentation Structure
 
 ### [1. Overview](./1-overview/INDEX.md)

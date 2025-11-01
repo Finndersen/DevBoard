@@ -137,8 +137,3 @@ DELETE /api/configurations/{key}             Delete config
 **Dependency Injection**: Routes use FastAPI dependencies for database sessions (`get_db`) and services.
 
 **Validation**: Pydantic schemas in `backend/devboard/schemas/` handle validation.
-
-**See Also**:
-- [Components](./components.md) - Service implementations
-- [Patterns](./patterns.md) - Design patterns
-- [Database Schema](../database-schema.md) - Data models

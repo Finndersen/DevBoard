@@ -116,10 +116,3 @@ See [Backend API Reference](./backend/api-reference.md) for complete endpoint li
 **Authentication**: Currently none (single-user local). Future: token-based for multi-user.
 
 **Rate Limiting**: Currently none (local). Respects external API limits (GitHub, Jira, etc.).
-
-## See Also
-
-- [Backend API Reference](./backend/api-reference.md) - Complete endpoint documentation
-- [Backend Patterns](./backend/patterns.md) - Implementation patterns
-- [Frontend Streaming](./frontend/streaming.md) - Client-side consumption
-- [System Design](./system-design.md) - Overall architecture

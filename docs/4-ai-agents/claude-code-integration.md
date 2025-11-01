@@ -125,7 +125,3 @@ agent = ClaudeCodeAgent(
 - `backend/devboard/agents/engines/claude_code/session.py`: Session management
 - `backend/devboard/agents/engines/claude_code/tool_approval_manager.py`: Tool approval workflow
 - `backend/devboard/agents/engines/claude_code/virtual_tools.py`: Virtual tool definitions
-
-## See Also
-
-[Agent Architecture](./agent-architecture.md) | [Tools and Capabilities](./tools-and-capabilities.md) | [Conversation System](./conversation-system.md) | [Configuration](./configuration.md)

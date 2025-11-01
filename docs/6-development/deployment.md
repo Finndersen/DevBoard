@@ -154,9 +154,3 @@ VITE_API_BASE_URL=https://api.devboard.com
 
 **Docker Compose**: `docker-compose logs -f <service>`
 **Kubernetes**: `kubectl logs <pod-name>`
-
-## See Also
-
-- [Getting Started](./getting-started.md) - Local development setup
-- [Contributing](./contributing.md) - Development workflow
-- [Testing](./testing.md) - Testing guidelines

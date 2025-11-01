@@ -47,10 +47,3 @@ npm run dev              # Start dev server
 ```
 
 See [Getting Started](./getting-started.md) for detailed instructions.
-
-## Related Sections
-
-- **[Architecture - System Design](../3-architecture/system-design.md)**: Technical architecture overview
-- **[Architecture - Backend](../3-architecture/backend/INDEX.md)**: Backend implementation details
-- **[Architecture - Frontend](../3-architecture/frontend/INDEX.md)**: Frontend implementation details
-- **[MAINTENANCE_GUIDE](../MAINTENANCE_GUIDE.md)**: Documentation maintenance guidelines

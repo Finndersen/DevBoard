@@ -130,7 +130,3 @@ backend/
 **Migrations** (`backend/alembic/`): Alembic schema evolution, version-controlled
 
 **Dependencies**: `pyproject.toml`, `uv.lock`. Modern tooling with `uv` for fast resolution, strict pinning
-
-## See Also
-
-[Backend Components](./components.md) | [Backend Patterns](./patterns.md) | [Database Schema](../database-schema.md) | [API Reference](./api-reference.md)

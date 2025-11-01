@@ -172,9 +172,3 @@ Typed HTTP client with TypeScript interfaces.
 - Synchronous: Return complete responses
 - Async generators: Stream NDJSON events
 - Coverage: Project/task/codebase CRUD, conversation messaging (standard/streaming), tool approval (standard/streaming), configuration management
-
-**See Also**:
-- [Directory Structure](./directory-structure.md) - Code organization
-- [Patterns](./patterns.md) - Development patterns
-- [Streaming](./streaming.md) - Real-time updates
-- [Backend API Reference](../backend/api-reference.md) - API endpoints

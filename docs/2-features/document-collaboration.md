@@ -85,7 +85,3 @@
 **Update Project Spec**: Open project → ask ProjectQARole to update → agent proposes changes → review diff → approve
 
 **Architecture Docs**: Register codebase → request generation → review → request improvements → agent proposes edits → approve
-
-## See Also
-
-[Task Management](./task-management.md) | [Project Management](./project-management.md) | [User Workflows](../1-overview/user-workflows.md#document-centric-interaction) | [Agent Tools](../4-ai-agents/tools-and-capabilities.md)

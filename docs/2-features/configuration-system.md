@@ -76,7 +76,3 @@
 **Register Codebase**: Settings → Codebases → Add → Enter name/description/path → Validate → Optional remote → Available for projects/tasks
 
 **Override Env**: Identify env setting → UI override → UI takes precedence → Source shows "UI Override"
-
-## See Also
-
-[Key Concepts](../1-overview/key-concepts.md) | [Agent Configuration](../4-ai-agents/configuration.md) | [External Services](../5-integrations/external-services.md) | [LLM Providers](../5-integrations/llm-providers.md)

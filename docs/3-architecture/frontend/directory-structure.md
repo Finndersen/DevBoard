@@ -146,10 +146,3 @@ import { DocumentDiffModal } from '../documents/DocumentDiffModal'
 import { useUIStore } from '../../stores/uiStore'
 import { apiClient } from '../../lib/api'
 ```
-
-## See Also
-
-- [Frontend Components](./components.md): Component documentation
-- [Frontend Patterns](./patterns.md): Development patterns
-- [Frontend Streaming](./streaming.md): Real-time updates
-- [System Design](../system-design.md): Architecture context

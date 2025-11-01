@@ -100,7 +100,3 @@
 **Services**: `backend/devboard/services/{context_assembly.py, resource_service.py}`
 
 **Integrations**: `backend/devboard/integrations/`
-
-## See Also
-
-[External Services](./external-services.md) | [Context Assembly](../4-ai-agents/context-assembly.md) | [Agent Architecture](../4-ai-agents/agent-architecture.md)

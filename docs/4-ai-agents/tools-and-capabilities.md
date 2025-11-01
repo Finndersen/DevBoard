@@ -106,7 +106,3 @@
 **Virtual System**: `backend/devboard/agents/engines/claude_code/{virtual_tools.py, message_parser.py}`
 
 **Services**: `backend/devboard/services/{document_editor.py, codebase_search.py, resource_service.py}`
-
-## See Also
-
-[Agent Architecture](./agent-architecture.md) | [Claude Code Integration](./claude-code-integration.md) | [Conversation System](./conversation-system.md) | [Document Collaboration](../2-features/document-collaboration.md)

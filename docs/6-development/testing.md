@@ -100,8 +100,3 @@ Framework internals, third-party libraries, generated code, trivial getters/sett
 ## CI/CD
 
 Tests run automatically on pull requests. PRs with failing tests cannot merge. Coverage reports generated and tracked.
-
-## See Also
-
-- [Contributing](./contributing.md) - Development workflow
-- [Getting Started](./getting-started.md) - Development setup
