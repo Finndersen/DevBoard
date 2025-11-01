@@ -41,6 +41,8 @@ export default function ConversationChat({
   // Use ref for synchronous updates without waiting for re-render
   const removedPendingIdsRef = useRef<Set<string>>(new Set())
   const [renderCount, setRenderCount] = useState(0)
+  // Track the last fetched conversation ID to prevent unnecessary refetches
+  const lastFetchedConversationIdRef = useRef<number | null>(null)
 
   const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
   const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
@@ -104,17 +106,26 @@ export default function ConversationChat({
   }, [messages, pendingMessage, isTransitioning, scrollToBottom])
 
   const fetchChatHistory = useCallback(async () => {
+    // Only fetch if we haven't already fetched for this conversation
+    if (lastFetchedConversationIdRef.current === conversationId) {
+      return
+    }
+
     try {
       const data = await apiClient.getConversationMessages(conversationId)
       setMessages(data)
+      lastFetchedConversationIdRef.current = conversationId
     } catch (error) {
       console.error('Failed to fetch chat history:', error)
     }
   }, [conversationId])
 
+  // Reset tracking and fetch when conversationId changes
   useEffect(() => {
+    // Reset the ref when conversation changes to allow refetch
+    lastFetchedConversationIdRef.current = null
     fetchChatHistory()
-  }, [fetchChatHistory])
+  }, [conversationId, fetchChatHistory])
 
   // Clean up removedPendingIds when pending messages are actually removed from context
   // Only remove from the local "removed" set when the message is no longer in pendingMessages

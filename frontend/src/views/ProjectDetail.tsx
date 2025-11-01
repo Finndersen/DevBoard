@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
@@ -15,7 +15,7 @@ interface ProjectDetailProps {
   id: string
 }
 
-export default function ProjectDetail({ id }: ProjectDetailProps) {
+function ProjectDetail({ id }: ProjectDetailProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()
@@ -456,3 +456,9 @@ export default function ProjectDetail({ id }: ProjectDetailProps) {
     </div>
   )
 }
+
+// Memoize to prevent unnecessary re-renders when other tabs switch
+// Only re-render if the project ID actually changes
+export default memo(ProjectDetail, (prevProps, nextProps) => {
+  return prevProps.id === nextProps.id
+})

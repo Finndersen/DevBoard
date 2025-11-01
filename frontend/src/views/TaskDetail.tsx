@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../lib/api'
@@ -15,7 +15,7 @@ interface TaskDetailProps {
   id: string
 }
 
-export default function TaskDetail({ id }: TaskDetailProps) {
+function TaskDetail({ id }: TaskDetailProps) {
   const { data: task, loading, error, refetch } = useTask(id)
   const { setTask } = useDataStore()
   const { data: codebases } = useCodebases()
@@ -556,3 +556,9 @@ export default function TaskDetail({ id }: TaskDetailProps) {
     </div>
   )
 }
+
+// Memoize to prevent unnecessary re-renders when other tabs switch
+// Only re-render if the task ID actually changes
+export default memo(TaskDetail, (prevProps, nextProps) => {
+  return prevProps.id === nextProps.id
+})

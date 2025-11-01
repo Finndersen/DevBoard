@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useUIStore } from '../../stores/uiStore'
 import Home from '../../views/Home'
 import TaskDetail from '../../views/TaskDetail'
@@ -23,30 +24,32 @@ export default function TabContentContainer() {
     )
   }
 
-  return (
-    <>
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTabId
+  // Memoize rendered tabs to prevent unnecessary re-renders of inactive tabs
+  // Only re-memoize when tabs array or activeTabId changes
+  const renderedTabs = useMemo(() => {
+    return tabs.map((tab) => {
+      const isActive = tab.id === activeTabId
 
-        return (
-          <div
-            key={tab.id}
-            role="tabpanel"
-            aria-hidden={!isActive}
-            style={{
-              display: 'block',
-              visibility: isActive ? 'visible' : 'hidden',
-              position: isActive ? 'relative' : 'absolute',
-              pointerEvents: isActive ? 'auto' : 'none'
-            }}
-          >
-            {tab.type === 'home' && <Home />}
-            {tab.type === 'task' && <TaskDetail id={tab.entityId} />}
-            {tab.type === 'project' && <ProjectDetail id={tab.entityId} />}
-            {tab.type === 'settings' && <Settings />}
-          </div>
-        )
-      })}
-    </>
-  )
+      return (
+        <div
+          key={tab.id}
+          role="tabpanel"
+          aria-hidden={!isActive}
+          style={{
+            display: 'block',
+            visibility: isActive ? 'visible' : 'hidden',
+            position: isActive ? 'relative' : 'absolute',
+            pointerEvents: isActive ? 'auto' : 'none'
+          }}
+        >
+          {tab.type === 'home' && <Home />}
+          {tab.type === 'task' && <TaskDetail id={tab.entityId} />}
+          {tab.type === 'project' && <ProjectDetail id={tab.entityId} />}
+          {tab.type === 'settings' && <Settings />}
+        </div>
+      )
+    })
+  }, [tabs, activeTabId])
+
+  return <>{renderedTabs}</>
 }
