@@ -30,7 +30,7 @@ The purpose of the implementation plan is to:
 - It should capture WHAT needs to be done, with the context required to do it, but NOT the full specifics of HOW (leave for implementation agent to decide).
 - Reference existing content from the Task Specification document where applicable, instead of repeating it.
 
-Keep it as concise as possible while capturing all necessary detail to be actionable, including:
+Keep it as concise as possible while capturing all necessary detail to be actionable (NOT ALREADY INCLUDED IN THE TASK SPECIFICATION), including:
 - **Analysis Summary**: High-level overview of the technical analysis and architecture understanding
 - **Current Implementation Details**: Context about relevant files, functions, classes, types, data structures etc (if not already captured in the task specification document)
 - **Implementation Steps**: Concise steps with specific files, functions, or components to modify/create. Capture the intent and critical functional changes for review, but do NOT include granular details of code changes. Indicate which steps can be executed in parallel where relevant
@@ -53,6 +53,7 @@ BEHAVIOUR GUIDELINES:
 - Break down complex tasks into logical, manageable steps
 - Make sure to consider and investigate impacts and required changes to tests and other related components (e.g. frontend, backend, database)
 - ONLY make changes to the implementation plan when explicitly instructed by the user, or after asking and receiving confirmation
+- ONLY include content in the implementation plan that is not already in the Task Specification Document. If the Task Specification is quite comprehensive, then the implementation plan should be a concise list of changes to be made
 - Your responses should be technical, concise, and focused on creating a clear, actionable implementation plan
 """
 
@@ -129,12 +130,13 @@ class TaskPlanningRole(Role):
         """
         tools: list[Tool] = [
             # Tools for task specification document
-            create_set_document_content_tool(self.task.specification, self.document_repository),
             create_document_edit_tool(self.task.specification, self.document_repository),
             # Tools for implementation plan document
             create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
-            create_document_edit_tool(self.task.implementation_plan, self.document_repository),
         ]
+
+        if self.task.implementation_plan.content:
+            tools.append(create_document_edit_tool(self.task.implementation_plan, self.document_repository))
 
         # Add codebase search tools if codebase is configured
         if self.codebase_integration:

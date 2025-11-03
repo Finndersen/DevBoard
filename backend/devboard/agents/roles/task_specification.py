@@ -114,8 +114,10 @@ class TaskSpecificationRole(Role):
         """
         tools: list[Tool] = [
             create_set_document_content_tool(self.task.specification, self.document_repository),
-            create_document_edit_tool(self.task.specification, self.document_repository),
         ]
+
+        if self.task.specification.content:
+            tools.append(create_document_edit_tool(self.task.specification, self.document_repository))
 
         # Add codebase search tools if codebase is configured
         if self.codebase_integration:

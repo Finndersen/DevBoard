@@ -122,11 +122,10 @@ class TestTaskPlanningRole:
         """Test role creates tools for both documents in planning."""
         tools = role.get_tools()
 
-        # Should have both set_content and edit tools for both documents
-        assert len(tools) == 4
+        # Should have set_content for implementation plan and edit tools for both documents
+        assert len(tools) == 3
 
         tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
@@ -341,18 +340,17 @@ class TestRoleToolSelection:
         """Create a mock document repository."""
         return Mock(spec=DocumentRepository)
 
-    def test_specification_role_provides_both_tools(self, mock_task_with_blank_spec, mock_document_repo):
-        """Test TaskSpecificationRole always provides both set_content and edit tools."""
+    def test_specification_role_providesonly_set_content_for_empty(self, mock_task_with_blank_spec, mock_document_repo):
+        """Test TaskSpecificationRole provides only set_content for empty documents."""
         role = TaskSpecificationRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 2
+        assert len(tools) == 1
         tool_names = [tool.name for tool in tools]
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
-        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
 
     def test_specification_role_provides_both_tools_for_document_with_content(
         self, mock_task_with_content, mock_document_repo
@@ -369,22 +367,24 @@ class TestRoleToolSelection:
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
 
-    def test_planning_role_provides_all_tools_for_both_documents(self, mock_task_with_blank_spec, mock_document_repo):
-        """Test TaskPlanningRole always provides both set_content and edit tools for both documents."""
+    def test_planning_role_provides_only_set_content_for_empty_plan(
+        self, mock_task_with_blank_spec, mock_document_repo
+    ):
+        """Test TaskPlanningRole provides only set_content for empty implementation plan."""
         role = TaskPlanningRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 4  # set_content + edit for both specification and plan
+        assert len(tools) == 2  # set_content for plan and edit for specification
         tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
 
-    def test_planning_role_provides_all_tools_regardless_of_content(self, mock_task_with_content, mock_document_repo):
+    def test_planning_role_provides_set_and_edit_for_plan_with_content(
+        self, mock_task_with_content, mock_document_repo
+    ):
         """Test TaskPlanningRole provides all tools even when documents have content."""
         role = TaskPlanningRole(
             task=mock_task_with_content,
@@ -392,9 +392,8 @@ class TestRoleToolSelection:
         )
 
         tools = role.get_tools()
-        assert len(tools) == 4  # set_content + edit for both specification and plan
+        assert len(tools) == 3  # set_content + edit for plan, edit for specification
         tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
