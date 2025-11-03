@@ -218,11 +218,8 @@ class ClaudeCodeAgent(BaseAgent):
                         timestamp=timestamp,
                     )
                 elif isinstance(content_block, TextBlock):
-                    yield ConversationMessage(
-                        role=MessageRole.AGENT,
-                        text_content=content_block.text,
-                        timestamp=timestamp,
-                    )
+                    # Parse text content to handle both normal messages and virtual tool calls
+                    yield from self._parse_claude_message_text(content_block.text)
                 elif isinstance(content_block, ThinkingBlock):
                     yield ConversationMessage(
                         role=MessageRole.AGENT,
@@ -288,40 +285,34 @@ class ClaudeCodeAgent(BaseAgent):
         # Create fresh client with current system prompt, document state, and session ID
         client = await self._create_client()
 
-        # Retry loop for handling virtua tool call validation errors
+        # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
-            # Stream messages from the client
-            result_message = None
-            async for message in client.stream(user_query=current_message):
-                # Capture the ResultMessage for parsing
-                if isinstance(message, ResultMessage):
-                    result_message = message
-                else:
-                    # Convert Message events to ConversationEvent
-                    for conv_event in self._convert_claude_message_to_events(message):
-                        yield conv_event
-
-            # Parse the final result
-            if not result_message:
-                raise RuntimeError("No ResultMessage received from Claude SDK")
-
-            # Update session_id from result if not already set
-            if not self.session_id:
-                self.session_id = result_message.session_id
-
             try:
-                # Parse and convert final result to ConversationEvent
-                events = await self._parse_claude_result(result_message)
+                # Stream messages from the client
+                result_message = None
+                async for message in client.stream(user_query=current_message):
+                    # Capture the ResultMessage for session ID extraction
+                    if isinstance(message, ResultMessage):
+                        result_message = message
+                    else:
+                        # Convert Message events to ConversationEvent
+                        # This now includes parsing and validation of text content
+                        for conv_event in self._convert_claude_message_to_events(message):
+                            yield conv_event
 
-                # Yield all events
-                for event in events:
-                    yield event
+                # Ensure we received a ResultMessage
+                if not result_message:
+                    raise RuntimeError("No ResultMessage received from Claude SDK")
+
+                # Update session_id from result if not already set
+                if not self.session_id:
+                    self.session_id = result_message.session_id
 
                 # Success - exit retry loop
                 break
 
             except InvalidVirtualToolCallError as e:
-                # Validation failed - prepare retry message
+                # Validation failed during streaming - prepare retry message
                 if attempt < MAX_RETRY_ATTEMPTS:
                     # Format error message for retry
                     current_message = self._format_tool_result(
@@ -426,9 +417,9 @@ class ClaudeCodeAgent(BaseAgent):
         outcome_str = outcome.value if isinstance(outcome, ToolCallOutcome) else outcome
         return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome_str}">\n{content}\n</tool_call_result>'
 
-    async def _parse_claude_result(
+    def _parse_claude_message_text(
         self,
-        result_message: ResultMessage,
+        text_content: str,
     ) -> list[ConversationEvent]:
         """Parse the Claude response and convert to conversation events.
 
@@ -436,7 +427,7 @@ class ClaudeCodeAgent(BaseAgent):
         and tool calls, then converts them to appropriate ConversationEvent instances.
 
         Args:
-            result_message: The ResultMessage from Claude SDK
+            text_content: Text content to parse
 
         Returns:
             List of ConversationEvent instances (ConversationMessage or ToolCallRequest)
@@ -444,13 +435,10 @@ class ClaudeCodeAgent(BaseAgent):
         Raises:
             InvalidVirtualToolCallError: If tool call validation fails
         """
-        if not result_message.result:
-            raise RuntimeError("ResultMessage has no result content")
-
         # Generate timestamp for all events
         timestamp = datetime.datetime.now(datetime.UTC)
 
-        response_text = result_message.result.strip()
+        response_text = text_content.strip()
 
         # Use unified parser to handle both normal messages and virtual tool calls
         tool_call_or_text = ClaudeResponseParser.parse_message_content(response_text)
@@ -458,7 +446,7 @@ class ClaudeCodeAgent(BaseAgent):
         # Handle each message type
         if isinstance(tool_call_or_text, VirtualToolCall):
             # Validate tool call (raises InvalidVirtualToolCallError if invalid)
-            await self._validate_virtual_tool_call_response(tool_call_or_text)
+            self._validate_virtual_tool_call_response(tool_call_or_text)
 
             # Convert validated tool call to events using helper function
             # Use ToolCallRequest since this is a new tool call requiring approval
@@ -482,7 +470,7 @@ class ClaudeCodeAgent(BaseAgent):
                 f"Expected VirtualToolCall or TextMessage from agent response, got {type(tool_call_or_text)}"
             )
 
-    async def _validate_virtual_tool_call_response(
+    def _validate_virtual_tool_call_response(
         self,
         tool_call: VirtualToolCall,
     ) -> None:
@@ -517,9 +505,9 @@ class ClaudeCodeAgent(BaseAgent):
             available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
             tools_list = ", ".join(available_tools) if available_tools else "none"
             error_msg = (
-                f"ERROR: Unknown tool '{tool_name}'.\n\n"
-                f"Available tools: {tools_list}\n\n"
-                f"Please use one of the available tools."
+                f"ERROR: Unknown virtual tool '{tool_name}'.\n\n"
+                f"Available virtual tools: {tools_list}\n\n"
+                f"Please use one of the available virtual tools, or an appropriate normal tool call."
             )
             raise InvalidVirtualToolCallError(
                 tool_name=tool_name,

@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, ToolResultBlock, ToolUseBlock, UserMessage
+from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
@@ -43,6 +43,35 @@ def create_mock_result_message(content: str, session_id: str = "test-session-123
         total_cost_usd=0.001,
         result=content,
     )
+
+
+def create_mock_assistant_message_with_text(content: str) -> AssistantMessage:
+    """Helper to create an AssistantMessage with TextBlock for testing."""
+    return AssistantMessage(
+        content=[TextBlock(text=content)],
+        model="claude-sonnet-4",
+        parent_tool_use_id=None,
+    )
+
+
+def create_mock_text_stream(content: str, session_id: str = "test-session-123") -> list:
+    """Helper to create a complete message stream for text content.
+
+    This simulates the real Claude SDK streaming behavior where:
+    1. An AssistantMessage with TextBlock is streamed first
+    2. A ResultMessage with the same content is sent at the end
+
+    Args:
+        content: The text content to include in both messages
+        session_id: Session ID for the ResultMessage
+
+    Returns:
+        List of messages [AssistantMessage, ResultMessage] to be yielded by mock
+    """
+    return [
+        create_mock_assistant_message_with_text(content),
+        create_mock_result_message(content, session_id=session_id),
+    ]
 
 
 def create_mock_tool_use_block(tool_name: str, tool_id: str, args: dict[str, Any]) -> ToolUseBlock:
@@ -158,8 +187,8 @@ class TestStreamEventsTextResponse:
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
     async def test_simple_text_response(self, mock_client_class, agent_with_virtual_tool):
         """Test streaming a simple text response."""
-        result_msg = create_mock_result_message("Hello, this is a text response!")
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream("Hello, this is a text response!")
+        setup_mock_client(mock_client_class, messages)
 
         # Stream events
         events = []
@@ -177,8 +206,8 @@ class TestStreamEventsTextResponse:
     async def test_multiline_text_response(self, mock_client_class, agent_with_virtual_tool):
         """Test streaming a multiline text response."""
         multiline_text = "Line 1\nLine 2\nLine 3"
-        result_msg = create_mock_result_message(multiline_text)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream(multiline_text)
+        setup_mock_client(mock_client_class, messages)
 
         events = []
         async for event in agent_with_virtual_tool.stream_events("Test prompt"):
@@ -192,8 +221,8 @@ class TestStreamEventsTextResponse:
     async def test_session_id_captured_from_result(self, mock_client_class, agent_with_virtual_tool):
         """Test that session_id is captured from result message."""
         new_session_id = "new-session-456"
-        result_msg = create_mock_result_message("Response", session_id=new_session_id)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream("Response", session_id=new_session_id)
+        setup_mock_client(mock_client_class, messages)
 
         # Agent starts without session_id
         assert agent_with_virtual_tool.session_id is None
@@ -220,8 +249,8 @@ class TestStreamEventsVirtualToolCalls:
                 "arguments": {"edits": [{"find": "old", "replace": "new"}], "reasoning": "Update text"},
             }
         )
-        result_msg = create_mock_result_message(tool_call_json)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream(tool_call_json)
+        setup_mock_client(mock_client_class, messages)
 
         events = []
         async for event in agent_with_virtual_tool.stream_events("Test prompt"):
@@ -245,8 +274,8 @@ class TestStreamEventsVirtualToolCalls:
                 "arguments": {"edits": [{"find": "old", "replace": "new"}]},
             }
         )
-        result_msg = create_mock_result_message(tool_call_with_preamble)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream(tool_call_with_preamble)
+        setup_mock_client(mock_client_class, messages)
 
         events = []
         async for event in agent_with_virtual_tool.stream_events("Test prompt"):
@@ -274,8 +303,8 @@ class TestStreamEventsVirtualToolCalls:
             )
             + "\nI'll verify the changes afterwards"
         )
-        result_msg = create_mock_result_message(tool_call_with_postamble)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream(tool_call_with_postamble)
+        setup_mock_client(mock_client_class, messages)
 
         events = []
         async for event in agent_with_virtual_tool.stream_events("Test prompt"):
@@ -303,8 +332,8 @@ class TestStreamEventsVirtualToolCalls:
             )
             + "\nThis should fix the issue"
         )
-        result_msg = create_mock_result_message(tool_call_with_both)
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream(tool_call_with_both)
+        setup_mock_client(mock_client_class, messages)
 
         events = []
         async for event in agent_with_virtual_tool.stream_events("Test prompt"):
@@ -331,7 +360,8 @@ class TestStreamEventsVirtualToolCalls:
         async def mock_stream(user_query):
             nonlocal call_count
             call_count += 1
-            yield create_mock_result_message(tool_call_json)
+            for message in create_mock_text_stream(tool_call_json):
+                yield message
 
         setup_mock_client_with_callback(mock_client_class, mock_stream)
 
@@ -366,9 +396,10 @@ class TestStreamEventsFunctionToolCalls:
         tool_result_block = ToolResultBlock(tool_use_id="tool-123", content="Found 5 matches", is_error=False)
         user_msg = UserMessage(content=[tool_result_block])
 
-        result_msg = create_mock_result_message("Here are the search results...")
+        # Create text stream for final message
+        final_messages = create_mock_text_stream("Here are the search results...")
 
-        setup_mock_client(mock_client_class, [assistant_msg, user_msg, result_msg])
+        setup_mock_client(mock_client_class, [assistant_msg, user_msg] + final_messages)
 
         events = []
         async for event in agent_with_function_tool.stream_events("Search for test"):
@@ -408,8 +439,8 @@ class TestStreamEventsToolApprovals:
         )
 
         # Mock client response after approval
-        result_msg = create_mock_result_message("The document has been updated.")
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream("The document has been updated.")
+        setup_mock_client(mock_client_class, messages)
 
         # Create tool approvals
         approvals = ToolApprovals(approvals={"edit_document": ToolApprovalDecision(approved=True, feedback=None)})
@@ -441,8 +472,8 @@ class TestStreamEventsToolApprovals:
         )
 
         # Mock client response after denial
-        result_msg = create_mock_result_message("I understand. Let me try a different approach.")
-        setup_mock_client(mock_client_class, result_msg)
+        messages = create_mock_text_stream("I understand. Let me try a different approach.")
+        setup_mock_client(mock_client_class, messages)
 
         # Create tool approvals (denied)
         approvals = ToolApprovals(
@@ -502,11 +533,13 @@ class TestStreamEventsRetryLogic:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                yield create_mock_result_message(invalid_tool_call)
+                for message in create_mock_text_stream(invalid_tool_call):
+                    yield message
             else:
                 # Check that error feedback was provided
                 assert "ERROR: Invalid arguments" in user_query
-                yield create_mock_result_message(valid_tool_call)
+                for message in create_mock_text_stream(valid_tool_call):
+                    yield message
 
         setup_mock_client_with_callback(mock_client_class, mock_stream)
 
@@ -533,7 +566,8 @@ class TestStreamEventsRetryLogic:
         async def mock_stream(user_query):
             nonlocal call_count
             call_count += 1
-            yield create_mock_result_message(invalid_tool_call)
+            for message in create_mock_text_stream(invalid_tool_call):
+                yield message
 
         setup_mock_client_with_callback(mock_client_class, mock_stream)
 
@@ -570,14 +604,18 @@ class TestStreamEventsEdgeCases:
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
     async def test_empty_result_content_raises_error(self, mock_client_class, agent_with_virtual_tool):
-        """Test that empty result content raises RuntimeError."""
-        result_msg = create_mock_result_message("")
-        setup_mock_client(mock_client_class, result_msg)
+        """Test that empty result content produces empty message."""
+        messages = create_mock_text_stream("")
+        setup_mock_client(mock_client_class, messages)
 
-        with pytest.raises(RuntimeError, match="ResultMessage has no result content"):
-            events = []
-            async for event in agent_with_virtual_tool.stream_events("Test prompt"):
-                events.append(event)
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should successfully create an empty message
+        assert len(events) == 1
+        assert isinstance(events[0], ConversationMessage)
+        assert events[0].text_content == ""
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
@@ -590,9 +628,9 @@ class TestStreamEventsEdgeCases:
         tool_result = ToolResultBlock(tool_use_id="tool-1", content="Results found", is_error=False)
         user_msg = UserMessage(content=[tool_result])
 
-        result_msg = create_mock_result_message("Analysis complete")
+        final_messages = create_mock_text_stream("Analysis complete")
 
-        setup_mock_client(mock_client_class, [assistant_msg, user_msg, result_msg])
+        setup_mock_client(mock_client_class, [assistant_msg, user_msg] + final_messages)
 
         events = []
         async for event in agent_with_both_tools.stream_events("Analyze code"):
