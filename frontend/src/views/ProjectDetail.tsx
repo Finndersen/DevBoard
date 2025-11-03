@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
-import { Button, Card, Input, Textarea, Modal, Markdown } from '../components/ui'
+import CreateTaskModal from '../components/modals/CreateTaskModal'
+import { Button, Card, Textarea, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
-import type { Project, Task, Codebase } from '../lib/api'
-import { useModal, useEditableField } from '../hooks'
+import type { Task } from '../lib/api'
+import { useModal, useEditableField, useProject, useProjectTasks } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { useApprovals } from '../contexts/ApprovalsContext'
@@ -22,9 +23,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   // Update tab title when project data is loaded
   useTabTitle('project', id)
-  const [project, setProject] = useState<Project | null>(null)
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
+
+  // Fetch data using hooks
+  const { data: project, loading: projectLoading, refetch: refetchProject } = useProject(id!)
+  const { data: tasks, loading: tasksLoading } = useProjectTasks(id!)
+
+  // Combined loading state
+  const loading = projectLoading || tasksLoading
   
   // Get tab from URL query params, default to 'home'
   const getTabFromUrl = useCallback(() => {
@@ -37,13 +42,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     const tab = getTabFromUrl()
     return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
   })
-  const [codebases, setCodebases] = useState<Codebase[]>([])
-  const [newTask, setNewTask] = useState({
-    title: '',
-    codebase_id: null as number | null,
-    remote_task_id: null as string | null,
-    specification_content: ''
-  })
+
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
   // Use new custom hooks
@@ -74,41 +73,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     setActiveTab(internalTab)
   }, [getTabFromUrl])
 
-  const fetchProject = useCallback(async () => {
-    try {
-      const data = await apiClient.getProject(id!)
-      setProject(data)
-      setStoreProject(data)
-    } catch (error) {
-      console.error('Failed to fetch project:', error)
-    }
-  }, [id, setStoreProject])
-
-  const fetchTasks = useCallback(async () => {
-    try {
-      const data = await apiClient.getProjectTasks(id!)
-      setTasks(data)
-    } catch (error) {
-      console.error('Failed to fetch tasks:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
-
-  const fetchCodebases = useCallback(async () => {
-    try {
-      const data = await apiClient.getCodebases()
-      setCodebases(data)
-    } catch (error) {
-      console.error('Failed to fetch codebases:', error)
-    }
-  }, [])
-
+  // Store project in DataStore when loaded
   useEffect(() => {
-    fetchProject()
-    fetchTasks()
-    fetchCodebases()
-  }, [fetchProject, fetchTasks, fetchCodebases])
+    if (project) {
+      setStoreProject(project)
+    }
+  }, [project, setStoreProject])
 
   // Register refresh handlers for project document updates
   useEffect(() => {
@@ -120,7 +90,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       // Register refresh handler for project-related approvals
       registerRefreshHandler(conversationId, 'refresh_project', async () => {
         console.log('ProjectDetail: Executing project refresh handler')
-        await fetchProject() // Refresh project data to get updated specification
+        await refetchProject() // Refresh project data to get updated specification
       })
 
       // Cleanup on unmount or conversation change
@@ -129,45 +99,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         unregisterRefreshHandlers(conversationId)
       }
     }
-  }, [project?.default_conversation_id, fetchProject, registerRefreshHandler, unregisterRefreshHandlers])
-
-  // Individual change handlers to avoid object spread on every keystroke
-  const handleTaskTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewTask(prev => ({ ...prev, title: e.target.value }))
-  }, [])
-
-  const handleTaskCodebaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setNewTask(prev => ({ ...prev, codebase_id: e.target.value ? Number(e.target.value) : null }))
-  }, [])
-
-  const handleTaskSpecificationChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setNewTask(prev => ({ ...prev, specification_content: e.target.value }))
-  }, [])
-
-  const handleCreateTask = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const taskData = {
-        title: newTask.title,
-        codebase_id: newTask.codebase_id,
-        remote_task_id: newTask.remote_task_id,
-        specification_content: newTask.specification_content
-      }
-      const createdTask = await apiClient.createTask(id!, taskData)
-      createTaskModal.close()
-      setNewTask({
-        title: '',
-        codebase_id: null,
-        remote_task_id: null,
-        specification_content: ''
-      })
-      // Navigate to the newly created task
-      navigate(`/tasks/${createdTask.id}`)
-    } catch (error) {
-      console.error('Failed to create task:', error)
-    }
-  }, [newTask, id, createTaskModal, navigate])
-
+  }, [project?.default_conversation_id, refetchProject, registerRefreshHandler, unregisterRefreshHandlers])
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -188,6 +120,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   // Memoize task grouping to avoid recalculation on every render
   const taskGroups = useMemo(() => {
+    if (!tasks) return {} as Record<string, Task[]>
     return tasks.reduce((groups, task) => {
       const status = task.status
       if (!groups[status]) {
@@ -382,76 +315,11 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       )}
 
       {/* Create Task Modal */}
-      <Modal
+      <CreateTaskModal
         isOpen={createTaskModal.isOpen}
         onClose={createTaskModal.close}
-        title="Create New Task"
-        maxWidth="xl"
-      >
-        <form onSubmit={handleCreateTask}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Task Title
-              </label>
-              <Input
-                type="text"
-                required
-                value={newTask.title}
-                onChange={handleTaskTitleChange}
-                placeholder="Enter task title"
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Codebase (Optional)
-              </label>
-              <select
-                value={newTask.codebase_id ?? ''}
-                onChange={handleTaskCodebaseChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="">None</option>
-                {codebases.map((codebase) => (
-                  <option key={codebase.id} value={codebase.id}>
-                    {codebase.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Task Specification (Optional)
-              </label>
-              <Textarea
-                value={newTask.specification_content}
-                onChange={handleTaskSpecificationChange}
-                placeholder="Enter task specification in Markdown format..."
-                className="w-full h-40 font-mono text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 mt-6">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={createTaskModal.close}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-            >
-              Create Task
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        projectId={id!}
+      />
 
     </div>
   )

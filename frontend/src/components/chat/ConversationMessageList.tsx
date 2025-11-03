@@ -49,7 +49,11 @@ function ConversationMessageList({
         const cacheKey = `${message.timestamp}-${message.event_type}-${index}`
         if (!toolResultCache.current.has(cacheKey)) {
           const result = findToolResult(message.tool_call_id, index)
-          toolResultCache.current.set(cacheKey, result)
+          // Only cache if we found a result (don't cache undefined)
+          // This allows retry on next render when result arrives during streaming
+          if (result) {
+            toolResultCache.current.set(cacheKey, result)
+          }
         }
       }
     })

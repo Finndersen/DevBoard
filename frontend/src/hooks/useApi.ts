@@ -13,13 +13,13 @@ export interface UseApiOptions {
 export function useApi<T>(
   apiCall: () => Promise<T>,
   options: UseApiOptions = {}
-): ApiState<T> & { refetch: () => Promise<void> } {
+): ApiState<T> & { refetch: () => Promise<void>; setData: (data: T) => void } {
   const { immediate = true } = options
-  
+
   // Store the apiCall in a ref to avoid dependency issues
   const apiCallRef = useRef(apiCall)
   apiCallRef.current = apiCall
-  
+
   const [state, setState] = useState<ApiState<T>>({
     data: null,
     loading: immediate,
@@ -28,7 +28,7 @@ export function useApi<T>(
 
   const execute = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }))
-    
+
     try {
       const data = await apiCallRef.current()
       setState({ data, loading: false, error: null })
@@ -38,6 +38,10 @@ export function useApi<T>(
     }
   }, []) // Remove apiCall from dependencies
 
+  const setData = useCallback((data: T) => {
+    setState({ data, loading: false, error: null })
+  }, [])
+
   useEffect(() => {
     if (immediate) {
       execute()
@@ -46,7 +50,8 @@ export function useApi<T>(
 
   return {
     ...state,
-    refetch: execute
+    refetch: execute,
+    setData
   }
 }
 

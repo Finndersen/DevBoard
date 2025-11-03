@@ -651,65 +651,6 @@ describe('ConversationChat', () => {
     expect(screen.getAllByText('AI response')).toHaveLength(2)
   })
 
-  it('clears pending tool approvals when clearing chat history', async () => {
-    const user = userEvent.setup()
-
-    // Mock agent requesting tool approval
-    server.use(
-      http.post('*/api/conversations/1/messages/stream', () => {
-        return createStreamingResponse([
-          {
-            event_type: 'tool_call_request',
-            tool_call_id: 'edit_123',
-            tool_name: 'edit_project_specification',
-            tool_args: {
-              edits: [
-                { find: 'old text', replace: 'new text' }
-              ],
-              reasoning: 'Updating project specification'
-            }
-          }
-        ])
-      }),
-      http.post('*/api/conversations/1/clear-messages', () => {
-        return HttpResponse.json({ status: 'success' })
-      })
-    )
-
-    const mockOnClearHistory = vi.fn()
-    render(
-      <ConversationChat
-        conversationId={mockConversationId}
-        onClearHistory={mockOnClearHistory}
-        showClearButton={true}
-      />
-    )
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
-    })
-
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    // Send message that triggers tool approval
-    await user.type(input, 'Please update the project specification')
-    await user.click(sendButton)
-
-    // Wait for approval to appear
-    await waitFor(() => {
-      expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
-      expect(screen.getByText('Updating project specification')).toBeInTheDocument()
-    })
-
-    // Use the external clear handler (which is what AgentChat provides)
-    mockOnClearHistory()
-
-    // The approval should be cleared when the external handler is called
-    // Note: In the actual implementation, AgentChat calls clearApprovals
-    // We're testing that the external handler is called correctly
-    expect(mockOnClearHistory).toHaveBeenCalled()
-  })
 
   it('converts pending message to confirmed message on first streamed event', async () => {
     const user = userEvent.setup()

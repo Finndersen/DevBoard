@@ -1,39 +1,37 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { flushSync } from 'react-dom'
 import { apiClient } from '../../lib/api'
 import type { ConversationEvent, ToolCallRequest, ToolApprovalRequest } from '../../lib/api'
+import { processConversationStream } from '../../lib/streamProcessor'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
-import Button from '../ui/Button'
-import Modal from '../ui/Modal'
 import { useUIStore } from '../../stores/uiStore'
+
+export interface ConversationChatHandle {
+  executePromptAction: (actionKey: string) => Promise<void>
+}
 
 interface ConversationChatProps {
   conversationId: number
   placeholder?: string
   emptyStateMessage?: string
-  onClearHistory?: () => void
-  showClearButton?: boolean
   isTransitioning?: boolean
   transitionMessage?: string
 }
 
-export default function ConversationChat({
+const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProps>(({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
-  onClearHistory,
   isTransitioning = false,
   transitionMessage = ''
-}: ConversationChatProps) {
+}, ref) => {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(false)
-  const [showClearModal, setShowClearModal] = useState(false)
-  const [clearing, setClearing] = useState(false)
   const [approvalError, setApprovalError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -56,8 +54,7 @@ export default function ConversationChat({
     updateMessageStatus,
     removeMessage,
     getPendingMessages,
-    retryMessage,
-    clearConversationMessages
+    retryMessage
   } = usePendingMessages()
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
   const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
@@ -150,11 +147,76 @@ export default function ConversationChat({
     }
   }, [pendingMessages])
 
+  // Shared callback for handling streamed events
+  const handleStreamEvent = useCallback((event: ConversationEvent) => {
+    setMessages(prev => [...prev, event])
+  }, [])
+
+  /**
+   * Convert tool requests to approval objects with conversation context
+   */
+  const convertToolRequestsToApprovals = useCallback(async (toolRequests: ToolCallRequest[]): Promise<PendingApprovalWithContext[]> => {
+    return toolRequests.map((request) => {
+      // Parse tool_args if it's a string
+      let toolArgs: Record<string, unknown> | null = null
+      if (typeof request.tool_args === 'object' && request.tool_args !== null) {
+        toolArgs = request.tool_args as Record<string, unknown>
+      } else if (typeof request.tool_args === 'string') {
+        try {
+          toolArgs = JSON.parse(request.tool_args)
+        } catch (e) {
+          console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
+        }
+      }
+
+      const approvalObject: PendingApprovalWithContext = {
+        tool_call_id: request.tool_call_id,
+        tool_name: request.tool_name,
+        tool_args: toolArgs,
+        conversationId: conversationId // Add conversation context
+      }
+
+      return approvalObject
+    })
+  }, [conversationId])
+
+  /**
+   * Higher-level wrapper for stream processing that handles:
+   * - Event streaming with message updates
+   * - Tool request conversion to approvals
+   * - Setting approvals state
+   *
+   * This standardizes the common pattern across all stream operations.
+   *
+   * @returns true if tool approvals were set, false otherwise
+   */
+  const processStreamWithApprovals = useCallback(async (
+    stream: AsyncGenerator<ConversationEvent>,
+    options?: {
+      onFirstEvent?: () => void | Promise<void>
+    }
+  ): Promise<boolean> => {
+    const { toolRequests } = await processConversationStream({
+      stream,
+      onFirstEvent: options?.onFirstEvent,
+      onEvent: handleStreamEvent
+    })
+
+    // Handle tool approval requests if any
+    if (toolRequests.length > 0) {
+      const approvals = await convertToolRequestsToApprovals(toolRequests)
+      setApprovals(approvalKey, approvals)
+      return true
+    }
+
+    return false
+  }, [handleStreamEvent, approvalKey, setApprovals, convertToolRequestsToApprovals])
+
   /**
    * Core logic for processing streamed conversation events.
    * Handles both regular messages and tool approval requests.
    */
-  const processStreamedMessage = async (
+  const processStreamedMessage = useCallback(async (
     messageText: string,
     messageTimestamp: string,
     pendingMessageId: string
@@ -164,50 +226,36 @@ export default function ConversationChat({
     try {
       updateMessageStatus(pendingKey, pendingMessageId, 'sent')
 
-      // Track whether we've received the first successful event
-      let firstEventReceived = false
+      // Process stream with standardized approval handling
+      const hasApprovals = await processStreamWithApprovals(
+        apiClient.streamConversationMessage(conversationId, {
+          message: messageText
+        }),
+        {
+          onFirstEvent: () => {
+            // Remove pending message and add user message on first event
+            removedPendingIdsRef.current.add(pendingMessageId)
+            removeMessage(pendingKey, pendingMessageId)
 
-      // Stream and process events as they arrive
-      const toolRequests: ToolCallRequest[] = []
-      for await (const event of apiClient.streamConversationMessage(conversationId, {
-        message: messageText
-      })) {
-        // Add user message only after first successful event
-        if (!firstEventReceived) {
-          firstEventReceived = true
+            // Force immediate UI update to hide pending message
+            flushSync(() => {
+              setRenderCount(prev => prev + 1)
+            })
 
-          // Remove pending message immediately when real message appears
-          removedPendingIdsRef.current.add(pendingMessageId)
-          removeMessage(pendingKey, pendingMessageId)
-
-          // Force immediate UI update to hide pending message
-          flushSync(() => {
-            setRenderCount(prev => prev + 1)
-          })
-
-          const userMessage: ConversationEvent = {
-            event_type: 'message',
-            role: 'user',
-            text_content: messageText,
-            timestamp: messageTimestamp
+            const userMessage: ConversationEvent = {
+              event_type: 'message',
+              role: 'user',
+              text_content: messageText,
+              timestamp: messageTimestamp
+            }
+            setMessages(prev => [...prev, userMessage])
           }
-          setMessages(prev => [...prev, userMessage])
         }
+      )
 
-        // Handle tool approval requests separately
-        if (event.event_type === 'tool_call_request') {
-          toolRequests.push(event as ToolCallRequest)
-        } else {
-          // Add all other events to messages immediately for real-time display
-          setMessages(prev => [...prev, event])
-        }
-      }
-
-      // Handle tool approval requests if any
-      if (toolRequests.length > 0) {
+      // Update status to awaiting_approval if there are pending approvals
+      if (hasApprovals) {
         updateMessageStatus(pendingKey, pendingMessageId, 'awaiting_approval')
-        const approvals = await convertToolRequestsToApprovals(toolRequests)
-        setApprovals(approvalKey, approvals)
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -216,7 +264,7 @@ export default function ConversationChat({
     } finally {
       setLoading(false)
     }
-  }
+  }, [updateMessageStatus, pendingKey, processStreamWithApprovals, conversationId, removeMessage])
 
   const handleSendMessage = useCallback(async (messageText: string) => {
     if (loading || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
@@ -244,31 +292,6 @@ export default function ConversationChat({
     [loading, pendingApprovals.length, pendingMessage, isTransitioning]
   )
 
-  const convertToolRequestsToApprovals = async (toolRequests: ToolCallRequest[]): Promise<PendingApprovalWithContext[]> => {
-    return toolRequests.map((request) => {
-      // Parse tool_args if it's a string
-      let toolArgs: Record<string, unknown> | null = null
-      if (typeof request.tool_args === 'object' && request.tool_args !== null) {
-        toolArgs = request.tool_args as Record<string, unknown>
-      } else if (typeof request.tool_args === 'string') {
-        try {
-          toolArgs = JSON.parse(request.tool_args)
-        } catch (e) {
-          console.warn('ConversationChat: Failed to parse tool_args as JSON:', e)
-        }
-      }
-
-      const approvalObject: PendingApprovalWithContext = {
-        tool_call_id: request.tool_call_id,
-        tool_name: request.tool_name,
-        tool_args: toolArgs,
-        conversationId: conversationId // Add conversation context
-      }
-
-      return approvalObject
-    })
-  }
-
   const handleToolApproval = async (approvalRequest: ToolApprovalRequest) => {
     if (pendingApprovals.length === 0) return
 
@@ -288,40 +311,10 @@ export default function ConversationChat({
     })
 
     try {
-      // Track whether we've received the first successful event
-      let firstEventReceived = false
-
-      // Stream and process events as they arrive
-      const toolRequests: ToolCallRequest[] = []
-      for await (const event of apiClient.streamApproveConversationTools(conversationId, approvalRequest)) {
-        // Add user message only after first successful event (if pending message exists)
-        if (!firstEventReceived && pendingMessage) {
-          firstEventReceived = true
-
-          // Remove pending message immediately when real message appears
-          removedPendingIdsRef.current.add(pendingMessage.id)
-          removeMessage(pendingKey, pendingMessage.id)
-
-          // Force immediate UI update to hide pending message
-          flushSync(() => {
-            setRenderCount(prev => prev + 1)
-          })
-
-          const userMessage: ConversationEvent = {
-            event_type: 'message',
-            role: 'user',
-            text_content: pendingMessage.text_content,
-            timestamp: pendingMessage.timestamp
-          }
-          setMessages(prev => [...prev, userMessage])
-        }
-
-        if (event.event_type === 'tool_call_request') {
-          toolRequests.push(event as ToolCallRequest)
-        } else {
-          setMessages(prev => [...prev, event])
-        }
-      }
+      // Process stream with standardized approval handling
+      await processStreamWithApprovals(
+        apiClient.streamApproveConversationTools(conversationId, approvalRequest)
+      )
 
       // Clear pending approvals after successful response
       clearApprovals(approvalKey)
@@ -330,12 +323,6 @@ export default function ConversationChat({
       if (approvedToolNames.length > 0) {
         console.log('ConversationChat: Executing refresh handlers for approved tools:', approvedToolNames)
         await executeRefreshHandlers(conversationId, approvedToolNames)
-      }
-
-      // Handle new tool requests if any
-      if (toolRequests.length > 0) {
-        const newApprovals = await convertToolRequestsToApprovals(toolRequests)
-        setApprovals(approvalKey, newApprovals)
       }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
@@ -346,31 +333,26 @@ export default function ConversationChat({
     }
   }
 
-
-  const handleClearHistory = async () => {
-    if (onClearHistory) {
-      // Use external clear handler if provided
-      onClearHistory()
-      return
-    }
-
-    // Fallback to internal clear handler
-    setClearing(true)
+  const executePromptAction = useCallback(async (actionKey: string) => {
+    setLoading(true)
     try {
-      const response = await apiClient.clearConversationMessages(conversationId)
-      console.log('Clear history response:', response)
-      setMessages([])
-      // Also clear pending messages
-      clearConversationMessages(pendingKey)
-      // Clear pending tool approvals
-      clearApprovals(approvalKey)
-      setShowClearModal(false)
+      // Process stream with standardized approval handling
+      await processStreamWithApprovals(
+        apiClient.streamPromptAction(conversationId, {
+          action_key: actionKey
+        })
+      )
     } catch (error) {
-      console.error('Failed to clear chat history:', error)
+      console.error('Failed to execute prompt action:', error)
     } finally {
-      setClearing(false)
+      setLoading(false)
     }
-  }
+  }, [conversationId, processStreamWithApprovals])
+
+  // Expose executePromptAction via ref
+  useImperativeHandle(ref, () => ({
+    executePromptAction
+  }), [executePromptAction])
 
   return (
     <div className="flex flex-col h-full">
@@ -457,39 +439,8 @@ export default function ConversationChat({
           </p>
         )}
       </div>
-
-      {/* Clear History Confirmation Modal */}
-      {showClearModal && (
-        <Modal 
-          isOpen={showClearModal}
-          onClose={() => setShowClearModal(false)}
-          title="Clear Chat History"
-          maxWidth="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-gray-600 dark:text-gray-300">
-              Are you sure you want to clear all conversation history? This action cannot be undone.
-            </p>
-            
-            <div className="flex justify-end space-x-3">
-              <Button 
-                variant="secondary" 
-                onClick={() => setShowClearModal(false)}
-                disabled={clearing}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="primary" 
-                onClick={handleClearHistory}
-                loading={clearing}
-              >
-                Clear History
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   )
-}
+})
+
+export default ConversationChat

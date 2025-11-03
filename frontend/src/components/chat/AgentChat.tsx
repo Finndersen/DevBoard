@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
-import { ChatBubbleLeftIcon, TrashIcon, ClipboardDocumentIcon, CheckIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
-import ConversationChat from './ConversationChat'
+import { useState, useEffect, forwardRef, useRef, useImperativeHandle } from 'react'
+import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
+import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
-import Modal from '../ui/Modal'
+import ClearChatHistoryModal from '../modals/ClearChatHistoryModal'
+import SessionIdModal from '../modals/SessionIdModal'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ConversationResponse } from '../../lib/api'
@@ -24,7 +25,7 @@ interface AgentChatProps {
   transitionMessage?: string
 }
 
-export default function AgentChat({
+const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
@@ -32,10 +33,19 @@ export default function AgentChat({
   padding = "xs",
   isTransitioning = false,
   transitionMessage = ''
-}: AgentChatProps) {
+}, ref) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
-  const [sessionIdCopied, setSessionIdCopied] = useState(false)
+
+  // Ref for ConversationChat to access its methods
+  const conversationChatRef = useRef<ConversationChatHandle>(null)
+
+  // Forward ref to parent
+  useImperativeHandle(ref, () => ({
+    executePromptAction: async (actionKey: string) => {
+      await conversationChatRef.current?.executePromptAction(actionKey)
+    }
+  }), [])
 
   // Use new custom hooks to eliminate boilerplate
   const clearChatModal = useModal()
@@ -83,18 +93,6 @@ export default function AgentChat({
       window.location.reload() // Simple approach - could be optimized to just refresh the chat
     }
   )
-
-  const handleCopySessionId = async () => {
-    if (!conversation?.external_session_id) return
-
-    try {
-      await navigator.clipboard.writeText(conversation.external_session_id)
-      setSessionIdCopied(true)
-      setTimeout(() => setSessionIdCopied(false), 2000)
-    } catch (error) {
-      console.error('Failed to copy session ID:', error)
-    }
-  }
 
   return (
     <>
@@ -145,6 +143,7 @@ export default function AgentChat({
         <div className="flex-1 overflow-hidden">
           {conversationId ? (
             <ConversationChat
+              ref={conversationChatRef}
               conversationId={conversationId}
               placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
@@ -161,76 +160,23 @@ export default function AgentChat({
       </Card>
 
       {/* Clear Chat History Confirmation Modal */}
-      <Modal
+      <ClearChatHistoryModal
         isOpen={clearChatModal.isOpen}
         onClose={clearChatModal.close}
-        title="Clear Chat History"
-        maxWidth="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300">
-            Are you sure you want to clear all conversation history? This action cannot be undone.
-          </p>
-
-          <div className="flex justify-end space-x-3">
-            <Button
-              variant="secondary"
-              onClick={clearChatModal.close}
-              disabled={clearChatOperation.loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={clearChatOperation.execute}
-              loading={clearChatOperation.loading}
-            >
-              Clear History
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={clearChatOperation.execute}
+        loading={clearChatOperation.loading}
+      />
 
       {/* Session ID Modal */}
       {conversation?.external_session_id && (
-        <Modal
+        <SessionIdModal
           isOpen={sessionIdModal.isOpen}
           onClose={sessionIdModal.close}
-          title="Session ID"
-          maxWidth="md"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              This is the external session identifier for this conversation.
-            </p>
-
-            <div className="relative">
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
-                <code className="text-sm text-gray-800 dark:text-gray-200 break-all select-all">
-                  {conversation.external_session_id}
-                </code>
-              </div>
-              <button
-                onClick={handleCopySessionId}
-                className="absolute top-2 right-2 p-2 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600 transition-colors"
-                title={sessionIdCopied ? "Copied!" : "Copy to clipboard"}
-              >
-                {sessionIdCopied ? (
-                  <CheckIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
-                ) : (
-                  <ClipboardDocumentIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                )}
-              </button>
-            </div>
-
-            <div className="flex justify-end">
-              <Button variant="secondary" onClick={sessionIdModal.close}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          sessionId={conversation.external_session_id}
+        />
       )}
     </>
   )
-}
+})
+
+export default AgentChat

@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import { apiClient } from '../lib/api'
-import type { Project, Task, Codebase } from '../lib/api'
-import { useTask, useUpdateTask, useEditableField, useCodebases } from '../hooks'
+import type { Task, Codebase } from '../lib/api'
+import { useTask, useUpdateTask, useEditableField, useCodebases, useProject, useTransitionTaskState } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
+import type { ConversationChatHandle } from '../components/chat/ConversationChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 
 interface TaskDetailProps {
@@ -25,16 +25,26 @@ function TaskDetail({ id }: TaskDetailProps) {
     refetch()
   }, [id, refetch])
 
-  // Populate DataStore with task data when loaded
+  // Fetch project data using hook (never fetch automatically)
+  const projectId = task?.project_id ?? 0
+  const { data: project, refetch: refetchProject } = useProject(projectId, {
+    immediate: false
+  })
+
+  // Populate DataStore with task data and fetch project when loaded
   useEffect(() => {
     if (task) {
       setTask(task)
+      // Fetch associated project if valid project_id exists
+      if (task.project_id && task.project_id !== 0) {
+        refetchProject()
+      }
     }
-  }, [task, setTask])
+  }, [task, setTask, refetchProject])
 
   // Update tab title when task data is loaded
   useTabTitle('task', id)
-  const [project, setProject] = useState<Project | null>(null)
+
   const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -45,6 +55,9 @@ function TaskDetail({ id }: TaskDetailProps) {
   const refetchRef = useRef(refetch)
   refetchRef.current = refetch
 
+  // Ref for AgentChat to access its methods
+  const agentChatRef = useRef<ConversationChatHandle>(null)
+
   // Memoize the updateCache function to prevent infinite re-creation
   const updateCache = useCallback(() => {
     // Update local task state with returned data - no refetch needed!
@@ -53,6 +66,11 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Use enhanced useMutation with optimistic updates (eliminates refetch!)
   const { mutate: updateTask, error: updateError } = useUpdateTask({
+    updateCache
+  })
+
+  // State transition mutation hook
+  const { mutate: transitionState } = useTransitionTaskState({
     updateCache
   })
 
@@ -84,22 +102,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   const selectedCodebase = task && task.codebase_id && codebases
     ? codebases.find((c: Codebase) => c.id === task.codebase_id)
     : null
-
-  useEffect(() => {
-    const fetchProject = async (projectId: number) => {
-      try {
-        const data = await apiClient.getProject(projectId)
-        setProject(data)
-      } catch (error) {
-        console.error('Failed to fetch project:', error)
-      }
-    }
-
-    if (task) {
-      // Fetch project details
-      fetchProject(task.project_id)
-    }
-  }, [task])
 
   // Memoize the refresh handler to prevent infinite loops
   const refreshHandler = useCallback(async () => {
@@ -161,20 +163,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     setTransitionMessage(message)
     try {
       // Step 1: Transition state (creates new conversation)
-      const result = await apiClient.transitionTaskState(id!, { new_state: newState })
+      // No refetch needed - updateCache handles state update
+      await transitionState({ id: id!, newState })
 
-      // Step 2: Refresh to get new task state and conversation
-      await refetch()
-
-      // Step 3: Get appropriate prompt action key for new state
+      // Step 2: Get appropriate prompt action key for new state
       const actionKey = getPromptActionForState(newState)
 
-      // Step 4: Stream initialization prompt to new conversation
-      if (actionKey && result.conversation_id) {
-        for await (const _event of apiClient.streamPromptAction(result.conversation_id, { action_key: actionKey })) {
-          // Events are processed but not shown in UI - they're just for agent execution
-          // The conversation will be visible in the conversation chat once the stream completes
-        }
+      // Step 3: Execute prompt action via ConversationChat
+      // This will stream events and display them in real-time
+      if (actionKey) {
+        await agentChatRef.current?.executePromptAction(actionKey)
       }
     } catch (error) {
       console.error('Failed to transition task state:', error)
@@ -542,6 +540,7 @@ function TaskDetail({ id }: TaskDetailProps) {
         {/* Right Column: Task Agent Chat */}
         <div className="h-full overflow-hidden">
           <AgentChat
+            ref={agentChatRef}
             conversationId={task.conversation_id}
             placeholder="Ask me to help with task specification or implementation planning..."
             emptyStateMessage="Welcome to the Task Agent!"

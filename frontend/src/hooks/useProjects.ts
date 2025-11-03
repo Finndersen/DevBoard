@@ -1,13 +1,13 @@
 import { apiClient } from '../lib/api'
 import type { Project } from '../lib/api'
-import { useApi, useMutation } from './useApi'
+import { useApi, useMutation, type UseApiOptions } from './useApi'
 
 export function useProjects() {
   return useApi(() => apiClient.getProjects())
 }
 
-export function useProject(id: number | string) {
-  return useApi(() => apiClient.getProject(id))
+export function useProject(id: number | string, options?: UseApiOptions) {
+  return useApi(() => apiClient.getProject(id), options)
 }
 
 export function useCreateProject() {

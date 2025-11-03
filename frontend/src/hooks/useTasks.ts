@@ -26,7 +26,13 @@ export function useUpdateTask(options?: { updateCache?: (data: Task) => void }) 
 }
 
 export function useDeleteTask() {
-  return useMutation((id: number | string) => 
+  return useMutation((id: number | string) =>
     apiClient.deleteTask(id)
+  )
+}
+
+export function useTransitionTaskState(options?: { updateCache?: (data: Task) => void }) {
+  return useMutation((data: { id: number | string; newState: string }) =>
+    apiClient.transitionTaskState(data.id, { new_state: data.newState }), options
   )
 }
