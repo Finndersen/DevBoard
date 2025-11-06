@@ -4,6 +4,7 @@ from .base import Base
 from .codebase import Codebase
 from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation, ParentEntityType
+from .conversation_evaluation import ConversationEvaluation
 from .document import Document, DocumentType
 from .messages import ConversationMessage, MessageType
 from .project import Project
@@ -17,6 +18,7 @@ __all__ = [
     "Configuration",
     "ContextProviderResource",
     "Conversation",
+    "ConversationEvaluation",
     "ConversationMessage",
     "Document",
     "DocumentType",

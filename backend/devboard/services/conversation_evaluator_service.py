@@ -35,8 +35,22 @@ from devboard.agents.roles.task_implementation import TaskImplementationRole
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.agents.roles.task_specification import TaskSpecificationRole
 from devboard.agents.roles.types import AgentRoleType
-from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType, Project, Task
-from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository, TaskRepository
+from devboard.db.models import (
+    Conversation,
+    ConversationMessage,
+    MessageType,
+    ParentEntityType,
+    Project,
+    Task,
+)
+from devboard.db.models.conversation_evaluation import ConversationEvaluation as DbConversationEvaluation
+from devboard.db.repositories import (
+    ConversationEvaluationRepository,
+    ConversationRepository,
+    DocumentRepository,
+    ProjectRepository,
+    TaskRepository,
+)
 
 
 class ConversationEvaluatorService:
@@ -48,6 +62,7 @@ class ConversationEvaluatorService:
         project_repo: ProjectRepository,
         task_repo: TaskRepository,
         document_repo: DocumentRepository,
+        evaluation_repo: ConversationEvaluationRepository | None = None,
     ):
         """Initialize conversation evaluator service.
 
@@ -56,16 +71,19 @@ class ConversationEvaluatorService:
             project_repo: Repository for project data access
             task_repo: Repository for task data access
             document_repo: Repository for document data access
+            evaluation_repo: Optional repository for persisting evaluation results
         """
         self.conversation_repo = conversation_repo
         self.project_repo = project_repo
         self.task_repo = task_repo
         self.document_repo = document_repo
+        self.evaluation_repo = evaluation_repo
 
     async def evaluate_conversation(
         self,
         conversation_id: int,
         evaluator_model_id: str | None = None,
+        persist: bool = True,
     ) -> ConversationEvaluation:
         """Evaluate a conversation and return structured feedback.
 
@@ -73,6 +91,7 @@ class ConversationEvaluatorService:
             conversation_id: ID of the conversation to evaluate
             evaluator_model_id: Optional model ID for the evaluator agent
                                (defaults to a capable model like Claude Sonnet 4)
+            persist: Whether to persist the evaluation to database (default True)
 
         Returns:
             ConversationEvaluation with scores and improvement suggestions
@@ -114,8 +133,23 @@ class ConversationEvaluatorService:
             tool_call_count=tool_call_count,
         )
 
-        # Run evaluation agent
-        evaluation = await self._run_evaluation_agent(analysis, evaluator_model_id)
+        # Run evaluation agent and get model ID used
+        evaluation, actual_model_id = await self._run_evaluation_agent(analysis, evaluator_model_id)
+
+        # Persist evaluation if requested and repository is available
+        if persist and self.evaluation_repo:
+            db_evaluation = DbConversationEvaluation.from_evaluation_result(
+                conversation_id=conversation_id,
+                evaluator_model_id=actual_model_id,
+                evaluation=evaluation,
+            )
+            self.evaluation_repo.create(
+                conversation_id=db_evaluation.conversation_id,
+                evaluator_model_id=db_evaluation.evaluator_model_id,
+                overall_rating=db_evaluation.overall_rating,
+                evaluations_json=db_evaluation.evaluations_json,
+                summary=db_evaluation.summary,
+            )
 
         return evaluation
 
@@ -337,7 +371,7 @@ class ConversationEvaluatorService:
 
     async def _run_evaluation_agent(
         self, analysis: ConversationAnalysis, evaluator_model_id: str | None
-    ) -> ConversationEvaluation:
+    ) -> tuple[ConversationEvaluation, str]:
         """Execute the evaluator agent and parse structured output.
 
         Args:
@@ -345,7 +379,7 @@ class ConversationEvaluatorService:
             evaluator_model_id: Optional model ID for evaluator
 
         Returns:
-            ConversationEvaluation with structured assessment
+            Tuple of (ConversationEvaluation, model_id_used)
 
         Raises:
             ValueError: If evaluation fails or output is invalid
@@ -355,14 +389,18 @@ class ConversationEvaluatorService:
             model = llm_registry.get(evaluator_model_id)
             if not model:
                 raise ValueError(f"Model {evaluator_model_id} not found in registry")
+            actual_model_id = evaluator_model_id
         else:
             # Default to Claude Sonnet 4 if available, otherwise first available model
             model = llm_registry.get("anthropic:claude-sonnet-4")
-            if not model:
+            if model:
+                actual_model_id = "anthropic:claude-sonnet-4"
+            else:
                 available_models = llm_registry.list_values()
                 if not available_models:
                     raise ValueError("No LLM models configured")
                 model = available_models[0]
+                actual_model_id = model.id
 
         # Create evaluator role with conversation analysis
         evaluator_role = ConversationEvaluatorRole(conversation_analysis=analysis)
@@ -392,4 +430,40 @@ class ConversationEvaluatorService:
         if not isinstance(result.output, ConversationEvaluation):
             raise ValueError(f"Expected ConversationEvaluation output, got {type(result.output)}")
 
-        return result.output
+        return result.output, actual_model_id
+
+    def get_evaluations_for_conversation(self, conversation_id: int) -> list[ConversationEvaluation]:
+        """Get all evaluations for a conversation from the database.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            List of ConversationEvaluation objects (from Pydantic models)
+
+        Raises:
+            ValueError: If evaluation repository is not configured
+        """
+        if not self.evaluation_repo:
+            raise ValueError("Evaluation repository is not configured")
+
+        db_evaluations = self.evaluation_repo.get_by_conversation_id(conversation_id)
+        return [db_eval.to_evaluation_result() for db_eval in db_evaluations]
+
+    def get_latest_evaluation(self, conversation_id: int) -> ConversationEvaluation | None:
+        """Get the most recent evaluation for a conversation from the database.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            ConversationEvaluation object or None if no evaluations exist
+
+        Raises:
+            ValueError: If evaluation repository is not configured
+        """
+        if not self.evaluation_repo:
+            raise ValueError("Evaluation repository is not configured")
+
+        db_evaluation = self.evaluation_repo.get_latest_by_conversation_id(conversation_id)
+        return db_evaluation.to_evaluation_result() if db_evaluation else None

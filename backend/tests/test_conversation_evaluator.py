@@ -24,13 +24,24 @@ from devboard.services.conversation_evaluator_service import ConversationEvaluat
 
 
 @pytest.fixture
-def evaluator_service(conversation_repository, project_repository, task_repository, document_repository):
+def evaluation_repository(db_session):
+    """Evaluation repository instance for testing."""
+    from devboard.db.repositories import ConversationEvaluationRepository
+
+    return ConversationEvaluationRepository(db_session)
+
+
+@pytest.fixture
+def evaluator_service(
+    conversation_repository, project_repository, task_repository, document_repository, evaluation_repository
+):
     """Create ConversationEvaluatorService instance for testing."""
     return ConversationEvaluatorService(
         conversation_repo=conversation_repository,
         project_repo=project_repository,
         task_repo=task_repository,
         document_repo=document_repository,
+        evaluation_repo=evaluation_repository,
     )
 
 
@@ -309,3 +320,161 @@ class TestConversationEvaluationModels:
         assert tool_spec.name == "search_documents"
         assert tool_spec.requires_approval is False
         assert "query" in tool_spec.parameters
+
+
+class TestEvaluationPersistence:
+    """Tests for evaluation persistence functionality."""
+
+    @pytest.mark.asyncio
+    async def test_evaluate_conversation_with_persistence(
+        self, evaluator_service, sample_conversation, sample_messages, evaluation_repository
+    ):
+        """Test that evaluations are persisted to database when persist=True."""
+        # Mock the evaluation agent to return a structured result
+        mock_evaluation = ConversationEvaluation(
+            overall_rating=8.5,
+            evaluations=PerformanceEvaluations(
+                system_prompt_effectiveness=Evaluation(
+                    score=9.0,
+                    explanation="Clear and well-structured system prompt",
+                    evidence=["message_1"],
+                    improvements=[],
+                ),
+                tool_specification_quality=Evaluation(
+                    score=8.5, explanation="Tools are well-defined", evidence=[], improvements=[]
+                ),
+                context_management=Evaluation(score=8.0, explanation="Context is relevant", evidence=[], improvements=[]),
+                response_quality=Evaluation(score=9.0, explanation="Responses are accurate", evidence=[], improvements=[]),
+                conversation_efficiency=Evaluation(
+                    score=8.0, explanation="Good conversation flow", evidence=[], improvements=[]
+                ),
+            ),
+            summary="Overall strong performance.",
+        )
+
+        # Mock the PydanticAI agent run
+        with patch("devboard.services.conversation_evaluator_service.PydanticAgent") as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_class.return_value = mock_agent_instance
+
+            mock_result = Mock()
+            mock_result.output = mock_evaluation
+            mock_agent_instance.run = AsyncMock(return_value=mock_result)
+
+            # Run evaluation with persist=True
+            result = await evaluator_service.evaluate_conversation(
+                sample_conversation.id, evaluator_model_id="anthropic:claude-sonnet-4", persist=True
+            )
+
+            # Verify result
+            assert isinstance(result, ConversationEvaluation)
+            assert result.overall_rating == 8.5
+
+            # Verify persistence
+            db_evaluations = evaluation_repository.get_by_conversation_id(sample_conversation.id)
+            assert len(db_evaluations) == 1
+            assert db_evaluations[0].overall_rating == 8.5
+            assert db_evaluations[0].evaluator_model_id == "anthropic:claude-sonnet-4"
+            assert db_evaluations[0].summary == "Overall strong performance."
+
+    @pytest.mark.asyncio
+    async def test_evaluate_conversation_without_persistence(
+        self, evaluator_service, sample_conversation, sample_messages, evaluation_repository
+    ):
+        """Test that evaluations are not persisted when persist=False."""
+        # Mock the evaluation agent
+        mock_evaluation = ConversationEvaluation(
+            overall_rating=7.5,
+            evaluations=PerformanceEvaluations(
+                system_prompt_effectiveness=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                tool_specification_quality=Evaluation(score=7.0, explanation="OK", evidence=[], improvements=[]),
+                context_management=Evaluation(score=7.5, explanation="Good", evidence=[], improvements=[]),
+                response_quality=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                conversation_efficiency=Evaluation(score=7.5, explanation="Good", evidence=[], improvements=[]),
+            ),
+            summary="Good performance.",
+        )
+
+        with patch("devboard.services.conversation_evaluator_service.PydanticAgent") as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_class.return_value = mock_agent_instance
+
+            mock_result = Mock()
+            mock_result.output = mock_evaluation
+            mock_agent_instance.run = AsyncMock(return_value=mock_result)
+
+            # Run evaluation with persist=False
+            result = await evaluator_service.evaluate_conversation(
+                sample_conversation.id, evaluator_model_id="anthropic:claude-sonnet-4", persist=False
+            )
+
+            # Verify result
+            assert isinstance(result, ConversationEvaluation)
+
+            # Verify no persistence
+            db_evaluations = evaluation_repository.get_by_conversation_id(sample_conversation.id)
+            assert len(db_evaluations) == 0
+
+    def test_get_evaluations_for_conversation(self, evaluator_service, evaluation_repository, sample_conversation):
+        """Test retrieving evaluations for a conversation."""
+        # Create some test evaluations
+        from devboard.agents.evaluation_models import ConversationEvaluation as EvalResult
+
+        mock_eval = ConversationEvaluation(
+            overall_rating=8.0,
+            evaluations=PerformanceEvaluations(
+                system_prompt_effectiveness=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                tool_specification_quality=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                context_management=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                response_quality=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+                conversation_efficiency=Evaluation(score=8.0, explanation="Good", evidence=[], improvements=[]),
+            ),
+            summary="Test evaluation",
+        )
+
+        evaluation_repository.create(
+            conversation_id=sample_conversation.id,
+            evaluator_model_id="test-model",
+            overall_rating=mock_eval.overall_rating,
+            evaluations_json=mock_eval.evaluations.model_dump(mode="json"),
+            summary=mock_eval.summary,
+        )
+
+        # Retrieve evaluations
+        evaluations = evaluator_service.get_evaluations_for_conversation(sample_conversation.id)
+
+        assert len(evaluations) == 1
+        assert evaluations[0].overall_rating == 8.0
+        assert evaluations[0].summary == "Test evaluation"
+
+    def test_get_latest_evaluation(self, evaluator_service, evaluation_repository, sample_conversation):
+        """Test retrieving the latest evaluation."""
+        mock_eval = ConversationEvaluation(
+            overall_rating=9.0,
+            evaluations=PerformanceEvaluations(
+                system_prompt_effectiveness=Evaluation(score=9.0, explanation="Excellent", evidence=[], improvements=[]),
+                tool_specification_quality=Evaluation(
+                    score=9.0, explanation="Excellent", evidence=[], improvements=[]
+                ),
+                context_management=Evaluation(score=9.0, explanation="Excellent", evidence=[], improvements=[]),
+                response_quality=Evaluation(score=9.0, explanation="Excellent", evidence=[], improvements=[]),
+                conversation_efficiency=Evaluation(score=9.0, explanation="Excellent", evidence=[], improvements=[]),
+            ),
+            summary="Latest evaluation",
+        )
+
+        # Create evaluation
+        evaluation_repository.create(
+            conversation_id=sample_conversation.id,
+            evaluator_model_id="test-model",
+            overall_rating=mock_eval.overall_rating,
+            evaluations_json=mock_eval.evaluations.model_dump(mode="json"),
+            summary=mock_eval.summary,
+        )
+
+        # Retrieve latest
+        latest = evaluator_service.get_latest_evaluation(sample_conversation.id)
+
+        assert latest is not None
+        assert latest.overall_rating == 9.0
+        assert latest.summary == "Latest evaluation"

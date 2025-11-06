@@ -5,6 +5,7 @@ from .codebase import CodebaseRepository
 from .configuration import ConfigurationRepository
 from .context_provider_resource import ContextProviderResourceRepository
 from .conversation import ConversationRepository
+from .conversation_evaluation import ConversationEvaluationRepository
 from .document import DocumentRepository
 from .project import ProjectRepository
 from .task import TaskRepository
@@ -16,6 +17,7 @@ __all__ = [
     "ConfigurationRepository",
     "CodebaseRepository",
     "ConversationRepository",
+    "ConversationEvaluationRepository",
     "DocumentRepository",
     "TaskRepository",
 ]

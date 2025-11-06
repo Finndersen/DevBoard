@@ -22,6 +22,7 @@ class ParentEntityType(StrEnum):
 
 
 if TYPE_CHECKING:
+    from .conversation_evaluation import ConversationEvaluation
     from .messages import ConversationMessage
 
 
@@ -79,6 +80,9 @@ class Conversation(Base):
 
     # Relationships
     messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan"
+    )
+    evaluations: Mapped[list["ConversationEvaluation"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
     sub_conversations: Mapped[list["Conversation"]] = relationship(back_populates="parent_conversation")
