@@ -14,3 +14,4 @@ class AgentRoleType(StrEnum):
     TASK_PLANNING = "task_planning"
     TASK_IMPLEMENTATION = "task_implementation"
     INVESTIGATION = "investigation"
+    CONVERSATION_EVALUATOR = "conversation_evaluator"

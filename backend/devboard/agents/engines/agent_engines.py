@@ -81,6 +81,7 @@ ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRoleType, list[AgentEngine]] = {
     AgentRoleType.TASK_PLANNING: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.TASK_IMPLEMENTATION: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],
     AgentRoleType.INVESTIGATION: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
+    AgentRoleType.CONVERSATION_EVALUATOR: [AgentEngine.INTERNAL],
 }
 
 
