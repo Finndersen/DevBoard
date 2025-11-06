@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { memo, useMemo } from 'react'
 import type { ConversationEvent, ToolResult } from '../../lib/api'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
@@ -25,39 +25,36 @@ function ConversationMessageList({
   emptyStateMessage,
   showEmptyState
 }: ConversationMessageListProps) {
-  // Cache for tool result lookups to avoid O(n²) searches on every render
-  const toolResultCache = useRef(new Map<string, ToolResult | undefined>())
+  // Compute tool result mappings using useMemo
+  // This creates a Map of cache keys to ToolResults, recomputed only when messages change
+  // Using useMemo ensures React knows to re-render when this changes
+  const toolResultMap = useMemo(() => {
+    const map = new Map<string, ToolResult>()
 
-  // Find matching tool result for a tool call
-  // Searches for the NEXT ToolResult with matching tool_call_id that comes AFTER the tool call
-  const findToolResult = useCallback((toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
-    // Search only messages that come after the tool call
-    for (let i = toolCallIndex + 1; i < messages.length; i++) {
-      const msg = messages[i]
-      if (msg.event_type === 'tool_result' && msg.tool_call_id === toolCallId) {
-        return msg as ToolResult
+    // Helper function to find matching tool result for a tool call
+    const findToolResult = (toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
+      // Search only messages that come after the tool call
+      for (let i = toolCallIndex + 1; i < messages.length; i++) {
+        const msg = messages[i]
+        if (msg.event_type === 'tool_result' && msg.tool_call_id === toolCallId) {
+          return msg as ToolResult
+        }
       }
+      return undefined
     }
-    return undefined
-  }, [messages])
 
-  // Populate cache when messages change
-  // This ensures lookups only happen once per tool_call message
-  useEffect(() => {
     messages.forEach((message, index) => {
       if (message.event_type === 'tool_call') {
         const cacheKey = `${message.timestamp}-${message.event_type}-${index}`
-        if (!toolResultCache.current.has(cacheKey)) {
-          const result = findToolResult(message.tool_call_id, index)
-          // Only cache if we found a result (don't cache undefined)
-          // This allows retry on next render when result arrives during streaming
-          if (result) {
-            toolResultCache.current.set(cacheKey, result)
-          }
+        const result = findToolResult(message.tool_call_id, index)
+        if (result) {
+          map.set(cacheKey, result)
         }
       }
     })
-  }, [messages, findToolResult])
+
+    return map
+  }, [messages])
 
   if (showEmptyState) {
     return (
@@ -76,10 +73,10 @@ function ConversationMessageList({
         // This ensures uniqueness even for messages generated in the same millisecond
         const messageKey = `${message.timestamp}-${message.event_type}-${index}`
 
-        // For tool calls, look up the matching result from cache
-        // Cache is populated in useEffect, so lookups are O(1) instead of O(n)
+        // For tool calls, look up the matching result from memoized map
+        // Map is computed via useMemo, so React knows to re-render when it changes
         const toolResult = message.event_type === 'tool_call'
-          ? toolResultCache.current.get(messageKey)
+          ? toolResultMap.get(messageKey)
           : undefined
 
         return (
