@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.utils import convert_tool_args
-from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolResult
+from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
@@ -163,7 +163,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
         if msg.message_type == MessageType.USER_PROMPT:
             # User prompt - single text message
             events.append(
-                ConversationMessage(
+                TextMessage(
                     role=MessageRole.USER,
                     text_content=msg.text_content,
                     timestamp=msg.timestamp,
@@ -172,7 +172,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
         elif msg.message_type == MessageType.TEXT_RESPONSE:
             # Agent text response - single text message
             events.append(
-                ConversationMessage(
+                TextMessage(
                     role=MessageRole.AGENT,
                     text_content=msg.text_content,
                     timestamp=msg.timestamp,

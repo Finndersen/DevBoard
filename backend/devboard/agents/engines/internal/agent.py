@@ -27,8 +27,8 @@ from devboard.agents.base_agent import BaseAgent
 from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import (
     ConversationEvent,
-    ConversationMessage,
     MessageRole,
+    TextMessage,
     ToolCall,
     ToolCallRequest,
     ToolResult,
@@ -61,8 +61,7 @@ class InternalAgent(BaseAgent):
             model: Language model to use
             conversation_history: Previous conversation messages
         """
-        self.role = role
-        self.model = model
+        super().__init__(role, model)
         self.conversation_history = conversation_history or []
         self.last_run_result: AgentRunResult | None = None
 
@@ -167,7 +166,7 @@ class InternalAgent(BaseAgent):
                     )
             elif isinstance(self.last_run_result.output, str):
                 # Text response
-                yield ConversationMessage(
+                yield TextMessage(
                     role=MessageRole.AGENT,
                     text_content=self.last_run_result.output,
                     timestamp=timestamp,

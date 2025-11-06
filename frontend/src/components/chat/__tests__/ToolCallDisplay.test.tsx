@@ -486,8 +486,8 @@ describe('ToolCallDisplay', () => {
 
       expect(screen.getByText(toolCallTime)).toBeInTheDocument()
 
-      // Result timestamp is shown with "Returned: " prefix
-      expect(screen.getByText(`Returned: ${resultTime}`)).toBeInTheDocument()
+      // Result timestamp is shown with "Returned: " prefix and duration
+      expect(screen.getByText(`Returned: ${resultTime} (5.0s)`)).toBeInTheDocument()
     })
 
     it('shows proper visual hierarchy with timestamps when expanded', async () => {
@@ -500,18 +500,52 @@ describe('ToolCallDisplay', () => {
         hour: '2-digit',
         minute: '2-digit',
       })
-      const resultTime = new Date('2024-01-01T10:00:05Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
 
       // Check the call timestamp styling with theme-aware classes
       const callTimestamp = screen.getByText(toolCallTime)
       expect(callTimestamp).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
 
-      // Check result timestamp styling with theme-aware classes (includes "Returned: " prefix)
-      const resultTimestamp = screen.getByText(`Returned: ${resultTime}`)
+      // Check result timestamp styling with theme-aware classes (includes "Returned: " prefix and duration)
+      const resultTimestamp = screen.getByText(/Returned:/)
       expect(resultTimestamp).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
+    })
+
+    it('displays duration when tool result is present', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      const resultTime = new Date('2024-01-01T10:00:05Z').toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      // Duration between 10:00:00 and 10:00:05 should be 5.0s
+      expect(screen.getByText(`Returned: ${resultTime} (5.0s)`)).toBeInTheDocument()
+    })
+
+    it('displays duration in milliseconds for sub-second durations', async () => {
+      const user = userEvent.setup()
+      const quickResult: ToolResult = {
+        event_type: 'tool_result',
+        tool_call_id: 'call_123',
+        result_content: 'Quick result',
+        is_error: false,
+        timestamp: '2024-01-01T10:00:00.234Z',
+      }
+
+      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={quickResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      const resultTime = new Date('2024-01-01T10:00:00.234Z').toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      // Duration should be 234ms
+      expect(screen.getByText(`Returned: ${resultTime} (234ms)`)).toBeInTheDocument()
     })
   })
 

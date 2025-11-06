@@ -138,6 +138,7 @@ def get_agent_role_for_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
     parent_entity: Task | Project = Depends(get_conversation_parent_entity),
     document_repo: DocumentRepository = Depends(get_document_repository),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> Role:
     """Get agent role for a conversation.
 
@@ -148,6 +149,7 @@ def get_agent_role_for_conversation(
         conversation: Verified conversation instance
         parent_entity: Parent entity (Task or Project)
         document_repo: Document repository
+        agent_config_service: Agent configuration service
 
     Returns:
         Role instance for the conversation
@@ -158,9 +160,17 @@ def get_agent_role_for_conversation(
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
         if conversation.agent_role == AgentRoleType.TASK_SPECIFICATION:
-            return TaskSpecificationRole(task=parent_entity, document_repository=document_repo)
+            return TaskSpecificationRole(
+                task=parent_entity,
+                document_repository=document_repo,
+                agent_config_service=agent_config_service,
+            )
         elif conversation.agent_role == AgentRoleType.TASK_PLANNING:
-            return TaskPlanningRole(task=parent_entity, document_repository=document_repo)
+            return TaskPlanningRole(
+                task=parent_entity,
+                document_repository=document_repo,
+                agent_config_service=agent_config_service,
+            )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
             return TaskImplementationRole(task=parent_entity, document_repository=document_repo)
         else:

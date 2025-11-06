@@ -184,7 +184,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
 
             elif full_path.is_dir():
                 # Count files in directory
-                files = await self.integration.list_files(file_path)
+                files = await self.integration.list_directory_contents(file_path)
                 return f"Directory: {file_path} ({len(files)} files)"
             else:
                 return f"Codebase pattern: {file_path}"

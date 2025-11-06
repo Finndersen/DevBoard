@@ -37,10 +37,17 @@ export const getTimestampClasses = (isUser: boolean) =>
   isUser ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
 
 export const formatTimestamp = (timestamp: string) =>
-  new Date(timestamp).toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit'
   })
+
+export const formatDuration = (durationMs: number) => {
+  if (durationMs < 1000) {
+    return `${Math.round(durationMs)}ms`
+  }
+  return `${(durationMs / 1000).toFixed(1)}s`
+}
 
 export const getStatusIcon = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {
   switch (status) {

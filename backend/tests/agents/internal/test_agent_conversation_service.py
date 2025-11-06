@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
-from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest
+from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles.base import Role
 from devboard.agents.roles.types import AgentRoleType
 from devboard.api.schemas.agent_conversation import (
@@ -91,7 +91,7 @@ class TestPydanticAIConversationService:
 
         # Mock agent stream_events to yield conversation events
         async def mock_stream_events(prompt_or_approvals):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="Test response",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -191,7 +191,7 @@ class TestPydanticAIConversationService:
 
         # Mock agent stream_events to yield a text response after approval
         async def mock_stream_events(prompt_or_approvals):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="Document updated successfully",
                 timestamp=datetime.datetime.now(datetime.UTC),

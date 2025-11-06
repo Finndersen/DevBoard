@@ -9,7 +9,7 @@ from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolRes
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
-from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest, ToolResult
+from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
@@ -197,7 +197,7 @@ class TestStreamEventsTextResponse:
 
         # Verify events
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].role == MessageRole.AGENT
         assert events[0].text_content == "Hello, this is a text response!"
 
@@ -283,7 +283,7 @@ class TestStreamEventsVirtualToolCalls:
 
         # Should have both preamble message and tool call request
         assert len(events) == 2
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].text_content == "I'll edit the document now"
         assert isinstance(events[1], ToolCallRequest)
         assert events[1].tool_name == "edit_document"
@@ -314,7 +314,7 @@ class TestStreamEventsVirtualToolCalls:
         assert len(events) == 2
         assert isinstance(events[0], ToolCallRequest)
         assert events[0].tool_name == "edit_document"
-        assert isinstance(events[1], ConversationMessage)
+        assert isinstance(events[1], TextMessage)
         assert events[1].text_content == "I'll verify the changes afterwards"
 
     @pytest.mark.asyncio
@@ -341,11 +341,11 @@ class TestStreamEventsVirtualToolCalls:
 
         # Should have preamble message, tool call request, and postamble message
         assert len(events) == 3
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].text_content == "I'll edit the document now"
         assert isinstance(events[1], ToolCallRequest)
         assert events[1].tool_name == "edit_document"
-        assert isinstance(events[2], ConversationMessage)
+        assert isinstance(events[2], TextMessage)
         assert events[2].text_content == "This should fix the issue"
 
     @pytest.mark.asyncio
@@ -416,7 +416,7 @@ class TestStreamEventsFunctionToolCalls:
         assert events[1].result_content == "Found 5 matches"
         assert events[1].is_error is False
 
-        assert isinstance(events[2], ConversationMessage)
+        assert isinstance(events[2], TextMessage)
         assert events[2].text_content == "Here are the search results..."
 
 
@@ -454,7 +454,7 @@ class TestStreamEventsToolApprovals:
 
         # Verify response
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].text_content == "The document has been updated."
 
     @pytest.mark.asyncio
@@ -614,7 +614,7 @@ class TestStreamEventsEdgeCases:
 
         # Should successfully create an empty message
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].text_content == ""
 
     @pytest.mark.asyncio
@@ -640,4 +640,4 @@ class TestStreamEventsEdgeCases:
         assert len(events) == 3
         assert isinstance(events[0], ToolCall)
         assert isinstance(events[1], ToolResult)
-        assert isinstance(events[2], ConversationMessage)
+        assert isinstance(events[2], TextMessage)

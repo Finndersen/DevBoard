@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ToolCall, ToolResult } from '../../lib/api'
-import { formatTimestamp } from '../../styles/messageStyles'
+import { formatTimestamp, formatDuration } from '../../styles/messageStyles'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
@@ -106,19 +106,28 @@ export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDispla
               )}
 
               {/* Tool Result */}
-              {hasResult && (
-                <div className={`px-4 py-3 border-t ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30'}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
-                      {isError ? 'Error:' : 'Result:'}
+              {hasResult && (() => {
+                // Calculate duration between tool call and result
+                const startTime = new Date(toolCall.timestamp).getTime()
+                const endTime = new Date(toolResult.timestamp).getTime()
+                const duration = endTime - startTime
+
+                return (
+                  <div className={`px-4 py-3 border-t ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                        {isError ? 'Error:' : 'Result:'}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-500 select-none">
+                        Returned: {formatTimestamp(toolResult.timestamp)} ({formatDuration(duration)})
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-500 select-none">Returned: {formatTimestamp(toolResult.timestamp)}</div>
+                    <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-300'} whitespace-pre-wrap font-mono max-h-96 overflow-y-auto select-text cursor-text`}>
+                      {toolResult.result_content}
+                    </div>
                   </div>
-                  <div className={`text-sm ${isError ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-300'} whitespace-pre-wrap font-mono max-h-96 overflow-y-auto select-text cursor-text`}>
-                    {toolResult.result_content}
-                  </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
           )}
         </button>

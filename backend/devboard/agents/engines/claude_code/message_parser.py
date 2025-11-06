@@ -15,7 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
 
-from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolCallRequest
+from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolCallRequest
 
 
 @dataclass
@@ -115,7 +115,7 @@ def convert_virtual_tool_call_to_events(
     # Generate preamble message if present
     if tool_call.preamble:
         events.append(
-            ConversationMessage(
+            TextMessage(
                 role=MessageRole.AGENT,
                 text_content=tool_call.preamble,
                 timestamp=timestamp,
@@ -145,7 +145,7 @@ def convert_virtual_tool_call_to_events(
     # Generate postamble message if present
     if tool_call.postamble:
         events.append(
-            ConversationMessage(
+            TextMessage(
                 role=MessageRole.AGENT,
                 text_content=tool_call.postamble,
                 timestamp=timestamp,

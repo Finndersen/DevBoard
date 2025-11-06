@@ -1,96 +1,6 @@
-from pydantic_ai import ModelRetry, Tool
+from pydantic_ai import Tool
 
-from devboard.api.schemas import DocumentEdit
-from devboard.db.models.document import Document
-from devboard.db.repositories.document import DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
-from devboard.services.document_editor import DocumentEditorService
-
-
-def create_document_edit_tool(document: Document, document_repo: DocumentRepository) -> Tool:
-    """Create an engine-agnostic document editing tool.
-
-    The tool validates edits before applying them and requires approval for execution.
-
-    Args:
-        document: Document model to edit
-        document_repo: Repository for document operations
-    """
-
-    def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
-        """
-        Apply edits to the virtual document.
-        This document DOES NOT exist on the file system, but is managed by the application.
-
-        DOCUMENT EDITING RULES:
-        1. Make precise find-replace edits using DocumentEdit objects
-        2. Use exact text matches for 'find' - the text must exist exactly as written
-        3. Use the MINIMUM necessary text to uniquely identify the location to replace
-        4. Preserve markdown formatting and structure
-        5. ONLY call this tool after discussing with the user and arriving at an understanding of the changes to be made
-
-        Args:
-            edits: List of find-replace edits to apply
-            reasoning: Optional CONCISE reasoning for why these edits are being made
-        """
-        # Create document editor service
-        editor_service = DocumentEditorService()
-
-        # Pre-validate edits can be applied
-        edit_result = editor_service.apply_edits(document.content, edits)
-        if not edit_result.success:
-            raise ModelRetry(f"Failed to apply edits to document: {'; '.join(edit_result.errors)}")
-
-        # Update document content and hash using repository
-        document_repo.update_content(document, edit_result.content)
-
-        return f"Edits applied successfully to {document.document_type}."
-
-    return Tool(
-        function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True, takes_ctx=False
-    )
-
-
-def create_set_document_content_tool(document: Document, document_repo: DocumentRepository) -> Tool:
-    """Create an engine-agnostic tool for setting the content of a document.
-
-    This tool can be used on both blank and non-blank documents:
-    - For blank documents: No approval required (non-destructive)
-    - For non-blank documents: Requires approval (destructive - replaces existing content)
-
-    Args:
-        document: Document model to set content for
-        document_repo: Repository for document operations
-    """
-
-    def set_document_content_tool(content: str, reasoning: str = "") -> str:
-        """Set the content of a virtual document.
-        This document DOES NOT exist on the file system, but managed by the application.
-        ONLY call this tool after discussing with the user and arriving at an understanding of the changes to be made.
-
-        Args:
-            content: The full content to set for the document
-            reasoning: Optional CONCISE reasoning for the content being set
-
-        Returns:
-            Success message or error details
-        """
-        # Validate content is not empty
-        if not content.strip():
-            raise ModelRetry("Error: Content cannot be empty.")
-
-        # Update document content and hash using repository
-        document_repo.update_content(document, content)
-
-        return f"Content set successfully for {document.document_type}."
-
-    document_has_content = bool(document.content and document.content.strip())
-    return Tool(
-        function=set_document_content_tool,
-        name=f"set_{document.document_type}_content",
-        requires_approval=document_has_content,
-        takes_ctx=False,
-    )
 
 
 def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -106,26 +16,28 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         codebase_integration: CodebaseIntegration instance for file system access
     """
 
-    async def search_text_in_files(
+    async def search_file_content(
         query: str,
         file_pattern: str | None = None,
         case_sensitive: bool = False,
         search_hidden: bool = False,
+        path: str | None = None,
+        context_before: int = 0,
+        context_after: int = 0,
     ) -> str:
-        """Search for text or regex patterns within file contents across the codebase.
+        """Search for text or regex patterns within file contents across the codebase (using `ripgrep`).
 
         Use this tool when you need to:
-        - Find specific function calls or method invocations
-        - Locate error handling patterns or exception types
-        - Search for configuration keys, environment variables, or constants
-        - Find documentation or comment references to specific topics
-        - Locate test cases or assertions related to specific functionality
+        - General text search needs
+        - Find specific function calls, variable usages, method invocations
+        - See surrounding code context for better understanding
 
         Examples:
-        - search_text_in_files("def authenticate", file_pattern="*.py") - Find authentication functions
-        - search_text_in_files("TODO.*security", case_sensitive=False) - Find security-related TODOs
-        - search_text_in_files("import.*pandas", file_pattern="*.py") - Find pandas imports
-        - search_text_in_files("error.*404", search_hidden=True) - Find 404 error references including hidden files
+        - search_file_content("def authenticate", file_pattern="*.py") - Find authentication functions
+        - search_file_content("TODO.*security", case_sensitive=False) - Find security-related TODOs
+        - search_file_content("import.*pandas", file_pattern="*.py") - Find pandas imports
+        - search_file_content("class.*Error", path="backend/models") - Find Error classes in backend/models
+        - search_file_content("async def", file_pattern="*.py", context_before=2, context_after=5) - Find async functions with context
 
         Args:
             query: Text or regex pattern to search for. Supports full regex syntax.
@@ -134,6 +46,10 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
             case_sensitive: Whether search should be case sensitive. Default is False (case-insensitive).
             search_hidden: Whether to search hidden/ignored files like .git/, .venv/, node_modules/.
                           Default is False (skip hidden files).
+            path: Optional subdirectory to search within (e.g., 'tests', 'src/components').
+                         Limits search to files within this directory and its subdirectories.
+            context_before: Number of lines to show before each match for context. Default is 0.
+            context_after: Number of lines to show after each match for context. Default is 0.
 
         Returns:
             Formatted search results showing file:line:match for each occurrence,
@@ -144,6 +60,9 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
             file_pattern=file_pattern,
             case_sensitive=case_sensitive,
             search_hidden=search_hidden,
+            subdirectory=path,
+            context_before=context_before,
+            context_after=context_after,
         )
 
         if not result:
@@ -152,8 +71,7 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         return "\n".join(result)
 
     return Tool(
-        function=search_text_in_files,
-        name="search_text_in_files",
+        function=search_file_content,
     )
 
 
@@ -176,21 +94,19 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         extension: str | None = None,
         exclude_pattern: str | None = None,
         search_hidden: bool = False,
+        path: str | None = None,
     ) -> str:
-        """Search for files by name patterns across the codebase using fd.
+        """Search for files by name patterns across the codebase (using `fd` command, similar to `find`).
 
         Use this tool when you need to:
-        - Find files with specific naming conventions or patterns
-        - Locate configuration files, templates, or documentation
-        - Discover test files or modules related to specific functionality
+        - Find files with specific naming conventions, extensions or patterns
         - Explore project structure and understand file organization
-        - Find files with specific extensions in certain directories
 
         Examples:
-        - search_files_by_name("config", extension="json") - Find JSON config files
-        - search_files_by_name("test.*auth", extension="py") - Find authentication test files
-        - search_files_by_name(".*\\.env", search_hidden=True) - Find environment files including hidden ones
-        - search_files_by_name("component", exclude_pattern="*.test.*") - Find component files excluding tests
+        - search_files_by_name(pattern="config", extension="json") - Find JSON config files
+        - search_files_by_name(pattern="test.*auth", extension="py") - Find authentication test files
+        - search_files_by_name(pattern="component", exclude_pattern="*.test.*") - Find component files excluding tests
+        - search_files_by_name(pattern="test_", extension="py", path="tests") - Find test files only in tests directory
 
         Args:
             pattern: Regex pattern to match file names/paths. Use regex syntax for complex patterns.
@@ -200,6 +116,8 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
                            Useful for filtering out unwanted files.
             search_hidden: Whether to search hidden directories like .git/, .venv/.
                           Default is False (skip hidden directories).
+            path: Optional subdirectory to search within (e.g., 'tests', 'src/components').
+                         Limits search to files within this directory and its subdirectories.
 
         Returns:
             List of matching file paths relative to the codebase root,
@@ -210,6 +128,7 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
             extension=extension,
             exclude_pattern=exclude_pattern,
             search_hidden=search_hidden,
+            subdirectory=path,
         )
 
         if not files:
@@ -248,7 +167,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         pattern: str,
         language: str | None = None,
     ) -> str:
-        """Search for code structure patterns using AST-based matching.
+        """Search for code structure patterns using AST-based matching (using ast-grep).
 
         Use this tool when you need to:
         - Find functions with specific parameter patterns or return types
@@ -312,18 +231,8 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
         """Display codebase git-tracked files in a hierarchical tree structure.
 
         Use this tool when you need to:
-        - Get an overview of the project structure and organization
-        - Understand how files and directories are organized
-        - Find the general location of components or modules
+        - Understand how files and directories are organized (for entire project or specific subdirectory)
         - Explore the codebase structure before diving into specific files
-        - Document or communicate the project layout
-        - Focus on a specific subdirectory's structure
-
-        Examples:
-        - show_directory_tree() - Show complete project structure
-        - show_directory_tree(max_depth=2) - Show only top 2 levels for overview
-        - show_directory_tree(subdirectory="src/my_project") - Show only files in src/my_project directory
-        - show_directory_tree(max_depth=3, subdirectory="tests") - Show tests/ directory with 3 levels deep
 
         Args:
             max_depth: Maximum directory depth to display relative to subdirectory.
@@ -342,4 +251,58 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
 
     return Tool(
         function=show_directory_tree,
+    )
+
+
+def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a file reading tool for reading file contents with optional line ranges.
+
+    This tool reads file contents from the codebase with optional line range specification,
+    which is ideal for:
+    - Reading entire files to understand implementation details
+    - Reading specific sections of large files to focus on relevant parts
+    - Examining function or class implementations after locating them via search
+    - Reviewing configuration files, documentation, or code comments
+    - Understanding code structure and implementation patterns
+
+    Args:
+        codebase_integration: CodebaseIntegration instance for file system access
+    """
+
+    async def read_file(
+        file_path: str,
+        start_line: int | None = None,
+        end_line: int | None = None,
+    ) -> str:
+        """Read the contents of a file from the codebase, optionally reading only a specific line range.
+
+        Examples:
+        - read_file("backend/services/auth.py") - Read entire authentication service file
+        - read_file("backend/models/user.py", start_line=45, end_line=75) - Read lines 45-75 of user model
+
+        Args:
+            file_path: Relative path to the file from codebase root (e.g., "backend/services/auth.py").
+            start_line: Optional 1-indexed line number to start reading from (inclusive).
+                       If not specified, reads from the beginning of the file.
+            end_line: Optional 1-indexed line number to stop reading at (inclusive).
+                     If not specified, reads to the end of the file.
+
+        Returns:
+            File contents with line numbers prepended (e.g., "  15→content"),
+            or an error message if the file is not found or cannot be read.
+        """
+        try:
+            content = await codebase_integration.read_file(
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                include_line_numbers=True,
+            )
+            return content
+        except (FileNotFoundError, ValueError) as e:
+            return f"Error: {e}"
+
+    return Tool(
+        function=read_file,
+        name="read_file",
     )

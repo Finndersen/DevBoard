@@ -26,6 +26,9 @@ class LanguageModel:
     name: str
     type: ModelType
     full_name: str | None = None  # Full model identifier for external engines (e.g., claude-sonnet-4-5-20250929)
+    bedrock_id: str | None = (
+        None  # Bedrock model inference profile (e.g., eu.anthropic.claude-sonnet-4-5-20250929-v1:0)
+    )
 
     @property
     def id(self) -> str:

@@ -54,3 +54,18 @@ class Role(ABC):
         - Any other relevant context
         """
         pass
+
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return []
+
+    @property
+    def include_builtin_system_prompt(self) -> bool:
+        """Whether to include the built-in system prompt for the engine (e.g. built-in Claude Code prompt)."""
+        return False
+
+    @property
+    def include_claude_md(self) -> bool:
+        """Whether to load CLAUDE.md prompt guidance files."""
+        return False

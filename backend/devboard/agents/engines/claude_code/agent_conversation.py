@@ -18,7 +18,7 @@ from devboard.agents.engines.claude_code.session import (
     SessionMessage,
     SessionMessageRole,
 )
-from devboard.agents.events import ConversationEvent, ConversationMessage, MessageRole, ToolCall, ToolResult
+from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
@@ -168,7 +168,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                             MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
                         )
                         events.append(
-                            ConversationMessage(
+                            TextMessage(
                                 role=conv_role,
                                 text_content=parsed.content,
                                 timestamp=session_msg.timestamp,

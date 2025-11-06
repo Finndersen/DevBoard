@@ -19,7 +19,7 @@ class ConversationEventType(StrEnum):
     TOOL_CALL_REQUEST = "tool_call_request"
 
 
-class ConversationMessage(BaseModel):
+class TextMessage(BaseModel):
     """Model for a project or task agent conversation message (only contains final response for agent)."""
 
     event_type: Literal["message"] = "message"
@@ -60,6 +60,6 @@ class ToolCallRequest(BaseModel):
 
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    ConversationMessage | ToolCallRequest | ToolCall | ToolResult,
+    TextMessage | ToolCallRequest | ToolCall | ToolResult,
     Field(discriminator="event_type"),
 ]

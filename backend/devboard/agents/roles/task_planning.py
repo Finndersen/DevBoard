@@ -1,17 +1,14 @@
 from pydantic_ai import Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import (
-    create_code_structure_search_tool,
-    create_directory_tree_tool,
+    create_codebase_investigation_tool,
     create_document_edit_tool,
-    create_file_search_tool,
     create_set_document_content_tool,
-    create_text_search_tool,
 )
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
-from devboard.integrations.codebase import CodebaseIntegration
 
 PLANNING_ROLE_PROMPT = """
 You are a Task Planning Assistant for DevBoard, helping developers create an implementation plan for a task.
@@ -106,16 +103,22 @@ RELEVANT CODEBASE:
 class TaskPlanningRole(Role):
     """Role for task implementation planning."""
 
-    def __init__(self, task: Task, document_repository: DocumentRepository):
+    def __init__(
+        self,
+        task: Task,
+        document_repository: DocumentRepository,
+        agent_config_service: AgentConfigService | None = None,
+    ):
         """Initialize task planning role.
 
         Args:
             task: Task instance
             document_repository: Repository for document operations
+            agent_config_service: Optional service for agent configuration (required for investigation tool)
         """
         self.task = task
         self.document_repository = document_repository
-        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
+        self.agent_config_service = agent_config_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
@@ -126,7 +129,7 @@ class TaskPlanningRole(Role):
 
         Returns:
             List of document editing tools for both specification and implementation plan,
-            plus codebase search tools (if codebase available)
+            plus codebase search tools and investigation tool (if codebase available)
         """
         tools: list[Tool] = [
             # Tools for task specification document
@@ -138,15 +141,14 @@ class TaskPlanningRole(Role):
         if self.task.implementation_plan.content:
             tools.append(create_document_edit_tool(self.task.implementation_plan, self.document_repository))
 
-        # Add codebase search tools if codebase is configured
-        if self.codebase_integration:
-            tools.extend(
-                [
-                    create_text_search_tool(self.codebase_integration),
-                    create_file_search_tool(self.codebase_integration),
-                    create_code_structure_search_tool(self.codebase_integration),
-                    create_directory_tree_tool(self.codebase_integration),
-                ]
+        # Add codebase investigation tool if codebase is configured
+        if self.task.codebase:
+            # Add investigation tool
+            tools.append(
+                create_codebase_investigation_tool(
+                    self.task.codebase,
+                    self.agent_config_service,
+                )
             )
 
         return tools
@@ -158,3 +160,8 @@ class TaskPlanningRole(Role):
             Formatted context containing task details, project spec, task spec, and implementation plan
         """
         return build_task_planning_context(self.task)
+
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return ["WebFetch", "WebSearch", "Task"]

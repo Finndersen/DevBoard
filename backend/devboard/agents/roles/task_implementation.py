@@ -126,3 +126,8 @@ class TaskImplementationRole(Role):
             Formatted context containing task details, specification, and implementation plan
         """
         return build_task_implementation_context(self.task)
+
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]

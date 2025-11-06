@@ -60,11 +60,143 @@ class TestCodebaseIntegrationMethods:
             await integration.read_file("nonexistent.py")
 
     @pytest.mark.asyncio
-    async def test_list_files(self, temp_codebase):
-        """Test listing files in directory."""
+    async def test_read_file_without_line_numbers(self, temp_codebase):
+        """Test reading file without line numbers (default)."""
         integration = CodebaseIntegration(temp_codebase)
-        files = await integration.list_files("subdir")
+        content = await integration.read_file("test.py")
+        # By default, line numbers should not be included
+        lines = content.split("\n")
+        assert lines[0] == "def hello():"
+        assert not lines[0].startswith("    1→")
+
+    @pytest.mark.asyncio
+    async def test_read_file_with_line_numbers(self, temp_codebase):
+        """Test reading file with line numbers in output."""
+        integration = CodebaseIntegration(temp_codebase)
+        content = await integration.read_file("test.py", include_line_numbers=True)
+        # Check that line numbers are included in format "  1→content"
+        lines = content.split("\n")
+        assert lines[0].startswith("    1→")
+        assert "def hello():" in lines[0]
+
+    @pytest.mark.asyncio
+    async def test_read_file_with_line_range(self, temp_codebase):
+        """Test reading specific line range from file."""
+        # Create a file with multiple lines
+        test_file = temp_codebase / "multiline.py"
+        test_file.write_text("line 1\nline 2\nline 3\nline 4\nline 5\n")
+
+        integration = CodebaseIntegration(temp_codebase)
+        content = await integration.read_file("multiline.py", start_line=2, end_line=4, include_line_numbers=True)
+
+        lines = content.split("\n")
+        assert len(lines) == 3
+        assert "line 2" in lines[0]
+        assert "line 3" in lines[1]
+        assert "line 4" in lines[2]
+        # Line numbers should be preserved
+        assert lines[0].startswith("    2→")
+        assert lines[1].startswith("    3→")
+        assert lines[2].startswith("    4→")
+
+    @pytest.mark.asyncio
+    async def test_read_file_from_start_line(self, temp_codebase):
+        """Test reading from specific start line to end of file."""
+        test_file = temp_codebase / "multiline.py"
+        test_file.write_text("line 1\nline 2\nline 3\n")
+
+        integration = CodebaseIntegration(temp_codebase)
+        content = await integration.read_file("multiline.py", start_line=2)
+
+        lines = content.split("\n")
+        assert len(lines) == 2
+        assert "line 2" in lines[0]
+        assert "line 3" in lines[1]
+
+    @pytest.mark.asyncio
+    async def test_read_file_to_end_line(self, temp_codebase):
+        """Test reading from beginning to specific end line."""
+        test_file = temp_codebase / "multiline.py"
+        test_file.write_text("line 1\nline 2\nline 3\n")
+
+        integration = CodebaseIntegration(temp_codebase)
+        content = await integration.read_file("multiline.py", end_line=2)
+
+        lines = content.split("\n")
+        assert len(lines) == 2
+        assert "line 1" in lines[0]
+        assert "line 2" in lines[1]
+
+    @pytest.mark.asyncio
+    async def test_read_file_invalid_range(self, temp_codebase):
+        """Test reading with invalid line range raises ValueError."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        # start > end
+        with pytest.raises(ValueError, match="start_line .* must be <= end_line"):
+            await integration.read_file("test.py", start_line=5, end_line=2)
+
+        # negative start
+        with pytest.raises(ValueError, match="start_line must be >= 1"):
+            await integration.read_file("test.py", start_line=0)
+
+        # negative end
+        with pytest.raises(ValueError, match="end_line must be >= 1"):
+            await integration.read_file("test.py", end_line=-1)
+
+    @pytest.mark.asyncio
+    async def test_read_file_line_beyond_file_length(self, temp_codebase):
+        """Test reading with line numbers beyond file length handles gracefully."""
+        test_file = temp_codebase / "short.py"
+        test_file.write_text("line 1\nline 2\n")
+
+        integration = CodebaseIntegration(temp_codebase)
+        # Request lines beyond file length - should return available lines
+        content = await integration.read_file("short.py", start_line=1, end_line=100)
+
+        lines = content.split("\n")
+        assert len(lines) == 2
+        assert "line 1" in lines[0]
+        assert "line 2" in lines[1]
+
+    @pytest.mark.asyncio
+    async def test_list_directory_contents_files_only(self, temp_codebase):
+        """Test listing files in directory (default behavior)."""
+        integration = CodebaseIntegration(temp_codebase)
+        files = await integration.list_directory_contents("subdir")
         assert "file.txt" in files
+        # Should not include directories by default
+        assert not any(f.endswith("/") for f in files)
+
+    @pytest.mark.asyncio
+    async def test_list_directory_contents_with_directories(self, temp_codebase):
+        """Test listing files and directories."""
+        # Create nested directory structure
+        (temp_codebase / "subdir" / "nested").mkdir()
+        (temp_codebase / "subdir" / "nested" / "deep.txt").write_text("deep")
+
+        integration = CodebaseIntegration(temp_codebase)
+        entries = await integration.list_directory_contents("subdir", include_directories=True)
+
+        # Should include files
+        assert "file.txt" in entries
+        assert "nested/deep.txt" in entries
+        # Should include directories with trailing /
+        assert "nested/" in entries
+
+    @pytest.mark.asyncio
+    async def test_list_directory_contents_recursive(self, temp_codebase):
+        """Test that listing is recursive."""
+        # Create nested structure
+        (temp_codebase / "subdir" / "nested").mkdir()
+        (temp_codebase / "subdir" / "nested" / "deep.txt").write_text("deep")
+
+        integration = CodebaseIntegration(temp_codebase)
+        files = await integration.list_directory_contents("subdir")
+
+        # Should include nested files recursively
+        assert "file.txt" in files
+        assert "nested/deep.txt" in files
 
     @pytest.mark.asyncio
     async def test_parse_file_url_with_file_prefix(self, temp_codebase):
@@ -142,6 +274,90 @@ class TestSearchFileContent:
             assert "--no-ignore" in call_args
             assert result == []
 
+    @pytest.mark.asyncio
+    async def test_search_file_content_with_subdirectory(self, temp_codebase):
+        """Test search with subdirectory filter."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("tests/test_auth.py:10:def test_login():\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            result = await integration.search_file_content("def test_", subdirectory="tests")
+
+            # Verify subdirectory was passed to rg command
+            call_args = mock_exec.call_args[0][0]
+            assert "tests" in call_args
+            # Verify results are returned
+            assert len(result) == 1
+            assert "tests/test_auth.py" in result[0]
+
+    @pytest.mark.asyncio
+    async def test_search_file_content_subdirectory_with_trailing_slash(self, temp_codebase):
+        """Test search handles trailing slash in subdirectory."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("backend/models/user.py:5:class User:\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            # Test with trailing slash - should be stripped
+            await integration.search_file_content("class", subdirectory="backend/models/")
+
+            # Verify trailing slash was removed
+            call_args = mock_exec.call_args[0][0]
+            assert "backend/models" in call_args
+            assert "backend/models/" not in call_args
+
+    @pytest.mark.asyncio
+    async def test_search_file_content_with_context_before(self, temp_codebase):
+        """Test search with context lines before matches."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            result = await integration.search_file_content("def hello", context_before=3)
+
+            # Verify -B flag was passed with correct value
+            call_args = mock_exec.call_args[0][0]
+            assert "-B" in call_args
+            b_index = call_args.index("-B")
+            assert call_args[b_index + 1] == "3"
+
+    @pytest.mark.asyncio
+    async def test_search_file_content_with_context_after(self, temp_codebase):
+        """Test search with context lines after matches."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            result = await integration.search_file_content("def hello", context_after=5)
+
+            # Verify -A flag was passed with correct value
+            call_args = mock_exec.call_args[0][0]
+            assert "-A" in call_args
+            a_index = call_args.index("-A")
+            assert call_args[a_index + 1] == "5"
+
+    @pytest.mark.asyncio
+    async def test_search_file_content_with_both_context(self, temp_codebase):
+        """Test search with both before and after context."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("test.py:10:    result = func()\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            result = await integration.search_file_content("result = ", context_before=2, context_after=3)
+
+            # Verify both -B and -A flags were passed
+            call_args = mock_exec.call_args[0][0]
+            assert "-B" in call_args
+            assert "-A" in call_args
+            b_index = call_args.index("-B")
+            a_index = call_args.index("-A")
+            assert call_args[b_index + 1] == "2"
+            assert call_args[a_index + 1] == "3"
+
 
 class TestSearchFiles:
     """Tests for search_files method using fd."""
@@ -187,6 +403,40 @@ class TestSearchFiles:
             call_args = mock_exec.call_args[0][0]
             assert "--exclude" in call_args
             assert "*.txt" in call_args
+
+    @pytest.mark.asyncio
+    async def test_search_files_with_subdirectory(self, temp_codebase):
+        """Test file search with subdirectory filter."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("tests/test_auth.py\ntests/test_user.py\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            files = await integration.search_files("test", subdirectory="tests")
+
+            # Verify subdirectory was passed to fd command
+            call_args = mock_exec.call_args[0][0]
+            assert "tests" in call_args
+            # Verify paths include subdirectory (relative to codebase root)
+            assert len(files) == 2
+            assert "tests/test_auth.py" in files
+            assert "tests/test_user.py" in files
+
+    @pytest.mark.asyncio
+    async def test_search_files_subdirectory_with_trailing_slash(self, temp_codebase):
+        """Test file search handles trailing slash in subdirectory."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("src/components/Button.tsx\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            # Test with trailing slash - should be stripped
+            await integration.search_files("Button", subdirectory="src/components/")
+
+            # Verify trailing slash was removed
+            call_args = mock_exec.call_args[0][0]
+            assert "src/components" in call_args
+            assert "src/components/" not in call_args
 
 
 class TestSearchCodeStructure:

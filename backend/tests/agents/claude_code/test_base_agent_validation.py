@@ -11,7 +11,7 @@ from devboard.agents.engines.claude_code.agent import (
     ClaudeCodeAgent,
     InvalidVirtualToolCallError,
 )
-from devboard.agents.events import ConversationMessage, MessageRole, ToolCallRequest
+from devboard.agents.events import MessageRole, TextMessage, ToolCallRequest
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 
@@ -75,7 +75,7 @@ class TestValidMessageResponse:
 
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].role == MessageRole.AGENT
         assert response[0].text_content == "Hello, world!"
 
@@ -117,7 +117,7 @@ class TestInvalidJSONResponse:
         # Non-JSON is now treated as a normal text message
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == "This is not JSON at all"
 
     def test_plain_text_message_no_validation(self, test_agent):
@@ -129,7 +129,7 @@ class TestInvalidJSONResponse:
         # Plain text should work fine as normal message
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert "Hello! I've analyzed" in response[0].text_content
 
 
@@ -145,7 +145,7 @@ class TestInvalidResponseStructure:
         # JSON array should be treated as plain text message
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == '["array", "not", "object"]'
 
     def test_json_object_without_tool_fields_treated_as_message(self, test_agent):
@@ -157,7 +157,7 @@ class TestInvalidResponseStructure:
         # JSON without tool_name is treated as plain text message (no retry)
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == '{"content": "Hello", "no_tool_fields": true}'
 
 
@@ -173,7 +173,7 @@ class TestInvalidMessageFormat:
         # JSON without tool_name is treated as plain text message (no validation/retry)
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == '{"type": "message"}'
 
     def test_message_with_content_works(self, test_agent):
@@ -185,7 +185,7 @@ class TestInvalidMessageFormat:
         # Should return full text
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == "Test message"
 
 
@@ -201,7 +201,7 @@ class TestInvalidToolCallFormat:
         # JSON without tool_name is treated as plain text message (no validation/retry)
         assert isinstance(response, list)
         assert len(response) == 1
-        assert isinstance(response[0], ConversationMessage)
+        assert isinstance(response[0], TextMessage)
         assert response[0].text_content == '{"arguments": {}}'
 
     def test_tool_call_missing_arguments_raises_validation_error(self, test_agent):
@@ -377,7 +377,7 @@ class TestRetryMechanism:
 
         # Verify response is valid - should be a ConversationMessage
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].role == MessageRole.AGENT
         assert events[0].text_content == "Success"
 

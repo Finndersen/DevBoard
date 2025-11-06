@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from devboard.agents.events import ConversationMessage
+from devboard.agents.events import TextMessage
 from devboard.services.prompt_action_service import PromptActionNotFoundError, PromptActionService
 
 
@@ -13,7 +13,7 @@ def mock_conversation_service():
     """Mock BaseAgentConversationService."""
 
     async def mock_stream_events():
-        yield ConversationMessage(
+        yield TextMessage(
             event_type="message",
             role="agent",
             text_content="Mock response",
@@ -56,7 +56,7 @@ class TestPromptActionService:
             events.append(event)
 
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].role == "agent"
         # Verify conversation service was called with the prompt template
         mock_conversation_service.stream_events_for_message_or_approval.assert_called_once()

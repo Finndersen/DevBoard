@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from devboard.agents.agent_config_service import AgentEngineModelConfig
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.events import ConversationMessage, MessageRole
+from devboard.agents.events import MessageRole, TextMessage
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base, Codebase, Document, Task
@@ -176,7 +176,7 @@ def mock_agent():
     # Create proper mock responses that return ConversationEvent lists
     def create_mock_events(message_text):
         return [
-            ConversationMessage(
+            TextMessage(
                 role=MessageRole.AGENT,
                 text_content=message_text,
                 timestamp=datetime.datetime.now(datetime.UTC),

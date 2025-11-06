@@ -53,11 +53,11 @@ class TestClaudeClient:
         # Create PydanticAI Tool instance
         tool = Tool(custom_tool, name="custom_tool")
 
-        agent = ClaudeClient(tools=[tool])
+        agent = ClaudeClient(tools=[tool], load_settings=False)
         assert agent.options.mcp_servers is not None
-        assert "devboard_tools" in agent.options.mcp_servers
+        assert "builtin_tools" in agent.options.mcp_servers
         assert len(agent.options.allowed_tools) == 1
-        assert agent.options.allowed_tools[0] == "mcp__devboard_tools__custom_tool"
+        assert agent.options.allowed_tools[0] == "mcp__builtin_tools__custom_tool"
 
     @pytest.mark.asyncio
     async def test_run_basic_query(self, mock_sdk_client):
@@ -263,8 +263,9 @@ class TestClaudeClient:
         # Create PydanticAI Tool instance
         pydantic_tool = Tool(simple_tool, name="simple_tool")
 
-        # Create wrapper
-        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
+        # Create wrapper using a ClaudeClient instance
+        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
 
         # Test the wrapper
         result = await wrapper({"text": "hello"})
@@ -287,8 +288,9 @@ class TestClaudeClient:
         # Create PydanticAI Tool instance
         pydantic_tool = Tool(dict_tool, name="dict_tool")
 
-        # Create wrapper
-        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
+        # Create wrapper using a ClaudeClient instance
+        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
 
         # Test the wrapper
         result = await wrapper({"value": 42})
@@ -310,13 +312,15 @@ class TestClaudeClient:
         # Create PydanticAI Tool instance
         pydantic_tool = Tool(typed_tool, name="typed_tool")
 
-        # Create wrapper
-        wrapper = ClaudeClient._create_tool_wrapper(pydantic_tool)
+        # Create wrapper using a ClaudeClient instance
+        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
 
         # Test with valid arguments
         result = await wrapper({"count": 5, "name": "test"})
         assert result["content"][0]["text"] == "test: 5"
 
-        # Test with invalid arguments (wrong type)
-        with pytest.raises(ValidationError):
-            await wrapper({"count": "not a number", "name": "test"})
+        # Test with invalid arguments (wrong type) - now returns error message instead of raising
+        result = await wrapper({"count": "not a number", "name": "test"})
+        assert "Error calling tool:" in result["content"][0]["text"]
+        assert "validation error" in result["content"][0]["text"].lower()

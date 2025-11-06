@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from devboard.agents.events import ConversationMessage, ToolCallRequest
+from devboard.agents.events import TextMessage, ToolCallRequest
 
 
 class PromptResponseType(StrEnum):
@@ -19,7 +19,7 @@ class PromptResponse(BaseModel):
     """
 
     type: PromptResponseType
-    message: ConversationMessage | None = None
+    message: TextMessage | None = None
     tool_requests: list[ToolCallRequest] | None = None
 
 

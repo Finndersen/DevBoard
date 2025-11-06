@@ -57,14 +57,28 @@ class CodebaseIntegration:
         )
         return result.stdout.strip()
 
-    async def read_file(self, file_path: str) -> str:
-        """Read contents of a file.
+    async def read_file(
+        self,
+        file_path: str,
+        start_line: int | None = None,
+        end_line: int | None = None,
+        include_line_numbers: bool = False,
+    ) -> str:
+        """Read contents of a file, optionally reading only a specific line range.
 
         Args:
             file_path: Relative path to file from codebase root
+            start_line: Optional 1-indexed line number to start reading from (inclusive)
+            end_line: Optional 1-indexed line number to stop reading at (inclusive)
+            include_line_numbers: Whether to prepend line numbers to output (default: False)
 
         Returns:
-            File contents as string
+            File contents as string. If include_line_numbers is True, line numbers
+            are prepended (e.g., "  15→content")
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the path is not a file or if line range is invalid
         """
         full_path = self.codebase_path / file_path
         if not full_path.exists():
@@ -73,18 +87,53 @@ class CodebaseIntegration:
         if not full_path.is_file():
             raise ValueError(f"Path is not a file: {file_path}")
 
-        with open(full_path, encoding="utf-8") as f:
-            return f.read()
+        # Validate line range parameters
+        if start_line is not None and start_line < 1:
+            raise ValueError(f"start_line must be >= 1, got {start_line}")
+        if end_line is not None and end_line < 1:
+            raise ValueError(f"end_line must be >= 1, got {end_line}")
+        if start_line is not None and end_line is not None and start_line > end_line:
+            raise ValueError(f"start_line ({start_line}) must be <= end_line ({end_line})")
 
-    async def list_files(self, directory: str = "", pattern: str | None = None) -> list[str]:
-        """List files in a directory with optional pattern matching.
+        with open(full_path, encoding="utf-8") as f:
+            lines = f.readlines()
+
+        # Determine the range to read
+        total_lines = len(lines)
+        if start_line is None:
+            start_idx = 0
+        else:
+            start_idx = max(0, start_line - 1)
+
+        if end_line is None:
+            end_idx = total_lines
+        else:
+            end_idx = min(end_line, total_lines)
+
+        # Format output with optional line numbers
+        result_lines = []
+        for i in range(start_idx, end_idx):
+            line_content = lines[i].rstrip("\n")
+            if include_line_numbers:
+                line_num = i + 1
+                result_lines.append(f"{line_num:>5}→{line_content}")
+            else:
+                result_lines.append(line_content)
+
+        return "\n".join(result_lines)
+
+    async def list_directory_contents(
+        self, directory: str = "", pattern: str | None = None, include_directories: bool = False
+    ) -> list[str]:
+        """List files and optionally directories in a directory with optional pattern matching.
 
         Args:
             directory: Relative directory path from codebase root
-            pattern: Optional glob pattern for filtering
+            pattern: Optional glob pattern for filtering (uses recursive rglob)
+            include_directories: Whether to include directories in results (default: False)
 
         Returns:
-            List of relative file paths
+            List of relative paths. Directories are marked with trailing '/' when included.
         """
         dir_path = self.codebase_path / directory
         if not dir_path.exists():
@@ -93,12 +142,16 @@ class CodebaseIntegration:
         if not dir_path.is_dir():
             raise ValueError(f"Path is not a directory: {directory}")
 
-        if pattern:
-            files = [str(p.relative_to(dir_path)) for p in dir_path.rglob(pattern)]
-        else:
-            files = [str(p.relative_to(dir_path)) for p in dir_path.iterdir() if p.is_file()]
+        entries = []
+        pattern = pattern or "*"
+        # Use rglob for recursive pattern matching
+        for p in dir_path.rglob(pattern):
+            if p.is_file():
+                entries.append(str(p.relative_to(dir_path)))
+            elif p.is_dir() and include_directories:
+                entries.append(str(p.relative_to(dir_path)) + "/")
 
-        return sorted(files)
+        return sorted(entries)
 
     async def search_file_content(
         self,
@@ -106,6 +159,9 @@ class CodebaseIntegration:
         file_pattern: str | None = None,
         case_sensitive: bool = False,
         search_hidden: bool = False,
+        subdirectory: str | None = None,
+        context_before: int = 0,
+        context_after: int = 0,
     ) -> list[str]:
         """Search for text within files using ripgrep.
 
@@ -114,9 +170,37 @@ class CodebaseIntegration:
             file_pattern: Optional glob pattern to filter files (e.g., '*.py')
             case_sensitive: Whether search is case sensitive (default: False)
             search_hidden: Whether to search hidden/ignored files like .venv/ (default: False)
+            subdirectory: Optional subdirectory to search within (e.g., 'tests', 'src/components')
+            context_before: Number of lines to show before each match (default: 0)
+            context_after: Number of lines to show after each match (default: 0)
 
         Returns:
             List of matching lines from ripgrep output
+
+        TODO: Output appears to repeat the file path multiple times, e.g.:
+        backend/devboard/services/prompt_action_service.py-8-
+        backend/devboard/services/prompt_action_service.py-9-
+        backend/devboard/services/prompt_action_service.py:10:class PromptActionNotFoundError(Exception):
+        backend/devboard/services/prompt_action_service.py-11-    \"\"\"Raised when a requested prompt action key does not exist.\"\"\"
+        backend/devboard/services/prompt_action_service.py-12-
+        backend/devboard/services/prompt_action_service.py-13-    pass
+        backend/devboard/services/prompt_action_service.py-14-
+        backend/devboard/services/prompt_action_service.py-15-
+        backend/devboard/services/prompt_action_service.py:16:class PromptActionService:
+        backend/devboard/services/prompt_action_service.py-17-    \"\"\"Service for managing and executing prompt actions.
+        backend/devboard/services/prompt_action_service.py-18-
+        backend/devboard/services/prompt_action_service.py-19-    Prompt actions are reusable, named operations that send predefined prompts
+        backend/devboard/services/prompt_action_service.py-20-    to agent conversations. This service handles action lookup and execution.
+        backend/devboard/services/prompt_action_service.py-21-    \"\"\"
+        --
+        backend/devboard/agents/prompt_actions.py-11-
+        backend/devboard/agents/prompt_actions.py-12-@dataclass(frozen=True)
+        backend/devboard/agents/prompt_actions.py:13:class PromptAction:
+        backend/devboard/agents/prompt_actions.py-14-    \"\"\"A reusable prompt action that can be triggered in conversations.
+        backend/devboard/agents/prompt_actions.py-15-
+        backend/devboard/agents/prompt_actions.py-16-    Attributes:
+        backend/devboard/agents/prompt_actions.py-17-        key: Unique identifier for the action (e.g., \"task.create_implementation_plan\")
+        backend/devboard/agents/prompt_actions.py-18-        prompt_template: The prompt text to send to the agent
         """
         cmd = ["rg", "--line-number"]
 
@@ -129,7 +213,19 @@ class CodebaseIntegration:
         if file_pattern:
             cmd.extend(["--glob", file_pattern])
 
+        if context_before > 0:
+            cmd.extend(["-B", str(context_before)])
+
+        if context_after > 0:
+            cmd.extend(["-A", str(context_after)])
+
         cmd.append(query)
+
+        # Add subdirectory path if specified
+        if subdirectory:
+            # Remove trailing slash for consistency
+            subdirectory = subdirectory.rstrip("/")
+            cmd.append(subdirectory)
 
         result = await execute_shell_command(
             cmd,
@@ -148,6 +244,7 @@ class CodebaseIntegration:
         extension: str | None = None,
         exclude_pattern: str | None = None,
         search_hidden: bool = False,
+        subdirectory: str | None = None,
     ) -> list[str]:
         """Search for files by name pattern using fd.
 
@@ -156,9 +253,10 @@ class CodebaseIntegration:
             extension: Optional file extension filter (e.g., 'py', 'ts')
             exclude_pattern: Optional pattern to exclude from results
             search_hidden: Whether to search hidden directories (default: False)
+            subdirectory: Optional subdirectory to search within (e.g., 'tests', 'src/components')
 
         Returns:
-            List of relative file paths matching the pattern
+            List of relative file paths matching the pattern (paths are relative to codebase root)
         """
         cmd = ["fd", "--type", "f"]
 
@@ -172,6 +270,13 @@ class CodebaseIntegration:
             cmd.extend(["--exclude", exclude_pattern])
 
         cmd.append(pattern)
+
+        # Add subdirectory path if specified
+        if subdirectory:
+            # Remove trailing slash for consistency
+            subdirectory = subdirectory.rstrip("/")
+            cmd.append(subdirectory)
+
         result = await execute_shell_command(
             cmd,
             working_dir=self.codebase_path,

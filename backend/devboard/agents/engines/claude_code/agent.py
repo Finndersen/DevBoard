@@ -33,8 +33,8 @@ from devboard.agents.engines.claude_code.virtual_tools import (
 )
 from devboard.agents.events import (
     ConversationEvent,
-    ConversationMessage,
     MessageRole,
+    TextMessage,
     ToolCall,
     ToolResult,
 )
@@ -80,8 +80,6 @@ class ClaudeCodeAgent(BaseAgent):
         model: LanguageModel | None,
         session_id: str | None = None,
         codebase_path: str | None = None,
-        include_builtin_system_prompt: bool = False,
-        include_claude_md: bool = False,
     ):
         """Initialize Claude Code agent with role.
 
@@ -90,20 +88,14 @@ class ClaudeCodeAgent(BaseAgent):
             model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
             codebase_path: Optional path to codebase directory
-            include_builtin_system_prompt: Whether to include Claude's built-in system prompt
-            include_claude_md: Whether to include CLAUDE.md file in system prompt
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
 
-        self.role = role
-        self.model = model
+        super().__init__(role, model)
+
         self.session_id = session_id
         self.codebase_path = codebase_path
-        self.session_service = ClaudeCodeSessionService()
-        self.include_builtin_system_prompt = include_builtin_system_prompt
-        self.include_claude_md = include_claude_md
-
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._convert_tools_from_role()
 
@@ -144,13 +136,13 @@ class ClaudeCodeAgent(BaseAgent):
 
         return ClaudeClient(
             session_id=self.session_id,
-            system_prompt=system_prompt + "\n\n" + CLAUDE_COMPACTION_PROMPT,
+            system_prompt=system_prompt,
             tools=self._function_tools,
-            allowed_builtin_tools=self._get_allowed_builtin_tools(),
+            allowed_builtin_tools=self.role.allowed_builtin_tools,
             model=self.model.display_full_name if self.model else None,
             cwd=self.codebase_path,
-            include_builtin_system_prompt=self.include_builtin_system_prompt,
-            include_claude_md=self.include_claude_md,
+            include_builtin_system_prompt=self.role.include_builtin_system_prompt,
+            load_settings=self.role.include_claude_md,
         )
 
     async def _build_system_prompt(self) -> str:
@@ -170,8 +162,13 @@ class ClaudeCodeAgent(BaseAgent):
         # Get current state/context from role (async operation)
         state_context = await self.role.get_context_content()
 
+        prompt_parts = [role_prompt, virtual_tool_prompt, state_context]
+
+        if not self.role.include_builtin_system_prompt:
+            prompt_parts.append(CLAUDE_COMPACTION_PROMPT)
+
         # Combine all parts
-        return "\n\n".join([role_prompt, virtual_tool_prompt, state_context])
+        return "\n\n".join(prompt_parts)
 
     def get_virtual_tool(self, tool_name: str) -> VirtualTool | None:
         """Get a virtual tool by name.
@@ -185,16 +182,6 @@ class ClaudeCodeAgent(BaseAgent):
             VirtualTool instance or None if not found
         """
         return self._virtual_tools.get(tool_name)
-
-    def _get_allowed_builtin_tools(self) -> list[str] | None:
-        """Get list of allowed Claude Code tools for this agent.
-
-        Override to customize tool access. By default allows common read-only tools.
-
-        Returns:
-            List of tool names or None to allow all tools
-        """
-        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task"]
 
     def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
         """Convert Claude SDK Message to ConversationEvent(s).
@@ -221,7 +208,7 @@ class ClaudeCodeAgent(BaseAgent):
                     # Parse text content to handle both normal messages and virtual tool calls
                     yield from self._parse_claude_message_text(content_block.text)
                 elif isinstance(content_block, ThinkingBlock):
-                    yield ConversationMessage(
+                    yield TextMessage(
                         role=MessageRole.AGENT,
                         text_content="Thinking: " + content_block.thinking,
                         timestamp=timestamp,
@@ -327,7 +314,7 @@ class ClaudeCodeAgent(BaseAgent):
                     # Continue to next iteration
                 else:
                     # Max retries exceeded
-                    raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}")
+                    raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}") from e
 
     async def _process_tool_approvals(
         self,
@@ -350,8 +337,9 @@ class ClaudeCodeAgent(BaseAgent):
         if not self.session_id:
             raise ValueError("session_id required when processing tool approvals")
 
+        session_service = ClaudeCodeSessionService()
         # Get last message from session to parse tool call
-        last_message = self.session_service.get_last_session_message(self.session_id)
+        last_message = session_service.get_last_session_message(self.session_id)
         if not last_message:
             raise ValueError("No messages in session - cannot process tool approvals")
 
@@ -459,7 +447,7 @@ class ClaudeCodeAgent(BaseAgent):
         elif isinstance(tool_call_or_text, TextResponse):
             # Normal message - convert to ConversationMessage
             return [
-                ConversationMessage(
+                TextMessage(
                     role=MessageRole.AGENT,
                     text_content=tool_call_or_text.content,
                     timestamp=timestamp,

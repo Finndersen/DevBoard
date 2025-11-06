@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 from devboard.agents.events import ConversationEvent
+from devboard.agents.language_models import LanguageModel
+from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovals
 
 
@@ -13,6 +15,20 @@ class BaseAgent(ABC):
     Provides a unified interface for agent execution with consistent
     method signatures across different engine implementations.
     """
+
+    def __init__(
+        self,
+        role: Role,
+        model: LanguageModel | None,
+    ):
+        """Initialize base agent with role and model.
+
+        Args:
+            role: Role defining agent behavior (prompts, tools, context)
+            model: Language model instance, or None to use Claude Code's default model
+        """
+        self.role = role
+        self.model = model
 
     async def run(self, prompt_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
         """Execute agent with either a user message or tool approval results.

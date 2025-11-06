@@ -1,17 +1,14 @@
 from pydantic_ai import Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import (
-    create_code_structure_search_tool,
-    create_directory_tree_tool,
+    create_codebase_investigation_tool,
     create_document_edit_tool,
-    create_file_search_tool,
     create_set_document_content_tool,
-    create_text_search_tool,
 )
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
-from devboard.integrations.codebase import CodebaseIntegration
 
 SPECIFICATION_ROLE_PROMPT = """
 You are a Task Specification Assistant for DevBoard, helping developers craft detailed task specifications.
@@ -44,6 +41,7 @@ BEHAVIOUR GUIDELINES:
 - Challenge the user and be critical of ideas where appropriate, suggest improvements or alternative approaches
 - Make sure to consider and investigate impacts and required changes to tests and other related components (e.g. frontend, backend, database)
 - DO NOT make any file edits or other destructive changes other than editing the Task Specification Document
+- Use the investigate_codebase tool to answer questions about functionality, implementation details, architecture, and code organization (use multiple parallel calls if needed).
 - Your responses should be concise, helpful, accurate, and focused on creating a clear, actionable specification.
 - Task or Project documents are "virtual documents" - they internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
 """
@@ -91,16 +89,22 @@ TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
 class TaskSpecificationRole(Role):
     """Role for task specification creation and management."""
 
-    def __init__(self, task: Task, document_repository: DocumentRepository):
+    def __init__(
+        self,
+        task: Task,
+        document_repository: DocumentRepository,
+        agent_config_service: AgentConfigService,
+    ):
         """Initialize task specification role.
 
         Args:
             task: Task instance
             document_repository: Repository for document operations
+            agent_config_service: Optional service for agent configuration (required for investigation tool)
         """
         self.task = task
         self.document_repository = document_repository
-        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
+        self.agent_config_service = agent_config_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task specification role."""
@@ -110,7 +114,7 @@ class TaskSpecificationRole(Role):
         """Get tools for task specification role.
 
         Returns:
-            List of document editing tools and codebase search tools (if codebase available)
+            List of document editing tools, codebase search tools, and investigation tool (if codebase available)
         """
         tools: list[Tool] = [
             create_set_document_content_tool(self.task.specification, self.document_repository),
@@ -119,15 +123,13 @@ class TaskSpecificationRole(Role):
         if self.task.specification.content:
             tools.append(create_document_edit_tool(self.task.specification, self.document_repository))
 
-        # Add codebase search tools if codebase is configured
-        if self.codebase_integration:
-            tools.extend(
-                [
-                    create_text_search_tool(self.codebase_integration),
-                    create_file_search_tool(self.codebase_integration),
-                    create_code_structure_search_tool(self.codebase_integration),
-                    create_directory_tree_tool(self.codebase_integration),
-                ]
+        if self.task.codebase:
+            # Add investigation tool
+            tools.append(
+                create_codebase_investigation_tool(
+                    self.task.codebase,
+                    self.agent_config_service,
+                )
             )
 
         return tools
@@ -139,3 +141,8 @@ class TaskSpecificationRole(Role):
             Formatted context containing task details, project spec, and task spec
         """
         return build_task_specification_context(self.task)
+
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return ["WebFetch", "WebSearch", "Task"]

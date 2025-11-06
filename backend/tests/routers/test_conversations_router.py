@@ -10,7 +10,7 @@ from starlette.testclient import TestClient
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
-from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest
+from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles.project_qa import ProjectQARole
 from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.services import get_agent_conversation_service
@@ -218,7 +218,7 @@ class TestConversationsRouter:
         db_session.commit()
 
         # Mock the agent to return approval result
-        agent_message_event = ConversationMessage(
+        agent_message_event = TextMessage(
             role=MessageRole.AGENT,
             text_content="Great! I've processed your tool approvals and made the requested edits.",
             timestamp=datetime.datetime.now(datetime.UTC),
@@ -259,7 +259,7 @@ class TestConversationsRouter:
         db_session.commit()
 
         # Mock the agent to return approval result
-        agent_message_event = ConversationMessage(
+        agent_message_event = TextMessage(
             role=MessageRole.AGENT,
             text_content="I've processed your approvals. I made the edit but skipped the deletion.",
             timestamp=datetime.datetime.now(datetime.UTC),
@@ -378,7 +378,7 @@ class TestConversationsRouter:
 
         # Mock the agent to yield multiple events
         async def multi_event_stream(prompt_or_approvals):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="First part of response",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -389,7 +389,7 @@ class TestConversationsRouter:
                 tool_args={"content": "new"},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="Final response after tool call",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -472,7 +472,7 @@ class TestConversationsRouter:
 
         # Mock the agent to stream approval result
         async def approval_stream_events(prompt_or_approvals):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="Great! I've processed your tool approvals and made the requested edits.",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -516,7 +516,7 @@ class TestConversationsRouter:
 
         # Mock the agent to stream multiple events during approval
         async def approval_multi_event_stream(prompt_or_approvals):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="Processing your approvals...",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -527,7 +527,7 @@ class TestConversationsRouter:
                 tool_args={},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="I've completed the requested changes and validated them.",
                 timestamp=datetime.datetime.now(datetime.UTC),
@@ -562,7 +562,7 @@ class TestConversationsRouter:
 
         # Mock the agent to stream events for the prompt action
         async def prompt_action_stream(prompt):
-            yield ConversationMessage(
+            yield TextMessage(
                 role=MessageRole.AGENT,
                 text_content="I'll help you create an implementation plan.",
                 timestamp=datetime.datetime.now(datetime.UTC),

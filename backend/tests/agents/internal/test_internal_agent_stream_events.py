@@ -17,7 +17,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
 
 from devboard.agents.engines.internal.agent import InternalAgent
-from devboard.agents.events import ConversationMessage, MessageRole, ToolCall, ToolCallRequest, ToolResult
+from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
@@ -161,7 +161,7 @@ class TestStreamEventsTextResponse:
 
         # Should have one ConversationMessage
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].role == MessageRole.AGENT
         assert events[0].text_content == "Hello, this is a text response!"
 
@@ -289,7 +289,7 @@ class TestStreamEventsFunctionToolCalls:
         assert events[1].result_content == "Found 5 matches"
         assert events[1].is_error is False
 
-        assert isinstance(events[2], ConversationMessage)
+        assert isinstance(events[2], TextMessage)
         assert events[2].text_content == "Here are the search results..."
 
     @pytest.mark.asyncio
@@ -316,7 +316,7 @@ class TestStreamEventsFunctionToolCalls:
         assert isinstance(events[1], ToolResult)
         assert isinstance(events[2], ToolCall)
         assert isinstance(events[3], ToolResult)
-        assert isinstance(events[4], ConversationMessage)
+        assert isinstance(events[4], TextMessage)
 
 
 class TestStreamEventsToolApprovals:
@@ -339,7 +339,7 @@ class TestStreamEventsToolApprovals:
 
         # Should process approvals and return response
         assert len(events) >= 1
-        assert isinstance(events[-1], ConversationMessage)
+        assert isinstance(events[-1], TextMessage)
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.internal.agent.Agent")
@@ -360,7 +360,7 @@ class TestStreamEventsToolApprovals:
 
         assert len(events) >= 1
         # Should get a response acknowledging the denial
-        assert any("different approach" in e.text_content for e in events if isinstance(e, ConversationMessage))
+        assert any("different approach" in e.text_content for e in events if isinstance(e, TextMessage))
 
 
 class TestStreamEventsEdgeCases:
@@ -450,5 +450,5 @@ class TestStreamEventsEdgeCases:
 
         # Should handle empty string gracefully
         assert len(events) == 1
-        assert isinstance(events[0], ConversationMessage)
+        assert isinstance(events[0], TextMessage)
         assert events[0].text_content == ""

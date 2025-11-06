@@ -14,10 +14,16 @@ def scrubbing_callback(m: logfire.ScrubMatch):
     if m.path == ("attributes", "message", "session_id"):
         return m.value
 
+    if m.path == ("attributes", "system_prompt"):
+        return m.value
+
     if m.path == ("attributes", "message", "result") and m.pattern_match.group(0).lower() == "session":
         return m.value
 
-    if m.path == ("attributes", "message", "content", 0, "text") and m.pattern_match.group(0).lower() == "session":
+    if m.path == ("attributes", "message", "content", 0, "text") and m.pattern_match.group(0).lower() in (
+        "session",
+        "auth",
+    ):
         return m.value
 
     if (
@@ -49,3 +55,4 @@ def setup_logfire(app: FastAPI) -> None:
     logfire.instrument_httpx()
     logfire.instrument_fastapi(app)
     logfire.instrument_pydantic_ai()
+    logfire.instrument_mcp()

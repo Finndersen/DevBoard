@@ -82,6 +82,52 @@ agent = ClaudeCodeAgent(
 
 **Preamble Support**: Text before JSON creates separate ConversationMessage before ToolCallRequest
 
+## Concurrent MCP Tool Execution
+
+**Location**: `backend/devboard/agents/engines/claude_code/client.py`
+
+**Purpose**: Execute multiple MCP tool calls concurrently to improve agent performance when Claude requests multiple tools simultaneously.
+
+**Architecture**:
+- **Dual Wrapper System**: ClaudeClient creates different wrappers based on `enable_concurrent_execution`:
+  - `_create_tool_execution_wrapper()`: Executes tools directly (normal mode)
+  - `_create_tool_result_retrieval_wrapper()`: Returns cached results (concurrent mode)
+- **Order-Based Correlation**: FIFO queue matches tool calls with their pre-executed results
+- **MCP-Only**: Only applies to custom MCP tools (e.g., `mcp__builtin_tools__*`), not built-in Claude Code tools
+
+**Flow**:
+1. **Message Reception**: `stream()` receives `AssistantMessage` with `ToolUseBlock`s
+2. **Immediate Execution**: `_start_running_any_mcp_tools()` checks each block:
+   - If MCP tool (`_is_mcp_tool()`) → launch async task via `_execute_concurrent_mcp_tool()`
+   - If built-in tool → skip (handled by CLI)
+3. **Task Creation**: `_execute_concurrent_mcp_tool()` creates `asyncio.Task`:
+   - Executes tool via `_execute_tool_concurrently()`
+   - Caches `Future` by `tool_use_id` in `_tool_execution_cache`
+   - Adds `(tool_name, tool_use_id)` to `_tool_execution_queue`
+4. **Result Retrieval**: When CLI calls MCP tool:
+   - Retrieval wrapper pops from queue → gets `tool_use_id`
+   - Validates tool name matches (fails fast on mismatch)
+   - Awaits cached `Future` (may already be complete)
+   - Returns result and cleans up cache entry
+
+**Configuration**:
+```python
+client = ClaudeClient(
+    tools=[...],
+    enable_concurrent_execution=True  # Default: True
+)
+```
+
+**Benefits**:
+- **Performance**: Multiple tools execute in parallel instead of sequentially
+- **Transparency**: No changes needed in agent code or tool definitions
+- **Safety**: Queue-based correlation prevents result mismatches
+
+**Limitations**:
+- Only applies to custom MCP tools, not built-in Claude Code tools
+- Requires all tool calls to arrive in single `AssistantMessage`
+- Tools must be stateless and order-independent
+
 ## Conversation Filtering
 
 **Location**: `backend/devboard/agents/engines/claude_code/agent_conversation.py`
@@ -120,8 +166,11 @@ agent = ClaudeCodeAgent(
 **Core**:
 - `backend/devboard/agents/engines/claude_code/agent.py`: ClaudeCodeAgent implementation
 - `backend/devboard/agents/engines/claude_code/agent_conversation.py`: Conversation service
-- `backend/devboard/agents/engines/claude_code/client.py`: Claude Code CLI client
+- `backend/devboard/agents/engines/claude_code/client.py`: Claude Code CLI client (includes concurrent MCP tool execution)
 - `backend/devboard/agents/engines/claude_code/message_parser.py`: Message parsing
 - `backend/devboard/agents/engines/claude_code/session.py`: Session management
 - `backend/devboard/agents/engines/claude_code/tool_approval_manager.py`: Tool approval workflow
 - `backend/devboard/agents/engines/claude_code/virtual_tools.py`: Virtual tool definitions
+
+**Tests**:
+- `backend/tests/agents/claude_code/test_concurrent_execution.py`: Concurrent MCP tool execution tests
