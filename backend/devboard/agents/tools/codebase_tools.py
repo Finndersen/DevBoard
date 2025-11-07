@@ -6,12 +6,6 @@ from devboard.integrations.codebase import CodebaseIntegration
 def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """Create a text search tool using ripgrep for finding specific content within files.
 
-    This tool searches through file contents using ripgrep, which is ideal for:
-    - Finding function definitions, class declarations, or specific code patterns
-    - Searching for error messages, log statements, or configuration values
-    - Locating usage of specific variables, methods, or APIs
-    - Finding TODO comments, FIXME markers, or code annotations
-
     Args:
         codebase_integration: CodebaseIntegration instance for file system access
     """
@@ -34,22 +28,18 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
 
         Examples:
         - search_file_content("def authenticate", file_pattern="*.py") - Find authentication functions
-        - search_file_content("TODO.*security", case_sensitive=False) - Find security-related TODOs
         - search_file_content("import.*pandas", file_pattern="*.py") - Find pandas imports
         - search_file_content("class.*Error", path="backend/models") - Find Error classes in backend/models
         - search_file_content("async def", file_pattern="*.py", context_before=2, context_after=5) - Find async functions with context
 
         Args:
-            query: Text or regex pattern to search for. Supports full regex syntax.
-            file_pattern: Optional glob pattern to filter files (e.g., '*.py', '*.ts', '**/*.json').
-                         Use to focus search on specific file types or directories.
-            case_sensitive: Whether search should be case sensitive. Default is False (case-insensitive).
-            search_hidden: Whether to search hidden/ignored files like .git/, .venv/, node_modules/.
-                          Default is False (skip hidden files).
-            path: Optional subdirectory to search within (e.g., 'tests', 'src/components').
-                         Limits search to files within this directory and its subdirectories.
-            context_before: Number of lines to show before each match for context. Default is 0.
-            context_after: Number of lines to show after each match for context. Default is 0.
+            query: Text or regex pattern to search for
+            file_pattern: Optional glob pattern to filter files (e.g., '*.py')
+            case_sensitive: Whether search is case sensitive (default: False)
+            search_hidden: Whether to search hidden/ignored files like .venv/ (default: False)
+            path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
+            context_before: Number of lines to show before each match (default: 0)
+            context_after: Number of lines to show after each match (default: 0)
 
         Returns:
             Formatted search results showing file:line:match for each occurrence,
@@ -60,7 +50,7 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
             file_pattern=file_pattern,
             case_sensitive=case_sensitive,
             search_hidden=search_hidden,
-            subdirectory=path,
+            path=path,
             context_before=context_before,
             context_after=context_after,
         )
@@ -77,13 +67,6 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
 
 def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """Create a file search tool using fd for finding files by name patterns.
-
-    This tool searches for files by their names/paths using fd, which is ideal for:
-    - Finding configuration files (e.g., config.json, .env files)
-    - Locating test files or specific modules by name patterns
-    - Discovering files with specific extensions across the codebase
-    - Finding template files, documentation, or assets by name
-    - Exploring project structure and file organization
 
     Args:
         codebase_integration: CodebaseIntegration instance for file system access
@@ -166,6 +149,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     async def search_code_structure(
         pattern: str,
         language: str | None = None,
+        path: str | None = None,
     ) -> str:
         """Search for code structure patterns using AST-based matching (using ast-grep).
 
@@ -181,13 +165,14 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         - search_code_structure("def $FUNC($$$ARGS): $$$BODY", language="python") - Find all function definitions
         - search_code_structure("try: $$$TRY except $ERROR: $$$EXCEPT") - Find error handling patterns
         - search_code_structure("@$DECORATOR\\nclass $NAME") - Find decorated classes
-        - search_code_structure("if __name__ == '__main__'") - Find main execution blocks
+        - search_code_structure("class $NAME", path="backend/models") - Find classes only in backend/models
 
         Args:
             pattern: AST pattern using ast-grep syntax. Use $NAME for single nodes,
                     $$$ARGS for multiple nodes, and specific syntax for language constructs.
             language: Optional language filter (e.g., 'python', 'typescript', 'rust', 'go').
                      Helps ast-grep parse files correctly and improves accuracy.
+            path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file.
 
         Returns:
             Formatted search results showing file:line:column:match for each occurrence,
@@ -196,6 +181,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         result = await codebase_integration.search_code_structure(
             pattern=pattern,
             language=language,
+            path=path,
         )
 
         if not result:

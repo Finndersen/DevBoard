@@ -159,7 +159,7 @@ class CodebaseIntegration:
         file_pattern: str | None = None,
         case_sensitive: bool = False,
         search_hidden: bool = False,
-        subdirectory: str | None = None,
+        path: str | None = None,
         context_before: int = 0,
         context_after: int = 0,
     ) -> list[str]:
@@ -170,13 +170,12 @@ class CodebaseIntegration:
             file_pattern: Optional glob pattern to filter files (e.g., '*.py')
             case_sensitive: Whether search is case sensitive (default: False)
             search_hidden: Whether to search hidden/ignored files like .venv/ (default: False)
-            subdirectory: Optional subdirectory to search within (e.g., 'tests', 'src/components')
+            path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
             context_before: Number of lines to show before each match (default: 0)
             context_after: Number of lines to show after each match (default: 0)
 
         Returns:
             List of matching lines from ripgrep output
-
         TODO: Output appears to repeat the file path multiple times, e.g.:
         backend/devboard/services/prompt_action_service.py-8-
         backend/devboard/services/prompt_action_service.py-9-
@@ -221,11 +220,11 @@ class CodebaseIntegration:
 
         cmd.append(query)
 
-        # Add subdirectory path if specified
-        if subdirectory:
+        # Add path if specified (can be subdirectory or specific file)
+        if path:
             # Remove trailing slash for consistency
-            subdirectory = subdirectory.rstrip("/")
-            cmd.append(subdirectory)
+            path = path.rstrip("/")
+            cmd.append(path)
 
         result = await execute_shell_command(
             cmd,
@@ -290,12 +289,18 @@ class CodebaseIntegration:
 
         return []
 
-    async def search_code_structure(self, pattern: str, language: str | None = None) -> list[str]:
+    async def search_code_structure(
+        self,
+        pattern: str,
+        language: str | None = None,
+        path: str | None = None,
+    ) -> list[str]:
         """Search for code structure patterns using ast-grep.
 
         Args:
             pattern: AST pattern to search (e.g., 'class $NAME', 'def $FUNC($$$ARGS)')
             language: Optional language filter (e.g., 'python', 'typescript', 'rust')
+            path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
 
         Returns:
             List of matching lines from ast-grep output
@@ -317,6 +322,12 @@ class CodebaseIntegration:
 
         if language:
             cmd.extend(["--lang", language])
+
+        # Add path if specified (can be subdirectory or specific file)
+        if path:
+            # Remove trailing slash for consistency
+            path = path.rstrip("/")
+            cmd.append(path)
 
         result = await execute_shell_command(
             cmd,

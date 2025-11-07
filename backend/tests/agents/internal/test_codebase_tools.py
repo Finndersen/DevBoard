@@ -218,6 +218,21 @@ class TestCodeStructureSearchTool:
         mock_codebase_integration.search_code_structure.assert_called_once_with(
             pattern="class $NAME",
             language="python",
+            path=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_search_with_path(self, mock_codebase_integration):
+        """Test code structure search with path filter."""
+        mock_codebase_integration.search_code_structure.return_value = []
+
+        tool = create_code_structure_search_tool(mock_codebase_integration)
+        await tool.function("class $NAME", path="backend/models")
+
+        mock_codebase_integration.search_code_structure.assert_called_once_with(
+            pattern="class $NAME",
+            language=None,
+            path="backend/models",
         )
 
     @pytest.mark.asyncio

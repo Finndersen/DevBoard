@@ -276,15 +276,15 @@ class TestSearchFileContent:
 
     @pytest.mark.asyncio
     async def test_search_file_content_with_subdirectory(self, temp_codebase):
-        """Test search with subdirectory filter."""
+        """Test search with path filter (subdirectory)."""
         integration = CodebaseIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("tests/test_auth.py:10:def test_login():\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
-            result = await integration.search_file_content("def test_", subdirectory="tests")
+            result = await integration.search_file_content("def test_", path="tests")
 
-            # Verify subdirectory was passed to rg command
+            # Verify path was passed to rg command
             call_args = mock_exec.call_args[0][0]
             assert "tests" in call_args
             # Verify results are returned
@@ -293,14 +293,14 @@ class TestSearchFileContent:
 
     @pytest.mark.asyncio
     async def test_search_file_content_subdirectory_with_trailing_slash(self, temp_codebase):
-        """Test search handles trailing slash in subdirectory."""
+        """Test search handles trailing slash in path."""
         integration = CodebaseIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("backend/models/user.py:5:class User:\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
             # Test with trailing slash - should be stripped
-            await integration.search_file_content("class", subdirectory="backend/models/")
+            await integration.search_file_content("class", path="backend/models/")
 
             # Verify trailing slash was removed
             call_args = mock_exec.call_args[0][0]
@@ -471,6 +471,39 @@ class TestSearchCodeStructure:
             assert "--lang" in call_args
             assert "python" in call_args
             assert result == []
+
+    @pytest.mark.asyncio
+    async def test_search_code_structure_with_path(self, temp_codebase):
+        """Test code structure search with path filter."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("backend/models/user.py:5:1:class User:\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            result = await integration.search_code_structure("class $NAME", path="backend/models")
+
+            # Verify path was passed to ast-grep command
+            call_args = mock_exec.call_args[0][0]
+            assert "backend/models" in call_args
+            # Verify results are returned
+            assert len(result) == 1
+            assert "backend/models/user.py" in result[0]
+
+    @pytest.mark.asyncio
+    async def test_search_code_structure_path_with_trailing_slash(self, temp_codebase):
+        """Test code structure search handles trailing slash in path."""
+        integration = CodebaseIntegration(temp_codebase)
+
+        mock_result = ShellCommandResult("src/components/Button.tsx:10:1:class Button:\n", "", 0)
+
+        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+            # Test with trailing slash - should be stripped
+            await integration.search_code_structure("class $NAME", path="src/components/")
+
+            # Verify trailing slash was removed
+            call_args = mock_exec.call_args[0][0]
+            assert "src/components" in call_args
+            assert "src/components/" not in call_args
 
 
 class TestGetGitFileTree:
