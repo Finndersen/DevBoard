@@ -17,7 +17,7 @@ export function useURLSync() {
   // Parse URL to determine tab type and entity ID
   const parseURL = (pathname: string): { type: TabType; entityId: string; title: string } | null => {
     // Home (consolidated projects and codebases view)
-    if (pathname === '/' || pathname === '/projects' || pathname === '/codebases') {
+    if (pathname === '/' || pathname === '/projects') {
       return { type: 'home', entityId: 'main', title: 'Home' }
     }
 
@@ -31,6 +31,12 @@ export function useURLSync() {
     const taskMatch = pathname.match(/^\/tasks\/(\d+)$/)
     if (taskMatch) {
       return { type: 'task', entityId: taskMatch[1], title: `Task #${taskMatch[1]}` }
+    }
+
+    // Codebase detail
+    const codebaseMatch = pathname.match(/^\/codebases\/(\d+)$/)
+    if (codebaseMatch) {
+      return { type: 'codebase', entityId: codebaseMatch[1], title: `Codebase #${codebaseMatch[1]}` }
     }
 
     // Settings
@@ -76,8 +82,7 @@ export function useURLSync() {
         targetPath = `/tasks/${activeTab.entityId}`
         break
       case 'codebase':
-        // Codebases are managed in Home view now
-        targetPath = '/'
+        targetPath = `/codebases/${activeTab.entityId}`
         break
       case 'settings':
         targetPath = '/settings'

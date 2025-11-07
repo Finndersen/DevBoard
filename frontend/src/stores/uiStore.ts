@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
+import { enableMapSet } from 'immer'
+
+// Enable Immer's MapSet plugin for Set and Map support
+enableMapSet()
 
 export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home'
 
@@ -24,6 +28,7 @@ interface UIState {
   tabs: TabState[]
   activeTabId: string | null
   navigationMenuOpen: boolean
+  visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
 }
 
 interface UIActions {
@@ -33,6 +38,7 @@ interface UIActions {
   switchTab: (tabId: string) => void
   updateTab: (tabId: string, updates: Partial<Omit<TabState, 'id'>>) => void
   reorderTabs: (fromIndex: number, toIndex: number) => void
+  markTabVisited: (tabId: string) => void
 
   // Navigation menu
   toggleNavigationMenu: () => void
@@ -59,6 +65,7 @@ export const useUIStore = create<UIStore>()(
       tabs: [],
       activeTabId: null,
       navigationMenuOpen: false,
+      visitedTabs: new Set<string>(),
 
       // Tab management actions
       openTab: (tabData) => {
@@ -70,6 +77,7 @@ export const useUIStore = create<UIStore>()(
           // Switch to existing tab instead of creating duplicate
           set((draft) => {
             draft.activeTabId = existingTab.id
+            draft.visitedTabs.add(existingTab.id)
             const tab = draft.tabs.find(t => t.id === existingTab.id)
             if (tab) {
               tab.lastActivity = new Date()
@@ -91,6 +99,7 @@ export const useUIStore = create<UIStore>()(
         set((draft) => {
           draft.tabs.push(newTab)
           draft.activeTabId = newTabId
+          draft.visitedTabs.add(newTabId)
         })
 
         return newTabId
@@ -103,6 +112,7 @@ export const useUIStore = create<UIStore>()(
 
           // Remove the tab
           draft.tabs.splice(tabIndex, 1)
+          draft.visitedTabs.delete(tabId)
 
           // Update active tab if necessary
           if (draft.activeTabId === tabId) {
@@ -124,6 +134,7 @@ export const useUIStore = create<UIStore>()(
           const tab = draft.tabs.find(t => t.id === tabId)
           if (tab) {
             draft.activeTabId = tabId
+            draft.visitedTabs.add(tabId)
             tab.lastActivity = new Date()
           }
         })
@@ -142,6 +153,12 @@ export const useUIStore = create<UIStore>()(
         set((draft) => {
           const [movedTab] = draft.tabs.splice(fromIndex, 1)
           draft.tabs.splice(toIndex, 0, movedTab)
+        })
+      },
+
+      markTabVisited: (tabId) => {
+        set((draft) => {
+          draft.visitedTabs.add(tabId)
         })
       },
 

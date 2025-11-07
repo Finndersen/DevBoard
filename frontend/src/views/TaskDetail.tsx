@@ -338,44 +338,50 @@ function TaskDetail({ id }: TaskDetailProps) {
               {task.status}
             </StatusBadge>
 
-            {/* Codebase Selector */}
+            {/* Codebase Display/Selector */}
             <div className="relative">
-              <button
-                onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
-                title="Select codebase"
-              >
-                <span className="font-medium">Codebase:</span>
-                <span>{selectedCodebase ? selectedCodebase.name : 'None'}</span>
-                <ChevronDownIcon className="w-3 h-3" />
-              </button>
+              {selectedCodebase ? (
+                // Read-only display with link to codebase detail
+                <Link
+                  to={`/codebases/${selectedCodebase.id}`}
+                  className="flex items-center space-x-1 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  title="View codebase details"
+                >
+                  <span className={`font-medium ${textColors.secondary}`}>Codebase:</span>
+                  <span className="text-blue-600 dark:text-blue-400 hover:underline">{selectedCodebase.name}</span>
+                </Link>
+              ) : (
+                // Dropdown selector (only shown if no codebase assigned)
+                <>
+                  <button
+                    onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
+                    className={`flex items-center space-x-1 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+                    title="Select codebase"
+                  >
+                    <span className="font-medium">Codebase:</span>
+                    <span>None</span>
+                    <ChevronDownIcon className="w-3 h-3" />
+                  </button>
 
-              {showCodebaseSelector && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
-                  <div className="max-h-64 overflow-y-auto">
-                    <button
-                      onClick={() => handleCodebaseSelect(null)}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        !task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
-                      }`}
-                    >
-                      <div className="font-medium">None</div>
-                      <div className={`text-xs ${textColors.secondary}`}>No codebase assigned</div>
-                    </button>
-                    {codebases && codebases.map((codebase: Codebase) => (
-                      <button
-                        key={codebase.id}
-                        onClick={() => handleCodebaseSelect(codebase.id)}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-100 dark:border-gray-700 ${
-                          task.codebase_id === codebase.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
-                        }`}
-                      >
-                        <div className="font-medium">{codebase.name}</div>
-                        <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                  {showCodebaseSelector && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                      <div className="max-h-64 overflow-y-auto">
+                        {codebases && codebases.map((codebase: Codebase) => (
+                          <button
+                            key={codebase.id}
+                            onClick={() => handleCodebaseSelect(codebase.id)}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                              codebase.id === task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
+                            } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}
+                          >
+                            <div className="font-medium">{codebase.name}</div>
+                            <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
