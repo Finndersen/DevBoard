@@ -1,10 +1,8 @@
 """Claude Code client using claude-agent-sdk for Claude Code CLI integration."""
 
 import asyncio
-import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, TypedDict
 
 import logfire
@@ -14,18 +12,15 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     Message,
     ResultMessage,
-    SystemMessage,
-    TextBlock,
-    ThinkingBlock,
-    ToolResultBlock,
     ToolUseBlock,
-    UserMessage,
     create_sdk_mcp_server,
     tool,
 )
-from claude_agent_sdk.types import StreamEvent, SystemPromptPreset
-from pydantic import ValidationError
+from claude_agent_sdk.types import SystemPromptPreset
 from pydantic_ai import Tool
+from pydantic_core import ValidationError
+
+from .utils import describe_message, load_env_from_settings
 
 
 @dataclass
@@ -64,26 +59,6 @@ class ClaudeClient:
     - Tool filtering via allowed_tools
     - Streaming and non-streaming execution modes
     """
-
-    @staticmethod
-    def _load_env_from_settings() -> dict[str, str]:
-        """Load environment variables from ~/.claude/settings.json.
-
-        Returns:
-            Dictionary of environment variables, or empty dict if not found
-        """
-        settings_path = Path.home() / ".claude" / "settings.json"
-
-        if not settings_path.exists():
-            return {}
-
-        try:
-            with settings_path.open() as f:
-                settings = json.load(f)
-                return settings.get("env", {})
-        except (json.JSONDecodeError, OSError) as e:
-            logfire.warn(f"Failed to load Claude settings from {settings_path}: {e}")
-            return {}
 
     def __init__(
         self,
@@ -132,7 +107,7 @@ class ClaudeClient:
             all_allowed_tools += custom_tool_names
 
         # Load environment variables from user settings
-        env_vars = self._load_env_from_settings()
+        env_vars = load_env_from_settings()
         # Set model name when using AWS Bedrock
         if model and env_vars.get("CLAUDE_CODE_USE_BEDROCK") == "1":
             region_prefix = env_vars.get("AWS_REGION", "us-west-1").split("-")[0]
@@ -183,17 +158,19 @@ class ClaudeClient:
         for pydantic_tool in tools:
             # Extract metadata from PydanticAI Tool's function_schema
             tool_name = pydantic_tool.name
-            tool_description = pydantic_tool.description
-            input_schema = pydantic_tool.function_schema.json_schema
 
             # Create wrapper that converts the function to Claude Code format
             if self._enable_concurrent_execution:
-                wrapper_func = self._create_tool_result_retrieval_wrapper(pydantic_tool)
+                wrapper_func = self._create_tool_result_retrieval_func(pydantic_tool)
             else:
-                wrapper_func = self._create_tool_execution_wrapper(pydantic_tool)
+                wrapper_func = self._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
             # Wrap with the @tool decorator
-            sdk_tool = tool(tool_name, tool_description, input_schema)(wrapper_func)
+            sdk_tool = tool(
+                name=tool_name,
+                description=pydantic_tool.description,
+                input_schema=pydantic_tool.function_schema.json_schema,
+            )(wrapper_func)
             sdk_tools.append(sdk_tool)
             custom_tool_names.append(f"mcp__{mcp_name}__{tool_name}")
 
@@ -210,6 +187,8 @@ class ClaudeClient:
     def _create_tool_execution_wrapper(
         self,
         pydantic_tool: Tool,
+        *,
+        validate_args: bool,
     ) -> Callable[[dict[str, Any]], Awaitable[ClaudeToolContent]]:
         """Create a wrapper function that converts a PydanticAI Tool to Claude Code tool format.
 
@@ -222,43 +201,41 @@ class ClaudeClient:
 
         async def normal_wrapper(args: dict[str, Any]) -> ClaudeToolContent:
             with logfire.span(
-                f"tool.{pydantic_tool.name}",
+                f"Calling tool: {pydantic_tool.name}()",
                 tool_name=pydantic_tool.name,
                 args=args,
             ):
-                try:
+                if validate_args:
                     # Validate arguments using the tool's schema validator
                     validated_args = pydantic_tool.function_schema.validator.validate_python(args)
-                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
+                else:
+                    validated_args = args
 
-                    # Convert result to Claude Code format
-                    if isinstance(result, dict) and "content" in result:
-                        return result  # type: ignore[return-value]
-                    else:
-                        return {"content": [{"type": "text", "text": str(result)}]}
-                except ValidationError as e:
-                    logfire.error(f"Tool call argument validation error: {e}")
-                    return {
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"Error calling tool: {e}. Check the tool schema and arguments and try again",
-                            }
-                        ]
-                    }
+                result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
+
+                # Convert result to Claude Code format
+                if isinstance(result, dict) and "content" in result:
+                    return result  # type: ignore[return-value]
+                else:
+                    return {"content": [{"type": "text", "text": str(result)}]}
 
         return normal_wrapper
 
-    def _create_tool_result_retrieval_wrapper(
+    def _create_tool_result_retrieval_func(
         self,
         pydantic_tool: Tool,
     ) -> Callable[[dict[str, Any]], Awaitable[ClaudeToolContent]]:
+        """
+        Create a tool function that does not actually execute the tool but retrieves its result from the tool task.
+        :param pydantic_tool:
+        :return:
+        """
         # Concurrent execution wrapper - returns cached results
-        async def result_retrieval_wrapper(args: dict[str, Any]) -> ClaudeToolContent:
+        async def retrieve_tool_result(args: dict[str, Any]) -> ClaudeToolContent:
             # Get the tool_use_id from the queue (order-based correlation)
             tool_name_expected, tool_use_id = await self._tool_execution_queue.get()
             with logfire.span(
-                f"Retrieving {pydantic_tool.name} tool result",
+                f"Retrieving result for tool: {pydantic_tool.name}()",
                 tool_call_id=tool_use_id,
             ):
                 # Verify tool name matches
@@ -283,7 +260,7 @@ class ClaudeClient:
 
                 return result
 
-        return result_retrieval_wrapper
+        return retrieve_tool_result
 
     def _find_tool_by_name(self, tool_name: str) -> Tool | None:
         """Find a tool by its name, handling MCP prefixes.
@@ -304,52 +281,54 @@ class ClaudeClient:
 
     async def _execute_tool_concurrently(
         self,
-        tool_use_id: str,
-        tool_name: str,
-        tool_input: dict[str, Any],
+        tool: Tool,
+        tool_args: dict[str, Any],
     ) -> ClaudeToolContent:
-        """Execute a tool asynchronously and cache the result.
+        """Execute a tool asynchronously so its result can be retrieved later.
 
         Args:
-            tool_use_id: Unique identifier for this tool use
-            tool_name: Name of the tool to execute
-            tool_input: Input arguments for the tool
+            tool: PydanticAI Tool instance to execute
+            tool_args: Validated input arguments for the tool
 
         Returns:
             Tool execution result in Claude Code format
-
-        Raises:
-            ValueError: If tool is not found
         """
-        # Find the tool by name
-        tool = self._find_tool_by_name(tool_name)
-        if not tool:
-            error_msg = f"Tool {tool_name} not found for concurrent execution"
-            logfire.error(error_msg, tool_use_id=tool_use_id)
-            raise ValueError(error_msg)
-
-        wrapper = self._create_tool_execution_wrapper(tool)
-        formatted_result = await wrapper(tool_input)
+        wrapper = self._create_tool_execution_wrapper(tool, validate_args=False)
+        formatted_result = await wrapper(tool_args)
         return formatted_result
 
     async def _execute_concurrent_mcp_tool(self, tool_block: ToolUseBlock) -> None:
-        """Launch async execution for a single tool use block.
+        """
+        Launch async execution for a single tool use block.
+        If tool name or arguments are invalid, do not create a task since the MCP client should also fail validation
+        and not actually make the tool call.
 
         Args:
             tool_block: ToolUseBlock to execute concurrently
         """
+        # Find the tool
+        tool = self._find_tool_by_name(tool_block.name)
+        if not tool:
+            logfire.warn(f"Invalid tool name: '{tool_block.name}'", tool_use_id=tool_block.id)
+            return
+
+        try:
+            validated_args = tool.function_schema.validator.validate_python(tool_block.input)
+        except ValidationError as e:
+            logfire.warn(f"Invalid arguments for tool '{tool_block.name}'", tool_use_id=tool_block.id, error=e)
+            return
+
         logfire.debug(
             "Launching concurrent execution for tool",
             tool_use_id=tool_block.id,
             tool_name=tool_block.name,
         )
 
-        # Create async task for this tool execution
+        # Create async task for this tool execution with pre-validated args
         task = asyncio.create_task(
             self._execute_tool_concurrently(
-                tool_use_id=tool_block.id,
-                tool_name=tool_block.name,
-                tool_input=tool_block.input,
+                tool=tool,
+                tool_args=validated_args,
             )
         )
 
@@ -361,67 +340,6 @@ class ClaudeClient:
         await self._tool_execution_queue.put(
             (self._get_original_tool_name_from_mcp_tool(tool_block.name), tool_block.id)
         )
-
-    @staticmethod
-    def _describe_message(message: Message) -> str:
-        """Generate a concise description of a Claude SDK message.
-
-        Args:
-            message: The message to describe
-
-        Returns:
-            A string describing the message type and its key content
-        """
-        if isinstance(message, UserMessage):
-            # Check if content is a list of blocks or a simple string
-            if isinstance(message.content, str):
-                return f"UserMessage(text, {len(message.content)} chars)"
-
-            # Analyze content blocks
-            text_blocks = sum(1 for block in message.content if isinstance(block, TextBlock))
-            tool_results = [block for block in message.content if isinstance(block, ToolResultBlock)]
-
-            parts = []
-            if text_blocks:
-                parts.append(f"{text_blocks} text")
-            if tool_results:
-                parts.append(f"{len(tool_results)} tool_result(s)")
-
-            content_desc = ", ".join(parts) if parts else "empty"
-            return f"UserMessage({content_desc})"
-
-        elif isinstance(message, AssistantMessage):
-            # Analyze content blocks
-            text_blocks = sum(1 for block in message.content if isinstance(block, TextBlock))
-            thinking_blocks = sum(1 for block in message.content if isinstance(block, ThinkingBlock))
-            tool_uses = [block for block in message.content if isinstance(block, ToolUseBlock)]
-
-            parts = []
-            if text_blocks:
-                parts.append(f"{text_blocks} text")
-            if thinking_blocks:
-                parts.append(f"{thinking_blocks} thinking")
-            if tool_uses:
-                tool_names = [tool.name for tool in tool_uses]
-                parts.append(f"tools: {', '.join(tool_names)}")
-
-            content_desc = ", ".join(parts) if parts else "empty"
-            return f"AssistantMessage({content_desc}, model={message.model})"
-
-        elif isinstance(message, SystemMessage):
-            return f"SystemMessage(subtype={message.subtype})"
-
-        elif isinstance(message, ResultMessage):
-            status = "error" if message.is_error else "success"
-            cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else "N/A"
-            return f"ResultMessage({status}, cost={cost}, turns={message.num_turns})"
-
-        elif StreamEvent and isinstance(message, StreamEvent):
-            event_type = message.event.get("type", "unknown")
-            return f"StreamEvent(type={event_type})"
-
-        else:
-            return f"Unknown message type: {type(message).__name__}"
 
     async def run(self, user_query: str) -> ClaudeCodeResult:
         """Execute a query and return a single result.
@@ -479,11 +397,11 @@ class ClaudeClient:
                     await client.query(user_query)
 
                 async for message in client.receive_response():
-                    message_desc = self._describe_message(message)
-                    with logfire.span(f"Received message: {message_desc}", message=message):
-                        await self._start_running_any_mcp_tools(message)
+                    message_desc = describe_message(message)
+                    logfire.info(f"Received message: {message_desc}", message=message)
+                    await self._start_running_any_mcp_tools(message)
 
-                        yield message
+                    yield message
 
     async def _start_running_any_mcp_tools(self, message: Message):
         # Launch concurrent tool executions if enabled

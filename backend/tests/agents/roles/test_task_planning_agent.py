@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic_ai.exceptions import ModelRetry
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.agents.roles.task_specification import TaskSpecificationRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
@@ -38,11 +39,17 @@ class TestTaskSpecificationRole:
         return repo
 
     @pytest.fixture
-    def role(self, mock_task, mock_document_repo):
+    def mock_agent_config_service(self):
+        """Create a mock agent config service."""
+        return Mock(spec=AgentConfigService)
+
+    @pytest.fixture
+    def role(self, mock_task, mock_document_repo, mock_agent_config_service):
         """Create TaskSpecificationRole instance."""
         return TaskSpecificationRole(
             task=mock_task,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -100,11 +107,17 @@ class TestTaskPlanningRole:
         return repo
 
     @pytest.fixture
-    def role(self, mock_task, mock_document_repo):
+    def mock_agent_config_service(self):
+        """Create a mock agent config service."""
+        return Mock(spec=AgentConfigService)
+
+    @pytest.fixture
+    def role(self, mock_task, mock_document_repo, mock_agent_config_service):
         """Create TaskPlanningRole instance."""
         return TaskPlanningRole(
             task=mock_task,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -340,11 +353,19 @@ class TestRoleToolSelection:
         """Create a mock document repository."""
         return Mock(spec=DocumentRepository)
 
-    def test_specification_role_providesonly_set_content_for_empty(self, mock_task_with_blank_spec, mock_document_repo):
+    @pytest.fixture
+    def mock_agent_config_service(self):
+        """Create a mock agent config service."""
+        return Mock(spec=AgentConfigService)
+
+    def test_specification_role_providesonly_set_content_for_empty(
+        self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service
+    ):
         """Test TaskSpecificationRole provides only set_content for empty documents."""
         role = TaskSpecificationRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
         tools = role.get_tools()
@@ -353,12 +374,13 @@ class TestRoleToolSelection:
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
 
     def test_specification_role_provides_both_tools_for_document_with_content(
-        self, mock_task_with_content, mock_document_repo
+        self, mock_task_with_content, mock_document_repo, mock_agent_config_service
     ):
         """Test TaskSpecificationRole provides both tools even when document has content."""
         role = TaskSpecificationRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
         tools = role.get_tools()

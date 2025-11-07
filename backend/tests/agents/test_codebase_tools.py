@@ -31,7 +31,7 @@ class TestTextSearchTool:
         """Test text search tool is created correctly."""
         tool = create_text_search_tool(mock_codebase_integration)
 
-        assert tool.name == "search_text_in_files"
+        assert tool.name == "search_file_content"
         assert tool.function is not None
 
     @pytest.mark.asyncio
@@ -53,6 +53,9 @@ class TestTextSearchTool:
             file_pattern=None,
             case_sensitive=False,
             search_hidden=False,
+            path=None,
+            context_before=0,
+            context_after=0,
         )
 
     @pytest.mark.asyncio
@@ -83,6 +86,9 @@ class TestTextSearchTool:
             file_pattern="*.py",
             case_sensitive=True,
             search_hidden=True,
+            path=None,
+            context_before=0,
+            context_after=0,
         )
 
     @pytest.mark.asyncio
@@ -158,6 +164,7 @@ class TestFileSearchTool:
             extension="py",
             exclude_pattern=None,
             search_hidden=False,
+            subdirectory=None,
         )
 
     @pytest.mark.asyncio

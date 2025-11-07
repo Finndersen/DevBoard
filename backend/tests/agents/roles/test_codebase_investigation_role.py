@@ -68,7 +68,7 @@ class TestCodebaseInvestigationRole:
         # Should have all codebase tools including read_file
         assert len(tools) == 5
         tool_names = [tool.name for tool in tools]
-        assert "search_text_in_files" in tool_names
+        assert "search_file_content" in tool_names
         assert "search_files_by_name" in tool_names
         assert "search_code_structure" in tool_names
         assert "show_directory_tree" in tool_names

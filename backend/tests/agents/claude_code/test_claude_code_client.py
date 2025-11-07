@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 from pydantic_ai import Tool
-from pydantic_core import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
@@ -265,7 +264,7 @@ class TestClaudeClient:
 
         # Create wrapper using a ClaudeClient instance
         client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
-        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test the wrapper
         result = await wrapper({"text": "hello"})
@@ -290,7 +289,7 @@ class TestClaudeClient:
 
         # Create wrapper using a ClaudeClient instance
         client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
-        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test the wrapper
         result = await wrapper({"value": 42})
@@ -314,13 +313,14 @@ class TestClaudeClient:
 
         # Create wrapper using a ClaudeClient instance
         client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
-        wrapper = client._create_tool_execution_wrapper(pydantic_tool)
+        wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test with valid arguments
         result = await wrapper({"count": 5, "name": "test"})
         assert result["content"][0]["text"] == "test: 5"
 
-        # Test with invalid arguments (wrong type) - now returns error message instead of raising
-        result = await wrapper({"count": "not a number", "name": "test"})
-        assert "Error calling tool:" in result["content"][0]["text"]
-        assert "validation error" in result["content"][0]["text"].lower()
+        # Test with invalid arguments (wrong type) - should raise ValidationError
+        from pydantic_core import ValidationError
+
+        with pytest.raises(ValidationError):
+            await wrapper({"count": "not a number", "name": "test"})

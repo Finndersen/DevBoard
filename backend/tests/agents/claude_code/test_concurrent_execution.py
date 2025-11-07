@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from claude_agent_sdk import ToolUseBlock
-from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeToolContent
 from pydantic_ai import Tool
+
+from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeToolContent
 
 
 @pytest.fixture
@@ -55,9 +56,8 @@ class TestConcurrentExecution:
     async def test_execute_tool_concurrently(self, client_with_tools: ClaudeClient, mock_tool: Tool) -> None:
         """Test executing a tool concurrently."""
         result = await client_with_tools._execute_tool_concurrently(
-            tool_use_id="test_id_1",
-            tool_name="test_tool",
-            tool_input={"arg1": "value1"},
+            tool=mock_tool,
+            tool_args={"arg1": "value1"},
         )
 
         # Verify the result format
@@ -72,13 +72,15 @@ class TestConcurrentExecution:
 
     @pytest.mark.asyncio
     async def test_execute_tool_concurrently_not_found(self, client_with_tools: ClaudeClient) -> None:
-        """Test executing a tool that doesn't exist."""
-        with pytest.raises(ValueError, match="Tool nonexistent not found"):
-            await client_with_tools._execute_tool_concurrently(
-                tool_use_id="test_id_1",
-                tool_name="nonexistent",
-                tool_input={},
-            )
+        """Test launching concurrent execution for a tool that doesn't exist - should log warning and return early."""
+        # Create a ToolUseBlock with nonexistent tool name
+        tool_block = ToolUseBlock(id="tool_1", name="nonexistent", input={})
+
+        # Should not raise, just log warning and return early (no task created)
+        await client_with_tools._execute_concurrent_mcp_tool(tool_block)
+
+        # Verify no task was added to cache
+        assert "tool_1" not in client_with_tools._tool_execution_cache
 
     @pytest.mark.asyncio
     async def test_execute_tool_concurrently_with_error(self, client_with_tools: ClaudeClient, mock_tool: Tool) -> None:
@@ -87,9 +89,8 @@ class TestConcurrentExecution:
 
         with pytest.raises(RuntimeError, match="Tool execution failed"):
             await client_with_tools._execute_tool_concurrently(
-                tool_use_id="test_id_1",
-                tool_name="test_tool",
-                tool_input={},
+                tool=mock_tool,
+                tool_args={},
             )
 
     @pytest.mark.asyncio
@@ -156,7 +157,7 @@ class TestConcurrentExecution:
         await client_with_tools._tool_execution_queue.put(("test_tool", tool_use_id))
 
         # Create result retrieval wrapper and call it
-        wrapper = client_with_tools._create_tool_result_retrieval_wrapper(mock_tool)
+        wrapper = client_with_tools._create_tool_result_retrieval_func(mock_tool)
         result = await wrapper({"arg": "value"})
 
         # Verify cached result was returned
@@ -174,7 +175,7 @@ class TestConcurrentExecution:
         # Don't populate queue - should raise an error when trying to get from empty queue
 
         # Create result retrieval wrapper and call it
-        wrapper = client_with_tools._create_tool_result_retrieval_wrapper(mock_tool)
+        wrapper = client_with_tools._create_tool_result_retrieval_func(mock_tool)
 
         # Should block waiting for queue item
         # Since we're using asyncio.Queue.get(), it will block indefinitely
@@ -189,7 +190,7 @@ class TestConcurrentExecution:
         await client_with_tools._tool_execution_queue.put(("wrong_tool", "test_id"))
 
         # Create result retrieval wrapper and call it
-        wrapper = client_with_tools._create_tool_result_retrieval_wrapper(mock_tool)
+        wrapper = client_with_tools._create_tool_result_retrieval_func(mock_tool)
 
         # Should raise RuntimeError due to name mismatch
         with pytest.raises(RuntimeError, match="Tool name mismatch"):
@@ -252,7 +253,7 @@ class TestConcurrentExecution:
         assert len(client._tool_execution_cache) == 0
 
         # Execution wrapper should execute directly
-        wrapper = client._create_tool_execution_wrapper(mock_tool)
+        wrapper = client._create_tool_execution_wrapper(mock_tool, validate_args=True)
         result = await wrapper({"arg": "value"})
         assert isinstance(result, dict)
         mock_tool.function_schema.call.assert_called_once()
