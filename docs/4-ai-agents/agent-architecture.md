@@ -113,6 +113,21 @@ Roles define agent behavior independently of the execution engine, encapsulating
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_implementation.py`
 
+**CodebaseInvestigationRole**:
+- Purpose: Investigate codebases to answer implementation questions and provide analysis
+- Context: Codebase information, directory tree, documentation index
+- Tools: `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file`
+- Engine Support: INTERNAL or CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/codebase_investigation.py`
+- Note: Used as a sub-agent by other roles via `investigate_codebase` tool
+
+**DocumentationMaintainerRole**:
+- Purpose: Create and maintain codebase documentation following documentation standards
+- Context: Codebase information, directory tree, documentation index, maintenance guide
+- Tools: `investigate_codebase`, `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file`
+- Engine Support: INTERNAL or CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/documentation_maintainer.py`
+
 ### Dynamic Role Selection
 
 The system automatically selects the appropriate role based on entity type and state.
@@ -194,4 +209,6 @@ Agents return event streams rather than single responses, providing complete con
 - `backend/devboard/agents/roles/task_specification.py`: Task specification role
 - `backend/devboard/agents/roles/task_planning.py`: Task planning role
 - `backend/devboard/agents/roles/task_implementation.py`: Task implementation role
+- `backend/devboard/agents/roles/codebase_investigation.py`: Codebase investigation role
+- `backend/devboard/agents/roles/documentation_maintainer.py`: Documentation maintainer role
 - `backend/devboard/agents/roles/types.py`: Role type definitions

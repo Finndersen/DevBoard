@@ -13,7 +13,7 @@ DevBoard formalizes the development workflow through a **state-driven task lifec
 ## Key Features
 
 ### 🤖 AI-Powered Development Assistance
-- **Specialized AI Agents**: Project Q&A, Task Planning, Codebase Investigation, and Implementation agents
+- **Specialized AI Agents**: Project Q&A, Task Planning, Codebase Investigation, Documentation Maintainer, and Implementation agents
 - **Multi-Engine Support**: Choose between internal PydanticAI, Claude Code CLI, or Gemini CLI for different agent roles
 - **Context-Aware Intelligence**: Agents understand full project context from multiple integrated sources
 - **Virtual Tool Calling**: Safe, user-approved AI operations with transparent decision-making
