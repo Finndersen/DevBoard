@@ -77,8 +77,8 @@ class TestDocumentationMaintainerRole:
 
         tools = role.get_tools()
 
-        # Should have codebase tools plus investigation tool
-        assert len(tools) >= 6
+        # Should have codebase tools plus investigation tool plus write/edit tools
+        assert len(tools) == 8
         tool_names = [tool.name for tool in tools]
         assert "investigate_codebase" in tool_names
         assert "search_file_content" in tool_names
@@ -86,6 +86,8 @@ class TestDocumentationMaintainerRole:
         assert "search_code_structure" in tool_names
         assert "show_directory_tree" in tool_names
         assert "read_file" in tool_names
+        assert "write_file" in tool_names
+        assert "edit_file" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content_includes_codebase_info(self, mock_codebase, mock_agent_config_service):

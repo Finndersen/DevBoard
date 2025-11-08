@@ -8,8 +8,10 @@ from devboard.agents.roles.base import Role
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
+    create_file_edit_tool,
     create_file_read_tool,
     create_file_search_tool,
+    create_file_write_tool,
     create_text_search_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
@@ -234,13 +236,15 @@ class DocumentationMaintainerRole(Role):
         return [
             # Investigation tool for understanding codebase
             create_codebase_investigation_tool(self.codebase, self.agent_config_service),
-            # File manipulation tools
+            # File reading and searching tools
             create_text_search_tool(self.codebase_integration),
             create_file_search_tool(self.codebase_integration),
             create_code_structure_search_tool(self.codebase_integration),
             create_directory_tree_tool(self.codebase_integration),
             create_file_read_tool(self.codebase_integration),
-            # TODO: Add file writing/editing tools when available
+            # File writing and editing tools
+            create_file_write_tool(self.codebase_integration),
+            create_file_edit_tool(self.codebase_integration),
         ]
 
     async def get_context_content(self) -> str:

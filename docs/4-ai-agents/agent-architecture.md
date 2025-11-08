@@ -124,7 +124,7 @@ Roles define agent behavior independently of the execution engine, encapsulating
 **DocumentationMaintainerRole**:
 - Purpose: Create and maintain codebase documentation following documentation standards
 - Context: Codebase information, directory tree, documentation index, maintenance guide
-- Tools: `investigate_codebase`, `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file`
+- Tools: `investigate_codebase`, `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file`, `write_file`, `edit_file`
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/documentation_maintainer.py`
 

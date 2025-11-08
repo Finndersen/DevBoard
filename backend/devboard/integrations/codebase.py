@@ -507,6 +507,84 @@ class CodebaseIntegration:
 
         return info
 
+    async def write_file(self, file_path: str, content: str) -> None:
+        """Write content to a file, creating it if it doesn't exist.
+
+        Args:
+            file_path: Relative path to file from codebase root
+            content: Content to write to the file
+
+        Raises:
+            ValueError: If the path is invalid or outside codebase
+            OSError: If file cannot be written
+        """
+        full_path = self.codebase_path / file_path
+
+        # Ensure path is within codebase directory
+        try:
+            full_path.resolve().relative_to(self.codebase_path)
+        except ValueError:
+            raise ValueError(f"File path is outside codebase directory: {file_path}")
+
+        # Create parent directories if they don't exist
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write content to file
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logfire.info(f"File written: {file_path}")
+
+    async def edit_file(self, file_path: str, find: str, replace: str, replace_all: bool = False) -> None:
+        """Edit a file using find/replace pattern.
+
+        Args:
+            file_path: Relative path to file from codebase root
+            find: Text to find in the file (must match exactly)
+            replace: Text to replace with
+            replace_all: If True, replace all occurrences; if False, replace only first occurrence
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the find text is not found in the file or if path is invalid
+            OSError: If file cannot be read or written
+        """
+        full_path = self.codebase_path / file_path
+
+        if not full_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if not full_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
+
+        # Ensure path is within codebase directory
+        try:
+            full_path.resolve().relative_to(self.codebase_path)
+        except ValueError:
+            raise ValueError(f"File path is outside codebase directory: {file_path}")
+
+        # Read file content
+        with open(full_path, encoding="utf-8") as f:
+            content = f.read()
+
+        # Check if find text exists
+        if find not in content:
+            raise ValueError(f"Find text not found in file: '{find}'")
+
+        # Perform replacement
+        if replace_all:
+            new_content = content.replace(find, replace)
+            occurrences = content.count(find)
+        else:
+            new_content = content.replace(find, replace, 1)
+            occurrences = 1
+
+        # Write updated content
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        logfire.info(f"File edited: {file_path} ({occurrences} occurrence(s) replaced)")
+
     def parse_file_url(self, url: str) -> str | None:
         """Parse file URL to extract relative file path.
 

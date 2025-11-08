@@ -292,3 +292,121 @@ def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
         function=read_file,
         name="read_file",
     )
+
+
+def create_file_write_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a file writing tool for creating new files in the codebase.
+
+    This tool writes content to a new file in the codebase, creating parent directories
+    as needed. It's ideal for:
+    - Creating new documentation files
+    - Generating new code files or configuration
+    - Creating structured project files
+
+    Args:
+        codebase_integration: CodebaseIntegration instance for file system access
+    """
+
+    async def write_file(
+        file_path: str,
+        content: str,
+    ) -> str:
+        """Write content to a new file in the codebase.
+
+        IMPORTANT: This tool creates NEW files. If the file already exists, it will be OVERWRITTEN.
+        Use edit_file instead to modify existing files.
+
+        Use this tool when you need to:
+        - Create new documentation files
+        - Generate new configuration or code files
+        - Add new files to the project structure
+
+        Examples:
+        - write_file("docs/api/endpoints.md", "# API Endpoints\\n\\n...") - Create new API documentation
+        - write_file("config/settings.json", "{\\"key\\": \\"value\\"}") - Create new config file
+
+        Args:
+            file_path: Relative path to the file from codebase root (e.g., "docs/new-doc.md").
+                      Parent directories will be created if they don't exist.
+            content: Full content to write to the file.
+
+        Returns:
+            Success message indicating the file was written,
+            or an error message if the operation failed.
+        """
+        try:
+            await codebase_integration.write_file(
+                file_path=file_path,
+                content=content,
+            )
+            return f"Successfully wrote file: {file_path}"
+        except (ValueError, OSError) as e:
+            return f"Error writing file: {e}"
+
+    return Tool(
+        function=write_file,
+        name="write_file",
+        requires_approval=True,
+    )
+
+
+def create_file_edit_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a file editing tool for modifying existing files using find/replace.
+
+    This tool edits existing files using find/replace patterns, which is ideal for:
+    - Updating existing documentation
+    - Making targeted changes to configuration
+    - Modifying specific sections of files
+
+    Args:
+        codebase_integration: CodebaseIntegration instance for file system access
+    """
+
+    async def edit_file(
+        file_path: str,
+        find: str,
+        replace: str,
+        replace_all: bool = False,
+    ) -> str:
+        """Edit an existing file using find/replace pattern.
+
+        IMPORTANT: The 'find' text must match EXACTLY (including whitespace and line breaks).
+        Use read_file first to see the exact text you need to match.
+
+        Use this tool when you need to:
+        - Update specific sections of existing documentation
+        - Modify configuration values
+        - Make targeted changes to existing files
+
+        Examples:
+        - edit_file("docs/README.md", "## Old Title", "## New Title") - Update a heading
+        - edit_file("config.json", '"debug": false', '"debug": true') - Toggle a setting
+        - edit_file("docs/guide.md", "version 1.0", "version 2.0", replace_all=True) - Update all version references
+
+        Args:
+            file_path: Relative path to the file from codebase root (e.g., "docs/guide.md").
+            find: Exact text to find in the file. Must match exactly including whitespace.
+            replace: Text to replace the found text with.
+            replace_all: If True, replace all occurrences; if False (default), replace only the first occurrence.
+
+        Returns:
+            Success message indicating how many occurrences were replaced,
+            or an error message if the operation failed.
+        """
+        try:
+            await codebase_integration.edit_file(
+                file_path=file_path,
+                find=find,
+                replace=replace,
+                replace_all=replace_all,
+            )
+            mode = "all occurrences" if replace_all else "first occurrence"
+            return f"Successfully edited file: {file_path} ({mode} replaced)"
+        except (FileNotFoundError, ValueError, OSError) as e:
+            return f"Error editing file: {e}"
+
+    return Tool(
+        function=edit_file,
+        name="edit_file",
+        requires_approval=True,
+    )
