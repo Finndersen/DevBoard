@@ -25,7 +25,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   useTabTitle('project', id)
 
   // Fetch data using hooks
-  const { data: project, loading: projectLoading, refetch: refetchProject } = useProject(id!)
+  const { data: project, loading: projectLoading, refetch: refetchProject, setData: setProject } = useProject(id!)
   const { data: tasks, loading: tasksLoading } = useProjectTasks(id!)
 
   // Combined loading state
@@ -49,12 +49,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const createTaskModal = useModal()
   const specificationField = useEditableField(
     project?.specification?.content || '',
-    (value) => apiClient.updateProject(id!, { 
-      specification: {
-        ...project!.specification,
-        content: value
-      }
-    })
+    async (value) => {
+      const updatedProject = await apiClient.updateProject(id!, {
+        specification: value
+      })
+      // Update the local project data with the response from the API
+      setProject(updatedProject)
+    }
   )
 
   // Update URL when tab changes
@@ -281,7 +282,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                   <Textarea
                     value={specificationField.editedValue}
                     onChange={(e) => specificationField.setEditedValue(e.target.value)}
-                    className="w-full flex-1 font-mono text-sm resize-none"
+                    className="w-full font-mono text-sm"
+                    fillHeight={true}
                     placeholder="Enter project specification in Markdown format..."
                   />
                 ) : (
