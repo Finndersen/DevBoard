@@ -70,6 +70,10 @@ class TestDocumentationMaintainerRole:
         assert "documentation" in prompt.lower()
         assert "High Information Density" in prompt
         assert "Quality Checklist" in prompt
+        # Verify critical restrictions are present
+        assert "CRITICAL RESTRICTIONS" in prompt
+        assert "ONLY allowed to make changes to documentation files within the `docs/` directory" in prompt
+        assert "investigate_codebase" in prompt
 
     def test_get_tools(self, mock_codebase, mock_agent_config_service):
         """Test role provides documentation maintenance tools."""
@@ -77,17 +81,17 @@ class TestDocumentationMaintainerRole:
 
         tools = role.get_tools()
 
-        # Should have codebase tools plus investigation tool plus write/edit tools
+        # Should have investigation tool plus file search/manipulation tools
         assert len(tools) == 8
         tool_names = [tool.name for tool in tools]
         assert "investigate_codebase" in tool_names
         assert "search_file_content" in tool_names
         assert "search_files_by_name" in tool_names
-        assert "search_code_structure" in tool_names
-        assert "show_directory_tree" in tool_names
         assert "read_file" in tool_names
         assert "write_file" in tool_names
         assert "edit_file" in tool_names
+        assert "move_file" in tool_names
+        assert "delete_file" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content_includes_codebase_info(self, mock_codebase, mock_agent_config_service):
@@ -120,40 +124,19 @@ class TestDocumentationMaintainerRole:
         assert "This is the main index" in content
 
     @pytest.mark.asyncio
-    async def test_context_includes_maintenance_guide(self, mock_codebase, mock_agent_config_service):
-        """Test context content includes MAINTENANCE_GUIDE.md when it exists."""
+    async def test_context_does_not_include_maintenance_guide(self, mock_codebase, mock_agent_config_service):
+        """Test context does not include MAINTENANCE_GUIDE.md (guidelines are in system prompt instead)."""
         role = DocumentationMaintainerRole(codebase=mock_codebase, agent_config_service=mock_agent_config_service)
 
         content = await role.get_context_content()
 
-        assert "DOCUMENTATION MAINTENANCE GUIDE" in content
-        assert "Guidelines for maintaining documentation" in content
+        # Maintenance guide should not be in context
+        assert "DOCUMENTATION MAINTENANCE GUIDE" not in content
+        assert "Guidelines for maintaining documentation" not in content
 
-    @pytest.mark.asyncio
-    async def test_context_handles_missing_maintenance_guide(self, tmp_path, mock_agent_config_service):
-        """Test context handles missing MAINTENANCE_GUIDE.md gracefully."""
-        codebase_path = tmp_path / "test_codebase_no_maintenance"
-        codebase_path.mkdir()
-        (codebase_path / ".git").mkdir()
-
-        # Create docs dir with INDEX.md only
-        docs_dir = codebase_path / "docs"
-        docs_dir.mkdir()
-        (docs_dir / "INDEX.md").write_text("# Index")
-
-        codebase = Mock(spec=Codebase)
-        codebase.name = "TestCodebase"
-        codebase.description = "No maintenance guide"
-        codebase.local_path = str(codebase_path)
-
-        role = DocumentationMaintainerRole(codebase=codebase, agent_config_service=mock_agent_config_service)
-
-        # Should not raise an error even without MAINTENANCE_GUIDE.md
-        content = await role.get_context_content()
-
+        # But should still have other context
         assert "CODEBASE INFORMATION" in content
         assert "DOCUMENTATION INDEX" in content
-        assert "DOCUMENTATION MAINTENANCE GUIDE" not in content
 
     @pytest.mark.asyncio
     async def test_context_handles_missing_docs_entirely(self, tmp_path, mock_agent_config_service):

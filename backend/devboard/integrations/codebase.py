@@ -26,6 +26,42 @@ class CodebaseIntegration:
         """
         self.codebase_path = Path(codebase_path).resolve()
 
+    def _validate_file_path(
+        self,
+        file_path: str,
+        must_exist: bool = False,
+        must_be_file: bool = False,
+    ) -> Path:
+        """Validate and resolve a file path within the codebase.
+
+        Args:
+            file_path: Relative path to file from codebase root
+            must_exist: If True, raises FileNotFoundError if path doesn't exist
+            must_be_file: If True, raises ValueError if path is not a file
+
+        Returns:
+            Resolved absolute Path object
+
+        Raises:
+            ValueError: If path is outside codebase or not a file (when must_be_file=True)
+            FileNotFoundError: If path doesn't exist (when must_exist=True)
+        """
+        full_path = self.codebase_path / file_path
+
+        # Ensure path is within codebase directory
+        try:
+            full_path.resolve().relative_to(self.codebase_path)
+        except ValueError:
+            raise ValueError(f"Path is outside codebase directory: {file_path}")
+
+        if must_exist and not full_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if must_be_file and not full_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
+
+        return full_path
+
     async def validate(self) -> IntegrationConnectionResult:
         """Test codebase access and git repository detection."""
         if not self.codebase_path.exists():
@@ -176,32 +212,8 @@ class CodebaseIntegration:
 
         Returns:
             List of matching lines from ripgrep output
-        TODO: Output appears to repeat the file path multiple times, e.g.:
-        backend/devboard/services/prompt_action_service.py-8-
-        backend/devboard/services/prompt_action_service.py-9-
-        backend/devboard/services/prompt_action_service.py:10:class PromptActionNotFoundError(Exception):
-        backend/devboard/services/prompt_action_service.py-11-    \"\"\"Raised when a requested prompt action key does not exist.\"\"\"
-        backend/devboard/services/prompt_action_service.py-12-
-        backend/devboard/services/prompt_action_service.py-13-    pass
-        backend/devboard/services/prompt_action_service.py-14-
-        backend/devboard/services/prompt_action_service.py-15-
-        backend/devboard/services/prompt_action_service.py:16:class PromptActionService:
-        backend/devboard/services/prompt_action_service.py-17-    \"\"\"Service for managing and executing prompt actions.
-        backend/devboard/services/prompt_action_service.py-18-
-        backend/devboard/services/prompt_action_service.py-19-    Prompt actions are reusable, named operations that send predefined prompts
-        backend/devboard/services/prompt_action_service.py-20-    to agent conversations. This service handles action lookup and execution.
-        backend/devboard/services/prompt_action_service.py-21-    \"\"\"
-        --
-        backend/devboard/agents/prompt_actions.py-11-
-        backend/devboard/agents/prompt_actions.py-12-@dataclass(frozen=True)
-        backend/devboard/agents/prompt_actions.py:13:class PromptAction:
-        backend/devboard/agents/prompt_actions.py-14-    \"\"\"A reusable prompt action that can be triggered in conversations.
-        backend/devboard/agents/prompt_actions.py-15-
-        backend/devboard/agents/prompt_actions.py-16-    Attributes:
-        backend/devboard/agents/prompt_actions.py-17-        key: Unique identifier for the action (e.g., \"task.create_implementation_plan\")
-        backend/devboard/agents/prompt_actions.py-18-        prompt_template: The prompt text to send to the agent
         """
-        cmd = ["rg", "--line-number"]
+        cmd = ["rg", "--line-number", "--heading"]
 
         if not case_sensitive:
             cmd.append("--ignore-case")
@@ -303,22 +315,9 @@ class CodebaseIntegration:
             path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
 
         Returns:
-            List of matching lines from ast-grep output
-
-        TODO: Output appears to repeat the file path multiple times, e.g.:
-        Search: "class TaskStatus(StrEnum):
-        $$$"
-        Returns:
-        backend/devboard/db/models/task.py:19:class TaskStatus(StrEnum):
-        backend/devboard/db/models/task.py:20:    ""Enumeration of possible task statuses.""
-        backend/devboard/db/models/task.py:21:
-        backend/devboard/db/models/task.py:22:    DEFINING = "defining"
-        backend/devboard/db/models/task.py:23:    PLANNING = "planning"
-        backend/devboard/db/models/task.py:24:    IMPLEMENTING = "implementing"
-        backend/devboard/db/models/task.py:25:    REVIEWING = "reviewing"
-        backend/devboard/db/models/task.py:26:    COMPLETE = "complete"
+            List of matching lines from ast-grep output. File paths are shown as headings.
         """
-        cmd = ["ast-grep", "--pattern", pattern]
+        cmd = ["ast-grep", "--pattern", pattern, "--heading=always"]
 
         if language:
             cmd.extend(["--lang", language])
@@ -507,24 +506,28 @@ class CodebaseIntegration:
 
         return info
 
-    async def write_file(self, file_path: str, content: str) -> None:
+    async def write_file(self, file_path: str, content: str, overwrite_existing: bool = False) -> None:
         """Write content to a file, creating it if it doesn't exist.
 
         Args:
             file_path: Relative path to file from codebase root
             content: Content to write to the file
+            overwrite_existing: If False (default), raises error if file already exists.
+                              If True, allows overwriting existing files.
 
         Raises:
-            ValueError: If the path is invalid or outside codebase
+            ValueError: If the path is invalid, outside codebase, or file already exists when overwrite_existing=False
             OSError: If file cannot be written
         """
-        full_path = self.codebase_path / file_path
+        # Validate path is within codebase (but don't require it to exist yet)
+        full_path = self._validate_file_path(file_path)
 
-        # Ensure path is within codebase directory
-        try:
-            full_path.resolve().relative_to(self.codebase_path)
-        except ValueError:
-            raise ValueError(f"File path is outside codebase directory: {file_path}")
+        # Check if file exists
+        file_existed = full_path.exists()
+
+        # Raise error if file exists and overwrite_existing is False
+        if not overwrite_existing and file_existed:
+            raise ValueError(f"File already exists: {file_path}. Use overwrite_existing=True to overwrite.")
 
         # Create parent directories if they don't exist
         full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -533,7 +536,66 @@ class CodebaseIntegration:
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        logfire.info(f"File written: {file_path}")
+        action = "overwritten" if file_existed else "written"
+        logfire.info(f"File {action}: {file_path}")
+
+    async def delete_file(self, file_path: str) -> None:
+        """Delete a file from the codebase.
+
+        Args:
+            file_path: Relative path to file from codebase root
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the path is not a file or outside codebase
+            OSError: If file cannot be deleted
+        """
+        # Validate path, ensure it exists and is a file
+        full_path = self._validate_file_path(file_path, must_exist=True, must_be_file=True)
+
+        # Delete the file
+        full_path.unlink()
+
+        logfire.info(f"File deleted: {file_path}")
+
+    async def move_file(self, source_path: str, destination_path: str, overwrite_existing: bool = False) -> None:
+        """Move or rename a file within the codebase.
+
+        This operation can be used to:
+        - Rename a file in the same directory
+        - Move a file to a different directory
+        - Move and rename a file simultaneously
+
+        Args:
+            source_path: Relative path to source file from codebase root
+            destination_path: Relative path to destination from codebase root
+            overwrite_existing: If False (default), raises error if destination already exists.
+                              If True, allows overwriting existing files at destination.
+
+        Raises:
+            FileNotFoundError: If the source file does not exist
+            ValueError: If source is not a file, paths are outside codebase, or destination exists when overwrite_existing=False
+            OSError: If file cannot be moved
+        """
+        # Validate source path (must exist and be a file)
+        source_full = self._validate_file_path(source_path, must_exist=True, must_be_file=True)
+
+        # Validate destination path (just check it's within codebase, don't require it to exist)
+        dest_full = self._validate_file_path(destination_path)
+
+        # Check if destination exists
+        if dest_full.exists() and not overwrite_existing:
+            raise ValueError(
+                f"Destination already exists: {destination_path}. Use overwrite_existing=True to overwrite."
+            )
+
+        # Create parent directories for destination if needed
+        dest_full.parent.mkdir(parents=True, exist_ok=True)
+
+        # Move/rename the file
+        source_full.rename(dest_full)
+
+        logfire.info(f"File moved: {source_path} -> {destination_path}")
 
     async def edit_file(self, file_path: str, find: str, replace: str, replace_all: bool = False) -> None:
         """Edit a file using find/replace pattern.
@@ -549,19 +611,8 @@ class CodebaseIntegration:
             ValueError: If the find text is not found in the file or if path is invalid
             OSError: If file cannot be read or written
         """
-        full_path = self.codebase_path / file_path
-
-        if not full_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        if not full_path.is_file():
-            raise ValueError(f"Path is not a file: {file_path}")
-
-        # Ensure path is within codebase directory
-        try:
-            full_path.resolve().relative_to(self.codebase_path)
-        except ValueError:
-            raise ValueError(f"File path is outside codebase directory: {file_path}")
+        # Validate path, ensure it exists and is a file
+        full_path = self._validate_file_path(file_path, must_exist=True, must_be_file=True)
 
         # Read file content
         with open(full_path, encoding="utf-8") as f:

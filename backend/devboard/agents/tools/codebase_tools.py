@@ -222,11 +222,8 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
 
         Args:
             max_depth: Maximum directory depth to display relative to subdirectory.
-                      Use smaller values (1-3) for high-level overviews, or None for complete structure.
-                      Helpful for large projects to avoid overwhelming output.
-            subdirectory: Optional subdirectory to explore (e.g., 'src', 'tests', 'docs').
-                         When specified, only shows files within that directory.
-                         Do not include leading/trailing slashes.
+                      Use smaller values (1-3) for high-level overviews of large projects.
+            subdirectory: Optional subdirectory to show tree for. Do not include leading/trailing slashes.
 
         Returns:
             Formatted tree structure showing git-tracked files and directories,
@@ -298,10 +295,7 @@ def create_file_write_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """Create a file writing tool for creating new files in the codebase.
 
     This tool writes content to a new file in the codebase, creating parent directories
-    as needed. It's ideal for:
-    - Creating new documentation files
-    - Generating new code files or configuration
-    - Creating structured project files
+    as needed.
 
     Args:
         codebase_integration: CodebaseIntegration instance for file system access
@@ -310,43 +304,40 @@ def create_file_write_tool(codebase_integration: CodebaseIntegration) -> Tool:
     async def write_file(
         file_path: str,
         content: str,
+        overwrite_existing: bool = False,
     ) -> str:
-        """Write content to a new file in the codebase.
-
-        IMPORTANT: This tool creates NEW files. If the file already exists, it will be OVERWRITTEN.
-        Use edit_file instead to modify existing files.
-
-        Use this tool when you need to:
-        - Create new documentation files
-        - Generate new configuration or code files
-        - Add new files to the project structure
+        """
+        Create a new file with specified content, or overwrite entire content of an existing file.
+        If overwrite_existing=False and the file exists, it will return an error.
+        Any missing parent directories will be created.
 
         Examples:
         - write_file("docs/api/endpoints.md", "# API Endpoints\\n\\n...") - Create new API documentation
         - write_file("config/settings.json", "{\\"key\\": \\"value\\"}") - Create new config file
+        - write_file("src/app.py", "import os...", overwrite_existing=True) - Overwrite content of existing code file
 
         Args:
-            file_path: Relative path to the file from codebase root (e.g., "docs/new-doc.md").
-                      Parent directories will be created if they don't exist.
+            file_path: Relative path to the file from codebase root (e.g., "docs/new-doc.md")
             content: Full content to write to the file.
+            overwrite_existing: Set to False (default) for creating a new files, or True for overwriting existing files.
 
         Returns:
-            Success message indicating the file was written,
-            or an error message if the operation failed.
+            Success or error message.
         """
         try:
             await codebase_integration.write_file(
                 file_path=file_path,
                 content=content,
+                overwrite_existing=overwrite_existing,
             )
-            return f"Successfully wrote file: {file_path}"
+            action = "overwrote" if overwrite_existing else "wrote"
+            return f"Successfully {action} file: {file_path}"
         except (ValueError, OSError) as e:
             return f"Error writing file: {e}"
 
     return Tool(
         function=write_file,
         name="write_file",
-        requires_approval=True,
     )
 
 
@@ -408,5 +399,94 @@ def create_file_edit_tool(codebase_integration: CodebaseIntegration) -> Tool:
     return Tool(
         function=edit_file,
         name="edit_file",
-        requires_approval=True,
+    )
+
+
+def create_file_delete_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a file deletion tool for removing files from the codebase.
+
+    This tool deletes files from the codebase.
+
+    Args:
+        codebase_integration: CodebaseIntegration instance for file system access
+    """
+
+    async def delete_file(
+        file_path: str,
+    ) -> str:
+        """Delete a file from the codebase.
+
+        Examples:
+        - delete_file("config/old-settings.json") - Remove old configuration
+
+        Args:
+            file_path: Relative path to the file from codebase root (e.g., "docs/old-doc.md").
+
+        Returns:
+            Success or error message.
+        """
+        try:
+            await codebase_integration.delete_file(
+                file_path=file_path,
+            )
+            return f"Successfully deleted file: {file_path}"
+        except (FileNotFoundError, ValueError, OSError) as e:
+            return f"Error deleting file: {e}"
+
+    return Tool(
+        function=delete_file,
+        name="delete_file",
+    )
+
+
+def create_file_move_tool(codebase_integration: CodebaseIntegration) -> Tool:
+    """Create a file move/rename tool for moving or renaming files in the codebase.
+
+    This tool can both rename files in place and move them to different directories.
+
+    Args:
+        codebase_integration: CodebaseIntegration instance for file system access
+    """
+
+    async def move_file(
+        source_path: str,
+        destination_path: str,
+        overwrite_existing: bool = False,
+    ) -> str:
+        """Move or rename a file within the codebase.
+
+        This tool handles both renaming (same directory) and moving (different directory).
+
+        Use this tool when you need to:
+        - Rename a file to better reflect its content
+        - Move files to different directories for better organization
+
+        Examples:
+        - move_file("docs/old-name.md", "docs/new-name.md") - Rename file in same directory
+        - move_file("docs/guide.md", "docs/user-guides/guide.md") - Move to subdirectory
+        - move_file("README.txt", "docs/README.md") - Move and rename simultaneously
+        - move_file("docs/temp.md", "docs/final.md", overwrite_existing=True) - Move with overwrite
+
+        Args:
+            source_path: Relative path to the source file from codebase root (e.g., "docs/old.md").
+            destination_path: Relative path to the destination from codebase root (e.g., "docs/new.md").
+                            Parent directories will be created if they don't exist.
+            overwrite_existing: Set to True to allow overwriting existing files at destination.
+
+        Returns:
+            Success or error message.
+        """
+        try:
+            await codebase_integration.move_file(
+                source_path=source_path,
+                destination_path=destination_path,
+                overwrite_existing=overwrite_existing,
+            )
+            return f"Successfully moved file: {source_path} -> {destination_path}"
+        except (FileNotFoundError, ValueError, OSError) as e:
+            return f"Error moving file: {e}"
+
+    return Tool(
+        function=move_file,
+        name="move_file",
     )

@@ -27,6 +27,7 @@
 - refresh documents when edited through non-approval tools
 - Create "Documentation Maintenance" and "Codebase analysis" sub-agents which can be called by other agents
 - Handle CC AWS Bedrock SSO login?
+- Try using a read-only and read-write Bash command tool for file/git operations instead of custom tools for each
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
