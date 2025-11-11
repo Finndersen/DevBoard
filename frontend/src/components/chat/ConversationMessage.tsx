@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import type { ConversationEvent, ToolResult } from '../../lib/api'
 import {
   getMessageBubbleClasses,
-  getTimestampClasses,
   formatTimestamp
 } from '../../styles/messageStyles'
 import { Markdown } from '../ui'
@@ -38,9 +37,9 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     }, [message.text_content, isLatest])
 
     return (
-      <div className="w-full">
-        {/* Message bubble */}
-        <div className={getMessageBubbleClasses(isUser)}>
+      <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
+        {/* Message bubble with content-based width */}
+        <div className={`${getMessageBubbleClasses(isUser)} max-w-full min-w-[200px]`}>
           <div className="relative">
             <div
               ref={contentRef}
@@ -104,8 +103,8 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   // Tool call requests (pending approval) - render similarly to tool calls but with different styling
   if (message.event_type === 'tool_call_request') {
     return (
-      <div className="w-full min-w-0">
-        <div className="rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm w-full min-w-0">
+      <div className="flex w-full min-w-0">
+        <div className="rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px]">
           <div className="px-3 py-1.5 bg-yellow-800/20 border-b border-yellow-600 flex items-center justify-between gap-2 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <svg

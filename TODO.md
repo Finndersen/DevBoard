@@ -26,7 +26,7 @@
 - Add tool for getting code skeleton/structure of a module
 - refresh documents when edited through non-approval tools
 - Create "Documentation Maintenance" and "Codebase analysis" sub-agents which can be called by other agents
-- Handle CC AWS Bedrock SSO login?
+- Handle CC AWS Bedrock SSO login? message: "API Error: The SSO session associated with this profile has expired. To refresh this SSO session run aws sso login with the corresponding profile."
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

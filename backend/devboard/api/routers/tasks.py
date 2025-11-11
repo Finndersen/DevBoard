@@ -1,9 +1,13 @@
 """Task API endpoints."""
 
+import datetime
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
+    get_codebase_repository,
     get_conversation_repository,
     get_document_repository,
     get_task_repository,
@@ -11,16 +15,20 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import get_resource_service, get_task_service
 from devboard.api.schemas import (
     DeleteResponse,
+    FileDiff,
     ResourceResponse,
     StateTransitionRequest,
+    TaskDiffResponse,
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
 )
+from devboard.integrations.codebase import CodebaseIntegration
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
+    CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
     TaskRepository,
@@ -264,3 +272,120 @@ async def transition_task_state(
         specification=updated_task.specification,
         implementation_plan=updated_task.implementation_plan,
     )
+
+
+@router.get("/{task_id}/diff", response_model=TaskDiffResponse)
+async def get_task_diff(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+) -> TaskDiffResponse:
+    """Get git diff of uncommitted changes in task's associated codebase.
+
+    Args:
+        task_id: ID of the task
+        task: Verified task instance
+        codebase_repo: Codebase repository
+
+    Returns:
+        TaskDiffResponse with per-file diffs and statistics
+
+    Raises:
+        HTTPException: 400 if task has no associated codebase, 404 if codebase not found,
+                      500 if git operation fails
+    """
+    # Check task has a codebase
+    if not task.codebase_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Task has no associated codebase. Cannot retrieve diff.",
+        )
+
+    # Get codebase
+    codebase = codebase_repo.get_by_id(task.codebase_id)
+    if not codebase:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Codebase with id {task.codebase_id} not found.",
+        )
+
+    # Initialize codebase integration
+    try:
+        codebase_integration = CodebaseIntegration(codebase.local_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize codebase integration: {str(e)}",
+        ) from e
+
+    # Get git diff (all uncommitted changes)
+    try:
+        raw_diff = await codebase_integration.get_git_diff(commit1="HEAD")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get git diff: {str(e)}",
+        ) from e
+
+    # Parse diff into per-file structures
+    files = _parse_git_diff(raw_diff)
+
+    # Calculate totals
+    total_additions = sum(f.additions for f in files)
+    total_deletions = sum(f.deletions for f in files)
+
+    return TaskDiffResponse(
+        files=files,
+        total_additions=total_additions,
+        total_deletions=total_deletions,
+        generated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
+def _parse_git_diff(raw_diff: str) -> list[FileDiff]:
+    """Parse raw git diff output into structured per-file diffs.
+
+    Args:
+        raw_diff: Raw git diff output
+
+    Returns:
+        List of FileDiff objects, one per changed file
+    """
+    if not raw_diff.strip():
+        return []
+
+    files: list[FileDiff] = []
+
+    # Split by file headers (diff --git lines)
+    file_blocks = re.split(r"(?=^diff --git)", raw_diff, flags=re.MULTILINE)
+
+    for block in file_blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        # Extract file path from +++ b/path line
+        file_path_match = re.search(r"^\+\+\+ b/(.+)$", block, re.MULTILINE)
+        if not file_path_match:
+            # Try --- a/path for deletions
+            file_path_match = re.search(r"^--- a/(.+)$", block, re.MULTILINE)
+
+        if not file_path_match:
+            continue
+
+        file_path = file_path_match.group(1)
+
+        # Count additions and deletions (lines starting with + or -, but not +++ or ---)
+        additions = len(re.findall(r"^\+(?!\+\+)", block, re.MULTILINE))
+        deletions = len(re.findall(r"^-(?!--)", block, re.MULTILINE))
+
+        files.append(
+            FileDiff(
+                file_path=file_path,
+                diff_content=block,
+                additions=additions,
+                deletions=deletions,
+            )
+        )
+
+    return files

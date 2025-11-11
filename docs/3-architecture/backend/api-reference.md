@@ -44,13 +44,23 @@ GET    /api/tasks/{id}                   Get task details
 PATCH  /api/tasks/{id}                   Update task
 DELETE /api/tasks/{id}                   Delete task
 POST   /api/tasks/{id}/state-transition  Trigger state transition with optional AI
+GET    /api/tasks/{id}/diff              Get git diff of uncommitted changes
+GET    /api/tasks/{id}/resources         List task-linked resources
+POST   /api/tasks/{id}/resources         Link resource to task
+DELETE /api/tasks/{id}/resources/{id}    Unlink resource from task
 ```
 
 **State Flow**: `DEFINING -> DESIGNING -> PLANNING -> IMPLEMENTING -> IN_REVIEW -> COMPLETE`
 
 **State Transition**: Can optionally use agent (`use_agent: true`) to execute transition logic automatically.
 
-**Key Schemas**: `TaskResponse`, `TaskCreate`, `TaskUpdate`, `StateTransitionRequest`
+**Git Diff Endpoint**: Returns structured diff data for all uncommitted changes in the task's associated codebase:
+- Requires task to have a linked codebase (`codebase_id`)
+- Returns per-file diffs with syntax-highlightable content
+- Includes statistics (additions/deletions per file and totals)
+- Generated timestamp for tracking freshness
+
+**Key Schemas**: `TaskResponse`, `TaskCreate`, `TaskUpdate`, `StateTransitionRequest`, `TaskDiffResponse`, `FileDiff`
 
 ## Conversations API
 

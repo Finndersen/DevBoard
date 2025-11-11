@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import type { Task, Codebase } from '../lib/api'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
 import { useTask, useUpdateTask, useEditableField, useCodebases, useProject, useTransitionTaskState } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
@@ -10,6 +10,8 @@ import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
 import type { ConversationChatHandle } from '../components/chat/ConversationChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
+import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
+import { apiClient } from '../lib/api'
 
 interface TaskDetailProps {
   id: string
@@ -45,11 +47,16 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Update tab title when task data is loaded
   useTabTitle('task', id)
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan'>('specification')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string>('')
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
+
+  // State for diff data
+  const [diffData, setDiffData] = useState<TaskDiffResponse | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [lastDiffUpdate, setLastDiffUpdate] = useState<string | null>(null)
   
   // Use ref to store refetch function to avoid dependency issues
   const refetchRef = useRef(refetch)
@@ -97,6 +104,30 @@ function TaskDetail({ id }: TaskDetailProps) {
     setShowCodebaseSelector(false)
     updateTask({ id: id!, task: { codebase_id: codebaseId } as unknown as Task })
   }, [updateTask, id])
+
+  // Fetch task diff
+  const fetchTaskDiff = useCallback(async () => {
+    if (!task?.id) return
+
+    setDiffLoading(true)
+
+    try {
+      const response = await apiClient.getTaskDiff(task.id)
+      setDiffData(response)
+      setLastDiffUpdate(new Date().toISOString())
+    } catch (error) {
+      console.error('Failed to fetch task diff:', error)
+    } finally {
+      setDiffLoading(false)
+    }
+  }, [task?.id])
+
+  // Auto-fetch diff when Changes tab is first opened
+  useEffect(() => {
+    if (activeTab === 'changes' && !diffData && !diffLoading && task?.codebase_id) {
+      fetchTaskDiff()
+    }
+  }, [activeTab, diffData, diffLoading, task?.codebase_id, fetchTaskDiff])
 
   // Get selected codebase object
   const selectedCodebase = task && task.codebase_id && codebases
@@ -411,6 +442,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
                     ...(task.implementation_plan ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
+                    ...(task.codebase_id && ['implementing', 'reviewing', 'complete'].includes(task.status.toLowerCase()) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -538,6 +570,17 @@ function TaskDetail({ id }: TaskDetailProps) {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'changes' && (
+              <div className="h-full overflow-hidden">
+                <AllFilesDiffViewer
+                  diffResponse={diffData}
+                  loading={diffLoading}
+                  onRefresh={fetchTaskDiff}
+                  lastUpdated={lastDiffUpdate}
+                />
               </div>
             )}
           </div>

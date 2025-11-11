@@ -76,8 +76,16 @@ Delegate implementation work to specialized agents:
 - **Implementation Agent**: TaskImplementationRole assists with coding
 - **Tool Access**: Agent can search codebase, read files, execute commands
 - **Guided Development**: Agent follows implementation plan
-- **Progress Tracking**: Monitor implementation progress
+- **Progress Tracking**: Monitor implementation progress through file change diffs
 - **Quality Focus**: Testing and code quality throughout implementation
+
+**File Change Viewer**: Track implementation progress in real-time:
+- **Changes Tab**: View all uncommitted file modifications directly in the task UI
+- **Syntax Highlighted Diffs**: Color-coded changes with language-specific highlighting
+- **Collapsible Files**: Each modified file shown collapsed by default for performance
+- **Line Numbers**: Precise line tracking showing old and new line numbers
+- **Statistics**: See additions/deletions per file and total changes
+- **Refresh Capability**: Manually refresh to see latest changes with timestamps
 
 ### 5. Review & Integration
 

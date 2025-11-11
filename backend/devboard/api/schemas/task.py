@@ -68,3 +68,21 @@ class StateTransitionRequest(BaseModel):
     """Schema for manual state transitions."""
 
     new_state: TaskStatus  # 'Designing', 'Planning', 'Implementing'
+
+
+class FileDiff(BaseModel):
+    """Schema for a single file's diff information."""
+
+    file_path: str
+    diff_content: str
+    additions: int
+    deletions: int
+
+
+class TaskDiffResponse(BaseModel):
+    """Schema for task git diff response."""
+
+    files: list[FileDiff]
+    total_additions: int
+    total_deletions: int
+    generated_at: datetime.datetime

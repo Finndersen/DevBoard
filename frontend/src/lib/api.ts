@@ -97,6 +97,20 @@ export interface PendingApproval {
   tool_args: Record<string, unknown> | null  // Generic tool arguments, structure depends on tool type
 }
 
+export interface FileDiff {
+  file_path: string
+  diff_content: string
+  additions: number
+  deletions: number
+}
+
+export interface TaskDiffResponse {
+  files: FileDiff[]
+  total_additions: number
+  total_deletions: number
+  generated_at: string
+}
+
 export interface StateTransitionRequest {
   new_state: string
 }
@@ -321,6 +335,10 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(request),
     })
+  }
+
+  async getTaskDiff(taskId: number | string): Promise<TaskDiffResponse> {
+    return this.request<TaskDiffResponse>(`/api/tasks/${taskId}/diff`)
   }
 
   // Unified Conversation API

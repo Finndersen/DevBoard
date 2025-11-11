@@ -47,11 +47,11 @@ export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDispla
   }
 
   return (
-    <div className="w-full min-w-0">
+    <div className="flex w-full min-w-0">
       {/* Collapsed Tool Call Card */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-lg border ${getStatusColor()} overflow-hidden shadow-sm w-full text-left hover:opacity-80 transition-opacity min-w-0`}
+        className={`rounded-lg border ${getStatusColor()} overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">

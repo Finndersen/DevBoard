@@ -102,6 +102,8 @@ Document viewing/editing with diff visualization.
 - **DocumentContentViewer** (`DocumentContentViewer.tsx`): Read-only markdown display
 - **DocumentDiffModal** (`DocumentDiffModal.tsx`): Full-screen diff modal with accept/reject
 - **InlineChangeHighlighter** (`InlineChangeHighlighter.tsx`): Character-level diff highlighting
+- **GitDiffViewer** (`GitDiffViewer.tsx`): Git diff viewer with syntax highlighting, collapsible file sections, line numbers (old/new), language auto-detection (30+ languages via Prism), dark mode support
+- **AllFilesDiffViewer** (`AllFilesDiffViewer.tsx`): Multi-file diff container with refresh capability, statistics display, empty state handling, timestamp tracking
 
 ## Configuration Components
 

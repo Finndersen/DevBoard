@@ -38,10 +38,12 @@ from .resource import (
     TaskResourceCreate,
 )
 from .task import (
+    FileDiff,
     StateTransitionRequest,
     TaskBase,
     TaskCreate,
     TaskCreateNested,
+    TaskDiffResponse,
     TaskResponse,
     TaskUpdate,
 )
@@ -93,10 +95,12 @@ __all__ = [
     "PromptActionRequest",
     # Task
     "DocumentEdit",
+    "FileDiff",
     "StateTransitionRequest",
     "TaskBase",
     "TaskCreate",
     "TaskCreateNested",
+    "TaskDiffResponse",
     "TaskResponse",
     "TaskUpdate",
 ]

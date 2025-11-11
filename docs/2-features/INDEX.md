@@ -14,6 +14,9 @@ Comprehensive project oversight with living documentation, status tracking, cont
 ### [Task Management](./task-management.md)
 AI-assisted task development from definition through completion, including specification writing, implementation planning, and execution support. Understand the complete task lifecycle.
 
+### [File Change Viewer](./file-change-viewer.md)
+Real-time visibility into uncommitted code changes during task implementation with syntax-highlighted git diffs, collapsible file views, and progress tracking. Monitor implementation agent modifications directly in the task UI.
+
 ### [Codebase Documentation](./codebase-documentation.md)
 Maintain living architecture documentation for code repositories with AI assistance. Learn how DevBoard helps keep codebase documentation up-to-date.
 
@@ -28,6 +31,7 @@ Structured document editing with AI agents through approval workflows, conflict 
 All core features are production-ready and fully functional:
 - ✅ Project Management
 - ✅ Task Management & Planning
+- ✅ File Change Viewer
 - ✅ Codebase Documentation
 - ✅ Configuration System
 - ✅ Document Collaboration
