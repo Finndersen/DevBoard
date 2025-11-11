@@ -23,6 +23,7 @@ interface AgentChatProps {
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
   isTransitioning?: boolean
   transitionMessage?: string
+  onStreamingStarted?: () => void
 }
 
 const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
@@ -32,7 +33,8 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
   className = "flex flex-col overflow-hidden",
   padding = "xs",
   isTransitioning = false,
-  transitionMessage = ''
+  transitionMessage = '',
+  onStreamingStarted
 }, ref) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
@@ -149,6 +151,7 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
               emptyStateMessage={emptyStateMessage}
               isTransitioning={isTransitioning}
               transitionMessage={transitionMessage}
+              onStreamingStarted={onStreamingStarted}
             />
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">

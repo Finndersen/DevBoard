@@ -9,17 +9,17 @@ export const getMessageContainerAlignment = (isUser: boolean) =>
   isUser ? 'items-end' : 'items-start'
 
 export const getMessageBubbleClasses = (isUser: boolean, additionalClasses?: string) => {
-  const baseClasses = 'rounded-lg px-3 py-2 text-sm'
-  const colorClasses = isUser 
+  const baseClasses = 'rounded-lg px-3 py-1.5 text-sm'
+  const colorClasses = isUser
     ? 'bg-blue-600 text-white'
     : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-  
+
   return `${baseClasses} ${colorClasses} ${additionalClasses || ''}`
 }
 
 export const getPendingMessageBubbleClasses = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {
-  const baseClasses = 'rounded-lg px-3 py-2 text-sm text-white'
-  
+  const baseClasses = 'rounded-lg px-3 py-1.5 text-sm text-white'
+
   switch (status) {
     case 'failed':
       return `${baseClasses} bg-red-500`
@@ -34,7 +34,7 @@ export const getPendingMessageBubbleClasses = (status: 'pending' | 'sent' | 'awa
 }
 
 export const getTimestampClasses = (isUser: boolean) =>
-  isUser ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+  'text-gray-500 dark:text-gray-400'
 
 export const formatTimestamp = (timestamp: string) =>
   new Date(timestamp).toLocaleTimeString([], {

@@ -21,6 +21,7 @@ interface ConversationChatProps {
   emptyStateMessage?: string
   isTransitioning?: boolean
   transitionMessage?: string
+  onStreamingStarted?: () => void
 }
 
 const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProps>(({
@@ -28,7 +29,8 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   isTransitioning = false,
-  transitionMessage = ''
+  transitionMessage = '',
+  onStreamingStarted
 }, ref) => {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -340,14 +342,20 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       await processStreamWithApprovals(
         apiClient.streamPromptAction(conversationId, {
           action_key: actionKey
-        })
+        }),
+        {
+          onFirstEvent: () => {
+            // Notify parent that streaming has started
+            onStreamingStarted?.()
+          }
+        }
       )
     } catch (error) {
       console.error('Failed to execute prompt action:', error)
     } finally {
       setLoading(false)
     }
-  }, [conversationId, processStreamWithApprovals])
+  }, [conversationId, processStreamWithApprovals, onStreamingStarted])
 
   // Expose executePromptAction via ref
   useImperativeHandle(ref, () => ({
@@ -357,7 +365,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">{/* Removed floating Clear History Button - now handled externally */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">{/* Removed floating Clear History Button - now handled externally */}
 
         <ConversationMessageList
           messages={messages}
@@ -369,14 +377,14 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
         
         {/* Approval Error Message */}
         {approvalError && pendingApprovals.length > 0 && (
-          <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="mt-2 p-2.5 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
             <p className="text-sm text-red-800 dark:text-red-200">{approvalError}</p>
           </div>
         )}
 
         {/* Pending Tool Approvals */}
         {pendingApprovals.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-2">
             <PendingApprovalsList
               approvals={pendingApprovals}
               onBatchApproval={handleToolApproval}
@@ -387,7 +395,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
         
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2 text-sm">
+            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -399,7 +407,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
         {isTransitioning && transitionMessage && (
           <div className="flex justify-start">
-            <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3">
+            <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-3 py-2">
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce"></div>
@@ -416,7 +424,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-200 dark:border-gray-600 p-4 flex-shrink-0">
+      <div className="border-t border-gray-200 dark:border-gray-600 p-3 flex-shrink-0">
         <ConversationInput
           onSendMessage={handleSendMessage}
           disabled={isInputDisabled}

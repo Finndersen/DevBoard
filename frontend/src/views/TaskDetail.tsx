@@ -554,6 +554,10 @@ function TaskDetail({ id }: TaskDetailProps) {
             padding="xs"
             isTransitioning={isTransitioning}
             transitionMessage={transitionMessage}
+            onStreamingStarted={() => {
+              setIsTransitioning(false)
+              setTransitionMessage('')
+            }}
           />
         </div>
       </div>

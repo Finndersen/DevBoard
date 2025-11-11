@@ -56,6 +56,16 @@ function ConversationMessageList({
     return map
   }, [messages])
 
+  // Find the index of the last 'message' type event
+  const lastMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].event_type === 'message') {
+        return i
+      }
+    }
+    return -1
+  }, [messages])
+
   if (showEmptyState) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -79,11 +89,15 @@ function ConversationMessageList({
           ? toolResultMap.get(messageKey)
           : undefined
 
+        // Check if this is the latest message
+        const isLatest = index === lastMessageIndex
+
         return (
           <MemoizedMessageComponent
             key={messageKey}
             message={message}
             toolResult={toolResult}
+            isLatest={isLatest}
           />
         )
       })}

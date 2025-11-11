@@ -74,9 +74,9 @@ export default function PendingApprovalsList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
+      <div className="flex items-center justify-between p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
         <div className="flex items-center space-x-2">
           <ExclamationTriangleIcon className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           <h3 className="font-medium text-orange-800 dark:text-orange-200">
@@ -109,7 +109,7 @@ export default function PendingApprovalsList({
 
       {/* Global Feedback for Batch Operations */}
       {approvals.length > 1 && (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+        <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Global feedback (applies to all tools):
           </label>
@@ -125,7 +125,7 @@ export default function PendingApprovalsList({
       )}
 
       {/* Individual Approvals */}
-      <div className="space-y-4">
+      <div className="space-y-2">
         {approvals.map((approval, index) => (
           <div key={approval.tool_call_id}>
             <div className="flex items-center justify-between mb-2">
@@ -154,7 +154,7 @@ export default function PendingApprovalsList({
 
       {/* Batch Decision Submission */}
       {hasPendingDecisions && (
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
