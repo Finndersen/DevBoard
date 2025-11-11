@@ -32,7 +32,7 @@ dev = [
 ]
 
 [[tool.uv.index]]
-url = "https://pypi-256045177368.d.codeartifact.eu-west-1.amazonaws.com/pypi/pypi/simple/"
+url = "https://pypi.org/simple/"
 default = true
 
 [tool.ruff]

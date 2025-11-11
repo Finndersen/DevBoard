@@ -14,6 +14,11 @@ if TYPE_CHECKING:
     from devboard.agents.agent_config_service import AgentConfigService
     from devboard.db.models.codebase import Codebase
 
+CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
+Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
+Your answer should be concise and to the point with no unnecessary preamble or superfluous details.
+Query: {query}"""
+
 
 def create_codebase_investigation_tool(
     codebase: "Codebase",
@@ -89,8 +94,9 @@ def create_codebase_investigation_tool(
         else:
             raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
 
-        # Execute investigation - query is passed here, not stored in role
-        events = await investigation_agent.run(query)
+        # Execute investigation
+        prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
+        events = await investigation_agent.run(prompt)
 
         # Extract final text response from events
         # Look for the last agent message
