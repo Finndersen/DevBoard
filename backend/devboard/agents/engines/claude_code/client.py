@@ -16,7 +16,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from claude_agent_sdk.types import SystemPromptPreset
+from claude_agent_sdk.types import SystemPromptPreset, PermissionMode
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
@@ -114,6 +114,14 @@ class ClaudeClient:
             model = f"{region_prefix}.anthropic.{model}-v1:0"
 
         # Initialize ClaudeAgentOptions directly
+        permission_mode: PermissionMode
+        if plan_mode:
+            permission_mode = "plan"
+        elif "Write" in all_allowed_tools:
+            permission_mode = "acceptEdits"
+        else:
+            permission_mode = "default"
+
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
@@ -121,7 +129,7 @@ class ClaudeClient:
             model=model,
             cwd=cwd,
             mcp_servers=mcp_servers,
-            permission_mode="plan" if plan_mode else "default",
+            permission_mode=permission_mode,
             setting_sources=["local", "project", "user"] if load_settings else None,
             env=env_vars,
         )

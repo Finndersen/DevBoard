@@ -8,6 +8,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     Message,
     ResultMessage,
+    SystemMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -276,24 +277,21 @@ class ClaudeCodeAgent(BaseAgent):
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
             try:
                 # Stream messages from the client
-                result_message = None
                 async for message in client.stream(user_query=current_message):
-                    # Capture the ResultMessage for session ID extraction
                     if isinstance(message, ResultMessage):
-                        result_message = message
-                    else:
-                        # Convert Message events to ConversationEvent
-                        # This now includes parsing and validation of text content
-                        for conv_event in self._convert_claude_message_to_events(message):
-                            yield conv_event
+                        # Do not process the ResultMessage since it just contains the content from the previous message
+                        continue
 
-                # Ensure we received a ResultMessage
-                if not result_message:
-                    raise RuntimeError("No ResultMessage received from Claude SDK")
+                    if isinstance(message, SystemMessage):
+                        # Set session_id from SystemMessage
+                        # TODO: Instead of doing this, convert to a SystemEvent which indicates that session_id has changed, and cna be handled in both ConversationService and frontend UI
+                        if not self.session_id:
+                            self.session_id = message.data["session_id"]
+                        continue
 
-                # Update session_id from result if not already set
-                if not self.session_id:
-                    self.session_id = result_message.session_id
+                    # Convert normal Message events to ConversationEvent
+                    for conv_event in self._convert_claude_message_to_events(message):
+                        yield conv_event
 
                 # Success - exit retry loop
                 break

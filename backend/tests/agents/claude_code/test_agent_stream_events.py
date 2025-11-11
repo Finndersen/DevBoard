@@ -5,14 +5,21 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
-from pydantic_ai import Tool
-
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
+from pydantic_ai import Tool
 
 
 class MockRole(Role):
@@ -69,6 +76,7 @@ def create_mock_text_stream(content: str, session_id: str = "test-session-123") 
         List of messages [AssistantMessage, ResultMessage] to be yielded by mock
     """
     return [
+        SystemMessage(subtype="session_start", data={"session_id": session_id}),
         create_mock_assistant_message_with_text(content),
         create_mock_result_message(content, session_id=session_id),
     ]
@@ -582,24 +590,6 @@ class TestStreamEventsRetryLogic:
 
 class TestStreamEventsEdgeCases:
     """Tests for edge cases and error conditions."""
-
-    @pytest.mark.asyncio
-    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
-    async def test_no_result_message_raises_error(self, mock_client_class, agent_with_virtual_tool):
-        """Test that missing ResultMessage raises RuntimeError."""
-
-        # Stream with no ResultMessage
-        async def mock_stream(user_query):
-            # Empty stream - no messages yielded
-            return
-            yield  # Make this an async generator
-
-        setup_mock_client_with_callback(mock_client_class, mock_stream)
-
-        with pytest.raises(RuntimeError, match="No ResultMessage received from Claude SDK"):
-            events = []
-            async for event in agent_with_virtual_tool.stream_events("Test prompt"):
-                events.append(event)
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")

@@ -57,7 +57,8 @@ class Role(ABC):
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
-        """List of allowed engine internal tools for this role."""
+        """List of allowed engine internal tools for this role.
+        TODO: Maybe have a "write_allowed" flag or something instead of specifying tool names here"""
         return []
 
     @property

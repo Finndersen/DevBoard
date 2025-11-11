@@ -99,11 +99,11 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
 
             # Stream events from agent execution
             async for event in agent.stream_events(message_or_approvals):
-                yield event
+                # Update session_id if changed
+                if agent.session_id != self.conversation.external_session_id:
+                    self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
 
-            # Update session_id if changed
-            if agent.session_id != self.conversation.external_session_id:
-                self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
+                yield event
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all events for the Claude Code conversation.
