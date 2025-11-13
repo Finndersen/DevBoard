@@ -17,6 +17,14 @@ class ConversationEventType(StrEnum):
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     TOOL_CALL_REQUEST = "tool_call_request"
+    SYSTEM = "system"
+
+
+class SystemEventType(StrEnum):
+    """Type of system event."""
+
+    TASK_UPDATED = "task_updated"
+    CONVERSATION_UPDATED = "conversation_updated"
 
 
 class TextMessage(BaseModel):
@@ -58,8 +66,33 @@ class ToolCallRequest(BaseModel):
     timestamp: datetime.datetime
 
 
+class SystemEvent(BaseModel):
+    """System-level event for entity changes and workflow notifications.
+
+    System events notify about entity changes without requiring conversation context.
+    The data structure varies by event type.
+
+    Example (TASK_UPDATED):
+        {
+            "task_id": 123,
+            "updated_fields": {"status": "planning", "implementation_plan_id": 789}
+        }
+
+    Example (CONVERSATION_UPDATED):
+        {
+            "conversation_id": 100,
+            "updated_fields": {"external_session_id": "abc123"}
+        }
+    """
+
+    event_type: Literal["system"] = "system"
+    type: SystemEventType
+    data: dict[str, Any] | None = None
+    timestamp: datetime.datetime
+
+
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    TextMessage | ToolCallRequest | ToolCall | ToolResult,
+    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent,
     Field(discriminator="event_type"),
 ]

@@ -40,7 +40,7 @@ class TestPromptActionService:
 
         assert action is not None
         assert action.key == "task.create_implementation_plan"
-        assert "implementation plan" in action.prompt_template.lower()
+        assert action.description == "Generate a technical implementation plan from the task specification"
 
     def test_get_action_not_found(self, prompt_action_service):
         """Test getting a non-existent action returns None."""

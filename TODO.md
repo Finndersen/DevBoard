@@ -27,6 +27,7 @@
 - refresh documents when edited through non-approval tools
 - Create "Documentation Maintenance" and "Codebase analysis" sub-agents which can be called by other agents
 - Handle CC AWS Bedrock SSO login? message: "API Error: The SSO session associated with this profile has expired. To refresh this SSO session run aws sso login with the corresponding profile."
+- Add Post-Implementation agent role that has Github/Jira tools etc and can still make code changes.  These integrations are not required during normal implementation phase before approval.
 
 For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

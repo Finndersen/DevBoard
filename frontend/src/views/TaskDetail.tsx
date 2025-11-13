@@ -4,6 +4,7 @@ import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon,
 import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
 import { useTask, useUpdateTask, useEditableField, useCodebases, useProject, useTransitionTaskState } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
+import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
@@ -157,6 +158,30 @@ function TaskDetail({ id }: TaskDetailProps) {
       }
     }
   }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
+
+  // Handle specification document updates from MCP tools
+  useToolResultHandler(
+    (toolName, result) =>
+      (toolName.includes('edit_specification') || toolName.includes('set_specification_content')) && !result.is_error,
+    async () => {
+      console.log('TaskDetail: Specification updated, refetching task data...')
+      await refetch()
+      // Switch to specification tab to show the updated content
+      setActiveTab('specification')
+    }
+  )
+
+  // Handle implementation plan document updates from MCP tools
+  useToolResultHandler(
+    (toolName, result) =>
+      (toolName.includes('edit_implementation_plan') || toolName.includes('set_implementation_plan_content')) && !result.is_error,
+    async () => {
+      console.log('TaskDetail: Implementation plan updated, refetching task data...')
+      await refetch()
+      // Switch to plan tab to show the updated content
+      setActiveTab('plan')
+    }
+  )
 
   // Close codebase selector when clicking outside
   useEffect(() => {

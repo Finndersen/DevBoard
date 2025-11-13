@@ -1,6 +1,7 @@
 import { useState, useEffect, forwardRef, useRef, useImperativeHandle } from 'react'
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
+import ConversationEventHandlerProvider from './ConversationEventHandlerProvider'
 import ConversationModelSelector from './ConversationModelSelector'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -144,15 +145,17 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
         </div>
         <div className="flex-1 overflow-hidden">
           {conversationId ? (
-            <ConversationChat
-              ref={conversationChatRef}
-              conversationId={conversationId}
-              placeholder={placeholder}
-              emptyStateMessage={emptyStateMessage}
-              isTransitioning={isTransitioning}
-              transitionMessage={transitionMessage}
-              onStreamingStarted={onStreamingStarted}
-            />
+            <ConversationEventHandlerProvider>
+              <ConversationChat
+                ref={conversationChatRef}
+                conversationId={conversationId}
+                placeholder={placeholder}
+                emptyStateMessage={emptyStateMessage}
+                isTransitioning={isTransitioning}
+                transitionMessage={transitionMessage}
+                onStreamingStarted={onStreamingStarted}
+              />
+            </ConversationEventHandlerProvider>
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">
               <p className="text-sm">No conversation started yet.</p>

@@ -7,6 +7,7 @@ import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
 import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
+import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import TaskDetail from '../TaskDetail'
 
 // Helper to create NDJSON streaming response
@@ -22,9 +23,11 @@ const renderTaskDetail = (taskId: string = '1') => {
   return render(
     <ApprovalsProvider>
       <PendingMessagesProvider>
-        <BrowserRouter>
-          <TaskDetail id={taskId} />
-        </BrowserRouter>
+        <ConversationEventHandlerProvider>
+          <BrowserRouter>
+            <TaskDetail id={taskId} />
+          </BrowserRouter>
+        </ConversationEventHandlerProvider>
       </PendingMessagesProvider>
     </ApprovalsProvider>
   )

@@ -41,7 +41,9 @@ export interface DocumentResponse {
 // New agent conversation interfaces matching backend schemas
 export type MessageRole = 'user' | 'agent'
 
-export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request'
+export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
+
+export type SystemEventType = 'task_updated' | 'conversation_updated'
 
 export interface ConversationMessage {
   event_type: 'message'
@@ -74,8 +76,15 @@ export interface ToolCallRequest {
   timestamp: string
 }
 
+export interface SystemEvent {
+  event_type: 'system'
+  type: SystemEventType
+  data: Record<string, unknown> | null
+  timestamp: string
+}
+
 // Union type for all conversation events
-export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest
+export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent
 
 export interface UserPrompt {
   message: string

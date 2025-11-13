@@ -5,6 +5,7 @@ import TaskDetail from '../../views/TaskDetail'
 import ProjectDetail from '../../views/ProjectDetail'
 import CodebaseDetail from '../../views/CodebaseDetail'
 import Settings from '../../views/Settings'
+import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 
 /**
  * Renders tabs with lazy mounting and CSS visibility toggling.
@@ -52,7 +53,11 @@ export default function TabContentContainer() {
           }}
         >
           {tab.type === 'home' && <Home />}
-          {tab.type === 'task' && <TaskDetail id={tab.entityId} />}
+          {tab.type === 'task' && (
+            <ConversationEventHandlerProvider>
+              <TaskDetail id={tab.entityId} />
+            </ConversationEventHandlerProvider>
+          )}
           {tab.type === 'project' && <ProjectDetail id={tab.entityId} />}
           {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
           {tab.type === 'settings' && <Settings />}

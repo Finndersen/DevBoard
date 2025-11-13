@@ -141,6 +141,11 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     )
   }
 
+  // System events - ignore for now (will add event-specific handling later)
+  if (message.event_type === 'system') {
+    return null
+  }
+
   // Fallback for unknown event types
   return null
 }

@@ -1,9 +1,17 @@
 import type { ConversationEvent, ToolCallRequest } from './api'
+import { invokeEventHandlers } from '../hooks/useConversationEventHandlers'
+import type { ToolResultHandler, ToolResultMatcher, SystemEventHandler, SystemEventMatcher } from '../hooks/useConversationEventHandlers'
+
+interface EventHandlerRegistry {
+  toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandler>>
+  systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
+}
 
 export interface StreamProcessorOptions {
   stream: AsyncGenerator<ConversationEvent>
   onFirstEvent?: () => void | Promise<void>
   onEvent: (event: ConversationEvent) => void | Promise<void>
+  eventHandlerRegistry?: EventHandlerRegistry
 }
 
 export interface StreamProcessorResult {
@@ -41,8 +49,9 @@ export interface StreamProcessorResult {
 export async function processConversationStream(
   options: StreamProcessorOptions
 ): Promise<StreamProcessorResult> {
-  const { stream, onFirstEvent, onEvent } = options
+  const { stream, onFirstEvent, onEvent, eventHandlerRegistry } = options
   const toolRequests: ToolCallRequest[] = []
+  const toolCallMap = new Map<string, string>() // Maps tool_call_id -> tool_name
   let eventCount = 0
   let firstEventProcessed = false
 
@@ -55,12 +64,29 @@ export async function processConversationStream(
       firstEventProcessed = true
     }
 
+    // Track tool calls for mapping tool_call_id to tool_name
+    if (event.event_type === 'tool_call') {
+      toolCallMap.set(event.tool_call_id, event.tool_name)
+    }
+
     // Separate tool requests from other events
     if (event.event_type === 'tool_call_request') {
       toolRequests.push(event as ToolCallRequest)
-    } else {
-      await onEvent(event)
+      continue
     }
+
+    // Invoke event handlers for tool results and system events
+    if (eventHandlerRegistry && (event.event_type === 'tool_result' || event.event_type === 'system')) {
+      await invokeEventHandlers(event, eventHandlerRegistry, toolCallMap)
+    }
+
+    // Skip system events from regular event processing (handlers deal with them)
+    if (event.event_type === 'system') {
+      continue
+    }
+
+    // Process all other events
+    await onEvent(event)
   }
 
   return { toolRequests, eventCount }
