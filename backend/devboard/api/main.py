@@ -16,6 +16,7 @@ from devboard.api.routers import (
     tasks,
     tool_approvals,
 )
+from devboard.api.routers.mcp import mcp_app
 from devboard.config.logfire_config import setup_logfire
 
 """Load environment variables from .env files in current directory or home directory."""
@@ -50,6 +51,10 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(tool_approvals.router, prefix="/api")
+
+# Mount MCP server as ASGI application
+# The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)
+app.mount("/mcp", mcp_app)
 
 
 @app.get("/")

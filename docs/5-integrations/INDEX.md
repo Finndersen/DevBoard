@@ -33,6 +33,11 @@ Multi-provider LLM support including OpenAI, Anthropic, and Google integrations.
 
 **Location**: `backend/devboard/agents/llm_service.py`
 
+### [MCP Server](./mcp-server.md)
+Model Context Protocol (MCP) server integration allowing DevBoard to act as a tool and resource provider for external AI clients. HTTP/SSE transport, tool scaffolding, and resource definitions.
+
+**Location**: `backend/devboard/mcp/`
+
 ## Integration Types
 
 ### External Development Tools
@@ -44,6 +49,7 @@ Multi-provider LLM support including OpenAI, Anthropic, and Google integrations.
 - **OpenAI**: GPT-4 and GPT-3.5 models
 - **Anthropic**: Claude 3 family (Opus, Sonnet, Haiku)
 - **Google**: Gemini models
+- **MCP Server**: Model Context Protocol server for external AI clients
 
 ### Local Resources
 - **Codebases**: File system analysis, architecture documentation
