@@ -407,12 +407,12 @@ export class ApiClient {
     })
   }
 
-  async *streamPromptAction(
+  async *streamWorkflowAction(
     conversationId: number | string,
     request: PromptActionRequest,
   ): AsyncGenerator<ConversationEvent> {
     yield* StreamParser.parseStream(
-      `${this.baseURL}/api/conversations/${conversationId}/prompt-action`,
+      `${this.baseURL}/api/conversations/${conversationId}/workflow-action`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

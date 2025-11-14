@@ -45,8 +45,8 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
 
   // Forward ref to parent
   useImperativeHandle(ref, () => ({
-    executePromptAction: async (actionKey: string) => {
-      await conversationChatRef.current?.executePromptAction(actionKey)
+    executeWorkflowAction: async (actionKey: string) => {
+      await conversationChatRef.current?.executeWorkflowAction(actionKey)
     }
   }), [])
 

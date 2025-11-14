@@ -66,6 +66,7 @@ export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undef
 /**
  * Register a handler for tool call results.
  * The handler is called when the matcher returns true for a tool result.
+ * Error results (is_error=true) are automatically skipped.
  *
  * @param matcher - Function that returns true if handler should be called
  * @param handler - Function to call when tool result matches
@@ -92,10 +93,10 @@ export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undef
  * )
  *
  * @example
- * Check result status:
+ * Access result data (errors are automatically skipped):
  * useToolResultHandler(
- *   (name, result) => name.includes('edit_') && !result.is_error,
- *   (result) => console.log('Edit succeeded')
+ *   (name) => name.includes('edit_') || name.includes('set_'),
+ *   (result) => console.log('Document modified:', result.result_content)
  * )
  */
 export function useToolResultHandler(matcher: ToolResultMatcher, handler: ToolResultHandler): void {
@@ -217,6 +218,9 @@ export async function invokeEventHandlers(
   if (event.event_type === 'tool_result') {
     const toolName = toolCallMap.get(event.tool_call_id)
     if (!toolName) return
+
+    // Skip error results - handlers shouldn't be invoked for errors
+    if (event.is_error) return
 
     // Find matching handlers
     const matchingHandlers: ToolResultHandler[] = []

@@ -58,10 +58,8 @@ function TaskDocumentView({ taskId }: { taskId: number }) {
   useToolResultHandler(
     /mcp__devboard_tools__(?:edit|set)_specification/,
     async (result) => {
-      if (!result.is_error) {
-        console.log('Specification updated, refetching...')
-        await refetchSpec()
-      }
+      console.log('Specification updated, refetching...')
+      await refetchSpec()
     }
   )
 
@@ -69,10 +67,8 @@ function TaskDocumentView({ taskId }: { taskId: number }) {
   useToolResultHandler(
     /mcp__devboard_tools__(?:edit|set)_implementation_plan/,
     async (result) => {
-      if (!result.is_error) {
-        console.log('Implementation plan updated, refetching...')
-        await refetchPlan()
-      }
+      console.log('Implementation plan updated, refetching...')
+      await refetchPlan()
     }
   )
 
@@ -81,7 +77,6 @@ function TaskDocumentView({ taskId }: { taskId: number }) {
     (toolName) => toolName.startsWith('mcp__devboard_tools__') &&
                   (toolName.includes('edit_') || toolName.includes('set_')),
     async (result) => {
-      if (!result.is_error) {
         console.log('Document edited, refetching all...')
         await Promise.all([refetchSpec(), refetchPlan()])
       }
@@ -258,7 +253,7 @@ useToolResultHandler(
 
 ## Best Practices
 
-1. **Check error status**: Always check `result.is_error` for tool results
+1. **Error handling**: Tool result handlers automatically skip error results (is_error=true), so you only handle successful operations
 2. **Filter by entity ID**: For system events, check the entity ID matches what you're displaying
 3. **Granular refetching**: Only refetch data that actually changed
 4. **Debounce refetches**: If multiple events might fire rapidly, consider debouncing

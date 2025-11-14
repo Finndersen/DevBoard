@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
 import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
-import { useTask, useUpdateTask, useEditableField, useCodebases, useProject, useTransitionTaskState } from '../hooks'
+import { useTask, useUpdateTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
+import { useToolResultHandler, useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
@@ -74,11 +74,6 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Use enhanced useMutation with optimistic updates (eliminates refetch!)
   const { mutate: updateTask, error: updateError } = useUpdateTask({
-    updateCache
-  })
-
-  // State transition mutation hook
-  const { mutate: transitionState } = useTransitionTaskState({
     updateCache
   })
 
@@ -161,9 +156,8 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Handle specification document updates from MCP tools
   useToolResultHandler(
-    (toolName, result) =>
-      (toolName.includes('edit_specification') || toolName.includes('set_specification_content')) && !result.is_error,
-    async () => {
+    (toolName) => toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content'),
+    async (result) => {
       console.log('TaskDetail: Specification updated, refetching task data...')
       await refetch()
       // Switch to specification tab to show the updated content
@@ -173,13 +167,22 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Handle implementation plan document updates from MCP tools
   useToolResultHandler(
-    (toolName, result) =>
-      (toolName.includes('edit_implementation_plan') || toolName.includes('set_implementation_plan_content')) && !result.is_error,
-    async () => {
+    (toolName) => toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content'),
+    async (result) => {
       console.log('TaskDetail: Implementation plan updated, refetching task data...')
       await refetch()
       // Switch to plan tab to show the updated content
       setActiveTab('plan')
+    }
+  )
+
+  // Handle task updates from SystemEvents (emitted during workflow actions)
+  useSystemEventHandler(
+    (event) => event.type === 'task_updated' && event.data?.task_id === task?.id,
+    async (event) => {
+      console.log('TaskDetail: Received TASK_UPDATED SystemEvent:', event)
+      // Refetch task to get updated status and conversation_id
+      await refetch()
     }
   )
 
@@ -198,40 +201,13 @@ function TaskDetail({ id }: TaskDetailProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showCodebaseSelector])
 
-  // Helper to map task status to prompt action key
-  const getPromptActionForState = (state: string): string | null => {
-    const mapping: Record<string, string> = {
-      'planning': 'task.create_implementation_plan',
-      'implementing': 'task.begin_implementation',
-    }
-    return mapping[state.toLowerCase()] || null
-  }
-
-  const handleStateTransition = async (newState: string) => {
-    // Set appropriate message based on the new state
-    const messages: Record<string, string> = {
-      'planning': 'Generating Implementation Plan...',
-      'implementing': 'Executing Implementation Plan...',
-    }
-    const message = messages[newState.toLowerCase()] || 'Processing...'
-
+  const executeWorkflowAction = async (actionKey: string, message: string) => {
     setIsTransitioning(true)
     setTransitionMessage(message)
     try {
-      // Step 1: Transition state (creates new conversation)
-      // No refetch needed - updateCache handles state update
-      await transitionState({ id: id!, newState })
-
-      // Step 2: Get appropriate prompt action key for new state
-      const actionKey = getPromptActionForState(newState)
-
-      // Step 3: Execute prompt action via ConversationChat
-      // This will stream events and display them in real-time
-      if (actionKey) {
-        await agentChatRef.current?.executePromptAction(actionKey)
-      }
+      await agentChatRef.current?.executeWorkflowAction(actionKey)
     } catch (error) {
-      console.error('Failed to transition task state:', error)
+      console.error('Failed to execute workflow action:', error)
     } finally {
       setIsTransitioning(false)
       setTransitionMessage('')
@@ -247,7 +223,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       case 'defining':
         return (
           <Button
-            onClick={() => handleStateTransition('planning')}
+            onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
             variant="primary"
           >
             Begin Planning
@@ -256,7 +232,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       case 'planning':
         return (
           <Button
-            onClick={() => handleStateTransition('implementing')}
+            onClick={() => executeWorkflowAction('task.begin_implementation', 'Starting Implementation...')}
             variant="primary"
             className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
           >

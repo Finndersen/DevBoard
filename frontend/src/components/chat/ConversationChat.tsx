@@ -12,7 +12,7 @@ import ConversationInput from './ConversationInput'
 import { useUIStore } from '../../stores/uiStore'
 
 export interface ConversationChatHandle {
-  executePromptAction: (actionKey: string) => Promise<void>
+  executeWorkflowAction: (actionKey: string) => Promise<void>
 }
 
 interface ConversationChatProps {
@@ -335,12 +335,12 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     }
   }
 
-  const executePromptAction = useCallback(async (actionKey: string) => {
+  const executeWorkflowAction = useCallback(async (actionKey: string) => {
     setLoading(true)
     try {
       // Process stream with standardized approval handling
       await processStreamWithApprovals(
-        apiClient.streamPromptAction(conversationId, {
+        apiClient.streamWorkflowAction(conversationId, {
           action_key: actionKey
         }),
         {
@@ -351,16 +351,16 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
         }
       )
     } catch (error) {
-      console.error('Failed to execute prompt action:', error)
+      console.error('Failed to execute workflow action:', error)
     } finally {
       setLoading(false)
     }
   }, [conversationId, processStreamWithApprovals, onStreamingStarted])
 
-  // Expose executePromptAction via ref
+  // Expose executeWorkflowAction via ref
   useImperativeHandle(ref, () => ({
-    executePromptAction
-  }), [executePromptAction])
+    executeWorkflowAction
+  }), [executeWorkflowAction])
 
   return (
     <div className="flex flex-col h-full">
