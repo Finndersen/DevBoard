@@ -76,7 +76,7 @@ class VirtualTool:
         """Return the tool description."""
         return self.pydantic_tool.description
 
-    def validate_args(self, arguments: dict) -> Any:
+    def validate_args(self, arguments: dict[str, Any]) -> Any:
         """Validate and convert arguments using the PydanticAI tool's schema validator.
 
         Args:
@@ -90,7 +90,7 @@ class VirtualTool:
         """
         return self.pydantic_tool.function_schema.validator.validate_python(arguments)
 
-    async def execute(self, arguments: dict) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         """Execute the PydanticAI tool with the provided arguments.
 
         Args:

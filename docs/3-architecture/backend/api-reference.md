@@ -65,26 +65,31 @@ DELETE /api/tasks/{id}/resources/{id}    Unlink resource from task
 ## Conversations API
 
 **Base**: `/api/conversations`
-**Router**: `backend/devboard/api/routes/conversations.py`
+**Router**: `backend/devboard/api/routers/conversations.py`
 
 **Unified Interface**: All entity conversations (projects, tasks, codebases) share these endpoints.
 
 ```
+GET    /api/conversations/{id}                       Get conversation details
 GET    /api/conversations/{id}/messages              Get message history as event list
 POST   /api/conversations/{id}/messages              Send message (returns all events)
 POST   /api/conversations/{id}/messages/stream       Send message (NDJSON stream)
 POST   /api/conversations/{id}/approve-tools         Approve/deny tool requests
 POST   /api/conversations/{id}/approve-tools/stream  Approve tools (NDJSON stream)
+POST   /api/conversations/{id}/workflow-action       Execute workflow action (NDJSON stream)
+PUT    /api/conversations/{id}/model                 Update conversation model
 DELETE /api/conversations/{id}/messages              Clear conversation
 ```
 
-**Event-Based Architecture**: All responses are lists of `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`.
+**Event-Based Architecture**: All responses are lists of `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`, `SystemEvent`.
 
-**Streaming Format**: NDJSON (newline-delimited JSON). Each line is a complete `ConversationEvent` JSON object.
+**Streaming Format**: NDJSON (newline-delimited JSON). Each line is a complete `ConversationEvent` JSON object. All streaming endpoints use the `stream_conversation_events()` helper from `backend/devboard/api/streaming.py`.
 
 **Tool Approval**: When tools require approval, agent pauses and returns `ToolCallRequest` events. Frontend approves/denies via `/approve-tools`.
 
-**Key Schemas**: `ChatRequest`, `ConversationEvent`, `ToolApprovalRequest`, `ToolApprovalDecision`
+**Workflow Actions**: Reusable, named operations that combine task state transitions with agent interactions. Executed via `/workflow-action` endpoint. Examples: `task.create_implementation_plan`, `task.begin_implementation`.
+
+**Key Schemas**: `ChatRequest`, `ConversationEvent`, `ToolApprovalRequest`, `ToolApprovalDecision`, `PromptActionRequest`, `UpdateConversationModelRequest`
 
 ## Codebases API
 

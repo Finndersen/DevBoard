@@ -1,6 +1,6 @@
 """API router for tool approval requests and responses."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import logfire
 from fastapi import APIRouter, HTTPException, Path, Query
@@ -20,7 +20,7 @@ class ToolApprovalRequestSchema(BaseModel):
     request_id: str = Field(description="Unique identifier for this approval request")
     conversation_id: int = Field(description="ID of conversation this approval belongs to")
     tool_name: str = Field(description="Name of the tool requesting approval")
-    tool_args: dict = Field(description="Arguments the tool will be called with")
+    tool_args: dict[str, Any] = Field(description="Arguments the tool will be called with")
     timestamp: str = Field(description="ISO 8601 timestamp when request was created")
 
 
@@ -29,7 +29,9 @@ class ToolApprovalDecisionSchema(BaseModel):
 
     approved: bool = Field(description="Whether to approve tool execution")
     feedback: str | None = Field(default=None, description="Optional feedback message (used when denying)")
-    modified_args: dict | None = Field(default=None, description="Optional modified arguments (for approved tools)")
+    modified_args: dict[str, Any] | None = Field(
+        default=None, description="Optional modified arguments (for approved tools)"
+    )
 
 
 class ToolApprovalStatsSchema(BaseModel):
@@ -82,7 +84,7 @@ async def get_pending_approvals(
 async def respond_to_approval(
     request_id: Annotated[str, Path(description="ID of the approval request")],
     decision: ToolApprovalDecisionSchema,
-) -> dict:
+) -> dict[str, Any]:
     """Respond to a pending tool approval request.
 
     This endpoint unblocks the agent waiting for approval and continues
@@ -135,7 +137,7 @@ async def respond_to_approval(
 )
 async def cancel_conversation_approvals(
     conversation_id: Annotated[int, Path(description="ID of the conversation")],
-) -> dict:
+) -> dict[str, Any]:
     """Cancel all pending approvals for a conversation.
 
     Useful when a conversation is deleted or agent execution is stopped.

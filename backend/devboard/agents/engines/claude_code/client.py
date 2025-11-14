@@ -16,7 +16,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from claude_agent_sdk.types import SystemPromptPreset, PermissionMode
+from claude_agent_sdk.types import PermissionMode, SystemPromptPreset
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
@@ -238,6 +238,7 @@ class ClaudeClient:
         :param pydantic_tool:
         :return:
         """
+
         # Concurrent execution wrapper - returns cached results
         async def retrieve_tool_result(args: dict[str, Any]) -> ClaudeToolContent:
             # Get the tool_use_id from the queue (order-based correlation)
@@ -282,9 +283,9 @@ class ClaudeClient:
         # Remove MCP prefix if present (e.g., "mcp__builtin_tools__search" -> "search")
         clean_name = self._get_original_tool_name_from_mcp_tool(tool_name)
 
-        for tool in self._tools:
-            if tool.name == clean_name:
-                return tool
+        for pydantic_tool in self._tools:
+            if pydantic_tool.name == clean_name:
+                return pydantic_tool
         return None
 
     async def _execute_tool_concurrently(

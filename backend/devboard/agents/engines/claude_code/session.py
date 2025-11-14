@@ -202,7 +202,7 @@ class SessionMessage:
         """
         text_parts = []
         for block in self.content:
-            if isinstance(block, dict) and block.get("type") == "text":
+            if block.get("type") == "text":
                 text_parts.append(block["text"])
         return "\n".join(text_parts)
 

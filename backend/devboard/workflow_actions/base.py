@@ -98,28 +98,3 @@ class PromptTemplateAction(WorkflowAction):
         """
         async for event in self.conversation_service.stream_events_for_message_or_approval(self.config.prompt_template):
             yield event
-
-
-# Registry of built-in prompt template action configurations
-# Supports user-defined actions to be added in the future
-PROMPT_TEMPLATE_ACTION_CONFIGS: list[PromptTemplateActionConfig] = [
-    PromptTemplateActionConfig(
-        key="task.create_implementation_plan",
-        description="Generate a technical implementation plan from the task specification",
-        prompt_template="The task specification is complete. Your goal is now to create a detailed technical implementation plan.",
-    ),
-    PromptTemplateActionConfig(
-        key="task.begin_implementation",
-        description="Start implementing the approved plan",
-        prompt_template="The implementation plan has been approved. Your goal is to write the code to fulfill the plan.",
-    ),
-]
-
-
-# Registry of all workflow action definitions
-# Maps action classes to their initialization logic
-WORKFLOW_ACTION_DEFINITIONS: list[tuple[type[WorkflowAction], dict]] = [
-    # PromptTemplateActions are defined by their configs
-    *[(PromptTemplateAction, {"config": config}) for config in PROMPT_TEMPLATE_ACTION_CONFIGS],
-    # Future: Add other custom workflow action classes here
-]

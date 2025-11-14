@@ -37,6 +37,7 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
+from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
@@ -85,7 +86,7 @@ async def create_project(
         description=created_project.description,
         created_at=created_project.created_at,
         specification=created_project.specification,
-        default_conversation_id=conversation.id if conversation else None,
+        default_conversation_id=conversation.id,
     )
 
 
@@ -97,15 +98,8 @@ async def get_project(
 ) -> ProjectResponse:
     """Get a specific project with active conversation_id."""
     # Get active conversation (should always exist since created at project creation)
+    # Will raise NoActiveConversationError if not found
     conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.PROJECT, project_id)
-
-    if not conversation:
-        # This should never happen for projects created after this change
-        # For legacy projects without conversations, this is a data integrity issue
-        raise HTTPException(
-            status_code=500,
-            detail="Project has no active conversation. Data integrity issue.",
-        )
 
     return ProjectResponse(
         id=project.id,
@@ -168,9 +162,10 @@ async def list_project_tasks(
     # Get conversations for all tasks
     task_responses = []
     for task in tasks:
-        conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
-        if not conversation:
-            # Skip tasks without conversations (should not happen for properly created tasks)
+        try:
+            conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
+        except NoActiveConversationError:
+            # Skip tasks without conversations (legacy data)
             continue
 
         task_responses.append(
@@ -215,13 +210,8 @@ async def create_project_task(
     task_repo.db.refresh(created_task)
 
     # Get the active conversation that was just created
+    # Will raise NoActiveConversationError if not found
     conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, created_task.id)
-
-    if not conversation:
-        raise HTTPException(
-            status_code=500,
-            detail="Task conversation was not created. Data integrity issue.",
-        )
 
     return TaskResponse(
         id=created_task.id,

@@ -181,10 +181,7 @@ class WebPageContextProvider(BaseContextProvider):
             content_element = body_element if body_element is not None else soup
 
         # Extract text and clean it up
-        if content_element is not None:
-            extracted_text = content_element.get_text()
-        else:
-            extracted_text = ""
+        extracted_text = content_element.get_text()
 
         # Clean up whitespace
         extracted_text = re.sub(r"\s+", " ", extracted_text)

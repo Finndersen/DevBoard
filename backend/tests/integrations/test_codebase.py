@@ -315,7 +315,7 @@ class TestSearchFileContent:
         mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
-            result = await integration.search_file_content("def hello", context_before=3)
+            await integration.search_file_content("def hello", context_before=3)
 
             # Verify -B flag was passed with correct value
             call_args = mock_exec.call_args[0][0]
@@ -331,7 +331,7 @@ class TestSearchFileContent:
         mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
-            result = await integration.search_file_content("def hello", context_after=5)
+            await integration.search_file_content("def hello", context_after=5)
 
             # Verify -A flag was passed with correct value
             call_args = mock_exec.call_args[0][0]
@@ -347,7 +347,7 @@ class TestSearchFileContent:
         mock_result = ShellCommandResult("test.py:10:    result = func()\n", "", 0)
 
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
-            result = await integration.search_file_content("result = ", context_before=2, context_after=3)
+            await integration.search_file_content("result = ", context_before=2, context_after=3)
 
             # Verify both -B and -A flags were passed
             call_args = mock_exec.call_args[0][0]

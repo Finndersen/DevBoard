@@ -108,7 +108,7 @@ class TestResourceSharing:
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project.id
         # Remove status from task_data as it will be passed separately
-        status = task_data.pop("status", "DEFINING")
+        task_data.pop("status", "DEFINING")
         task = task_repo.create(
             **task_data,
             specification=task_spec_doc,

@@ -114,7 +114,7 @@ class TestToolApprovalsRouterEndpoints:
         )
 
         with patch("devboard.api.routers.tool_approvals.get_approval_manager", return_value=mock_manager):
-            result = await respond_to_approval("test-789", decision)
+            await respond_to_approval("test-789", decision)
 
         call_args = mock_manager.respond_to_approval.call_args
         assert call_args[0][1].modified_args == {"file_path": "/safe.txt"}

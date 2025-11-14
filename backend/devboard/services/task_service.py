@@ -96,134 +96,69 @@ class TaskService:
 
         return task
 
-    @staticmethod
-    def can_transition_to_phase(task: Task, target_status: TaskStatus) -> tuple[bool, str]:
-        """Check if task can transition to target phase.
+    def transition_to_planning(self, task: Task) -> Task:
+        """Transition task from DEFINING to PLANNING status.
 
-        Validates that required content exists before allowing phase transition.
-        Each phase has specific prerequisites:
-        - PLANNING: Requires specification content
-        - IMPLEMENTING: Requires implementation plan
-        - REVIEWING: Implementation must be marked complete
-        - COMPLETE: All work must be finished
+        Creates implementation_plan document if needed and updates task status.
 
         Args:
-            task: The task to validate
-            target_status: The target status to transition to
+            task: Task to transition
 
         Returns:
-            Tuple of (can_transition, error_message)
-            - can_transition: True if transition is allowed
-            - error_message: Empty string if allowed, error description otherwise
+            Updated task instance
+
+        Raises:
+            ValueError: If task is not in DEFINING status or transition validation fails
         """
-        # DEFINING → PLANNING
-        if target_status == TaskStatus.PLANNING:
-            if not task.specification or not task.specification.content.strip():
-                return False, "Cannot transition to PLANNING without specification content"
-
-        # PLANNING → IMPLEMENTING
-        elif target_status == TaskStatus.IMPLEMENTING:
-            if not task.implementation_plan or not task.implementation_plan.content.strip():
-                return False, "Cannot transition to IMPLEMENTING without implementation plan"
-
-        # IMPLEMENTING → REVIEWING
-        elif target_status == TaskStatus.REVIEWING:
-            # Could add checks for implementation completion markers
-            # For now, allow transition if explicitly requested
-            pass
-
-        # REVIEWING → COMPLETE
-        elif target_status == TaskStatus.COMPLETE:
-            # Could add checks for review completion
-            # For now, allow transition if explicitly requested
-            pass
-
-        # DEFINING is initial state, always allowed
-        elif target_status == TaskStatus.DEFINING:
-            pass
-
-        return True, ""
-
-    @staticmethod
-    def get_finalization_prompt(target_status: TaskStatus) -> str:
-        """Get the finalization prompt for transitioning to a new phase.
-
-        Hardcoded for now, will be configurable in the future.
-
-        Args:
-            target_status: The target status being transitioned to
-
-        Returns:
-            Finalization prompt to send to current conversation
-        """
-        prompts = {
-            TaskStatus.PLANNING: "The specification phase is complete. Please provide a final summary of the task requirements and any important considerations for the planning phase.",
-            TaskStatus.IMPLEMENTING: "The planning phase is complete. Please provide a final summary of the implementation plan and any important notes for the implementation phase.",
-            TaskStatus.REVIEWING: "The implementation phase is complete. Please provide a final summary of what was implemented and any important notes for review.",
-            TaskStatus.COMPLETE: "The review phase is complete. Please provide a final summary of the task completion.",
-        }
-        return prompts.get(target_status, "This phase is complete. Please provide a final summary.")
-
-    def create_conversation_for_task_phase(
-        self,
-        task: Task,
-        new_status: TaskStatus,
-    ):
-        """Create conversation for task phase with appropriate agent config.
-
-        When transitioning from DEFINING to PLANNING, if the agent engine remains the same,
-        the current conversation is reused by updating its role and model instead of
-        archiving and creating a new one.
-
-        For other transitions, archives current conversation if exists, derives agent role
-        from status, gets effective config from AgentConfigService, and creates new
-        conversation with config snapshot.
-
-        Args:
-            task: The task transitioning phases
-            new_status: The new status being transitioned to
-
-        Returns:
-            Conversation instance for the phase (either updated or newly created)
-        """
-        # Get current conversation
-        current = self.conversation_repo.get_active_for_entity(ParentEntityType.TASK, task.id)
-
-        # Derive agent role from new task status
-        new_agent_role = self._get_agent_role_for_status(new_status)
-
-        # Get effective config for new role
-        new_agent_config = self.agent_config_service.get_agent_configuration(new_agent_role)
-        new_config = new_agent_config.config
-
-        # Check if we can reuse the conversation
-        # Reuse if: transitioning from DEFINING to PLANNING AND same engine
-        if (
-            current
-            and current.agent_role == AgentRoleType.TASK_SPECIFICATION
-            and new_agent_role == AgentRoleType.TASK_PLANNING
-            and current.engine == new_config.engine
-        ):
-            # Reuse conversation by updating role and model
-            return self.conversation_repo.update_role_and_model(
-                conversation=current,
-                agent_role=new_agent_role,
-                model_id=new_config.model_id,
+        # Verify current status
+        if task.status != TaskStatus.DEFINING:
+            raise ValueError(
+                f"Cannot transition to PLANNING: task {task.id} must be in DEFINING status, "
+                f"currently in {task.status.value}"
             )
 
-        # Archive current conversation if it exists
-        if current:
-            self.conversation_repo.archive(current.id)
+        # Validate transition
+        can_transition, error_msg = task.can_transition_to_phase(TaskStatus.PLANNING)
+        if not can_transition:
+            raise ValueError(f"Cannot transition task {task.id} to PLANNING: {error_msg}")
 
-        # Create new conversation with config snapshot (external_session_id will be set later if needed)
-        return self.conversation_repo.create(
-            parent_entity_type=ParentEntityType.TASK,
-            parent_entity_id=task.id,
-            agent_role=new_agent_role,
-            engine=new_config.engine,
-            model_id=new_config.model_id,
-            external_session_id=None,
-        )
+        # Create implementation_plan document if needed
+        if not task.implementation_plan:
+            implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+            task.implementation_plan_id = implementation_plan_doc.id
+            task.implementation_plan = implementation_plan_doc
+
+        # Update task status
+        task.status = TaskStatus.PLANNING
+        return self.task_repo.update(task)
+
+    def transition_to_implementing(self, task: Task) -> Task:
+        """Transition task from PLANNING to IMPLEMENTING status.
+
+        Args:
+            task: Task to transition
+
+        Returns:
+            Updated task instance
+
+        Raises:
+            ValueError: If task is not in PLANNING status or transition validation fails
+        """
+        # Verify current status
+        if task.status != TaskStatus.PLANNING:
+            raise ValueError(
+                f"Cannot transition to IMPLEMENTING: task {task.id} must be in PLANNING status, "
+                f"currently in {task.status.value}"
+            )
+
+        # Validate transition
+        can_transition, error_msg = task.can_transition_to_phase(TaskStatus.IMPLEMENTING)
+        if not can_transition:
+            raise ValueError(f"Cannot transition task {task.id} to IMPLEMENTING: {error_msg}")
+
+        # Update task status
+        task.status = TaskStatus.IMPLEMENTING
+        return self.task_repo.update(task)
 
     @staticmethod
     def _get_agent_role_for_status(status: TaskStatus) -> AgentRoleType:

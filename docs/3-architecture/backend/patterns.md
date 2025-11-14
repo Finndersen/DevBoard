@@ -97,14 +97,23 @@ Services raise specific exceptions (e.g., `DocumentConflictError`), routers conv
 
 `StreamingResponse` with NDJSON for real-time event streaming.
 
-**Implementation**:
-```python
-async def event_generator():
-    for event in agent.stream_events():
-        yield event.model_dump_json() + "\n"
+**Helper Function**: `stream_conversation_events()` in `backend/devboard/api/streaming.py` encapsulates the streaming pattern:
 
-return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+```python
+from devboard.api.streaming import stream_conversation_events
+
+# Simple usage - just pass the event iterator
+return stream_conversation_events(
+    conversation_service.stream_events_for_message_or_approval(message)
+)
 ```
+
+**Implementation Details**:
+- Takes `AsyncIterator[ConversationEvent]` as input
+- Returns `StreamingResponse` with NDJSON format
+- Automatically handles JSON serialization and newline delimiters
+- Media type: `text/plain` (NDJSON)
+- Used by all conversation streaming endpoints (`/messages/stream`, `/approve-tools/stream`, `/workflow-action`)
 
 ## Configuration Management
 

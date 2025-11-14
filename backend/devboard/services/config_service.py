@@ -5,7 +5,8 @@ import os
 from typing import Any, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
-from pydantic.fields import FieldInfo, PydanticUndefined
+from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 from devboard.config.base import BaseConfig, ConfigValidationResult
 from devboard.config.registry import config_schema_registry

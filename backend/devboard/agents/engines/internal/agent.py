@@ -164,15 +164,15 @@ class InternalAgent(BaseAgent):
                         tool_args=tool_call.args if tool_call.args else None,
                         timestamp=timestamp,
                     )
-            elif isinstance(self.last_run_result.output, str):
+            elif isinstance(result.output, str):
                 # Text response
                 yield TextMessage(
                     role=MessageRole.AGENT,
-                    text_content=self.last_run_result.output,
+                    text_content=result.output,
                     timestamp=timestamp,
                 )
             else:
-                raise ValueError(f"Unexpected agent result output: {self.last_run_result.output}")
+                raise ValueError(f"Unexpected agent result output: {result.output}")
 
         # Ignore other event types:
         # - PartStartEvent, PartDeltaEvent: For future real-time streaming

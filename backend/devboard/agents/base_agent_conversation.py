@@ -28,6 +28,9 @@ class BaseAgentConversationService(ABC):
     Attributes:
         conversation: The conversation instance this service manages
         role: The Role defining agent behavior
+        conversation_repository: Repository for conversation operations
+
+    TODO: Might make sense to split up the message sending and event retrieval into separate classes?
     """
 
     def __init__(

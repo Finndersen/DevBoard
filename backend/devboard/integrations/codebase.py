@@ -177,29 +177,29 @@ class CodebaseIntegration:
         Returns:
             List of matching lines from ripgrep output
         TODO: Output appears to repeat the file path multiple times, e.g.:
-        backend/devboard/services/prompt_action_service.py-8-
-        backend/devboard/services/prompt_action_service.py-9-
-        backend/devboard/services/prompt_action_service.py:10:class PromptActionNotFoundError(Exception):
-        backend/devboard/services/prompt_action_service.py-11-    \"\"\"Raised when a requested prompt action key does not exist.\"\"\"
-        backend/devboard/services/prompt_action_service.py-12-
-        backend/devboard/services/prompt_action_service.py-13-    pass
-        backend/devboard/services/prompt_action_service.py-14-
-        backend/devboard/services/prompt_action_service.py-15-
-        backend/devboard/services/prompt_action_service.py:16:class PromptActionService:
-        backend/devboard/services/prompt_action_service.py-17-    \"\"\"Service for managing and executing prompt actions.
-        backend/devboard/services/prompt_action_service.py-18-
-        backend/devboard/services/prompt_action_service.py-19-    Prompt actions are reusable, named operations that send predefined prompts
-        backend/devboard/services/prompt_action_service.py-20-    to agent conversations. This service handles action lookup and execution.
-        backend/devboard/services/prompt_action_service.py-21-    \"\"\"
+        backend/devboard/services/workflow_action_service.py-8-
+        backend/devboard/services/workflow_action_service.py-9-
+        backend/devboard/services/workflow_action_service.py:10:class PromptActionNotFoundError(Exception):
+        backend/devboard/services/workflow_action_service.py-11-    \"\"\"Raised when a requested prompt action key does not exist.\"\"\"
+        backend/devboard/services/workflow_action_service.py-12-
+        backend/devboard/services/workflow_action_service.py-13-    pass
+        backend/devboard/services/workflow_action_service.py-14-
+        backend/devboard/services/workflow_action_service.py-15-
+        backend/devboard/services/workflow_action_service.py:16:class PromptActionService:
+        backend/devboard/services/workflow_action_service.py-17-    \"\"\"Service for managing and executing prompt actions.
+        backend/devboard/services/workflow_action_service.py-18-
+        backend/devboard/services/workflow_action_service.py-19-    Prompt actions are reusable, named operations that send predefined prompts
+        backend/devboard/services/workflow_action_service.py-20-    to agent conversations. This service handles action lookup and execution.
+        backend/devboard/services/workflow_action_service.py-21-    \"\"\"
         --
-        backend/devboard/agents/prompt_actions.py-11-
-        backend/devboard/agents/prompt_actions.py-12-@dataclass(frozen=True)
-        backend/devboard/agents/prompt_actions.py:13:class PromptAction:
-        backend/devboard/agents/prompt_actions.py-14-    \"\"\"A reusable prompt action that can be triggered in conversations.
-        backend/devboard/agents/prompt_actions.py-15-
-        backend/devboard/agents/prompt_actions.py-16-    Attributes:
-        backend/devboard/agents/prompt_actions.py-17-        key: Unique identifier for the action (e.g., \"task.create_implementation_plan\")
-        backend/devboard/agents/prompt_actions.py-18-        prompt_template: The prompt text to send to the agent
+        backend/devboard/agents/base.py-11-
+        backend/devboard/agents/base.py-12-@dataclass(frozen=True)
+        backend/devboard/agents/base.py:13:class PromptAction:
+        backend/devboard/agents/base.py-14-    \"\"\"A reusable prompt action that can be triggered in conversations.
+        backend/devboard/agents/base.py-15-
+        backend/devboard/agents/base.py-16-    Attributes:
+        backend/devboard/agents/base.py-17-        key: Unique identifier for the action (e.g., \"task.create_implementation_plan\")
+        backend/devboard/agents/base.py-18-        prompt_template: The prompt text to send to the agent
         """
         cmd = ["rg", "--line-number"]
 

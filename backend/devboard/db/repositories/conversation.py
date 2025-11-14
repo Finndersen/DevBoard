@@ -2,13 +2,19 @@
 
 import datetime
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage
 from sqlalchemy import delete, select
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
+
+
+class NoActiveConversationError(Exception):
+    """Raised when no active conversation exists for an entity."""
+
+    pass
 
 
 class ConversationRepository(BaseRepository[Conversation]):
@@ -24,18 +30,21 @@ class ConversationRepository(BaseRepository[Conversation]):
         self,
         entity_type: ParentEntityType,
         entity_id: int,
-    ) -> Conversation | None:
+    ) -> Conversation:
         """Get the currently active conversation for an entity.
 
         For task lifecycle management - returns the active conversation for the
-        current phase. Returns None if no active conversation exists.
+        current phase.
 
         Args:
             entity_type: Type of parent entity (PROJECT, TASK, CODEBASE)
             entity_id: ID of parent entity
 
         Returns:
-            Active Conversation or None
+            Active Conversation
+
+        Raises:
+            NoActiveConversationError: If no active conversation exists for the entity
         """
         stmt = (
             select(Conversation)
@@ -47,7 +56,10 @@ class ConversationRepository(BaseRepository[Conversation]):
             )
             .order_by(Conversation.created_at.desc())
         )
-        return self.db.execute(stmt).scalar_one_or_none()
+        conversation = self.db.execute(stmt).scalar_one_or_none()
+        if not conversation:
+            raise NoActiveConversationError(f"No active conversation found for {entity_type.value} with id {entity_id}")
+        return conversation
 
     def create(
         self,
@@ -134,30 +146,6 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
-    def get_active_for_entity(
-        self,
-        parent_type: ParentEntityType,
-        parent_id: int,
-    ) -> Conversation | None:
-        """Get active conversation for an entity (alias for get_active_conversation_for_entity).
-
-        Args:
-            parent_type: Type of parent entity
-            parent_id: ID of parent entity
-
-        Returns:
-            Active Conversation or None
-        """
-        return self.get_active_conversation_for_entity(parent_type, parent_id)
-
-    def archive(self, conversation_id: int) -> None:
-        """Archive a conversation (alias for archive_conversation).
-
-        Args:
-            conversation_id: ID of conversation to archive
-        """
-        self.archive_conversation(conversation_id)
-
     def archive_conversation(self, conversation_id: int) -> None:
         """Archive a conversation by setting is_active=False.
 
@@ -238,15 +226,3 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
 
         return self.db.execute(stmt).rowcount
-
-    def convert_messages_to_pydantic(self, message_records: list[ConversationMessage]) -> list[ModelMessage]:
-        """Extract PydanticAI message history from database records."""
-        # Extract pydantic_content from each record
-        serialized_messages = [record.pydantic_content for record in message_records]
-
-        if not serialized_messages:
-            return []
-
-        # Deserialize the messages
-        messages = ModelMessagesTypeAdapter.validate_python(serialized_messages)
-        return messages

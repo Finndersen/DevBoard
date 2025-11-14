@@ -89,7 +89,7 @@ def describe_message(message: Message) -> str:
         cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else "N/A"
         return f"ResultMessage({status}, cost={cost}, turns={message.num_turns})"
 
-    elif StreamEvent and isinstance(message, StreamEvent):
+    elif isinstance(message, StreamEvent):
         event_type = message.event.get("type", "unknown")
         return f"StreamEvent(type={event_type})"
 

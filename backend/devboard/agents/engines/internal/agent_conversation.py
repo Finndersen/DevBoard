@@ -3,21 +3,18 @@
 from collections.abc import AsyncIterator
 
 import logfire
-from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ToolCallPart, ToolReturnPart
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
-from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
-from devboard.db.models import Conversation
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
 from devboard.db.models.messages import MessageType
-from devboard.db.repositories.conversation import ConversationRepository
 
 
 class PydanticAIConversationService(BaseAgentConversationService):
@@ -31,21 +28,6 @@ class PydanticAIConversationService(BaseAgentConversationService):
         role: The Role defining agent behavior
         conversation_repo: Repository for database operations
     """
-
-    def __init__(
-        self,
-        conversation: Conversation,
-        role: Role,
-        conversation_repository: ConversationRepository,
-    ):
-        """Initialize PydanticAI conversation service.
-
-        Args:
-            conversation: The conversation instance to manage
-            role: The Role defining agent behavior
-            conversation_repository: Repository for conversation database operations
-        """
-        super().__init__(conversation, role, conversation_repository)
 
     @property
     def conversation_id(self) -> int:
@@ -87,7 +69,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
                     existing_messages = existing_messages[:-delete_count]
                     logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
 
-            message_history = self.conversation_repo.convert_messages_to_pydantic(existing_messages)
+            message_history = self.convert_messages_to_pydantic(existing_messages)
 
             # Create agent with history and deps
             agent = self._get_agent(conversation_history=message_history)
@@ -128,6 +110,19 @@ class PydanticAIConversationService(BaseAgentConversationService):
         for message in new_messages:
             saved_messages.append(self.conversation_repo.create_message(self.conversation.id, message))
         return saved_messages
+
+    @staticmethod
+    def convert_messages_to_pydantic(message_records: list[DbConversationMessage]) -> list[ModelMessage]:
+        """Extract PydanticAI message history from database records."""
+        # Extract pydantic_content from each record
+        serialized_messages = [record.pydantic_content for record in message_records]
+
+        if not serialized_messages:
+            return []
+
+        # Deserialize the messages
+        messages = ModelMessagesTypeAdapter.validate_python(serialized_messages)
+        return messages
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all messages for the PydanticAI conversation.
@@ -180,7 +175,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
             )
         elif msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_RESULT, MessageType.STRUCTURED_RESPONSE):
             # For messages containing tool calls/results, we need to parse the PydanticAI message
-            pydantic_msg = self.conversation_repo.convert_messages_to_pydantic([msg])[0]
+            pydantic_msg = self.convert_messages_to_pydantic([msg])[0]
             # Extract parts from the message
             for part in pydantic_msg.parts:
                 if isinstance(part, ToolCallPart):

@@ -140,7 +140,7 @@ class TestConcurrentExecution:
         assert client_with_tools._tool_execution_queue.qsize() == 3
 
         # Wait for all executions to complete
-        results = await asyncio.gather(*[future for future in client_with_tools._tool_execution_cache.values()])
+        results = await asyncio.gather(*list(client_with_tools._tool_execution_cache.values()))
         assert len(results) == 3
 
     @pytest.mark.asyncio

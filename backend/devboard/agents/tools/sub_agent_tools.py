@@ -1,18 +1,13 @@
-from typing import TYPE_CHECKING
-
 from pydantic_ai import Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code import ClaudeCodeAgent
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
 from devboard.agents.roles.types import AgentRoleType
-
-# Import only for type checking to avoid circular dependency
-if TYPE_CHECKING:
-    from devboard.agents.agent_config_service import AgentConfigService
-    from devboard.db.models.codebase import Codebase
+from devboard.db.models.codebase import Codebase
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
 Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
@@ -21,8 +16,8 @@ Query: {query}"""
 
 
 def create_codebase_investigation_tool(
-    codebase: "Codebase",
-    agent_config_service: "AgentConfigService",
+    codebase: Codebase,
+    agent_config_service: AgentConfigService,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
 

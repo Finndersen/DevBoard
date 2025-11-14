@@ -166,10 +166,48 @@ Agents return event streams rather than single responses, providing complete con
 - ToolCall: Agent's request to execute a tool (InternalAgent)
 - ToolResult: Execution result from completed tool call (InternalAgent)
 - ToolCallRequest: Virtual tool call requiring approval (ClaudeCodeAgent)
+- SystemEvent: System-level events like task state transitions
 
 **Event Parsing**: Each agent implementation converts its native format to ConversationEvents internally
 
 **Streaming Support**: Both synchronous (`run()`) and streaming (`stream_events()`) execution modes
+
+## Workflow Actions
+
+Workflow actions are reusable, named operations that orchestrate task state transitions with agent interactions. They combine business logic (state validation, conversation management) with agent prompts to guide users through task workflows.
+
+**Location**: `backend/devboard/workflow_actions/`
+
+**Key Concepts**:
+- **WorkflowAction Base Class**: Abstract class defining `run()` method that returns `AsyncIterator[ConversationEvent]`
+- **TaskWorkflowAction**: Specialized workflow action for task-related operations, includes task service and conversation management
+- **Action Registry**: Lookup actions by string key (e.g., `task.create_implementation_plan`)
+
+**Implemented Actions**:
+
+**CreateImplementationPlanAction** (`task.create_implementation_plan`):
+- Transitions task from DEFINING → PLANNING
+- Reuses conversation if same engine, otherwise creates new one
+- Emits SystemEvent with task update
+- Streams agent's implementation plan generation
+
+**BeginImplementationAction** (`task.begin_implementation`):
+- Transitions task from PLANNING → IMPLEMENTING
+- Always creates new conversation for clean implementation context
+- Emits SystemEvent with task update
+- Streams agent's implementation work
+
+**Execution Flow**:
+1. Frontend calls `/api/conversations/{id}/workflow-action` with action key
+2. Router looks up action class in registry
+3. Router instantiates action with required dependencies (task, services, repos)
+4. Router streams events from `action.run()` to frontend via NDJSON
+5. Frontend processes events (system events for UI updates, agent messages for display)
+
+**Conversation Management**:
+- Actions can reuse conversations (DEFINING → PLANNING) to maintain context
+- Actions can replace conversations (PLANNING → IMPLEMENTING) for clean separation
+- Conversation reuse decision based on engine compatibility and phase requirements
 
 ## Implementation Reference
 
@@ -177,10 +215,14 @@ Agents return event streams rather than single responses, providing complete con
 - `backend/devboard/agents/base_agent.py`: Abstract base class
 - `backend/devboard/agents/base_agent_conversation.py`: Conversation service base
 - `backend/devboard/agents/agent_config_service.py`: Agent configuration and engine selection
-- `backend/devboard/agents/events.py`: Event type definitions
+- `backend/devboard/agents/events.py`: Event type definitions (ConversationMessage, ToolCall, ToolResult, ToolCallRequest, SystemEvent)
 - `backend/devboard/agents/language_models.py`: Multi-provider LLM management
 - `backend/devboard/agents/tools.py`: Tool definitions
-- `backend/devboard/agents/prompt_actions.py`: Prompt action handling
+
+**Workflow Actions**:
+- `backend/devboard/workflow_actions/base.py`: Base WorkflowAction class
+- `backend/devboard/workflow_actions/task_workflows.py`: Task workflow actions (CreateImplementationPlanAction, BeginImplementationAction)
+- `backend/devboard/workflow_actions/registry.py`: Workflow action registry for lookup by key
 
 **Agent Engines**:
 - `backend/devboard/agents/engines/agent_engines.py`: Engine registry

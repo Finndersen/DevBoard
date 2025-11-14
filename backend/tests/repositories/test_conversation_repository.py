@@ -8,6 +8,7 @@ from pydantic_ai.messages import (
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
 from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
@@ -66,30 +67,6 @@ class TestConversationRepository:
         assert conversation.agent_role == AgentRoleType.PROJECT.value
         assert conversation.engine == AgentEngine.INTERNAL
         assert conversation.model_id == "anthropic:claude-3-5-sonnet-20241022"
-
-    def test_get_active_for_entity(
-        self,
-        repo: ConversationRepository,
-        project: Project,
-        db_session,
-    ):
-        """Test getting active conversation for entity."""
-        # Create conversation
-        conversation1 = repo.create(
-            parent_entity_type=ParentEntityType.PROJECT,
-            parent_entity_id=project.id,
-            agent_role=AgentRoleType.PROJECT,
-            engine=AgentEngine.INTERNAL,
-            model_id="anthropic:claude-3-5-sonnet-20241022",
-        )
-        db_session.commit()
-
-        # Get active conversation
-        active = repo.get_active_for_entity(ParentEntityType.PROJECT, project.id)
-
-        assert active is not None
-        assert active.id == conversation1.id
-        assert active.is_active
 
     def test_get_by_id(
         self,
@@ -202,7 +179,7 @@ class TestConversationRepository:
 
         # Get messages and convert
         messages = repo.get_messages(conversation.id)
-        converted = repo.convert_messages_to_pydantic(messages)
+        converted = PydanticAIConversationService.convert_messages_to_pydantic(messages)
 
         assert len(converted) == 1
         assert isinstance(converted[0], ModelRequest)

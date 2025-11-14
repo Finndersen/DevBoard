@@ -118,9 +118,9 @@ class ToolApprovalManager:
             f"tool={tool_name}, pending={len(self._pending)})"
         )
 
+        # Block until response received or timeout
+        timeout_seconds = timeout if timeout is not None else self._default_timeout
         try:
-            # Block until response received or timeout
-            timeout_seconds = timeout if timeout is not None else self._default_timeout
             response = await asyncio.wait_for(response_queue.get(), timeout=timeout_seconds)
             logfire.info(
                 f"Tool approval received: {request_id} (approved={response.approved}, feedback={response.feedback})"
@@ -220,7 +220,7 @@ class ToolApprovalManager:
             ]
 
             for request_id in to_cancel:
-                request, queue = self._pending.pop(request_id)
+                _, queue = self._pending.pop(request_id)
                 # Send denial response to unblock any waiting tasks
                 try:
                     await asyncio.wait_for(

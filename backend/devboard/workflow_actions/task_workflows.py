@@ -1,0 +1,198 @@
+import datetime
+from collections.abc import AsyncIterator
+
+from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.db.models import ParentEntityType, Task
+from devboard.db.models.conversation import AgentRoleType
+from devboard.db.repositories import ConversationRepository
+from devboard.services.conversation_service import ConversationService
+from devboard.services.task_service import TaskService
+from devboard.workflow_actions.base import WorkflowAction
+
+
+class TaskWorkflowAction(WorkflowAction):
+    """Base class for workflow actions that operate on tasks.
+
+    Provides common functionality for task-related actions.
+
+    Subclasses should implement specific task operations like state transitions,
+    document generation, or other task-specific workflows.
+    """
+
+    def __init__(
+        self,
+        task: Task,
+        agent_conversation_service: BaseAgentConversationService,
+        task_service: TaskService,
+        conversation_repo: ConversationRepository,
+        agent_config_service: AgentConfigService,
+    ):
+        """Initialize the action with required services.
+
+        Args:
+            task: Task instance this workflow action operates on
+            agent_conversation_service: Service for agent conversation operations
+            task_service: Service for task operations
+            conversation_repo: Repository for conversation database operations
+            agent_config_service: Service for agent configuration
+        """
+        self.task = task
+        self.agent_conversation_service = agent_conversation_service
+        self.task_service = task_service
+        self.conversation_repo = conversation_repo
+        self.agent_config_service = agent_config_service
+        self.conversation_service = ConversationService(
+            conversation_repo=conversation_repo,
+            agent_config_service=agent_config_service,
+        )
+
+
+class CreateImplementationPlanAction(TaskWorkflowAction):
+    """Workflow action that transitions a task to PLANNING and generates an implementation plan.
+
+    This action:
+    1. Validates the task has a specification
+    2. Creates an implementation_plan document if needed
+    3. Updates task status to PLANNING
+    4. Reuses the conversation (if same engine) or creates new one for the planning phase
+    5. Emits a TASK_UPDATED SystemEvent
+    6. Streams the agent's implementation plan generation
+
+    Note: Conversation is reused from DEFINING→PLANNING to maintain specification context.
+    """
+
+    KEY = "task.create_implementation_plan"
+    PROMPT_TEMPLATE = (
+        "The task specification is complete. Your goal is now to create a detailed technical implementation plan."
+    )
+
+    @property
+    def key(self) -> str:
+        return self.KEY
+
+    @property
+    def description(self) -> str:
+        return "Generate a technical implementation plan from the task specification"
+
+    async def run(self) -> AsyncIterator[ConversationEvent]:
+        """Execute the action: transition to PLANNING and generate implementation plan.
+
+        Yields:
+            ConversationEvent objects including SystemEvent and agent messages
+
+        Raises:
+            ValueError: If task is not in DEFINING status or transition validation fails
+        """
+        # Transition task to PLANNING (validates status, creates implementation_plan doc, updates status)
+        self.task_service.transition_to_planning(self.task)
+
+        # Handle conversation: reuse if DEFINING→PLANNING with same engine, otherwise replace
+        current_conversation = self.conversation_repo.get_active_conversation_for_entity(
+            ParentEntityType.TASK, self.task.id
+        )
+        new_agent_role = AgentRoleType.TASK_PLANNING
+        agent_config = self.agent_config_service.get_agent_configuration(new_agent_role)
+
+        # Check if we can reuse the conversation when same engine
+        if current_conversation.engine == agent_config.config.engine:
+            # Reuse conversation by updating role and model
+            new_conversation = self.conversation_repo.update_role_and_model(
+                conversation=current_conversation,
+                agent_role=new_agent_role,
+                model_id=agent_config.config.model_id,
+            )
+        else:
+            # Replace: archive current and create new conversation
+            new_conversation = self.conversation_service.replace_active_conversation(
+                entity_type=ParentEntityType.TASK,
+                entity_id=self.task.id,
+                new_agent_role=new_agent_role,
+            )
+
+        # Emit SystemEvent for task update
+        yield SystemEvent(
+            event_type="system",
+            type=SystemEventType.TASK_UPDATED,
+            data={
+                "task_id": self.task.id,
+                "updated_fields": {
+                    "status": self.task.status.value,
+                    "conversation_id": new_conversation.id,
+                },
+            },
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        # Update agent conversation service to use new conversation
+        self.agent_conversation_service.conversation = new_conversation
+
+        # Stream agent prompt events
+        async for event in self.agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+            yield event
+
+
+class BeginImplementationAction(TaskWorkflowAction):
+    """Workflow action that transitions a task to IMPLEMENTING and begins implementation.
+
+    This action:
+    1. Validates the task has an implementation plan
+    2. Updates task status to IMPLEMENTING
+    3. Creates a new conversation for the implementation phase (archives planning conversation)
+    4. Emits a TASK_UPDATED SystemEvent
+    5. Streams the agent's implementation work
+
+    Note: Always creates a new conversation to provide clean context for implementation.
+    """
+
+    KEY = "task.begin_implementation"
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to write the code to fulfill the plan."
+
+    @property
+    def key(self) -> str:
+        return self.KEY
+
+    @property
+    def description(self) -> str:
+        return "Start implementing the approved plan"
+
+    async def run(self) -> AsyncIterator[ConversationEvent]:
+        """Execute the action: transition to IMPLEMENTING and begin implementation.
+
+        Yields:
+            ConversationEvent objects including SystemEvent and agent messages
+
+        Raises:
+            ValueError: If task is not in PLANNING status or transition validation fails
+        """
+        # Transition task to IMPLEMENTING (validates status, updates status)
+        self.task_service.transition_to_implementing(self.task)
+
+        # Always create new conversation for implementation (clean context)
+        new_conversation = self.conversation_service.replace_active_conversation(
+            entity_type=ParentEntityType.TASK,
+            entity_id=self.task.id,
+            new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
+        )
+
+        # Emit SystemEvent for task update
+        yield SystemEvent(
+            event_type="system",
+            type=SystemEventType.TASK_UPDATED,
+            data={
+                "task_id": self.task.id,
+                "updated_fields": {
+                    "status": self.task.status.value,
+                    "conversation_id": new_conversation.id,
+                },
+            },
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        # Update agent conversation service to use new conversation
+        self.agent_conversation_service.conversation = new_conversation
+
+        # Stream agent prompt events
+        async for event in self.agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+            yield event

@@ -14,12 +14,13 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
 )
+from pydantic_ai import Tool
+
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
-from pydantic_ai import Tool
 
 
 class MockRole(Role):

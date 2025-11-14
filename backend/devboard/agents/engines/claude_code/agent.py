@@ -225,7 +225,7 @@ class ClaudeCodeAgent(BaseAgent):
                             # Join text blocks from the content
                             text_parts = []
                             for item in content_block.content:
-                                if isinstance(item, dict) and item.get("type") == "text":
+                                if item.get("type") == "text":
                                     text_parts.append(item.get("text", ""))
                             result_str = "\n".join(text_parts)
                         elif content_block.content is None:
@@ -400,7 +400,7 @@ class ClaudeCodeAgent(BaseAgent):
             Formatted tool result message with XML markers
         """
         # Get string value from enum
-        outcome_str = outcome.value if isinstance(outcome, ToolCallOutcome) else outcome
+        outcome_str = outcome.value
         return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome_str}">\n{content}\n</tool_call_result>'
 
     def _parse_claude_message_text(

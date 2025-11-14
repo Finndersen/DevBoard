@@ -63,10 +63,10 @@ Multi-source configuration resolution (environment > database > defaults). Pydan
 
 - **resource_service.py**: Context resource management, URI-based identification, resource sharing
 - **template_service.py**: Document template loading, variable interpolation
-- **prompt_action_service.py**: Prompt action handling and execution
+- **conversation_service.py**: Conversation lifecycle management, conversation replacement
 - **integration_service.py**: External integration management
 - **project_service.py**: Project business logic
-- **task_service.py**: Task business logic
+- **task_service.py**: Task business logic including state transition methods (`transition_to_planning()`, `transition_to_implementing()`)
 - **codebase_investigation.py**: Codebase analysis and investigation
 
 ## Repositories
@@ -113,7 +113,7 @@ AI-powered agent system with role-based architecture and pluggable execution eng
 
 **Tools** (`tools.py`): Engine-agnostic tool definitions converted for each execution engine.
 
-**Prompt Actions** (`prompt_actions.py`): Prompt action handling and execution.
+**Workflow Actions** (`workflow_actions/`): Reusable, named operations combining task state transitions with agent interactions. Base class in `base.py`, task-specific actions in `task_workflows.py`, registry in `registry.py`.
 
 ### Agent Engines
 
