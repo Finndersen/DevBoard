@@ -78,17 +78,17 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
                 "updated_fields": {
                     "status": self.task.status.value,
                     "conversation_id": new_conversation.id,
+                    "implementation_plan_id": self.task.implementation_plan_id,
                 },
             },
             timestamp=datetime.datetime.now(datetime.UTC),
         )
 
-        # Update agent conversation service to use new conversation
-        # TODO: This is dodgy and should be refactored
-        self.agent_conversation_service.conversation = new_conversation
+        # Create agent service for the new conversation with correct role
+        agent_conversation_service = self._create_agent_service_for_conversation(new_conversation)
 
         # Stream agent prompt events
-        async for event in self.agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+        async for event in agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
             yield event
 
 
@@ -149,10 +149,9 @@ class BeginImplementationAction(TaskWorkflowAction):
             timestamp=datetime.datetime.now(datetime.UTC),
         )
 
-        # Update agent conversation service to use new conversation
-        # TODO: This is dodgy and should be refactored
-        self.agent_conversation_service.conversation = new_conversation
+        # Create agent service for the new conversation with correct role
+        agent_conversation_service = self._create_agent_service_for_conversation(new_conversation)
 
         # Stream agent prompt events
-        async for event in self.agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+        async for event in agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
             yield event

@@ -3,7 +3,7 @@
 from typing import ClassVar
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.config.base import BaseConfig
 
 

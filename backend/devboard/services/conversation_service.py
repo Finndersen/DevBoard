@@ -1,7 +1,7 @@
 """Service for managing conversation lifecycle and transitions."""
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories import ConversationRepository
 

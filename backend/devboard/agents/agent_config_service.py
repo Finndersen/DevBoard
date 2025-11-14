@@ -14,7 +14,7 @@ from devboard.agents.language_models import (
     LLMProvider,
     LLMRegistry,
 )
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.config.agent_config import AgentConfig
 from devboard.config.base import ConfigValidationResult
 from devboard.services.config_service import ConfigService

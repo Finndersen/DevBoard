@@ -11,8 +11,12 @@ from dataclasses import dataclass
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.events import ConversationEvent
-from devboard.db.models import Task
-from devboard.db.repositories import ConversationRepository
+from devboard.api.dependencies.factories import (
+    create_agent_conversation_service,
+    create_agent_role_for_conversation,
+)
+from devboard.db.models import Conversation, Task
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.task_service import TaskService
 
@@ -29,28 +33,59 @@ class TaskWorkflowAction(ABC):
     def __init__(
         self,
         task: Task,
-        agent_conversation_service: BaseAgentConversationService,
         task_service: TaskService,
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
+        document_repository: DocumentRepository,
     ):
         """Initialize the action with required services.
 
         Args:
             task: Task instance this workflow action operates on
-            agent_conversation_service: Service for agent conversation operations
             task_service: Service for task operations
             conversation_repo: Repository for conversation database operations
             agent_config_service: Service for agent configuration
+            document_repository: Repository for document database operations
         """
         self.task = task
-        self.agent_conversation_service = agent_conversation_service
         self.task_service = task_service
         self.conversation_repo = conversation_repo
         self.agent_config_service = agent_config_service
+        self.document_repository = document_repository
         self.conversation_service = ConversationService(
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
+        )
+
+    def _create_agent_service_for_conversation(self, conversation: Conversation) -> BaseAgentConversationService:
+        """Create a new agent service for the given conversation with appropriate role.
+
+        This factory method handles creating both the role and service instances
+        for a conversation, ensuring the role matches the conversation's agent_role field.
+
+        Args:
+            conversation: The conversation instance to create a service for
+
+        Returns:
+            BaseAgentConversationService instance configured with the correct role
+        """
+        # Get the parent entity (performs database query)
+        parent_entity = conversation.get_parent_entity()
+
+        # Create role using the conversation's parent entity
+        role = create_agent_role_for_conversation(
+            conversation=conversation,
+            parent_entity=parent_entity,
+            document_repo=self.document_repository,
+            agent_config_service=self.agent_config_service,
+        )
+
+        # Create service using the role
+        return create_agent_conversation_service(
+            conversation=conversation,
+            role=role,
+            parent_entity=parent_entity,
+            conversation_repo=self.conversation_repo,
         )
 
     @property
@@ -104,28 +139,28 @@ class PromptTemplateAction(TaskWorkflowAction):
     def __init__(
         self,
         task: Task,
-        agent_conversation_service: BaseAgentConversationService,
         task_service: TaskService,
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
+        document_repository: DocumentRepository,
         prompt_config: PromptTemplateActionConfig,
     ):
         """Initialize the action with required services and configuration.
 
         Args:
             task: Task instance this workflow action operates on
-            agent_conversation_service: Service for agent conversation operations
             task_service: Service for task operations
             conversation_repo: Repository for conversation database operations
             agent_config_service: Service for agent configuration
+            document_repository: Repository for document database operations
             prompt_config: Configuration defining the action's key, description, and prompt
         """
         super().__init__(
             task=task,
-            agent_conversation_service=agent_conversation_service,
             task_service=task_service,
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
+            document_repository=document_repository,
         )
         self.prompt_config = prompt_config
 
@@ -143,7 +178,14 @@ class PromptTemplateAction(TaskWorkflowAction):
         Yields:
             ConversationEvent objects from the agent's response
         """
-        async for event in self.agent_conversation_service.stream_events_for_message_or_approval(
+        # Get current active conversation and create service
+        from devboard.db.models import ParentEntityType
+
+        conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
+        agent_conversation_service = self._create_agent_service_for_conversation(conversation)
+
+        # Stream agent prompt events
+        async for event in agent_conversation_service.stream_events_for_message_or_approval(
             self.prompt_config.prompt_template
         ):
             yield event

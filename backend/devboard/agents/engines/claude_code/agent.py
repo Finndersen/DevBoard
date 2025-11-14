@@ -275,9 +275,11 @@ class ClaudeCodeAgent(BaseAgent):
 
         # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
+            # Capture the stream generator to ensure proper cleanup on exception
+            stream_generator = client.stream(user_query=current_message)
             try:
                 # Stream messages from the client
-                async for message in client.stream(user_query=current_message):
+                async for message in stream_generator:
                     if isinstance(message, ResultMessage):
                         # Do not process the ResultMessage since it just contains the content from the previous message
                         continue
@@ -297,6 +299,9 @@ class ClaudeCodeAgent(BaseAgent):
                 break
 
             except InvalidVirtualToolCallError as e:
+                # Explicitly close the generator to prevent context manager cleanup in wrong async context
+                await stream_generator.aclose()
+
                 # Validation failed during streaming - prepare retry message
                 if attempt < MAX_RETRY_ATTEMPTS:
                     # Format error message for retry

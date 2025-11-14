@@ -6,7 +6,7 @@ from pydantic_ai.messages import ModelMessage
 from sqlalchemy import delete, select
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
 

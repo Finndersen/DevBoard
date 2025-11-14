@@ -20,8 +20,7 @@ from sqlalchemy.orm import Session
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
-from devboard.agents.role_types import AgentRoleType
-from devboard.agents.roles.base import Role
+from devboard.agents.roles import AgentRoleType, Role
 from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
 )

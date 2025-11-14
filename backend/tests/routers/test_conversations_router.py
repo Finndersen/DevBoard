@@ -11,7 +11,7 @@ from starlette.testclient import TestClient
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQARole
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.main import app

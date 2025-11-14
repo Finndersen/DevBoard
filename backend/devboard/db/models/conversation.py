@@ -5,10 +5,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Index
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, object_session, relationship
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 
 from .base import Base
 
@@ -21,8 +21,23 @@ class ParentEntityType(StrEnum):
     CODEBASE = "codebase"
 
 
+class ParentEntityNotFoundError(ValueError):
+    """Raised when a conversation's parent entity is not found in the database."""
+
+    pass
+
+
+class InvalidParentEntityTypeError(ValueError):
+    """Raised when a conversation has an unrecognized parent entity type."""
+
+    pass
+
+
 if TYPE_CHECKING:
+    from .codebase import Codebase
     from .messages import ConversationMessage
+    from .project import Project
+    from .task import Task
 
 
 class Conversation(Base):
@@ -88,3 +103,42 @@ class Conversation(Base):
 
     # Index for efficiently querying active conversations
     __table_args__ = (Index("idx_active_conversations", "parent_entity_type", "parent_entity_id", "is_active"),)
+
+    def get_parent_entity(self) -> "Task | Project | Codebase":
+        """Get the parent entity (Task, Project, or Codebase) for this conversation.
+
+        Note: This method performs a database query using the conversation's SQLAlchemy session.
+        The method signature makes it explicit that a database operation is occurring.
+
+        Returns:
+            The parent entity instance (Task, Project, or Codebase)
+
+        Raises:
+            ParentEntityNotFoundError: If entity not found in database
+            InvalidParentEntityTypeError: If parent_entity_type is not recognized
+            RuntimeError: If conversation is not attached to a session
+        """
+        from .codebase import Codebase
+        from .project import Project
+        from .task import Task
+
+        session = object_session(self)
+        if session is None:
+            msg = "Conversation must be attached to a session to get parent entity"
+            raise RuntimeError(msg)
+
+        if self.parent_entity_type == ParentEntityType.TASK:
+            entity = session.get(Task, self.parent_entity_id)
+        elif self.parent_entity_type == ParentEntityType.PROJECT:
+            entity = session.get(Project, self.parent_entity_id)
+        elif self.parent_entity_type == ParentEntityType.CODEBASE:
+            entity = session.get(Codebase, self.parent_entity_id)
+        else:
+            msg = f"Unknown parent_entity_type: {self.parent_entity_type}"
+            raise InvalidParentEntityTypeError(msg)
+
+        if entity is None:
+            msg = f"{self.parent_entity_type.value.capitalize()} with id {self.parent_entity_id} not found"
+            raise ParentEntityNotFoundError(msg)
+
+        return entity

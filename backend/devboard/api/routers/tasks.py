@@ -8,10 +8,6 @@ from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.api.dependencies.entities import get_verified_task
-from devboard.api.dependencies.factories import (
-    create_agent_conversation_service,
-    create_agent_role_for_conversation,
-)
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
@@ -43,7 +39,6 @@ from devboard.db.repositories import (
     DocumentRepository,
     TaskRepository,
 )
-from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.services.resource_service import (
     ResourceService,
@@ -354,30 +349,19 @@ async def execute_workflow_action(
         HTTPException: 404 if action_key not found
         HTTPException: 400 if conversation not active
     """
-    # Get active conversation for the task
-    try:
-        conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
-    except NoActiveConversationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
     # Look up action class in registry
     action_class = workflow_action_registry.get(request.action_key)
     if not action_class:
         raise HTTPException(status_code=404, detail=f"Workflow action '{request.action_key}' not found")
 
-    # Create role using helper function
-    role = create_agent_role_for_conversation(conversation, task, document_repo, agent_config_service)
-
-    # Create service using helper function
-    agent_conversation_service = create_agent_conversation_service(conversation, role, task, conversation_repo)
-
     # Instantiate the task workflow action
+    # The action will create the agent service internally when needed
     action = action_class(
         task=task,
-        agent_conversation_service=agent_conversation_service,
         task_service=task_service,
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
+        document_repository=document_repo,
     )
 
     # Stream events from the action

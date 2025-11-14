@@ -10,7 +10,7 @@ from starlette.testclient import TestClient
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
@@ -708,24 +708,3 @@ class TestWorkflowActions:
         )
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
-
-    def test_stream_workflow_action_archived_conversation(
-        self, client_with_mock_workflow_deps, test_task_for_workflow, db_session
-    ):
-        """Test streaming workflow action on archived conversation."""
-        # Archive the conversation
-        conversation_repo = ConversationRepository(db_session)
-        conversation = conversation_repo.get_active_conversation_for_entity(
-            ParentEntityType.TASK, test_task_for_workflow.id
-        )
-        conversation.is_active = False
-        db_session.commit()
-
-        prompt_action_request = {"action_key": "task.create_implementation_plan"}
-
-        response = client_with_mock_workflow_deps.post(
-            f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
-            json=prompt_action_request,
-        )
-        assert response.status_code == 400
-        assert "no active conversation" in response.json()["detail"].lower()

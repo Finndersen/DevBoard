@@ -4,7 +4,7 @@ Handles project creation and conversation lifecycle management.
 Ensures proper agent configuration for project-level conversations.
 """
 
-from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.project import Project

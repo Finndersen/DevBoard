@@ -588,6 +588,77 @@ class TestStreamEventsRetryLogic:
         assert "Tool call validation failed after 3 attempts" in str(exc_info.value)
         assert call_count == 4  # Initial + 3 retries
 
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_generator_cleanup_on_validation_error(self, mock_client_class, agent_with_virtual_tool):
+        """Test that stream generator is properly closed when validation error occurs.
+
+        This test ensures that when InvalidVirtualToolCallError is raised, the generator
+        from client.stream() is explicitly closed via aclose() to prevent async context
+        manager cleanup errors (RuntimeError: exit cancel scope in different task).
+        """
+        # First call: invalid tool call to trigger validation error
+        invalid_tool_call = json.dumps(
+            {"type": "tool_call", "tool_name": "unknown_tool", "arguments": {"param": "value"}}
+        )
+        # Second call: valid tool call
+        valid_tool_call = json.dumps(
+            {
+                "type": "tool_call",
+                "tool_name": "edit_document",
+                "arguments": {"edits": [{"find": "old", "replace": "new"}]},
+            }
+        )
+
+        call_count = 0
+        generators_created = []
+
+        class MockAsyncGenerator:
+            """Mock async generator that tracks aclose() calls."""
+
+            def __init__(self, messages):
+                self.messages = messages
+                self.index = 0
+                self.closed = False
+                generators_created.append(self)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if self.index >= len(self.messages):
+                    raise StopAsyncIteration
+                message = self.messages[self.index]
+                self.index += 1
+                return message
+
+            async def aclose(self):
+                self.closed = True
+
+        def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return MockAsyncGenerator(create_mock_text_stream(invalid_tool_call))
+            return MockAsyncGenerator(create_mock_text_stream(valid_tool_call))
+
+        mock_client = AsyncMock()
+        mock_client.stream = mock_stream
+        mock_client_class.return_value = mock_client
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Verify aclose() was called on the first generator when validation error occurred
+        assert len(generators_created) == 2, "Should have created 2 generators (one for each attempt)"
+        assert generators_created[0].closed, "First generator aclose() was not called on validation error"
+        # Verify retry succeeded
+        assert call_count == 2
+        assert len(events) == 1
+        assert isinstance(events[0], ToolCallRequest)
+        assert events[0].tool_name == "edit_document"
+
 
 class TestStreamEventsEdgeCases:
     """Tests for edge cases and error conditions."""

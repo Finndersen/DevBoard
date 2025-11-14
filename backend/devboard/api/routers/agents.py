@@ -9,7 +9,7 @@ from devboard.agents.agent_config_service import (
     AvailableModelsByEngine,
 )
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.role_types import (
+from devboard.agents.roles import (
     AgentRoleType,
 )
 from devboard.api.dependencies.services import get_agent_config_service
