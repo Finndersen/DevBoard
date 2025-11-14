@@ -5,8 +5,9 @@
 help:		## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install:	## Install development dependencies
-	uv sync --extra dev
+install:	## Install development dependencies & setup dev environment
+	env -u PIP_INDEX_URL -u UV_DEFAULT_INDEX uv sync --extra dev
+	pre-commit install
 
 format:		## Format code with ruff
 	ruff format .
