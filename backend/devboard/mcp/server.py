@@ -4,58 +4,194 @@ This module provides an MCP server that can be accessed over HTTP,
 allowing AI clients to interact with DevBoard through the MCP protocol.
 """
 
-from typing import Any
+from typing import Any, TypedDict
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
+
+from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
+from devboard.db.repositories import CodebaseRepository, ProjectRepository, TaskRepository
+from devboard.mcp.dependencies import create_agent_config_service, get_mcp_db_session
 
 # Initialize MCP server
-mcp = FastMCP(
-    name="DevBoard MCP Server",
-    instructions="DevBoard developer command centre MCP server providing tools for project and task management",
-)
+mcp = FastMCP("DevBoard MCP Server")
 
 
 # ============================================================================
-# Tool Scaffolding - Add your MCP tools below
+# Return Type Structures
 # ============================================================================
 
 
-@mcp.tool()
-async def get_projects() -> dict[str, Any]:
+class ProjectInfo(TypedDict):
+    """Project information structure."""
+
+    id: int
+    name: str
+    description: str
+    created_at: str
+
+
+class TaskInfo(TypedDict):
+    """Task information structure."""
+
+    id: int
+    title: str
+    status: str
+    project_id: int
+    codebase_id: int | None
+    remote_task_id: str | None
+    created_at: str
+
+
+class CodebaseInfo(TypedDict):
+    """Codebase information structure."""
+
+    name: str
+    description: str | None
+    local_path: str
+
+
+# ============================================================================
+# Tool Implementations
+# ============================================================================
+
+
+@mcp.tool
+async def get_projects() -> list[ProjectInfo]:
     """Get a list of all projects in DevBoard.
 
     Returns:
-        A dictionary containing the list of projects.
+        List of projects with their details.
+        Each project includes: id, name, description, created_at.
     """
-    # TODO: Implement actual database query to fetch projects
-    # For now, return a placeholder response
-    return {
-        "projects": [],
-        "count": 0,
-        "message": "Projects endpoint - to be implemented with database access",
-    }
+    with get_mcp_db_session() as db:
+        projects = ProjectRepository(db).get_all()
+
+        return [
+            {
+                "id": project.id,
+                "name": project.name,
+                "description": project.description,
+                "created_at": project.created_at.isoformat(),
+            }
+            for project in projects
+        ]
 
 
-@mcp.tool()
-async def get_tasks(project_id: str | None = None) -> dict[str, Any]:
-    """Get a list of tasks, optionally filtered by project.
+@mcp.tool
+async def get_codebases() -> list[CodebaseInfo]:
+    """Get a list of all codebases in DevBoard.
 
-    Args:
-        project_id: Optional project ID to filter tasks by.
+    This is useful for discovering available codebases before using investigate_codebase.
 
     Returns:
-        A dictionary containing the list of tasks.
+        List of codebases with their details.
+        Each codebase includes: name, description, local_path.
     """
-    # TODO: Implement actual database query to fetch tasks
-    return {
-        "tasks": [],
-        "count": 0,
-        "project_id": project_id,
-        "message": "Tasks endpoint - to be implemented with database access",
-    }
+    with get_mcp_db_session() as db:
+        codebases = CodebaseRepository(db).get_all()
+
+        return [
+            {
+                "name": codebase.name,
+                "description": codebase.description,
+                "local_path": codebase.local_path,
+            }
+            for codebase in codebases
+        ]
 
 
-@mcp.tool()
+@mcp.tool
+async def get_tasks(project_id: int) -> list[TaskInfo]:
+    """Get a list of tasks for a specific project.
+
+    Args:
+        project_id: Project ID to get tasks for.
+
+    Returns:
+        List of tasks with their details.
+        Each task includes: id, title, status, project_id, codebase_id,
+        remote_task_id, created_at.
+    """
+    with get_mcp_db_session() as db:
+        tasks = TaskRepository(db).get_for_project(project_id)
+
+        return [
+            {
+                "id": task.id,
+                "title": task.title,
+                "status": task.status.value,
+                "project_id": task.project_id,
+                "codebase_id": task.codebase_id,
+                "remote_task_id": task.remote_task_id,
+                "created_at": task.created_at.isoformat(),
+            }
+            for task in tasks
+        ]
+
+
+@mcp.tool
+async def investigate_codebase(codebase_name: str, query: str) -> str:
+    """Investigate a codebase to answer questions about implementation details, architecture, and code organization.
+
+    This tool uses a specialized investigation agent to analyze the codebase and provide
+    comprehensive answers with file paths, code references, and implementation details.
+
+    Use this tool when you need detailed information about:
+    - How specific features are implemented
+    - Where certain functionality is located in the codebase
+    - Architectural patterns and structure
+    - Specific functions, classes, or modules
+    - How workflows or processes work
+    - Code organization and conventions
+
+    Be specific about what you want to know and what level of detail is required.
+
+    Note: Use get_codebases() to discover available codebase names if you don't know them.
+
+    Examples:
+    - investigate_codebase("DevBoard", "How is the agent system architecture organized?")
+    - investigate_codebase("DevBoard", "Where is TaskPlanningRole implemented and what does it do?")
+    - investigate_codebase("DevBoard", "What are the main database models and their relationships?")
+
+    Args:
+        codebase_name: The name of the codebase to investigate. Call get_codebases() to see available options.
+        query: Specific question about the codebase. Be as detailed as possible
+               about what you want to know.
+
+    Returns:
+        Comprehensive answer with file paths, code references, and implementation details.
+    """
+    try:
+        with get_mcp_db_session() as db:
+            # Get the codebase by name
+            codebase = CodebaseRepository(db).get_by_name(codebase_name)
+
+            if codebase is None:
+                return f"Error: Codebase '{codebase_name}' not found"
+
+            # Get agent config service
+            agent_config_service = create_agent_config_service(db)
+
+            # Create and use the investigation tool
+            investigation_tool = create_codebase_investigation_tool(
+                codebase=codebase,
+                agent_config_service=agent_config_service,
+            )
+
+            # Run the investigation
+            result = await investigation_tool.function(query)
+            return result
+
+    except Exception as e:
+        return f"Error: Failed to investigate codebase: {str(e)}"
+
+
+# ============================================================================
+# TODO: Additional tools to be implemented
+# ============================================================================
+
+
+@mcp.tool
 async def create_task(
     title: str,
     description: str,
@@ -83,7 +219,7 @@ async def create_task(
     }
 
 
-@mcp.tool()
+@mcp.tool
 async def get_codebase_info(codebase_id: str) -> dict[str, Any]:
     """Get information about a codebase.
 

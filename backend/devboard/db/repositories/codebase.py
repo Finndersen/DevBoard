@@ -21,6 +21,18 @@ class CodebaseRepository(BaseRepository[Codebase]):
         stmt = select(Codebase).where(Codebase.id == codebase_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def get_by_name(self, name: str) -> Codebase | None:
+        """Get a codebase by its name.
+
+        Args:
+            name: The codebase name to search for
+
+        Returns:
+            Codebase instance if found, None otherwise
+        """
+        stmt = select(Codebase).where(Codebase.name == name)
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def get_all(self) -> list[Codebase]:
         """Get all codebases.
 

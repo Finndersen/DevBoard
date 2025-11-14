@@ -29,6 +29,7 @@ app = FastAPI(
     title="DevBoard API",
     description="AI-powered developer command centre",
     version="0.1.0",
+    lifespan=mcp_app.lifespan,  # Pass MCP lifespan for proper initialization
 )
 
 setup_logfire(app)
