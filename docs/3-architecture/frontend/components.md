@@ -76,6 +76,30 @@ Expandable card displaying tool invocation with arguments and results.
 - **PendingMessage** (`PendingMessage.tsx`): Pending/sending state with retry capability
 - **AgentReasoning** (`AgentReasoning.tsx`): Agent reasoning/thinking display
 
+### Event Handler System
+
+**ConversationEventHandlerProvider** (`ConversationEventHandlerProvider.tsx`): React Context provider that maintains event handler registries for processing conversation events with side effects. Enables decoupled event handling separate from UI rendering.
+
+**Registries**:
+- Tool Result Handlers: React to successful tool executions (document edits, workflow actions, etc.)
+- System Event Handlers: React to system-level events (task updates, conversation changes, workflow transitions)
+
+**Architecture**: Provider wraps parent views (TaskDetail, ProjectDetail) at TabContentContainer level, ensuring single registry per conversation context. Child components register handlers via hooks that execute automatically when matching events stream through ConversationChat.
+
+**Hooks** (`hooks/useConversationEventHandlers.ts`):
+- `useToolResultHandler(matcher, handler)`: Register handlers for specific tool completions. Matcher receives tool name and event, handler receives ToolResult. Error results automatically filtered out.
+- `useSystemEventHandler(matcher, handler)`: Register handlers for system events. Matcher receives SystemEvent, handler processes data (e.g., refetch on task status change).
+- `useEventHandlerRegistryForStream()`: Internal hook for ConversationChat to retrieve registry for stream processor integration.
+
+**Use Cases**:
+- Refetch documents after agent edits them via MCP tools
+- Update UI state when tasks transition between workflow states
+- Refresh entity data when workflow actions complete (implementation plan creation, status transitions)
+- Coordinate multiple component updates from single event (task status + conversation ID + plan ID)
+- Switch to relevant tabs after tool execution (e.g., show Plan tab after plan update)
+
+**Pattern**: Components register handlers on mount, handlers execute when matching events stream, handlers auto-cleanup on unmount. Multiple handlers can match single event. Supports async handlers with Promise.all() execution.
+
 ## Approval System
 
 **Location**: `frontend/src/components/approvals/`

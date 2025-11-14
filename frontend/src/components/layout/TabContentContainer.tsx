@@ -58,7 +58,11 @@ export default function TabContentContainer() {
               <TaskDetail id={tab.entityId} />
             </ConversationEventHandlerProvider>
           )}
-          {tab.type === 'project' && <ProjectDetail id={tab.entityId} />}
+          {tab.type === 'project' && (
+            <ConversationEventHandlerProvider>
+              <ProjectDetail id={tab.entityId} />
+            </ConversationEventHandlerProvider>
+          )}
           {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
           {tab.type === 'settings' && <Settings />}
         </div>

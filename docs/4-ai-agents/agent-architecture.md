@@ -166,7 +166,9 @@ Agents return event streams rather than single responses, providing complete con
 - ToolCall: Agent's request to execute a tool (InternalAgent)
 - ToolResult: Execution result from completed tool call (InternalAgent)
 - ToolCallRequest: Virtual tool call requiring approval (ClaudeCodeAgent)
-- SystemEvent: System-level events like task state transitions
+- SystemEvent: System-level events for entity changes and workflow notifications
+  - `TASK_UPDATED`: Includes `task_id` and `updated_fields` (status, conversation_id, implementation_plan_id, etc.)
+  - `CONVERSATION_UPDATED`: Includes `conversation_id` and `updated_fields`
 
 **Event Parsing**: Each agent implementation converts its native format to ConversationEvents internally
 
@@ -188,13 +190,13 @@ Workflow actions are reusable, named operations that orchestrate task state tran
 **CreateImplementationPlanAction** (`task.create_implementation_plan`):
 - Transitions task from DEFINING → PLANNING
 - Reuses conversation if same engine, otherwise creates new one
-- Emits SystemEvent with task update
+- Emits SystemEvent (TASK_UPDATED) with `status`, `conversation_id`, and `implementation_plan_id` fields
 - Streams agent's implementation plan generation
 
 **BeginImplementationAction** (`task.begin_implementation`):
 - Transitions task from PLANNING → IMPLEMENTING
 - Always creates new conversation for clean implementation context
-- Emits SystemEvent with task update
+- Emits SystemEvent (TASK_UPDATED) with `status` and `conversation_id` fields
 - Streams agent's implementation work
 
 **Execution Flow**:

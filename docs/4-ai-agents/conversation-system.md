@@ -21,6 +21,9 @@
 - **ToolCall** (InternalAgent only): `event_type="tool_call"`, `tool_call_id`, `tool_name`, `tool_args`, `timestamp`. Display: expandable panel. Paired with ToolResult by tool_call_id
 - **ToolResult** (InternalAgent only): `event_type="tool_result"`, `tool_call_id`, `result_content`, `is_error`, `timestamp`. Display: result section. Frontend searches forward for matching ToolResult
 - **ToolCallRequest** (ClaudeCodeAgent only): `event_type="tool_call_request"`, `tool_call_id`, `tool_name`, `tool_args`, `timestamp`. Triggers approval UI. tool_name used as tool_call_id
+- **SystemEvent**: `event_type="system"`, `type` (SystemEventType enum), `data` (dict), `timestamp`. System-level notifications for entity changes and workflow events. Not displayed in chat UI - processed by registered event handlers for side effects (data refetching, UI updates). Types include:
+  - `TASK_UPDATED`: Task state/field changes. Data includes `task_id` and `updated_fields` (e.g., `status`, `conversation_id`, `implementation_plan_id`)
+  - `CONVERSATION_UPDATED`: Conversation changes. Data includes `conversation_id` and `updated_fields`
 
 ## Event Generation
 

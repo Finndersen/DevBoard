@@ -12,6 +12,7 @@ import { createConversationApprovalKey, createConversationPendingKey } from '../
 import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
 import { useUIStore } from '../../stores/uiStore'
+import { useEventHandlerRegistryForStream } from '../../hooks/useConversationEventHandlers'
 
 export interface ConversationChatHandle {
   processEventStream: (stream: AsyncGenerator<ConversationEvent>) => Promise<void>
@@ -81,6 +82,9 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   const pendingApprovals = useMemo(() => getApprovals(approvalKey), [getApprovals, approvalKey])
 
   const { setTabActivityStatus, getActiveTab } = useUIStore()
+
+  // Get event handler registry for streaming
+  const eventHandlerRegistry = useEventHandlerRegistryForStream()
 
   const {
     addPendingMessage,

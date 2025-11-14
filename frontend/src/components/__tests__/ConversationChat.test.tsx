@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
 import ConversationChat from '../chat/ConversationChat'
+import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 
 describe('ConversationChat', () => {
@@ -816,5 +817,69 @@ describe('ConversationChat', () => {
 
     // Verify the tool execution message is displayed
     expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
+  })
+
+  it('passes eventHandlerRegistry to processConversationStream and invokes SystemEvent handlers', async () => {
+    const user = userEvent.setup()
+
+    // Mock system event handler
+    const mockSystemEventHandler = vi.fn()
+
+    // Create a wrapper that provides event handler context
+    const TestWrapper = ({ children }: { children: React.ReactNode }) => {
+      return <ConversationEventHandlerProvider>{children}</ConversationEventHandlerProvider>
+    }
+
+    // Mock streaming response with SystemEvent
+    server.use(
+      http.post('*/api/conversations/1/messages/stream', () => {
+        return createStreamingResponse([
+          {
+            event_type: 'system',
+            type: 'task_updated',
+            data: {
+              task_id: 123,
+              updated_fields: {
+                status: 'planning',
+                conversation_id: 1,
+                implementation_plan_id: 456
+              }
+            },
+            timestamp: new Date().toISOString()
+          },
+          {
+            event_type: 'message',
+            text_content: 'Task has been updated',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ])
+      })
+    )
+
+    render(
+      <TestWrapper>
+        <ConversationChat conversationId={mockConversationId} />
+      </TestWrapper>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    })
+
+    const input = screen.getByPlaceholderText(/ask a question/i)
+    const sendButton = screen.getByRole('button', { name: /send message/i })
+
+    await user.type(input, 'Update the task status')
+    await user.click(sendButton)
+
+    // Wait for agent response (SystemEvent should be handled in background)
+    await waitFor(() => {
+      expect(screen.getByText('Task has been updated')).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    // Verify system event did not appear as a message in chat (should be filtered)
+    expect(screen.queryByText(/task_updated/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/implementation_plan_id/i)).not.toBeInTheDocument()
   })
 })

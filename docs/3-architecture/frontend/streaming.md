@@ -58,14 +58,108 @@ Type-safe event rendering with discriminated unions:
 
 ```typescript
 switch (event.event_type) {
-  case 'text_message': return <ConversationMessage message={event} />
+  case 'message': return <ConversationMessage message={event} />
   case 'tool_call': return <ToolCallDisplay toolCall={event} />
   case 'tool_result': return <ToolResult result={event} />
   case 'tool_call_request': return <ToolApprovalRequest request={event} />
+  case 'system': // Handled by registered SystemEventHandlers, not rendered
 }
 ```
 
 TypeScript exhaustiveness check ensures all event types handled at compile time.
+
+## Event Handler Architecture
+
+**Location**: `frontend/src/hooks/useConversationEventHandlers.ts`, `frontend/src/components/chat/ConversationEventHandlerProvider.tsx`
+
+The frontend implements a sophisticated event handler system for processing conversation events with side effects.
+
+### ConversationEventHandlerProvider
+
+A React Context provider that maintains registries for tool result handlers and system event handlers. Must wrap conversation components that need to react to events.
+
+**Pattern**:
+```typescript
+<ConversationEventHandlerProvider>
+  <TaskDetail id={123} />
+</ConversationEventHandlerProvider>
+```
+
+**Registry Structure**:
+- `toolResultHandlers`: Map of matchers to handler sets for tool execution results
+- `systemEventHandlers`: Map of matchers to handler sets for system events
+
+**Architecture**: Each parent view (TaskDetail, ProjectDetail) is wrapped in a provider at the TabContentContainer level. This ensures a single registry per conversation context, allowing components to register handlers that execute when matching events stream through ConversationChat.
+
+### Tool Result Handlers
+
+Components can register handlers that execute when specific tools complete successfully (error results are automatically skipped).
+
+**Hook**: `useToolResultHandler(matcher, handler)`
+
+**Example - Handle document edits**:
+```typescript
+useToolResultHandler(
+  (toolName) => toolName.includes('edit_specification'),
+  async (result) => await refetchSpecification()
+)
+```
+
+**Example - Handle multiple tools**:
+```typescript
+useToolResultHandler(
+  (toolName) => ['edit_specification', 'set_specification_content'].some(t => toolName.includes(t)),
+  async () => await refetchDocuments()
+)
+```
+
+**Pattern**: Matcher receives tool name and event, returns boolean. Handler receives ToolResult event. Multiple handlers can match a single tool result.
+
+### System Event Handlers
+
+Components can register handlers for system-level events like task updates and conversation changes.
+
+**Hook**: `useSystemEventHandler(matcher, handler)`
+
+**Example - Handle task updates**:
+```typescript
+useSystemEventHandler(
+  (event) => event.type === 'task_updated' && event.data?.task_id === taskId,
+  async (event) => {
+    const { updated_fields } = event.data
+    if ('status' in updated_fields) {
+      // Task status changed during workflow action
+      await refetch()
+    }
+    if ('implementation_plan_id' in updated_fields) {
+      // Implementation plan was created
+      await refetch()
+    }
+  }
+)
+```
+
+**Pattern**: Matcher receives SystemEvent, returns boolean. Handler receives SystemEvent. Enables reactive updates to task state changes, workflow transitions, and entity modifications.
+
+### Event Processing Flow
+
+**ConversationChat Integration**:
+1. ConversationChat retrieves registry via `useEventHandlerRegistryForStream()`
+2. Passes registry to `processConversationStream()` helper
+3. Stream processor invokes `invokeEventHandlers()` for each event
+4. For ToolResult events: maps tool_call_id to tool name, skips errors, finds matching handlers
+5. For SystemEvent events: finds matching handlers based on event type and data
+6. All matching handlers execute concurrently via `Promise.all()`
+
+**Benefits**:
+- Decoupled event handling from rendering logic
+- Type-safe event matching and handling
+- Automatic cleanup on component unmount
+- Supports multiple handlers per event type
+- Error results automatically filtered out for tool handlers
+- System events filtered from UI display (handled in background)
+
+**Implementation**: The `processConversationStream` helper in `streamProcessor.ts` builds a tool call map from ToolCall events, then uses it to resolve tool names for ToolResult events. System events skip the UI rendering pipeline entirely and only trigger registered handlers.
 
 ## API Client Streaming Methods
 

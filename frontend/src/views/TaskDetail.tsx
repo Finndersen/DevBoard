@@ -229,7 +229,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           <Button
             onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
             variant="primary"
-            disabled={!task.specification?.content || task.specification.content.trim() === ''}
+            disabled={!task.specification?.content || task.specification.content.trim() === '' || isTransitioning}
           >
             Begin Planning
           </Button>
@@ -240,6 +240,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             onClick={() => executeWorkflowAction('task.begin_implementation', 'Starting Implementation...')}
             variant="primary"
             className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
+            disabled={isTransitioning}
           >
             Start Implementation
           </Button>
