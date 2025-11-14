@@ -22,13 +22,19 @@ from devboard.db.repositories import ConversationRepository, DocumentRepository,
 
 
 @pytest.fixture
-def mock_agent_conversation_service(mock_agent, test_conversation, test_project, db_session, monkeypatch):
+def mock_agent_conversation_service(
+    mock_agent, test_conversation, test_project, db_session, mock_agent_config_service, monkeypatch
+):
     """Create a conversation service with mocked agent."""
     conversation_repo = ConversationRepository(db_session)
     document_repo = DocumentRepository(db_session)
 
     # Create role for the service
-    role = ProjectQARole(project=test_project, document_repository=document_repo)
+    role = ProjectQARole(
+        project=test_project,
+        document_repository=document_repo,
+        agent_config_service=mock_agent_config_service,
+    )
 
     service = PydanticAIConversationService(
         conversation=test_conversation,

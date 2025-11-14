@@ -107,7 +107,11 @@ def get_agent_role_for_conversation(
     else:
         # Must be a project
         if conversation.agent_role == AgentRoleType.PROJECT:
-            return ProjectQARole(project=parent_entity, document_repository=document_repo)
+            return ProjectQARole(
+                project=parent_entity,
+                document_repository=document_repo,
+                agent_config_service=agent_config_service,
+            )
         else:
             raise HTTPException(
                 status_code=400,

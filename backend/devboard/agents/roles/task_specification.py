@@ -126,10 +126,9 @@ class TaskSpecificationRole(Role):
             tools.append(create_document_edit_tool(self.task.specification, self.document_repository))
 
         if self.task.codebase:
-            # Add investigation tool
             tools.append(
                 create_codebase_investigation_tool(
-                    self.task.codebase,
+                    [self.task.codebase],
                     self.agent_config_service,
                 )
             )

@@ -18,7 +18,7 @@ class Codebase(Base):
     __tablename__ = "codebases"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255), unique=True)
     description: Mapped[str] = mapped_column(Text)
     repository_url: Mapped[str | None] = mapped_column(String(512))
     local_path: Mapped[str] = mapped_column(String(512))

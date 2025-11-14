@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
@@ -16,13 +18,14 @@ Query: {query}"""
 
 
 def create_codebase_investigation_tool(
-    codebase: Codebase,
+    codebases: list[Codebase],
     agent_config_service: AgentConfigService,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
 
     This tool allows parent agents to offload codebase investigation work to a specialized
-    investigation sub-agent. The sub-agent performs comprehensive analysis and returns
+    investigation sub-agent. When multiple codebases are available, the agent must specify
+    which codebase to investigate. The sub-agent performs comprehensive analysis and returns
     a detailed answer, avoiding the need for the parent agent to perform multiple searches
     and file reads directly.
 
@@ -34,12 +37,20 @@ def create_codebase_investigation_tool(
     - Getting comprehensive answers without multiple follow-up queries
 
     Args:
-        codebase: Codebase model instance containing name, description, and local_path
+        codebases: List of Codebase model instances. Must contain at least one codebase.
         agent_config_service: AgentConfigService for getting configured LLM
-    """
 
-    async def investigate_codebase(query: str) -> str:
-        """Investigate the codebase to answer questions about implementation details, architecture, and code organization.
+    Raises:
+        ValueError: If codebases list is empty
+    """
+    if not codebases:
+        raise ValueError("At least one codebase must be provided")
+
+    # Create name -> codebase mapping for dispatch
+    codebase_map: dict[str, Codebase] = {cb.name: cb for cb in codebases}
+
+    async def investigate_codebase(codebase_name: str, query: str) -> str:
+        """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
 
         Use this tool when you need detailed information about:
         - How specific features are implemented
@@ -51,18 +62,16 @@ def create_codebase_investigation_tool(
 
         Be specific about what you want to know and what level of detail is required.
 
-        Examples:
-        - investigate_codebase("How is the agent system architecture organized?")
-        - investigate_codebase("Where is TaskPlanningRole implemented and what does it do?")
-        - investigate_codebase("How are the implementation details of the schema models for agent conversation events?")
-        - investigate_codebase("What are the main database models and their relationships?")
-
         Args:
             query: Specific question about the codebase. Be as detailed as possible about what you want to know.
+            codebase_name: Name of the codebase to investigate. Choose from the available codebases.
 
         Returns:
             Comprehensive answer with file paths, code references, and implementation details.
         """
+        # Get the selected codebase
+        codebase = codebase_map[codebase_name]
+
         # TODO: Create more generic interface for constructing an Agent from a Role type
         # Get investigation agent configuration
         config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
@@ -72,7 +81,7 @@ def create_codebase_investigation_tool(
         if language_model is None:
             raise ValueError(f"Error: Could not find language model '{config.model_id}' for investigation agent")
 
-        # Create investigation role with codebase (role is stateless and reusable)
+        # Create investigation role with selected codebase (role is stateless and reusable)
         investigation_role = CodebaseInvestigationRole(codebase=codebase)
 
         # Create and run investigation agent
@@ -102,6 +111,10 @@ def create_codebase_investigation_tool(
             )
 
         return final_response.text_content
+
+    # Dynamically set the Literal annotation for codebase_name parameter
+    # This allows displaying the available codebase names as an enum to the LLM
+    investigate_codebase.__annotations__["codebase_name"] = Literal[tuple(codebase_map.keys())]
 
     return Tool(
         function=investigate_codebase,

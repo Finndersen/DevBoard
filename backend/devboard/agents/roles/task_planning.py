@@ -86,7 +86,7 @@ TASK SPECIFICATION DOCUMENT:
 
 TASK IMPLEMENTATION PLAN DOCUMENT:
 ```markdown
-{task.implementation_plan.content or "<EMPTY>"}
+{task.implementation_plan.content if task.implementation_plan else "<EMPTY>"}
 ```
 """
     if task.codebase:
@@ -134,19 +134,19 @@ class TaskPlanningRole(Role):
         tools: list[Tool] = [
             # Tools for task specification document
             create_document_edit_tool(self.task.specification, self.document_repository),
-            # Tools for implementation plan document
-            create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
         ]
 
-        if self.task.implementation_plan.content:
-            tools.append(create_document_edit_tool(self.task.implementation_plan, self.document_repository))
+        # Tools for implementation plan document
+        if self.task.implementation_plan:
+            tools.append(create_set_document_content_tool(self.task.implementation_plan, self.document_repository))
+            if self.task.implementation_plan.content:
+                tools.append(create_document_edit_tool(self.task.implementation_plan, self.document_repository))
 
         # Add codebase investigation tool if codebase is configured
         if self.task.codebase:
-            # Add investigation tool
             tools.append(
                 create_codebase_investigation_tool(
-                    self.task.codebase,
+                    [self.task.codebase],
                     self.agent_config_service,
                 )
             )

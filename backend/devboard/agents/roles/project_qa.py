@@ -2,8 +2,10 @@
 
 from pydantic_ai import Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
+from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
 
@@ -66,15 +68,22 @@ PROJECT SPECIFICATION DOCUMENT:
 class ProjectQARole(Role):
     """Role for project Q&A and specification management."""
 
-    def __init__(self, project: Project, document_repository: DocumentRepository):
+    def __init__(
+        self,
+        project: Project,
+        document_repository: DocumentRepository,
+        agent_config_service: AgentConfigService,
+    ):
         """Initialize project Q&A role.
 
         Args:
             project: Project instance
             document_repository: Repository for document operations
+            agent_config_service: Service for agent configuration
         """
         self.project = project
         self.document_repository = document_repository
+        self.agent_config_service = agent_config_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for project Q&A role."""
@@ -84,12 +93,23 @@ class ProjectQARole(Role):
         """Get tools for project Q&A role.
 
         Returns:
-            List of document editing tools for project specification
+            List of document editing tools and codebase investigation tool
         """
-        return [
+        tools = [
             create_set_document_content_tool(self.project.specification, self.document_repository),
             create_document_edit_tool(self.project.specification, self.document_repository),
         ]
+
+        # Add codebase investigation tool if project has codebases
+        if self.project.codebases:
+            tools.append(
+                create_codebase_investigation_tool(
+                    self.project.codebases,
+                    self.agent_config_service,
+                )
+            )
+
+        return tools
 
     async def get_context_content(self) -> str:
         """Get context content for project Q&A role.
