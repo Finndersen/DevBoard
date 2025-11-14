@@ -93,7 +93,9 @@ class PydanticAIConversationService(BaseAgentConversationService):
         Returns:
             InternalAgent instance configured with role, model, and history
         """
-        model = llm_registry.get(self.conversation.model_id)
+        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
+        if not model:
+            raise ValueError(f"Model '{self.conversation.model_id}' not found in registry")
         return InternalAgent(
             role=self.role,
             model=model,

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import ConversationRepository, DocumentRepository

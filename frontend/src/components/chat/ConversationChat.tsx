@@ -12,7 +12,7 @@ import ConversationInput from './ConversationInput'
 import { useUIStore } from '../../stores/uiStore'
 
 export interface ConversationChatHandle {
-  executeWorkflowAction: (actionKey: string) => Promise<void>
+  processEventStream: (stream: AsyncGenerator<ConversationEvent>) => Promise<void>
 }
 
 interface ConversationChatProps {
@@ -335,32 +335,27 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     }
   }
 
-  const executeWorkflowAction = useCallback(async (actionKey: string) => {
+  const processEventStream = useCallback(async (stream: AsyncGenerator<ConversationEvent>) => {
     setLoading(true)
     try {
       // Process stream with standardized approval handling
-      await processStreamWithApprovals(
-        apiClient.streamWorkflowAction(conversationId, {
-          action_key: actionKey
-        }),
-        {
-          onFirstEvent: () => {
-            // Notify parent that streaming has started
-            onStreamingStarted?.()
-          }
+      await processStreamWithApprovals(stream, {
+        onFirstEvent: () => {
+          // Notify parent that streaming has started
+          onStreamingStarted?.()
         }
-      )
+      })
     } catch (error) {
-      console.error('Failed to execute workflow action:', error)
+      console.error('Failed to process event stream:', error)
     } finally {
       setLoading(false)
     }
-  }, [conversationId, processStreamWithApprovals, onStreamingStarted])
+  }, [processStreamWithApprovals, onStreamingStarted])
 
-  // Expose executeWorkflowAction via ref
+  // Expose processEventStream via ref
   useImperativeHandle(ref, () => ({
-    executeWorkflowAction
-  }), [executeWorkflowAction])
+    processEventStream
+  }), [processEventStream])
 
   return (
     <div className="flex flex-col h-full">

@@ -4,7 +4,7 @@ import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType

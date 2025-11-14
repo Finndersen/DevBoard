@@ -25,6 +25,7 @@ from devboard.db.repositories import (
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
 from devboard.services.context_assembly import ContextAssemblyService
+from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.project_service import ProjectService
 from devboard.services.resource_service import ResourceService
@@ -85,31 +86,38 @@ def get_codebase_investigation_service(
     return CodebaseInvestigationService(template_service)
 
 
-def get_task_service(
+def get_conversation_service(
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> ConversationService:
+    """Get ConversationService instance."""
+    return ConversationService(
+        conversation_repo=conversation_repo,
+        agent_config_service=agent_config_service,
+    )
+
+
+def get_task_service(
+    conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
 ):
     """Get TaskService instance."""
     return TaskService(
-        conversation_repo=conversation_repo,
+        conversation_service=conversation_service,
         document_repo=document_repo,
         task_repo=task_repo,
-        agent_config_service=agent_config_service,
     )
 
 
 def get_project_service(
-    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
 ):
     """Get ProjectService instance."""
     return ProjectService(
-        conversation_repo=conversation_repo,
+        conversation_service=conversation_service,
         document_repo=document_repo,
         project_repo=project_repo,
-        agent_config_service=agent_config_service,
     )

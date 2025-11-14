@@ -6,7 +6,7 @@ from pydantic_ai.messages import ModelMessage
 from sqlalchemy import delete, select
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
 
@@ -200,7 +200,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         """Delete all messages in a conversation."""
         stmt = delete(ConversationMessage).where(ConversationMessage.conversation_id == conversation_id)
         result = self.db.execute(stmt)
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined]
 
     def delete_tool_approval_messages(self, conversation_id: int) -> int:
         """
@@ -225,4 +225,4 @@ class ConversationRepository(BaseRepository[Conversation]):
             ConversationMessage.id >= last_user_message_subq,
         )
 
-        return self.db.execute(stmt).rowcount
+        return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]

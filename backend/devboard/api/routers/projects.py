@@ -20,6 +20,7 @@ from devboard.api.dependencies.services import (
 )
 from devboard.api.schemas import (
     DeleteResponse,
+    DocumentResponse,
     ProjectCreate,
     ProjectResourceCreate,
     ProjectResponse,
@@ -85,7 +86,7 @@ async def create_project(
         name=created_project.name,
         description=created_project.description,
         created_at=created_project.created_at,
-        specification=created_project.specification,
+        specification=DocumentResponse.model_validate(created_project.specification),
         default_conversation_id=conversation.id,
     )
 
@@ -106,7 +107,7 @@ async def get_project(
         name=project.name,
         description=project.description,
         created_at=project.created_at,
-        specification=project.specification,
+        specification=DocumentResponse.model_validate(project.specification),
         default_conversation_id=conversation.id,
     )
 
@@ -178,8 +179,10 @@ async def list_project_tasks(
                 remote_task_id=task.remote_task_id,
                 conversation_id=conversation.id,
                 created_at=task.created_at,
-                specification=task.specification,
-                implementation_plan=task.implementation_plan,
+                specification=DocumentResponse.model_validate(task.specification),
+                implementation_plan=(
+                    DocumentResponse.model_validate(task.implementation_plan) if task.implementation_plan else None
+                ),
             )
         )
 
@@ -222,8 +225,12 @@ async def create_project_task(
         remote_task_id=created_task.remote_task_id,
         conversation_id=conversation.id,
         created_at=created_task.created_at,
-        specification=created_task.specification,
-        implementation_plan=created_task.implementation_plan,
+        specification=DocumentResponse.model_validate(created_task.specification),
+        implementation_plan=(
+            DocumentResponse.model_validate(created_task.implementation_plan)
+            if created_task.implementation_plan
+            else None
+        ),
     )
 
 

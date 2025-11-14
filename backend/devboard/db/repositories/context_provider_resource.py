@@ -159,7 +159,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
             project_context_resource_association.c.project_id == project_id,
         )
         result = self.db.execute(stmt)
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     def unlink_resource_from_task(self, resource_id: int, task_id: int) -> bool:
         """Remove M2M link between a resource and task.
@@ -176,7 +176,7 @@ class ContextProviderResourceRepository(BaseRepository[ContextProviderResource])
             task_context_resource_association.c.task_id == task_id,
         )
         result = self.db.execute(stmt)
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     def is_resource_orphaned(self, resource_id: int) -> bool:
         """Check if a resource has no remaining project or task links.

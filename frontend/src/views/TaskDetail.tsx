@@ -202,10 +202,14 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [showCodebaseSelector])
 
   const executeWorkflowAction = async (actionKey: string, message: string) => {
+    if (!task?.id) return
+
     setIsTransitioning(true)
     setTransitionMessage(message)
     try {
-      await agentChatRef.current?.executeWorkflowAction(actionKey)
+      // Stream workflow action with task ID and pass to AgentChat for processing
+      const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
+      await agentChatRef.current?.processEventStream(stream)
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
     } finally {

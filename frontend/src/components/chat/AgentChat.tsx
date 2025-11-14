@@ -9,7 +9,7 @@ import ClearChatHistoryModal from '../modals/ClearChatHistoryModal'
 import SessionIdModal from '../modals/SessionIdModal'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
-import type { ConversationResponse } from '../../lib/api'
+import type { ConversationResponse, ConversationEvent } from '../../lib/api'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { useApprovals } from '../../contexts/ApprovalsContext'
 import { createConversationPendingKey, createConversationApprovalKey } from '../../utils/approvalKeys'
@@ -45,8 +45,8 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
 
   // Forward ref to parent
   useImperativeHandle(ref, () => ({
-    executeWorkflowAction: async (actionKey: string) => {
-      await conversationChatRef.current?.executeWorkflowAction(actionKey)
+    processEventStream: async (stream: AsyncGenerator<ConversationEvent>) => {
+      await conversationChatRef.current?.processEventStream(stream)
     }
   }), [])
 

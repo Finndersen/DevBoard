@@ -1,9 +1,17 @@
 """Tests for tasks router."""
 
+import datetime
+import json
+from collections.abc import Iterator
+
 import pytest
+from starlette.testclient import TestClient
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.events import MessageRole, TextMessage
+from devboard.agents.role_types import AgentRoleType
+from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -35,6 +43,71 @@ def test_resource_data():
         "resource_uri": "https://github.com/owner/repo",
         "description": "Test GitHub repository",
     }
+
+
+@pytest.fixture
+def mock_task_service_for_workflow():
+    """Mock TaskService for workflow action tests."""
+    from unittest.mock import MagicMock
+
+    from devboard.db.models.task import TaskStatus
+
+    service = MagicMock()
+
+    # Mock transition methods to just update status
+    def mock_transition_to_planning(task):
+        task.status = TaskStatus.PLANNING
+        return task
+
+    def mock_transition_to_implementing(task):
+        task.status = TaskStatus.IMPLEMENTING
+        return task
+
+    service.transition_to_planning.side_effect = mock_transition_to_planning
+    service.transition_to_implementing.side_effect = mock_transition_to_implementing
+
+    return service
+
+
+@pytest.fixture
+def mock_agent_conversation_service_for_workflow(mock_agent, db_session, mock_agent_config_service, monkeypatch):
+    """Create a conversation service with mocked agent for workflow tests."""
+
+    def _create_service(conversation, task, document_repo):
+        # Create role for the service
+        role = TaskPlanningRole(
+            task=task,
+            document_repository=document_repo,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        service = PydanticAIConversationService(
+            conversation=conversation,
+            role=role,
+            conversation_repository=ConversationRepository(db_session),
+        )
+
+        # Patch the _get_agent method to return our mock
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent)
+
+        return service
+
+    return _create_service
+
+
+@pytest.fixture
+def client_with_mock_workflow_deps(
+    client,
+    mock_task_service_for_workflow,
+) -> Iterator[TestClient]:
+    """Client with mocked dependencies for workflow actions."""
+    from devboard.api.dependencies.services import get_task_service
+    from devboard.api.main import app
+
+    app.dependency_overrides[get_task_service] = lambda: mock_task_service_for_workflow
+    yield client
+    if get_task_service in app.dependency_overrides:
+        del app.dependency_overrides[get_task_service]
 
 
 class TestTasksRouter:
@@ -546,3 +619,113 @@ class TestTaskStateTransition:
         db_session.commit()
 
         return created_task
+
+
+class TestWorkflowActions:
+    """Test workflow action endpoints."""
+
+    @pytest.fixture
+    def test_task_for_workflow(self, db_session):
+        """Create a test task with conversation for workflow tests."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Test Project",
+            description="A test project for development",
+            specification=spec_doc,
+        )
+
+        # Create test task
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "Test task specification")
+        task = task_repo.create(
+            project_id=created_project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+        )
+
+        # Create conversation for task
+        conversation_repo = ConversationRepository(db_session)
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-sonnet-4.5",
+            is_active=True,
+        )
+        db_session.commit()
+
+        return task
+
+    def test_stream_workflow_action(
+        self, client_with_mock_workflow_deps, test_task_for_workflow, mock_agent, monkeypatch
+    ):
+        """Test streaming a workflow action."""
+
+        # Set up mock agent to return events
+        async def mock_stream(prompt_or_approvals):
+            yield TextMessage(
+                role=MessageRole.AGENT,
+                text_content="Creating implementation plan...",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_agent.stream_events = mock_stream
+
+        # Patch PydanticAIConversationService._get_agent to return our mock
+        from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
+
+        monkeypatch.setattr(PydanticAIConversationService, "_get_agent", lambda self, conversation_history: mock_agent)
+
+        prompt_action_request = {"action_key": "task.create_implementation_plan"}
+
+        response = client_with_mock_workflow_deps.post(
+            f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 200
+
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
+        # Should have SystemEvent for task update and agent message
+        assert len(events) >= 1
+        # Check that we got events back
+        assert any(e["event_type"] in ["message", "system"] for e in events)
+
+    def test_stream_workflow_action_not_found(self, client_with_mock_workflow_deps, test_task_for_workflow):
+        """Test streaming a non-existent workflow action."""
+        prompt_action_request = {"action_key": "nonexistent.action"}
+
+        response = client_with_mock_workflow_deps.post(
+            f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
+
+    def test_stream_workflow_action_archived_conversation(
+        self, client_with_mock_workflow_deps, test_task_for_workflow, db_session
+    ):
+        """Test streaming workflow action on archived conversation."""
+        # Archive the conversation
+        conversation_repo = ConversationRepository(db_session)
+        conversation = conversation_repo.get_active_conversation_for_entity(
+            ParentEntityType.TASK, test_task_for_workflow.id
+        )
+        conversation.is_active = False
+        db_session.commit()
+
+        prompt_action_request = {"action_key": "task.create_implementation_plan"}
+
+        response = client_with_mock_workflow_deps.post(
+            f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+            json=prompt_action_request,
+        )
+        assert response.status_code == 400
+        assert "no active conversation" in response.json()["detail"].lower()

@@ -7,8 +7,8 @@ from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code import ClaudeCodeAgent
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.events import MessageRole, TextMessage
+from devboard.agents.role_types import AgentRoleType
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
-from devboard.agents.roles.types import AgentRoleType
 from devboard.db.models.codebase import Codebase
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
@@ -76,16 +76,17 @@ def create_codebase_investigation_tool(
         # Get investigation agent configuration
         config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
 
-        # Get language model for investigation agent
-        language_model = agent_config_service.llm_registry.get(config.model_id)
-        if language_model is None:
-            raise ValueError(f"Error: Could not find language model '{config.model_id}' for investigation agent")
+        language_model = agent_config_service.llm_registry.get(config.model_id) if config.model_id else None
 
         # Create investigation role with selected codebase (role is stateless and reusable)
         investigation_role = CodebaseInvestigationRole(codebase=codebase)
 
         # Create and run investigation agent
         if config.engine == AgentEngine.INTERNAL:
+            if language_model is None:
+                raise ValueError(
+                    f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
+                )
             investigation_agent = InternalAgent(
                 role=investigation_role,
                 model=language_model,
@@ -94,6 +95,7 @@ def create_codebase_investigation_tool(
             investigation_agent = ClaudeCodeAgent(
                 role=investigation_role,
                 model=language_model,
+                codebase_path=codebase.local_path,
             )
         else:
             raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")

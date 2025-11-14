@@ -10,10 +10,10 @@ from devboard.services.task_service import TaskService
 
 
 @pytest.fixture
-def mock_conversation_repo():
-    """Mock ConversationRepository."""
-    repo = MagicMock()
-    return repo
+def mock_conversation_service():
+    """Mock ConversationService."""
+    service = MagicMock()
+    return service
 
 
 @pytest.fixture
@@ -42,20 +42,12 @@ def mock_task_repo():
 
 
 @pytest.fixture
-def mock_agent_config_service():
-    """Mock AgentConfigService."""
-    service = MagicMock()
-    return service
-
-
-@pytest.fixture
-def task_service(mock_conversation_repo, mock_document_repo, mock_task_repo, mock_agent_config_service):
+def task_service(mock_conversation_service, mock_document_repo, mock_task_repo):
     """Create TaskService instance with mocked dependencies."""
     return TaskService(
-        conversation_repo=mock_conversation_repo,
+        conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         task_repo=mock_task_repo,
-        agent_config_service=mock_agent_config_service,
     )
 
 

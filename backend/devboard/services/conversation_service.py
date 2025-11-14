@@ -1,7 +1,7 @@
 """Service for managing conversation lifecycle and transitions."""
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories import ConversationRepository
 
@@ -27,6 +27,37 @@ class ConversationService:
         """
         self.conversation_repo = conversation_repo
         self.agent_config_service = agent_config_service
+
+    def create_initial_conversation_for_parent_entity(
+        self,
+        parent_entity_type: ParentEntityType,
+        parent_entity_id: int,
+        agent_role: AgentRoleType,
+    ) -> Conversation:
+        """Create initial active conversation for a parent entity.
+
+        Gets the effective agent configuration for the specified role and creates
+        an active conversation linked to the parent entity.
+
+        Args:
+            parent_entity_type: Type of the parent entity (TASK or PROJECT)
+            parent_entity_id: ID of the parent entity
+            agent_role: Agent role type for the conversation
+
+        Returns:
+            Created Conversation instance
+        """
+        config = self.agent_config_service.get_effective_config(agent_role)
+
+        return self.conversation_repo.create(
+            parent_entity_type=parent_entity_type,
+            parent_entity_id=parent_entity_id,
+            agent_role=agent_role,
+            engine=config.engine,
+            model_id=config.model_id,
+            external_session_id=None,
+            is_active=True,
+        )
 
     def replace_active_conversation(
         self,

@@ -74,7 +74,7 @@ class VirtualTool:
     @property
     def description(self) -> str:
         """Return the tool description."""
-        return self.pydantic_tool.description
+        return self.pydantic_tool.description or ""
 
     def validate_args(self, arguments: dict[str, Any]) -> Any:
         """Validate and convert arguments using the PydanticAI tool's schema validator.

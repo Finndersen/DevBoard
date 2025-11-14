@@ -11,11 +11,8 @@ from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_conversation
-from devboard.api.dependencies.repositories import get_conversation_repository, get_task_repository
-from devboard.api.dependencies.services import (
-    get_agent_config_service,
-    get_task_service,
-)
+from devboard.api.dependencies.repositories import get_conversation_repository
+from devboard.api.dependencies.services import get_agent_config_service
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ToolApprovals,
@@ -23,12 +20,9 @@ from devboard.api.schemas.agent_conversation import (
 from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
-from devboard.api.schemas.prompt_action import PromptActionRequest
 from devboard.api.streaming import stream_conversation_events
-from devboard.db.models import Conversation, ParentEntityType
-from devboard.db.repositories import ConversationRepository, TaskRepository
-from devboard.services.task_service import TaskService
-from devboard.workflow_actions.registry import workflow_action_registry
+from devboard.db.models import Conversation
+from devboard.db.repositories import ConversationRepository
 
 router = APIRouter()
 
@@ -213,69 +207,3 @@ async def update_conversation_model(
         "engine": updated.engine.value,
         "model_id": updated.model_id,
     }
-
-
-@router.post("/{conversation_id}/workflow-action")
-async def execute_workflow_action(
-    request: PromptActionRequest,
-    conversation: Conversation = Depends(get_verified_conversation),
-    agent_conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-    task_repo: TaskRepository = Depends(get_task_repository),
-    task_service: TaskService = Depends(get_task_service),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
-) -> StreamingResponse:
-    """Stream a task workflow action on a conversation.
-
-    Workflow actions are reusable, named operations that can send prompts
-    to agent conversations or perform structured actions (like task state transitions).
-    This endpoint looks up the action by key and executes it, streaming the results.
-
-    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
-    Each line is a JSON-serialized ConversationEvent (TextMessage, ToolCall, ToolResult, or SystemEvent).
-
-    Args:
-        request: Request with action_key to execute
-        conversation: Agent conversation (must be a task conversation)
-        agent_conversation_service: Service for agent conversation operations
-        task_repo: Repository for task operations
-        task_service: Service for task operations
-        conversation_repo: Repository for conversation operations
-        agent_config_service: Service for agent configuration
-
-    Raises:
-        HTTPException: 404 if action_key not found or task not found
-        HTTPException: 400 if conversation not active or not a task conversation
-    """
-    # Check if conversation is active
-    if not conversation.is_active:
-        raise HTTPException(status_code=400, detail="Cannot execute workflow action on archived conversation")
-
-    # Check that conversation is for a task
-    if conversation.parent_entity_type != ParentEntityType.TASK:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Workflow action requires a task conversation, got {conversation.parent_entity_type}",
-        )
-
-    # Get task from conversation's parent entity
-    task = task_repo.get_by_id(conversation.parent_entity_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Task with id {conversation.parent_entity_id} not found")
-
-    # Look up action class in registry
-    action_class = workflow_action_registry.get(request.action_key)
-    if not action_class:
-        raise HTTPException(status_code=404, detail=f"Workflow action '{request.action_key}' not found")
-
-    # Instantiate the task workflow action
-    action = action_class(
-        task,
-        agent_conversation_service,
-        task_service,
-        conversation_repo,
-        agent_config_service,
-    )
-
-    # Stream events from the action
-    return stream_conversation_events(action.run())

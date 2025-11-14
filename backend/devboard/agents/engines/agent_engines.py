@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from devboard.agents.language_models import LLMProvider
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.core.registry import Registry
 
 

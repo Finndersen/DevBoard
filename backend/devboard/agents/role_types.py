@@ -1,3 +1,8 @@
+"""Agent role type enumeration.
+
+This module contains the AgentRoleType enum, separated to avoid circular imports.
+"""
+
 from enum import StrEnum
 
 

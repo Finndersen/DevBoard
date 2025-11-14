@@ -4,24 +4,37 @@ import datetime
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.api.dependencies.entities import get_verified_task
+from devboard.api.dependencies.factories import (
+    create_agent_conversation_service,
+    create_agent_role_for_conversation,
+)
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
     get_document_repository,
     get_task_repository,
 )
-from devboard.api.dependencies.services import get_resource_service
+from devboard.api.dependencies.services import (
+    get_agent_config_service,
+    get_resource_service,
+    get_task_service,
+)
 from devboard.api.schemas import (
     DeleteResponse,
+    DocumentResponse,
     FileDiff,
+    PromptActionRequest,
     ResourceResponse,
     TaskDiffResponse,
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
 )
+from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import ParentEntityType
 from devboard.db.models.task import Task
 from devboard.db.repositories import (
@@ -30,11 +43,14 @@ from devboard.db.repositories import (
     DocumentRepository,
     TaskRepository,
 )
+from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
+from devboard.services.task_service import TaskService
+from devboard.workflow_actions.registry import workflow_action_registry
 
 router = APIRouter()
 
@@ -58,8 +74,10 @@ async def get_task(
         remote_task_id=task.remote_task_id,
         conversation_id=conversation.id,
         created_at=task.created_at,
-        specification=task.specification,
-        implementation_plan=task.implementation_plan,
+        specification=DocumentResponse.model_validate(task.specification),
+        implementation_plan=(
+            DocumentResponse.model_validate(task.implementation_plan) if task.implementation_plan else None
+        ),
     )
 
 
@@ -108,8 +126,12 @@ async def update_task(
         remote_task_id=updated_task.remote_task_id,
         conversation_id=conversation.id,
         created_at=updated_task.created_at,
-        specification=updated_task.specification,
-        implementation_plan=updated_task.implementation_plan,
+        specification=DocumentResponse.model_validate(updated_task.specification),
+        implementation_plan=(
+            DocumentResponse.model_validate(updated_task.implementation_plan)
+            if updated_task.implementation_plan
+            else None
+        ),
     )
 
 
@@ -298,3 +320,65 @@ def _parse_git_diff(raw_diff: str) -> list[FileDiff]:
         )
 
     return files
+
+
+@router.post("/{task_id}/workflow-action")
+async def execute_workflow_action(
+    task_id: int,
+    request: PromptActionRequest,
+    task: Task = Depends(get_verified_task),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+    task_service: TaskService = Depends(get_task_service),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
+) -> StreamingResponse:
+    """Stream a task workflow action.
+
+    Workflow actions are reusable, named operations that can send prompts
+    to agent conversations or perform structured actions (like task state transitions).
+    This endpoint looks up the action by key and executes it, streaming the results.
+
+    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
+    Each line is a JSON-serialized ConversationEvent (TextMessage, ToolCall, ToolResult, or SystemEvent).
+
+    Args:
+        task_id: ID of the task
+        request: Request with action_key to execute
+        task: Task instance
+        conversation_repo: Repository for conversation operations
+        document_repo: Document repository
+        task_service: Service for task operations
+        agent_config_service: Service for agent configuration
+
+    Raises:
+        HTTPException: 404 if action_key not found
+        HTTPException: 400 if conversation not active
+    """
+    # Get active conversation for the task
+    try:
+        conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+    except NoActiveConversationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Look up action class in registry
+    action_class = workflow_action_registry.get(request.action_key)
+    if not action_class:
+        raise HTTPException(status_code=404, detail=f"Workflow action '{request.action_key}' not found")
+
+    # Create role using helper function
+    role = create_agent_role_for_conversation(conversation, task, document_repo, agent_config_service)
+
+    # Create service using helper function
+    agent_conversation_service = create_agent_conversation_service(conversation, role, task, conversation_repo)
+
+    # Instantiate the task workflow action
+    action = action_class(
+        task=task,
+        agent_conversation_service=agent_conversation_service,
+        task_service=task_service,
+        conversation_repo=conversation_repo,
+        agent_config_service=agent_config_service,
+    )
+
+    # Stream events from the action
+    return stream_conversation_events(action.run())

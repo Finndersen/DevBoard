@@ -90,7 +90,8 @@ class BaseAgentConversationService(ABC):
         Yields:
             ConversationEvent instances as they are generated during agent execution
         """
-        pass
+        if False:
+            yield  # type: ignore[unreachable]  # Required for async generator type inference
 
     @abstractmethod
     async def get_conversation_messages(self) -> list[ConversationEvent]:

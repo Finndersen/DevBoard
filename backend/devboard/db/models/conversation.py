@@ -8,7 +8,7 @@ from sqlalchemy import Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 
 from .base import Base
 

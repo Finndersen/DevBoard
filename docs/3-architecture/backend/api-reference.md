@@ -44,6 +44,7 @@ GET    /api/tasks/{id}                   Get task details
 PATCH  /api/tasks/{id}                   Update task
 DELETE /api/tasks/{id}                   Delete task
 POST   /api/tasks/{id}/state-transition  Trigger state transition with optional AI
+POST   /api/tasks/{id}/workflow-action   Execute workflow action (NDJSON stream)
 GET    /api/tasks/{id}/diff              Get git diff of uncommitted changes
 GET    /api/tasks/{id}/resources         List task-linked resources
 POST   /api/tasks/{id}/resources         Link resource to task
@@ -76,7 +77,6 @@ POST   /api/conversations/{id}/messages              Send message (returns all e
 POST   /api/conversations/{id}/messages/stream       Send message (NDJSON stream)
 POST   /api/conversations/{id}/approve-tools         Approve/deny tool requests
 POST   /api/conversations/{id}/approve-tools/stream  Approve tools (NDJSON stream)
-POST   /api/conversations/{id}/workflow-action       Execute workflow action (NDJSON stream)
 PUT    /api/conversations/{id}/model                 Update conversation model
 DELETE /api/conversations/{id}/messages              Clear conversation
 ```

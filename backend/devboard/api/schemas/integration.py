@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from devboard.agents.agent_config_service import ModelInfo
+from devboard.agents.config_types import ModelInfo
 
 
 class IntegrationTestResponse(BaseModel):

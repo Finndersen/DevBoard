@@ -102,6 +102,8 @@ class TaskImplementationRole(Role):
             Note: Codebase editing tools (Edit/Write) are provided directly by the
             underlying agent (ClaudeCode), not through this role.
         """
+        if not self.task.implementation_plan:
+            raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
         tools = [
             # Tools for task specification document

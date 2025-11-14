@@ -4,14 +4,13 @@ Handles task creation, phase transitions, and conversation lifecycle management.
 Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
-from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.types import AgentRoleType
+from devboard.agents.role_types import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
-from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
+from devboard.services.conversation_service import ConversationService
 
 
 class TaskService:
@@ -19,29 +18,25 @@ class TaskService:
 
     def __init__(
         self,
-        conversation_repo: ConversationRepository,
+        conversation_service: ConversationService,
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
-        agent_config_service: AgentConfigService,
     ):
         """Initialize service.
 
         Args:
-            conversation_repo: Repository for conversation operations
+            conversation_service: Service for conversation operations
             document_repo: Repository for document operations
             task_repo: Repository for task operations
-            agent_config_service: Service for agent configuration
         """
-        self.conversation_repo = conversation_repo
+        self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
-        self.agent_config_service = agent_config_service
 
     def create_task(
         self,
         project_id: int,
         title: str,
-        status: TaskStatus = TaskStatus.DEFINING,
         codebase_id: int | None = None,
         remote_task_id: str | None = None,
         specification_content: str = "",
@@ -72,26 +67,16 @@ class TaskService:
             title=title,
             specification=specification_doc,
             implementation_plan=None,
-            status=status,
+            status=TaskStatus.DEFINING,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,
         )
 
-        # Determine agent role from status
-        agent_role = self._get_agent_role_for_status(status)
-
-        # Get effective config for role
-        config = self.agent_config_service.get_effective_config(agent_role)
-
-        # Create initial conversation (external_session_id will be set later if needed)
-        self.conversation_repo.create(
+        # Create initial conversation
+        self.conversation_service.create_initial_conversation_for_parent_entity(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
-            agent_role=agent_role,
-            engine=config.engine,
-            model_id=config.model_id,
-            external_session_id=None,
-            is_active=True,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
         )
 
         return task
@@ -159,21 +144,3 @@ class TaskService:
         # Update task status
         task.status = TaskStatus.IMPLEMENTING
         return self.task_repo.update(task)
-
-    @staticmethod
-    def _get_agent_role_for_status(status: TaskStatus) -> AgentRoleType:
-        """Map task status to agent role.
-
-        Args:
-            status: Task status
-
-        Returns:
-            Corresponding AgentRole
-        """
-        mapping = {
-            TaskStatus.DEFINING: AgentRoleType.TASK_SPECIFICATION,
-            TaskStatus.PLANNING: AgentRoleType.TASK_PLANNING,
-            TaskStatus.IMPLEMENTING: AgentRoleType.TASK_IMPLEMENTATION,
-            TaskStatus.REVIEWING: AgentRoleType.TASK_IMPLEMENTATION,  # Same agent for review
-        }
-        return mapping.get(status, AgentRoleType.TASK_SPECIFICATION)

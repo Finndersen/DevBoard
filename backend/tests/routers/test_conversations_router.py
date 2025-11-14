@@ -11,8 +11,8 @@ from starlette.testclient import TestClient
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
+from devboard.agents.role_types import AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQARole
-from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
@@ -120,49 +120,6 @@ def test_task_conversation(db_session, test_task) -> Conversation:
     )
     db_session.commit()
     return conversation
-
-
-@pytest.fixture
-def mock_task_service_for_workflow():
-    """Mock TaskService for workflow action tests."""
-    from unittest.mock import MagicMock
-
-    from devboard.db.models.task import TaskStatus
-
-    service = MagicMock()
-
-    # Mock transition methods to just update status
-    def mock_transition_to_planning(task):
-        task.status = TaskStatus.PLANNING
-        return task
-
-    def mock_transition_to_implementing(task):
-        task.status = TaskStatus.IMPLEMENTING
-        return task
-
-    service.transition_to_planning.side_effect = mock_transition_to_planning
-    service.transition_to_implementing.side_effect = mock_transition_to_implementing
-
-    return service
-
-
-@pytest.fixture
-def client_with_mock_workflow_deps(
-    client,
-    mock_agent_conversation_service,
-    mock_task_service_for_workflow,
-) -> Iterator[TestClient]:
-    """Client with mocked dependencies for workflow actions."""
-    from devboard.api.dependencies.conversations import get_agent_conversation_service
-    from devboard.api.dependencies.services import get_task_service
-
-    app.dependency_overrides[get_agent_conversation_service] = lambda: mock_agent_conversation_service
-    app.dependency_overrides[get_task_service] = lambda: mock_task_service_for_workflow
-    yield client
-    if get_agent_conversation_service in app.dependency_overrides:
-        del app.dependency_overrides[get_agent_conversation_service]
-    if get_task_service in app.dependency_overrides:
-        del app.dependency_overrides[get_task_service]
 
 
 class TestConversationsRouter:
@@ -639,50 +596,3 @@ class TestConversationsRouter:
         assert events[1]["event_type"] == "tool_call"
         assert events[1]["tool_name"] == "validate_changes"
         assert events[2]["event_type"] == "message"
-
-    def test_stream_prompt_action(self, client_with_mock_workflow_deps, test_task_conversation):
-        """Test streaming a prompt action."""
-        prompt_action_request = {"action_key": "task.create_implementation_plan"}
-
-        response = client_with_mock_workflow_deps.post(
-            f"/api/conversations/{test_task_conversation.id}/workflow-action",
-            json=prompt_action_request,
-        )
-        assert response.status_code == 200
-
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
-
-        # Should have SystemEvent for task update and agent message
-        assert len(events) >= 1
-        # Check that we got events back
-        assert any(e["event_type"] in ["message", "system"] for e in events)
-
-    def test_stream_prompt_action_not_found(self, client_with_mock_workflow_deps, test_task_conversation):
-        """Test streaming a non-existent prompt action."""
-        prompt_action_request = {"action_key": "nonexistent.action"}
-
-        response = client_with_mock_workflow_deps.post(
-            f"/api/conversations/{test_task_conversation.id}/workflow-action",
-            json=prompt_action_request,
-        )
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"]
-
-    def test_stream_prompt_action_archived_conversation(
-        self, client_with_mock_workflow_deps, test_task_conversation, db_session
-    ):
-        """Test streaming prompt action on archived conversation."""
-        # Archive the conversation
-        test_task_conversation.is_active = False
-        db_session.commit()
-
-        prompt_action_request = {"action_key": "task.create_implementation_plan"}
-
-        response = client_with_mock_workflow_deps.post(
-            f"/api/conversations/{test_task_conversation.id}/workflow-action",
-            json=prompt_action_request,
-        )
-        assert response.status_code == 400
-        assert "archived" in response.json()["detail"].lower()

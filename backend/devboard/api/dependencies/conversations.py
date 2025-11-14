@@ -2,16 +2,9 @@ from fastapi import Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.agent_engines import AgentEngine
-from devboard.agents.engines.claude_code import ClaudeCodeConversationService
-from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.roles.base import Role
-from devboard.agents.roles.project_qa import ProjectQARole
-from devboard.agents.roles.task_implementation import TaskImplementationRole
-from devboard.agents.roles.task_planning import TaskPlanningRole
-from devboard.agents.roles.task_specification import TaskSpecificationRole
-from devboard.agents.roles.types import AgentRoleType
 from devboard.api.dependencies.entities import get_verified_conversation
+from devboard.api.dependencies.factories import create_agent_conversation_service, create_agent_role_for_conversation
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_document_repository,
@@ -68,7 +61,7 @@ def get_agent_role_for_conversation(
 ) -> Role:
     """Get agent role for a conversation.
 
-    This dependency creates the appropriate role based on the conversation's
+    FastAPI dependency that creates the appropriate role based on the conversation's
     configuration and parent entity.
 
     Args:
@@ -83,40 +76,7 @@ def get_agent_role_for_conversation(
     Raises:
         HTTPException: 400 if unsupported agent role for entity type
     """
-    if isinstance(parent_entity, Task):
-        # Create role based on agent_role type for tasks
-        if conversation.agent_role == AgentRoleType.TASK_SPECIFICATION:
-            return TaskSpecificationRole(
-                task=parent_entity,
-                document_repository=document_repo,
-                agent_config_service=agent_config_service,
-            )
-        elif conversation.agent_role == AgentRoleType.TASK_PLANNING:
-            return TaskPlanningRole(
-                task=parent_entity,
-                document_repository=document_repo,
-                agent_config_service=agent_config_service,
-            )
-        elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
-            return TaskImplementationRole(task=parent_entity, document_repository=document_repo)
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported agent role for task: {conversation.agent_role}",
-            )
-    else:
-        # Must be a project
-        if conversation.agent_role == AgentRoleType.PROJECT:
-            return ProjectQARole(
-                project=parent_entity,
-                document_repository=document_repo,
-                agent_config_service=agent_config_service,
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported agent role for project: {conversation.agent_role}",
-            )
+    return create_agent_role_for_conversation(conversation, parent_entity, document_repo, agent_config_service)
 
 
 def get_agent_conversation_service(
@@ -127,7 +87,7 @@ def get_agent_conversation_service(
 ) -> BaseAgentConversationService:
     """Get conversation service instance.
 
-    This dependency creates the appropriate conversation service (PydanticAI or Claude Code)
+    FastAPI dependency that creates the appropriate conversation service (PydanticAI or Claude Code)
     based on the conversation's engine configuration.
 
     Args:
@@ -142,28 +102,4 @@ def get_agent_conversation_service(
     Raises:
         HTTPException: 400 if unsupported engine
     """
-    # Get codebase path if parent is a task
-    if isinstance(parent_entity, Task):
-        codebase_path = parent_entity.codebase.local_path if parent_entity.codebase else None
-    else:
-        codebase_path = None
-
-    # Create service based on engine type
-    if conversation.engine == AgentEngine.INTERNAL:
-        return PydanticAIConversationService(
-            conversation=conversation,
-            role=role,
-            conversation_repository=conversation_repo,
-        )
-    elif conversation.engine == AgentEngine.CLAUDE_CODE:
-        return ClaudeCodeConversationService(
-            conversation=conversation,
-            role=role,
-            conversation_repository=conversation_repo,
-            codebase_path=codebase_path,
-        )
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported engine: {conversation.engine}",
-        )
+    return create_agent_conversation_service(conversation, role, parent_entity, conversation_repo)

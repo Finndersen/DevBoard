@@ -408,11 +408,11 @@ export class ApiClient {
   }
 
   async *streamWorkflowAction(
-    conversationId: number | string,
+    taskId: number | string,
     request: PromptActionRequest,
   ): AsyncGenerator<ConversationEvent> {
     yield* StreamParser.parseStream(
-      `${this.baseURL}/api/conversations/${conversationId}/workflow-action`,
+      `${this.baseURL}/api/tasks/${taskId}/workflow-action`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

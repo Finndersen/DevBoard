@@ -1,52 +1,10 @@
 import datetime
 from collections.abc import AsyncIterator
 
-from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
-from devboard.db.models import ParentEntityType, Task
+from devboard.db.models import ParentEntityType
 from devboard.db.models.conversation import AgentRoleType
-from devboard.db.repositories import ConversationRepository
-from devboard.services.conversation_service import ConversationService
-from devboard.services.task_service import TaskService
-from devboard.workflow_actions.base import WorkflowAction
-
-
-class TaskWorkflowAction(WorkflowAction):
-    """Base class for workflow actions that operate on tasks.
-
-    Provides common functionality for task-related actions.
-
-    Subclasses should implement specific task operations like state transitions,
-    document generation, or other task-specific workflows.
-    """
-
-    def __init__(
-        self,
-        task: Task,
-        agent_conversation_service: BaseAgentConversationService,
-        task_service: TaskService,
-        conversation_repo: ConversationRepository,
-        agent_config_service: AgentConfigService,
-    ):
-        """Initialize the action with required services.
-
-        Args:
-            task: Task instance this workflow action operates on
-            agent_conversation_service: Service for agent conversation operations
-            task_service: Service for task operations
-            conversation_repo: Repository for conversation database operations
-            agent_config_service: Service for agent configuration
-        """
-        self.task = task
-        self.agent_conversation_service = agent_conversation_service
-        self.task_service = task_service
-        self.conversation_repo = conversation_repo
-        self.agent_config_service = agent_config_service
-        self.conversation_service = ConversationService(
-            conversation_repo=conversation_repo,
-            agent_config_service=agent_config_service,
-        )
+from devboard.workflow_actions.base import TaskWorkflowAction
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
@@ -126,6 +84,7 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
         )
 
         # Update agent conversation service to use new conversation
+        # TODO: This is dodgy and should be refactored
         self.agent_conversation_service.conversation = new_conversation
 
         # Stream agent prompt events
@@ -191,6 +150,7 @@ class BeginImplementationAction(TaskWorkflowAction):
         )
 
         # Update agent conversation service to use new conversation
+        # TODO: This is dodgy and should be refactored
         self.agent_conversation_service.conversation = new_conversation
 
         # Stream agent prompt events

@@ -86,7 +86,7 @@ TASK SPECIFICATION DOCUMENT:
 
 TASK IMPLEMENTATION PLAN DOCUMENT:
 ```markdown
-{task.implementation_plan.content if task.implementation_plan else "<EMPTY>"}
+{task.implementation_plan.content or "<EMPTY>"}
 ```
 """
     if task.codebase:
