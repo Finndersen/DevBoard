@@ -145,8 +145,8 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             List of ConversationEvent instances (ConversationMessage, ToolCall, ToolResult)
         """
         events: list[ConversationEvent] = []
-
-        for session_msg in session_messages:
+        message_count = len(session_messages)
+        for session_idx, session_msg in enumerate(session_messages):
             # Skip sidechain messages
             if session_msg.is_sidechain:
                 continue
@@ -178,11 +178,11 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                     elif isinstance(parsed, VirtualToolCall):
                         # Virtual tool call - convert to ToolCall event (for both invalid and valid calls)
                         # Use helper function to convert to events
-                        # Use ToolCall (not ToolCallRequest) since this is historical data from session
+                        # Produce a ToolCallRequest if this is the last message in the session, otherwise use ToolCall
                         tool_call_events = convert_virtual_tool_call_to_events(
                             tool_call=parsed,
                             timestamp=session_msg.timestamp,
-                            use_tool_call_request=False,
+                            use_tool_call_request=session_idx == message_count - 1,
                         )
                         events.extend(tool_call_events)
 

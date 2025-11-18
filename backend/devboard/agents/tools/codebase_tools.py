@@ -11,18 +11,18 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """
 
     async def search_file_content(
-        query: str,
-        file_pattern: str | None = None,
+        pattern: str,
+        file_glob: str | None = None,
         case_sensitive: bool = False,
         search_hidden: bool = False,
         path: str | None = None,
         context_before: int = 0,
         context_after: int = 0,
     ) -> str:
-        """Search for text or regex patterns within file contents across the codebase (using `ripgrep`).
+        """Search for text or regex patterns within file contents (using `ripgrep`).
 
         Use this tool when you need to:
-        - General text search needs
+        - Find files that contain content that matches a pattern
         - Find specific function calls, variable usages, method invocations
         - See surrounding code context for better understanding
 
@@ -33,8 +33,8 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         - search_file_content("async def", file_pattern="*.py", context_before=2, context_after=5) - Find async functions with context
 
         Args:
-            query: Text or regex pattern to search for
-            file_pattern: Optional glob pattern to filter files (e.g., '*.py')
+            pattern: Text or regex pattern to search for in file content
+            file_glob: Optional glob pattern to filter files (e.g., '*.py')
             case_sensitive: Whether search is case sensitive (default: False)
             search_hidden: Whether to search hidden/ignored files like .venv/ (default: False)
             path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
@@ -46,8 +46,8 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
             or a "No matches found" message if nothing was found.
         """
         result = await codebase_integration.search_file_content(
-            query=query,
-            file_pattern=file_pattern,
+            query=pattern,
+            file_pattern=file_glob,
             case_sensitive=case_sensitive,
             search_hidden=search_hidden,
             path=path,
@@ -56,7 +56,7 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         )
 
         if not result:
-            return f"No matches found for '{query}'"
+            return f"No matches found for '{pattern}'"
 
         return "\n".join(result)
 
