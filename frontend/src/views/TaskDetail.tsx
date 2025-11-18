@@ -229,6 +229,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           <Button
             onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
             variant="primary"
+            disabled={!task.specification?.content || task.specification.content.trim() === ''}
           >
             Begin Planning
           </Button>

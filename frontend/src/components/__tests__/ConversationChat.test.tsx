@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
 import ConversationChat from '../chat/ConversationChat'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 
 describe('ConversationChat', () => {
   const mockConversationId = 1
@@ -17,35 +18,43 @@ describe('ConversationChat', () => {
     })
   }
 
+  // Default message history for tests that expect a populated chat
+  const defaultChatHistory = [
+    {
+      event_type: 'message',
+      text_content: 'What is the status?',
+      role: 'user',
+      timestamp: '2024-01-01T10:00:00Z',
+    },
+    {
+      event_type: 'message',
+      text_content: 'The project is progressing well.',
+      role: 'agent',
+      timestamp: '2024-01-01T10:01:00Z',
+    },
+  ]
+
   beforeEach(() => {
     vi.clearAllMocks()
-    
+
     // Clear any localStorage state that might interfere
     localStorage.clear()
-    
+
+    // Clear the conversationStreamStore between tests to prevent state pollution
+    // Replace the Map entirely to ensure complete cleanup
+    useConversationStreamStore.setState({ activeStreams: new Map() })
+
     // Mock scrollIntoView which is not available in jsdom
     Element.prototype.scrollIntoView = vi.fn()
-    
+
     // Reset server handlers to defaults for each test
     server.resetHandlers()
-    
-    // Setup default API responses for conversation API
+
+    // Setup default handler that returns empty history
+    // Individual tests can override this with server.use() if they need specific data
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
-          {
-            event_type: 'message',
-            text_content: 'What is the status?',
-            role: 'user',
-            timestamp: '2024-01-01T10:00:00Z',
-          },
-          {
-            event_type: 'message',
-            text_content: 'The project is progressing well.',
-            role: 'agent',
-            timestamp: '2024-01-01T10:01:00Z',
-          },
-        ])
+        return HttpResponse.json([])
       })
     )
   })
@@ -61,6 +70,12 @@ describe('ConversationChat', () => {
   })
 
   it('loads and displays chat history on mount', async () => {
+    server.use(
+      http.get('*/api/conversations/1/messages', () => {
+        return HttpResponse.json(defaultChatHistory)
+      })
+    )
+
     render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
@@ -70,6 +85,12 @@ describe('ConversationChat', () => {
   })
 
   it('displays messages with correct user/assistant styling', async () => {
+    server.use(
+      http.get('*/api/conversations/1/messages', () => {
+        return HttpResponse.json(defaultChatHistory)
+      })
+    )
+
     render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
@@ -80,8 +101,8 @@ describe('ConversationChat', () => {
     const userMessageText = screen.getByText('What is the status?')
     const userBubble = userMessageText.closest('.bg-blue-600')
     expect(userBubble).toBeInTheDocument()
-    
-    // Check that assistant messages have correct styling  
+
+    // Check that assistant messages have correct styling
     const assistantMessageText = screen.getByText('The project is progressing well.')
     const assistantBubble = assistantMessageText.closest('.bg-gray-100')
     expect(assistantBubble).toBeInTheDocument()
@@ -284,6 +305,7 @@ describe('ConversationChat', () => {
 
     render(<ConversationChat conversationId={mockConversationId} />)
 
+    // History fetch errors are logged to console
     await waitFor(() => {
       expect(consoleSpy).toHaveBeenCalledWith('Failed to fetch chat history:', expect.any(Error))
     })
@@ -313,8 +335,9 @@ describe('ConversationChat', () => {
     await user.type(input, 'Test message')
     await user.click(sendButton)
 
+    // Now errors are logged from the store with 'Stream error:' prefix
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to send message:', expect.any(Error))
+      expect(consoleSpy).toHaveBeenCalledWith('Stream error:', expect.any(Error))
     })
 
     consoleSpy.mockRestore()

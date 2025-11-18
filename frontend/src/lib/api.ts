@@ -369,6 +369,7 @@ export class ApiClient {
   async *streamConversationMessage(
     conversationId: number | string,
     request: UserPrompt,
+    signal?: AbortSignal,
   ): AsyncGenerator<ConversationEvent> {
     yield* StreamParser.parseStream(
       `${this.baseURL}/api/conversations/${conversationId}/messages/stream`,
@@ -376,6 +377,7 @@ export class ApiClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        signal,
       },
     )
   }
@@ -390,6 +392,7 @@ export class ApiClient {
   async *streamApproveConversationTools(
     conversationId: number | string,
     request: ToolApprovalRequest,
+    signal?: AbortSignal,
   ): AsyncGenerator<ConversationEvent> {
     yield* StreamParser.parseStream(
       `${this.baseURL}/api/conversations/${conversationId}/approve-tools/stream`,
@@ -397,6 +400,7 @@ export class ApiClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        signal,
       },
     )
   }
