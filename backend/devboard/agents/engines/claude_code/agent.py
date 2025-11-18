@@ -150,9 +150,6 @@ class ClaudeCodeAgent(BaseAgent):
         """Build the system prompt from role.
 
         Combines role description, tool schemas, and state/context data.
-
-        Returns:
-            Complete system prompt string
         """
         # Get system prompt from role
         role_prompt = self.role.get_system_prompt()
@@ -175,24 +172,11 @@ class ClaudeCodeAgent(BaseAgent):
         """Get a virtual tool by name.
 
         Tools are lazily computed and cached for the lifetime of the agent instance.
-
-        Args:
-            tool_name: Name of the tool to retrieve
-
-        Returns:
-            VirtualTool instance or None if not found
         """
         return self._virtual_tools.get(tool_name)
 
     def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
-        """Convert Claude SDK Message to ConversationEvent(s).
-
-        Args:
-            message: Message from Claude SDK
-
-        Returns:
-            List of ConversationEvent instances
-        """
+        """Convert Claude SDK Message to ConversationEvent(s)."""
         timestamp = datetime.datetime.now(datetime.UTC)
 
         # Extract tool calls from AssistantMessage if present
@@ -246,12 +230,6 @@ class ClaudeCodeAgent(BaseAgent):
     ) -> AsyncIterator[ConversationEvent]:
         """Stream conversation events from agent execution.
 
-        Args:
-            prompt_or_approvals: Either a user message string or ToolApprovals model
-
-        Yields:
-            Conversation events as they are generated during agent execution
-
         Raises:
             ValueError: If session_id missing when processing tool approvals,
                        or if maximum retry attempts exceeded
@@ -261,11 +239,17 @@ class ClaudeCodeAgent(BaseAgent):
             if not self.session_id:
                 raise ValueError("session_id required when processing tool approvals")
 
-            # Execute tools and format results (convert ToolApprovals to dict)
-            tool_call_results = await self._process_tool_approvals(prompt_or_approvals)
+            # Execute tools and format results
+            result_parts: list[str] = []
+            async for tool_event in self._process_tool_approvals(prompt_or_approvals):
+                if isinstance(tool_event, ToolResult):
+                    # Format result with outcome attribute
+                    result_parts.append(tool_event.result_content)
+
+                yield tool_event
 
             # Send results back to Claude wrapped in XML markers
-            user_message = tool_call_results
+            user_message = "\n".join(result_parts)
         else:
             user_message = prompt_or_approvals
 
@@ -322,20 +306,11 @@ class ClaudeCodeAgent(BaseAgent):
     async def _process_tool_approvals(
         self,
         approvals: ToolApprovals,
-    ) -> str:
+    ) -> AsyncIterator[ToolCall | ToolResult]:
         """Process tool approvals and execute approved virtual tools.
 
         Parses the last message from session to get tool call data,
         executes approved tools, and formats results with XML markers.
-
-        Args:
-            approvals: Map of tool_name (as tool_call_id) to approval decision
-
-        Returns:
-            Formatted result message with XML markers for sending back to Claude
-
-        Raises:
-            ValueError: If session has no messages or last message isn't a tool call
         """
         if not self.session_id:
             raise ValueError("session_id required when processing tool approvals")
@@ -351,77 +326,66 @@ class ClaudeCodeAgent(BaseAgent):
         if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
 
-        result_parts: list[str] = []
-
         # Should only ever actually be a single approval
-        for tool_call_id, decision in approvals.approvals.items():
-            # tool_call_id should match tool_name
-            if tool_call_id != tool_call.tool_name:
-                raise ValueError(
-                    f"Tool call ID mismatch: expected {tool_call.tool_name}, got {tool_call_id}. "
-                    f"Tool call ID must match the tool name from the session."
-                )
+        if len(approvals.approvals) != 1:
+            raise ValueError("Expected exactly one tool approval")
 
-            # Get the virtual tool
-            virtual_tool = self.get_virtual_tool(tool_call.tool_name)
-            if not virtual_tool:
-                raise ValueError(f"Unknown virtual tool: {tool_call.tool_name}")
+        tool_call_id, decision = next(iter(approvals.approvals.items()))
+        yield ToolCall(
+            tool_call_id=tool_call_id,
+            tool_name=tool_call_id,
+            tool_args=tool_call.arguments,
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
 
-            if decision.approved:
-                # Execute the virtual tool
-                try:
-                    result_content = await virtual_tool.execute(tool_call.arguments)
-                    outcome = ToolCallOutcome.SUCCESS
-                except ModelRetry as e:
-                    # Tool execution failed
-                    result_content = e.message
-                    outcome = ToolCallOutcome.ERROR
-                    logfire.warning(
-                        f"Tool execution failed for {tool_call.tool_name}: {e}",
-                        tool_name=tool_call.tool_name,
-                    )
-            else:
-                # Tool denied
-                result_content = "Tool execution denied: " + (decision.feedback or "<No reason provided>")
-                outcome = ToolCallOutcome.DENIED
-
-            # Format result with outcome attribute
-            result_parts.append(
-                self._format_tool_result(tool_name=tool_call.tool_name, outcome=outcome, content=result_content)
+        # tool_call_id should match tool_name
+        if tool_call_id != tool_call.tool_name:
+            raise ValueError(
+                f"Tool call ID mismatch: expected {tool_call.tool_name}, got {tool_call_id}. "
+                f"Tool call ID must match the tool name from the session."
             )
 
-        # Return combined results
-        return "\n\n".join(result_parts)
+        # Get the virtual tool
+        virtual_tool = self.get_virtual_tool(tool_call.tool_name)
+        if not virtual_tool:
+            raise ValueError(f"Unknown virtual tool: {tool_call.tool_name}")
+
+        if decision.approved:
+            # Execute the virtual tool
+            try:
+                result_content = await virtual_tool.execute(tool_call.arguments)
+                outcome = ToolCallOutcome.SUCCESS
+            except ModelRetry as e:
+                # Tool execution failed
+                result_content = e.message
+                outcome = ToolCallOutcome.ERROR
+                logfire.warning(
+                    f"Tool execution failed for {tool_call.tool_name}: {e}",
+                    tool_name=tool_call.tool_name,
+                )
+        else:
+            # Tool denied
+            result_content = "Tool execution denied: " + (decision.feedback or "<No reason provided>")
+            outcome = ToolCallOutcome.DENIED
+
+        formatted_result = self._format_tool_result(tool_name=tool_call_id, outcome=outcome, content=result_content)
+
+        yield ToolResult(
+            tool_call_id=tool_call_id,
+            result_content=formatted_result,
+            is_error=(outcome != ToolCallOutcome.SUCCESS),
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
 
     def _format_tool_result(self, tool_name: str, outcome: ToolCallOutcome, content: str) -> str:
-        """Format a tool result message with XML markers.
-
-        Args:
-            tool_name: Name of the tool
-            outcome: Outcome of the tool call enum value
-            content: Result content or error message
-
-        Returns:
-            Formatted tool result message with XML markers
-        """
-        # Get string value from enum
-        outcome_str = outcome.value
-        return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome_str}">\n{content}\n</tool_call_result>'
+        """Format a tool result message with XML markers."""
+        return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome.value}">\n{content}\n</tool_call_result>'
 
     def _parse_claude_message_text(
         self,
         text_content: str,
     ) -> list[ConversationEvent]:
         """Parse the Claude response and convert to conversation events.
-
-        Uses the centralized parser to consistently handle both regular messages
-        and tool calls, then converts them to appropriate ConversationEvent instances.
-
-        Args:
-            text_content: Text content to parse
-
-        Returns:
-            List of ConversationEvent instances (ConversationMessage or ToolCallRequest)
 
         Raises:
             InvalidVirtualToolCallError: If tool call validation fails
@@ -466,9 +430,6 @@ class ClaudeCodeAgent(BaseAgent):
         tool_call: VirtualToolCall,
     ) -> None:
         """Validate a virtual tool call response.
-
-        Args:
-            tool_call: Parsed and structurally validated VirtualToolCall
 
         Raises:
             InvalidVirtualToolCallError: If validation fails

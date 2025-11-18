@@ -44,7 +44,7 @@ from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
-from devboard.services.task_service import TaskService
+from devboard.services.task_service import TaskService, TaskTransitionError
 from devboard.workflow_actions.registry import workflow_action_registry
 
 router = APIRouter()
@@ -364,5 +364,12 @@ async def execute_workflow_action(
         document_repository=document_repo,
     )
 
+    # Define exception handler to convert task transition errors to HTTP exceptions
+    def handle_exception(exc: Exception) -> None:
+        """Convert task transition errors to appropriate HTTP exceptions."""
+        if isinstance(exc, TaskTransitionError):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise exc
+
     # Stream events from the action
-    return stream_conversation_events(action.run())
+    return stream_conversation_events(action.run(), exception_handler=handle_exception)

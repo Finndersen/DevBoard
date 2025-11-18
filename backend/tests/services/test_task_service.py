@@ -6,7 +6,11 @@ import pytest
 
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
-from devboard.services.task_service import TaskService
+from devboard.services.task_service import (
+    InvalidTaskStatusError,
+    TaskService,
+    TaskTransitionValidationError,
+)
 
 
 @pytest.fixture
@@ -164,7 +168,7 @@ class TestTransitionToPlanning:
 
     def test_transition_wrong_status(self, task_service, task_in_planning):
         """Test transition fails when task is not in DEFINING status."""
-        with pytest.raises(ValueError, match="must be in DEFINING status"):
+        with pytest.raises(InvalidTaskStatusError, match="must be in DEFINING status"):
             task_service.transition_to_planning(task_in_planning)
 
     def test_transition_empty_specification(self, task_service, task_in_defining_empty_spec):
@@ -175,7 +179,7 @@ class TestTransitionToPlanning:
             "Cannot transition to PLANNING without specification content",
         )
 
-        with pytest.raises(ValueError, match="specification content"):
+        with pytest.raises(TaskTransitionValidationError, match="specification content"):
             task_service.transition_to_planning(task_in_defining_empty_spec)
 
 
@@ -198,7 +202,7 @@ class TestTransitionToImplementing:
 
     def test_transition_wrong_status(self, task_service, task_in_defining):
         """Test transition fails when task is not in PLANNING status."""
-        with pytest.raises(ValueError, match="must be in PLANNING status"):
+        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
             task_service.transition_to_implementing(task_in_defining)
 
     def test_transition_empty_plan(self, task_service, task_in_planning_empty_plan):
@@ -209,12 +213,12 @@ class TestTransitionToImplementing:
             "Cannot transition to IMPLEMENTING without implementation plan",
         )
 
-        with pytest.raises(ValueError, match="implementation plan"):
+        with pytest.raises(TaskTransitionValidationError, match="implementation plan"):
             task_service.transition_to_implementing(task_in_planning_empty_plan)
 
     def test_transition_from_implementing_fails(self, task_service, task_in_implementing):
         """Test transition fails when task is already in IMPLEMENTING status."""
-        with pytest.raises(ValueError, match="must be in PLANNING status"):
+        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
             task_service.transition_to_implementing(task_in_implementing)
 
 
@@ -233,7 +237,7 @@ class TestTransitionValidation:
         )
 
         # Should fail with status error, not prerequisite error
-        with pytest.raises(ValueError, match="must be in DEFINING status"):
+        with pytest.raises(InvalidTaskStatusError, match="must be in DEFINING status"):
             task_service.transition_to_planning(task_in_planning)
 
         # Verify can_transition_to_phase was never called (status check failed first)
@@ -252,7 +256,7 @@ class TestTransitionValidation:
         )
 
         # Should fail with status error, not prerequisite error
-        with pytest.raises(ValueError, match="must be in PLANNING status"):
+        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
             task_service.transition_to_implementing(task_in_defining)
 
         # Verify can_transition_to_phase was never called (status check failed first)

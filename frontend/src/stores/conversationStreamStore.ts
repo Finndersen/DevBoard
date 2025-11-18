@@ -16,8 +16,16 @@ export interface StreamState {
   abortController: AbortController
   startedAt: number
   pendingToolRequests: ToolCallRequest[]
-  eventHandlerRegistry?: EventHandlerRegistry
 }
+
+/**
+ * Separate map for event handler registries (not in Zustand state).
+ * Kept outside the store because:
+ * 1. It contains functions (not serializable)
+ * 2. It needs to be mutable (Immer freezes objects)
+ * 3. It doesn't need to be reactive state
+ */
+const eventHandlerRegistries = new Map<number, EventHandlerRegistry>()
 
 /**
  * Store state containing all active conversation streams.
@@ -182,6 +190,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Create abort controller for this stream
       const abortController = new AbortController()
 
+      // Store event handler registry in separate map (not in Zustand state)
+      if (eventHandlerRegistry) {
+        eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
+      }
+
       // Initialize stream state with any initial messages (e.g., user message)
       set((draft) => {
         draft.activeStreams.set(conversationId, {
@@ -191,8 +204,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           error: null,
           abortController,
           startedAt: Date.now(),
-          pendingToolRequests: [],
-          eventHandlerRegistry
+          pendingToolRequests: []
         })
       })
 
@@ -205,14 +217,14 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         )
 
         // Process stream events and collect tool requests
-        // Use registry from store so it can be updated during streaming
+        // Use registry from separate map so it can be updated during streaming
         const { toolRequests } = await processConversationStream({
           stream,
           onEvent: (event) => {
             // Add event to store
             get().addEvent(conversationId, event)
           },
-          eventHandlerRegistry: get().activeStreams.get(conversationId)?.eventHandlerRegistry
+          eventHandlerRegistry: eventHandlerRegistries.get(conversationId)
         })
 
         // Store tool requests if any
@@ -269,6 +281,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           set((draft) => {
             draft.activeStreams.delete(conversationId)
           })
+          // Also clean up event handler registry
+          eventHandlerRegistries.delete(conversationId)
         }
       }, 60000) // Clean up after 1 minute
     },
@@ -277,6 +291,24 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         const stream = draft.activeStreams.get(conversationId)
         if (stream) {
+          // Special handling for ToolCallRequest: remove duplicate ToolCall
+          // PydanticAI emits ToolCall first, then ToolCallRequest for the same tool_call_id
+          // We want to remove the initial ToolCall and keep only the approval workflow
+          if (event.event_type === 'tool_call_request') {
+            // Find and remove previous ToolCall with same tool_call_id
+            const index = stream.messages.findIndex(
+              (msg) =>
+                msg.event_type === 'tool_call' &&
+                msg.tool_call_id === event.tool_call_id
+            )
+            if (index !== -1) {
+              stream.messages.splice(index, 1)
+            }
+            // Don't add ToolCallRequest to messages - it stays in approval UI only
+            return
+          }
+
+          // Add all other events to messages normally
           stream.messages.push(event)
         }
       })
@@ -320,6 +352,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Get existing messages to preserve conversation history
       const existingMessages = existingStream?.messages ?? initialMessages ?? []
 
+      // Store event handler registry in separate map (not in Zustand state)
+      if (eventHandlerRegistry) {
+        eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
+      }
+
       // Create new abort controller for the approval stream
       const abortController = new AbortController()
 
@@ -332,8 +369,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           error: null,
           abortController,
           startedAt: Date.now(),
-          pendingToolRequests: [],
-          eventHandlerRegistry
+          pendingToolRequests: []
         })
       })
 
@@ -346,13 +382,13 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         )
 
         // Process stream events and collect any new tool requests
-        // Use registry from store so it can be updated during streaming
+        // Use registry from separate map so it can be updated during streaming
         const { toolRequests } = await processConversationStream({
           stream: approvalStream,
           onEvent: (event) => {
             get().addEvent(conversationId, event)
           },
-          eventHandlerRegistry: get().activeStreams.get(conversationId)?.eventHandlerRegistry
+          eventHandlerRegistry: eventHandlerRegistries.get(conversationId)
         })
 
         // Store new tool requests if any
@@ -390,6 +426,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           set((draft) => {
             draft.activeStreams.delete(conversationId)
           })
+          // Also clean up event handler registry
+          eventHandlerRegistries.delete(conversationId)
         }
       }, 5000) // Clean up after 5 seconds
     },
@@ -404,12 +442,12 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     },
 
     updateEventHandlerRegistry: (conversationId, eventHandlerRegistry) => {
-      set((draft) => {
-        const stream = draft.activeStreams.get(conversationId)
-        if (stream) {
-          stream.eventHandlerRegistry = eventHandlerRegistry
-        }
-      })
+      // Update registry in external map (not in Zustand state)
+      if (eventHandlerRegistry) {
+        eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
+      } else {
+        eventHandlerRegistries.delete(conversationId)
+      }
     }
   }))
 )

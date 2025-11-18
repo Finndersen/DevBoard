@@ -13,6 +13,18 @@ from devboard.db.repositories.task import TaskRepository
 from devboard.services.conversation_service import ConversationService
 
 
+class TaskTransitionError(Exception):
+    """Base exception for task status transition errors."""
+
+
+class InvalidTaskStatusError(TaskTransitionError):
+    """Raised when a task is in an invalid status for the requested transition."""
+
+
+class TaskTransitionValidationError(TaskTransitionError):
+    """Raised when a task transition fails validation (e.g., missing prerequisites)."""
+
+
 class TaskService:
     """Service for task lifecycle operations including creation and phase transitions."""
 
@@ -93,11 +105,12 @@ class TaskService:
             Updated task instance
 
         Raises:
-            ValueError: If task is not in DEFINING status or transition validation fails
+            InvalidTaskStatusError: If task is not in DEFINING status
+            TaskTransitionValidationError: If transition validation fails
         """
         # Verify current status
         if task.status != TaskStatus.DEFINING:
-            raise ValueError(
+            raise InvalidTaskStatusError(
                 f"Cannot transition to PLANNING: task {task.id} must be in DEFINING status, "
                 f"currently in {task.status.value}"
             )
@@ -105,7 +118,7 @@ class TaskService:
         # Validate transition
         can_transition, error_msg = task.can_transition_to_phase(TaskStatus.PLANNING)
         if not can_transition:
-            raise ValueError(f"Cannot transition task {task.id} to PLANNING: {error_msg}")
+            raise TaskTransitionValidationError(f"Cannot transition task {task.id} to PLANNING: {error_msg}")
 
         # Create implementation_plan document if needed
         if not task.implementation_plan:
@@ -127,11 +140,12 @@ class TaskService:
             Updated task instance
 
         Raises:
-            ValueError: If task is not in PLANNING status or transition validation fails
+            InvalidTaskStatusError: If task is not in PLANNING status
+            TaskTransitionValidationError: If transition validation fails
         """
         # Verify current status
         if task.status != TaskStatus.PLANNING:
-            raise ValueError(
+            raise InvalidTaskStatusError(
                 f"Cannot transition to IMPLEMENTING: task {task.id} must be in PLANNING status, "
                 f"currently in {task.status.value}"
             )
@@ -139,7 +153,7 @@ class TaskService:
         # Validate transition
         can_transition, error_msg = task.can_transition_to_phase(TaskStatus.IMPLEMENTING)
         if not can_transition:
-            raise ValueError(f"Cannot transition task {task.id} to IMPLEMENTING: {error_msg}")
+            raise TaskTransitionValidationError(f"Cannot transition task {task.id} to IMPLEMENTING: {error_msg}")
 
         # Update task status
         task.status = TaskStatus.IMPLEMENTING

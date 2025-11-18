@@ -1,6 +1,7 @@
 """Comprehensive tests for ClaudeCodeAgent.stream_events() method."""
 
 import json
+from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,7 @@ from claude_agent_sdk import (
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import Role
@@ -133,6 +135,25 @@ def setup_mock_client_with_callback(mock_client_class, stream_callback):
     mock_client.stream = stream_callback
     mock_client_class.return_value = mock_client
     return mock_client
+
+
+def create_mock_session_message_with_tool_call(tool_call_json: str) -> SessionMessage:
+    """Helper to create a SessionMessage containing a virtual tool call.
+
+    Args:
+        tool_call_json: JSON string representing the tool call
+
+    Returns:
+        SessionMessage with the tool call as text content
+    """
+    return SessionMessage(
+        uuid="test-uuid",
+        timestamp=datetime.now(),
+        role=SessionMessageRole.ASSISTANT,
+        content=[{"type": "text", "text": tool_call_json}],
+        line_num=1,
+        is_sidechain=False,
+    )
 
 
 @pytest.fixture
@@ -434,18 +455,25 @@ class TestStreamEventsToolApprovals:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
-    @patch.object(ClaudeCodeAgent, "_process_tool_approvals")
-    async def test_tool_approval_success(self, mock_process_approvals, mock_client_class, agent_with_virtual_tool):
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeCodeSessionService")
+    async def test_tool_approval_success(self, mock_session_service_class, mock_client_class, agent_with_virtual_tool):
         """Test processing approved tool call."""
         # Set session_id (required for processing approvals)
         agent_with_virtual_tool.session_id = "session-123"
 
-        # Mock tool approval processing
-        mock_process_approvals.return_value = (
-            '<tool_call_result tool_name="edit_document" outcome="success">\n'
-            "Edit completed successfully\n"
-            "</tool_call_result>"
+        # Create mock session message with virtual tool call
+        tool_call_json = json.dumps(
+            {
+                "type": "tool_call",
+                "tool_name": "edit_document",
+                "arguments": {"edits": [{"find": "old", "replace": "new"}], "reasoning": "Update text"},
+            }
         )
+
+        # Mock session service to return a message with tool call
+        mock_session_service = mock_session_service_class.return_value
+        mock_session_message = create_mock_session_message_with_tool_call(tool_call_json)
+        mock_session_service.get_last_session_message.return_value = mock_session_message
 
         # Mock client response after approval
         messages = create_mock_text_stream("The document has been updated.")
@@ -458,27 +486,51 @@ class TestStreamEventsToolApprovals:
         async for event in agent_with_virtual_tool.stream_events(approvals):
             events.append(event)
 
-        # Verify approval was processed
-        mock_process_approvals.assert_called_once_with(approvals)
+        # Verify session service was called
+        mock_session_service.get_last_session_message.assert_called_once_with("session-123")
 
-        # Verify response
-        assert len(events) == 1
-        assert isinstance(events[0], TextMessage)
-        assert events[0].text_content == "The document has been updated."
+        # Verify events: ToolCall, ToolResult, TextMessage
+        assert len(events) == 3
+
+        # First event should be ToolCall
+        assert isinstance(events[0], ToolCall)
+        assert events[0].tool_name == "edit_document"
+        assert events[0].tool_call_id == "edit_document"
+        assert events[0].tool_args["edits"][0]["find"] == "old"
+
+        # Second event should be ToolResult with success
+        assert isinstance(events[1], ToolResult)
+        assert events[1].tool_call_id == "edit_document"
+        assert "success" in events[1].result_content
+        assert "Edit successful" in events[1].result_content
+        assert events[1].is_error is False
+
+        # Third event should be final TextMessage
+        assert isinstance(events[2], TextMessage)
+        assert events[2].text_content == "The document has been updated."
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
-    @patch.object(ClaudeCodeAgent, "_process_tool_approvals")
-    async def test_tool_denial_with_feedback(self, mock_process_approvals, mock_client_class, agent_with_virtual_tool):
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeCodeSessionService")
+    async def test_tool_denial_with_feedback(
+        self, mock_session_service_class, mock_client_class, agent_with_virtual_tool
+    ):
         """Test processing denied tool call with feedback."""
         agent_with_virtual_tool.session_id = "session-123"
 
-        # Mock tool denial processing
-        mock_process_approvals.return_value = (
-            '<tool_call_result tool_name="edit_document" outcome="denied">\n'
-            "Tool execution denied: The edit is not appropriate\n"
-            "</tool_call_result>"
+        # Create mock session message with virtual tool call
+        tool_call_json = json.dumps(
+            {
+                "type": "tool_call",
+                "tool_name": "edit_document",
+                "arguments": {"edits": [{"find": "old", "replace": "new"}]},
+            }
         )
+
+        # Mock session service to return a message with tool call
+        mock_session_service = mock_session_service_class.return_value
+        mock_session_message = create_mock_session_message_with_tool_call(tool_call_json)
+        mock_session_service.get_last_session_message.return_value = mock_session_message
 
         # Mock client response after denial
         messages = create_mock_text_stream("I understand. Let me try a different approach.")
@@ -493,9 +545,27 @@ class TestStreamEventsToolApprovals:
         async for event in agent_with_virtual_tool.stream_events(approvals):
             events.append(event)
 
-        mock_process_approvals.assert_called_once_with(approvals)
-        assert len(events) == 1
-        assert "different approach" in events[0].text_content
+        # Verify session service was called
+        mock_session_service.get_last_session_message.assert_called_once_with("session-123")
+
+        # Verify events: ToolCall, ToolResult (with denial), TextMessage
+        assert len(events) == 3
+
+        # First event should be ToolCall
+        assert isinstance(events[0], ToolCall)
+        assert events[0].tool_name == "edit_document"
+        assert events[0].tool_call_id == "edit_document"
+
+        # Second event should be ToolResult with denial
+        assert isinstance(events[1], ToolResult)
+        assert events[1].tool_call_id == "edit_document"
+        assert "denied" in events[1].result_content
+        assert "The edit is not appropriate" in events[1].result_content
+        assert events[1].is_error is True
+
+        # Third event should be final TextMessage
+        assert isinstance(events[2], TextMessage)
+        assert "different approach" in events[2].text_content
 
     @pytest.mark.asyncio
     async def test_tool_approval_without_session_raises_error(self, agent_with_virtual_tool):

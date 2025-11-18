@@ -70,9 +70,10 @@ export async function processConversationStream(
     }
 
     // Separate tool requests from other events
+    // Note: We still pass ToolCallRequest to onEvent for deduplication
+    // (the store will remove duplicate ToolCall but not add the request to messages)
     if (event.event_type === 'tool_call_request') {
       toolRequests.push(event as ToolCallRequest)
-      continue
     }
 
     // Invoke event handlers for tool results and system events

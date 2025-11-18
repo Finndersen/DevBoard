@@ -3,12 +3,17 @@
 import datetime
 from collections.abc import AsyncIterator, Generator
 
+import logfire
 from pydantic_ai import Agent, AgentRunResultEvent, AgentStreamEvent, FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.messages import (
+    FinalResultEvent,
     ModelMessage,
     ModelRequest,
     ModelRequestPart,
     ModelResponse,
+    PartDeltaEvent,
+    PartEndEvent,
+    PartStartEvent,
     RetryPromptPart,
     SystemPromptPart,
     TextPart,
@@ -128,6 +133,13 @@ class InternalAgent(BaseAgent):
         Returns:
             ConversationEvent or None if event should not be included
         """
+
+        # Ignore partial streaming event types for now
+        if isinstance(event, (PartStartEvent, PartDeltaEvent, PartEndEvent, FinalResultEvent)):
+            return
+
+        logfire.info(f"Handling PydanticAI stream event: {repr(event)}")
+
         timestamp = datetime.datetime.now(datetime.UTC)
 
         if isinstance(event, FunctionToolCallEvent):
@@ -173,9 +185,6 @@ class InternalAgent(BaseAgent):
                 )
             else:
                 raise ValueError(f"Unexpected agent result output: {result.output}")
-
-        # Ignore other event types:
-        # - PartStartEvent, PartDeltaEvent: For future real-time streaming
 
         return
 

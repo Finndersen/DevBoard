@@ -31,8 +31,8 @@ describe('processConversationStream', () => {
     // Should process all events
     expect(result.eventCount).toBe(4)
 
-    // Should call onEvent for non-tool-request events (3 times)
-    expect(onEvent).toHaveBeenCalledTimes(3)
+    // Should call onEvent for all events (4 times) - including tool requests for deduplication
+    expect(onEvent).toHaveBeenCalledTimes(4)
   })
 
   it('should invoke onFirstEvent callback once on first event', async () => {
@@ -89,8 +89,8 @@ describe('processConversationStream', () => {
     expect(result.toolRequests).toHaveLength(2)
     expect(result.eventCount).toBe(2)
 
-    // Should not call onEvent for tool requests
-    expect(onEvent).not.toHaveBeenCalled()
+    // Should call onEvent for tool requests (for deduplication handling)
+    expect(onEvent).toHaveBeenCalledTimes(2)
   })
 
   it('should handle empty stream', async () => {

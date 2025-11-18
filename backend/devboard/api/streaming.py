@@ -1,25 +1,38 @@
 """Streaming response utilities for API endpoints."""
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
+import logfire
 from fastapi.responses import StreamingResponse
 
 from devboard.agents.events import ConversationEvent
 
 
-def stream_conversation_events(events: AsyncIterator[ConversationEvent]) -> StreamingResponse:
+def stream_conversation_events(
+    events: AsyncIterator[ConversationEvent],
+    exception_handler: Callable[[Exception], None] | None = None,
+) -> StreamingResponse:
     """Create a StreamingResponse that streams ConversationEvents as NDJSON.
 
     Args:
         events: AsyncIterator yielding ConversationEvent objects
+        exception_handler: Optional callback to handle exceptions raised during event iteration.
+            Should raise an appropriate HTTPException. If None, exceptions propagate naturally.
 
     Returns:
         StreamingResponse with NDJSON formatted events (newline-delimited JSON)
     """
 
     async def event_generator():
-        async for event in events:
-            yield json.dumps(event.model_dump(mode="json")) + "\n"
+        try:
+            async for event in events:
+                logfire.info(f"Streaming conversation event: {repr(event)}")
+                yield json.dumps(event.model_dump(mode="json")) + "\n"
+        except Exception as e:
+            if exception_handler:
+                exception_handler(e)
+            else:
+                raise
 
     return StreamingResponse(event_generator(), media_type="text/plain")
