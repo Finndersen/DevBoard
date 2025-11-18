@@ -226,3 +226,37 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
 
         return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]
+
+    def delete_by_parent(self, parent_entity_type: ParentEntityType, parent_entity_id: int) -> int:
+        """Hard-delete all conversations and their messages for a parent entity.
+
+        Used during parent entity deletion to ensure no orphaned conversation records.
+        Messages are explicitly deleted first because we use SQL delete() which bypasses
+        ORM cascade rules. Using ORM delete would be slower for bulk operations.
+
+        Args:
+            parent_entity_type: Type of parent entity (PROJECT, TASK, CODEBASE)
+            parent_entity_id: ID of parent entity
+
+        Returns:
+            Number of conversations deleted
+        """
+        # Get all conversation IDs for the parent
+        stmt = select(Conversation.id).where(
+            Conversation.parent_entity_type == parent_entity_type,
+            Conversation.parent_entity_id == parent_entity_id,
+        )
+        conversation_ids = list(self.db.execute(stmt).scalars().all())
+
+        if not conversation_ids:
+            return 0
+
+        # Delete all messages for these conversations first
+        msg_stmt = delete(ConversationMessage).where(ConversationMessage.conversation_id.in_(conversation_ids))
+        self.db.execute(msg_stmt)
+
+        # Delete the conversations
+        conv_stmt = delete(Conversation).where(Conversation.id.in_(conversation_ids))
+        result = self.db.execute(conv_stmt)
+
+        return result.rowcount  # type: ignore[attr-defined]

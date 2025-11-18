@@ -134,14 +134,12 @@ async def update_task(
 async def delete_task(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    task_repo: TaskRepository = Depends(get_task_repository),
+    task_service: TaskService = Depends(get_task_service),
 ):
-    """Delete a task."""
-    deleted = task_repo.delete_by_id(task_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
+    """Delete a task and all related data (conversations, messages, documents, associations)."""
+    # Use the service layer for transactional deletion
+    task_service.delete_task(task)
 
-    task_repo.db.commit()
     return {"message": "Task deleted successfully", "success": True}
 
 

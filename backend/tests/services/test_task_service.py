@@ -46,12 +46,20 @@ def mock_task_repo():
 
 
 @pytest.fixture
-def task_service(mock_conversation_service, mock_document_repo, mock_task_repo):
+def mock_conversation_repo():
+    """Mock ConversationRepository."""
+    repo = MagicMock()
+    return repo
+
+
+@pytest.fixture
+def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, mock_conversation_repo):
     """Create TaskService instance with mocked dependencies."""
     return TaskService(
         conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         task_repo=mock_task_repo,
+        conversation_repo=mock_conversation_repo,
     )
 
 

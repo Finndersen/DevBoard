@@ -1,27 +1,30 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
-import { useTask, useUpdateTask, useEditableField, useCodebases, useProject } from '../hooks'
+import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
-import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown } from '../components/ui'
+import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
 import type { ConversationChatHandle } from '../components/chat/ConversationChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import { apiClient } from '../lib/api'
+import { useNotificationStore } from '../stores/notificationStore'
 
 interface TaskDetailProps {
   id: string
 }
 
 function TaskDetail({ id }: TaskDetailProps) {
+  const navigate = useNavigate()
   const { data: task, loading, error, refetch } = useTask(id)
   const { setTask } = useDataStore()
   const { data: codebases } = useCodebases()
+  const { addNotification } = useNotificationStore()
 
   // Fetch task when id changes (supports both initial mount and tab switching with keep-mounted components)
   useEffect(() => {
@@ -52,6 +55,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string>('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
   // State for diff data
@@ -94,6 +98,38 @@ function TaskDetail({ id }: TaskDetailProps) {
   const titleField = useEditableField(task?.title || '', saveTitleField)
   const specificationField = useEditableField(task?.specification.content || '', saveSpecificationField)
   const planField = useEditableField(task?.implementation_plan?.content || '', savePlanField)
+
+  // Delete task mutation
+  const { mutate: deleteTask, loading: deleteLoading, error: deleteError } = useDeleteTask()
+
+  // Handle task deletion
+  const handleDeleteTask = useCallback(async () => {
+    if (!task) return
+
+    try {
+      await deleteTask(task.id)
+
+      // Show success notification
+      addNotification({
+        type: 'system_error', // Using system_error as closest match for success
+        priority: 'normal',
+        entityType: 'project',
+        entityId: task.project_id.toString(),
+        entityTitle: project?.name || null,
+        conversationId: null,
+        message: `Task "${task.title}" deleted successfully`,
+        actions: []
+      })
+
+      // Navigate to parent project
+      navigate(`/projects/${task.project_id}`)
+    } catch (error) {
+      console.error('Failed to delete task:', error)
+      // Error will be shown via deleteError state
+    } finally {
+      setShowDeleteConfirm(false)
+    }
+  }, [task, project, deleteTask, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
@@ -182,7 +218,12 @@ function TaskDetail({ id }: TaskDetailProps) {
     async (event) => {
       console.log('TaskDetail: Received TASK_UPDATED SystemEvent:', event)
       // Refetch task to get updated status and conversation_id
-      await refetch()
+      try {
+        await refetch()
+      } catch (error) {
+        console.error('TaskDetail: Failed to refetch task after update event:', error)
+        // Don't throw - allow other handlers and stream to continue
+      }
     }
   )
 
@@ -301,17 +342,13 @@ function TaskDetail({ id }: TaskDetailProps) {
       {updateError && (
         <ErrorMessage error={updateError} className="mb-6" />
       )}
+      {deleteError && (
+        <ErrorMessage error={deleteError} className="mb-6" />
+      )}
       
       {/* Compact Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-4">
-          <Link
-            to={project ? `/projects/${project.id}` : '/projects'}
-            className={`inline-flex items-center text-sm ${textColors.secondary} hover:text-gray-700 dark:hover:text-gray-300`}
-          >
-            <ArrowLeftIcon className="w-4 h-4 mr-1" />
-            {project ? project.name : 'Projects'}
-          </Link>
           <div className="flex items-center space-x-3">
             {/* Task Title Display and Edit */}
             {titleField.isEditing ? (
@@ -430,7 +467,19 @@ function TaskDetail({ id }: TaskDetailProps) {
         </div>
         
         <div className="flex items-center space-x-3">
-          
+          {/* Delete Button */}
+          <Button
+            onClick={() => setShowDeleteConfirm(true)}
+            variant="ghost"
+            size="sm"
+            icon={<TrashIcon className="w-4 h-4" />}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+            title="Delete task"
+            aria-label="Delete task"
+          >
+            Delete
+          </Button>
+
           {/* State Transition Controls */}
           {getNextStateButton()}
         </div>
@@ -612,6 +661,18 @@ function TaskDetail({ id }: TaskDetailProps) {
         </div>
       </div>
 
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteTask}
+        title="Delete Task"
+        message={`Are you sure you want to delete "${task.title}"? This will permanently delete the task, its specification, implementation plan, conversations, and all associated data. This action cannot be undone.`}
+        confirmText="Delete Task"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleteLoading}
+      />
     </div>
   )
 }

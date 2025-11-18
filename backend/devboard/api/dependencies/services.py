@@ -101,12 +101,14 @@ def get_task_service(
     conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
     """Get TaskService instance."""
     return TaskService(
         conversation_service=conversation_service,
         document_repo=document_repo,
         task_repo=task_repo,
+        conversation_repo=conversation_repo,
     )
 
 

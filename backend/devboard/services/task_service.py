@@ -8,6 +8,7 @@ from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
+from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.services.conversation_service import ConversationService
@@ -33,6 +34,7 @@ class TaskService:
         conversation_service: ConversationService,
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
+        conversation_repo: ConversationRepository,
     ):
         """Initialize service.
 
@@ -40,10 +42,12 @@ class TaskService:
             conversation_service: Service for conversation operations
             document_repo: Repository for document operations
             task_repo: Repository for task operations
+            conversation_repo: Repository for conversation operations
         """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
+        self.conversation_repo = conversation_repo
 
     def create_task(
         self,
@@ -158,3 +162,28 @@ class TaskService:
         # Update task status
         task.status = TaskStatus.IMPLEMENTING
         return self.task_repo.update(task)
+
+    def delete_task(self, task: Task) -> None:
+        """Hard-delete a task and all related data.
+
+        Performs a transactional deletion of:
+        1. Task-context resource associations
+        2. Conversations and their messages for the task
+        3. The task itself
+        4. Task-specific documents (specification and implementation plan)
+        """
+        # 1. Delete task-context resource associations (required - no CASCADE on FK)
+        self.task_repo.delete_task_context_resources(task)
+
+        # 2. Delete conversations and messages for the task
+        self.conversation_repo.delete_by_parent(ParentEntityType.TASK, task.id)
+
+        # These documents are exclusive to the task, so safe to delete
+        if task.specification_id:
+            self.document_repo.delete_by_id(task.specification_id)
+
+        if task.implementation_plan_id:
+            self.document_repo.delete_by_id(task.implementation_plan_id)
+
+        # 3. Delete the task itself
+        self.task_repo.delete(task)

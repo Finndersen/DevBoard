@@ -240,8 +240,13 @@ class TestTasksRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
-    def test_delete_task_success(self, client, db_session, test_task_data):
-        """Test deleting a task."""
+    def test_delete_task_success(self, client, db_session, test_task_data, test_resource_data):
+        """Test deleting a task with comprehensive cleanup."""
+        from sqlalchemy import select
+
+        from devboard.db.models import ConversationMessage
+        from devboard.db.models.base import task_context_resource_association
+
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -252,8 +257,8 @@ class TestTasksRouter:
 
         # Create test task using repository
         task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "Test spec content")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "Test plan content")
         created_task = task_repo.create(
             project_id=created_project.id,
             title=test_task_data["title"],
@@ -261,15 +266,91 @@ class TestTasksRouter:
             specification=task_spec_doc,
             implementation_plan=task_plan_doc,
         )
+
+        # Create conversation and messages for the task
+        conversation_repo = ConversationRepository(db_session)
+        conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=created_task.id,
+            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+
+        # Add some messages to the conversation
+        from devboard.db.models import MessageType
+
+        message1 = ConversationMessage(
+            conversation_id=conversation.id,
+            message_type=MessageType.USER_PROMPT,
+            pydantic_content={"parts": [{"content": "Test message 1"}]},
+            text_content="Test message 1",
+        )
+        message2 = ConversationMessage(
+            conversation_id=conversation.id,
+            message_type=MessageType.TEXT_RESPONSE,
+            pydantic_content={"parts": [{"content": "Test response 1"}]},
+            text_content="Test response 1",
+        )
+        db_session.add(message1)
+        db_session.add(message2)
+
+        # Create a context resource and associate it with the task
+        resource_repo = ContextProviderResourceRepository(db_session)
+        resource = resource_repo.create_task_resource(
+            task_id=created_task.id,
+            resource_uri=test_resource_data["resource_uri"],
+            provider_name="github",
+            description=test_resource_data["description"],
+        )
+
         db_session.commit()
 
-        response = client.delete(f"/api/tasks/{created_task.id}")
+        # Store IDs for verification after deletion
+        task_id = created_task.id
+        conversation_id = conversation.id
+        spec_doc_id = task_spec_doc.id
+        plan_doc_id = task_plan_doc.id
+        resource_id = resource.id
+
+        # Verify setup: task-context association exists
+        assoc_stmt = select(task_context_resource_association).where(
+            task_context_resource_association.c.task_id == task_id
+        )
+        assoc_before = db_session.execute(assoc_stmt).first()
+        assert assoc_before is not None, "Task-context association should exist before deletion"
+
+        # Delete the task
+        response = client.delete(f"/api/tasks/{task_id}")
         assert response.status_code == 200
         assert response.json()["message"] == "Task deleted successfully"
 
         # Verify task is deleted
-        get_response = client.get(f"/api/tasks/{created_task.id}")
+        get_response = client.get(f"/api/tasks/{task_id}")
         assert get_response.status_code == 404
+
+        # Verify conversations are deleted
+        deleted_conversation = conversation_repo.get_by_id(conversation_id)
+        assert deleted_conversation is None, "Conversation should be deleted"
+
+        # Verify messages are deleted
+        messages_stmt = select(ConversationMessage).where(ConversationMessage.conversation_id == conversation_id)
+        remaining_messages = db_session.execute(messages_stmt).scalars().all()
+        assert len(remaining_messages) == 0, "All conversation messages should be deleted"
+
+        # Verify task-context resource associations are deleted
+        assoc_after = db_session.execute(assoc_stmt).first()
+        assert assoc_after is None, "Task-context association should be deleted"
+
+        # Verify resource itself still exists (it's M2M, resource should not be deleted)
+        resource_after = resource_repo.get_by_id(resource_id)
+        assert resource_after is not None, "Resource should still exist (not exclusive to task)"
+
+        # Verify documents are deleted
+        spec_doc_after = document_repo.get_by_id(spec_doc_id)
+        plan_doc_after = document_repo.get_by_id(plan_doc_id)
+        assert spec_doc_after is None, "Specification document should be deleted"
+        assert plan_doc_after is None, "Implementation plan document should be deleted"
 
     def test_delete_task_not_found(self, client):
         """Test deleting a non-existent task."""

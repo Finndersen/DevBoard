@@ -1,10 +1,12 @@
 """Main FastAPI application."""
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastmcp import FastMCP
 
 from devboard.api.routers import (
     agents,
@@ -16,20 +18,44 @@ from devboard.api.routers import (
     tasks,
     tool_approvals,
 )
-from devboard.api.routers.mcp import mcp_app
 from devboard.config.logfire_config import setup_logfire
+from devboard.mcp import mcp
 
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
 load_dotenv(Path.home() / ".env", override=False)
 
-# logging.basicConfig(level=logging.INFO)
+
+class SingleSessionMCP:
+    """Wrapper which prevents error of initialising FastMCP's StreamableHTTPSessionManager multiple times during tests."""
+
+    def __init__(self, mcp: FastMCP):
+        self.app = mcp.http_app(path="/mcp", transport="http")
+        self.lifespan_generator = self.app.lifespan(self.app)
+        self.generator_started = False
+
+    async def start_session(self):
+        if self.generator_started:
+            return
+        await self.lifespan_generator.__aenter__()
+        self.generator_started = True
+
+
+ss_mcp = SingleSessionMCP(mcp)
+
+
+@asynccontextmanager
+async def combined_lifespan(app: FastAPI):
+    """Run both lifespans."""
+    await ss_mcp.start_session()
+    yield
+
 
 app = FastAPI(
     title="DevBoard API",
     description="AI-powered developer command centre",
     version="0.1.0",
-    lifespan=mcp_app.lifespan,  # Pass MCP lifespan for proper initialization
+    lifespan=combined_lifespan,
 )
 
 setup_logfire(app)
@@ -55,7 +81,7 @@ app.include_router(tool_approvals.router, prefix="/api")
 
 # Mount MCP server as ASGI application
 # The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)
-app.mount("/mcp", mcp_app)
+app.mount("/mcp", ss_mcp.app)
 
 
 @app.get("/")

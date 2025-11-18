@@ -142,18 +142,3 @@ class TestTaskRepository:
         db_session.commit()
         assert updated.title == "Updated Task"
         assert updated.status == TaskStatus.COMPLETE
-
-    def test_delete_by_id(self, repo: TaskRepository, sample_task_data: dict, db_session):
-        """Test deleting a task by ID."""
-        created = repo.create(**sample_task_data)
-        db_session.commit()
-        result = repo.delete_by_id(created.id)
-        db_session.commit()
-
-        assert result is True
-        assert repo.get_by_id(created.id) is None
-
-    def test_delete_by_id_not_found(self, repo: TaskRepository):
-        """Test deleting a task by ID when it doesn't exist."""
-        result = repo.delete_by_id(999)
-        assert result is False

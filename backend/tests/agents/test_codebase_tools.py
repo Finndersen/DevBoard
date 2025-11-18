@@ -76,7 +76,7 @@ class TestTextSearchTool:
         tool = create_text_search_tool(mock_codebase_integration)
         await tool.function(
             "pattern",
-            file_pattern="*.py",
+            file_glob="*.py",
             case_sensitive=True,
             search_hidden=True,
         )

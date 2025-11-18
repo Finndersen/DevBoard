@@ -1,9 +1,10 @@
 """Task repository for task data access operations."""
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from devboard.db.models import Document, Task
+from devboard.db.models.base import task_context_resource_association
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories.base import BaseRepository
 
@@ -96,18 +97,24 @@ class TaskRepository(BaseRepository[Task]):
         self.db.merge(task)
         return task
 
-    def delete_by_id(self, task_id: int) -> bool:
-        """Delete a task by its ID.
+    def delete_task_context_resources(self, task: Task) -> int:
+        """Delete all task-context resource associations for a task.
 
         Args:
-            task_id: The task ID to delete
+            task: The task to clean up associations for
 
         Returns:
-            True if task was deleted, False if not found
+            Number of association rows deleted
         """
-        task = self.get_by_id(task_id)
-        if task:
-            # Documents will be cascade deleted via foreign key constraints
-            self.db.delete(task)
-            return True
-        return False
+        stmt = delete(task_context_resource_association).where(task_context_resource_association.c.task_id == task.id)
+        result = self.db.execute(stmt)
+        return result.rowcount  # type: ignore[attr-defined]
+
+    def delete(self, task: Task) -> None:
+        """Delete a task entity.
+
+        Args:
+            task: Task instance to delete
+        """
+        self.db.delete(task)
+        self.db.flush()

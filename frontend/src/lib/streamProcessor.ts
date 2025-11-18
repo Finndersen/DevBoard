@@ -77,8 +77,14 @@ export async function processConversationStream(
     }
 
     // Invoke event handlers for tool results and system events
+    // Error handling ensures handler failures don't crash the stream
     if (eventHandlerRegistry && (event.event_type === 'tool_result' || event.event_type === 'system')) {
-      await invokeEventHandlers(event, eventHandlerRegistry, toolCallMap)
+      try {
+        await invokeEventHandlers(event, eventHandlerRegistry, toolCallMap)
+      } catch (error) {
+        console.error('Error invoking event handlers:', error)
+        // Continue processing stream despite handler errors
+      }
     }
 
     // Skip system events from regular event processing (handlers deal with them)

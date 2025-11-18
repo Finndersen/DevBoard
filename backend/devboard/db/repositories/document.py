@@ -99,3 +99,18 @@ class DocumentRepository(BaseRepository[Document]):
         """
         expected_hash = self.calculate_hash(document.content)
         return expected_hash == document.content_hash
+
+    def delete_by_id(self, document_id: int) -> bool:
+        """Delete a document by its ID.
+
+        Args:
+            document_id: The document ID to delete
+
+        Returns:
+            True if document was deleted, False if not found
+        """
+        document = self.get_by_id(document_id)
+        if document:
+            self.db.delete(document)
+            return True
+        return False

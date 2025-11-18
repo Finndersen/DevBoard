@@ -230,8 +230,15 @@ export async function invokeEventHandlers(
       }
     }
 
-    // Call all matching handlers
-    await Promise.all(matchingHandlers.map(handler => handler(event)))
+    // Call all matching handlers (use allSettled to prevent one failure from stopping others)
+    const results = await Promise.allSettled(matchingHandlers.map(handler => handler(event)))
+
+    // Log any handler failures for debugging
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Tool result handler ${index} failed for tool "${toolName}":`, result.reason)
+      }
+    })
   }
 
   // Handle system events
@@ -244,7 +251,14 @@ export async function invokeEventHandlers(
       }
     }
 
-    // Call all matching handlers
-    await Promise.all(matchingHandlers.map(handler => handler(event)))
+    // Call all matching handlers (use allSettled to prevent one failure from stopping others)
+    const results = await Promise.allSettled(matchingHandlers.map(handler => handler(event)))
+
+    // Log any handler failures for debugging
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`System event handler ${index} failed for event type "${event.type}":`, result.reason)
+      }
+    })
   }
 }
