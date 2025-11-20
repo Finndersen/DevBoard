@@ -14,7 +14,7 @@ class TaskBase(BaseModel):
 
     title: str
     project_id: int
-    codebase_id: int | None = None
+    codebase_id: int
     status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
 
@@ -24,7 +24,7 @@ class TaskCreate(BaseModel):
 
     title: str
     project_id: int
-    codebase_id: int | None = None
+    codebase_id: int
     status: TaskStatus = TaskStatus.DEFINING
     remote_task_id: str | None = None
 
@@ -33,9 +33,11 @@ class TaskCreateNested(BaseModel):
     """Schema for creating a new task under a project (project_id from URL)."""
 
     title: str
-    codebase_id: int | None = None
+    codebase_id: int
     remote_task_id: str | None = None
     specification_content: str | None = None
+    branch_name: str | None = None
+    base_branch: str | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -86,3 +88,30 @@ class TaskDiffResponse(BaseModel):
     total_additions: int
     total_deletions: int
     generated_at: datetime.datetime
+
+
+class TaskGitStatusResponse(BaseModel):
+    """Schema for task git status response."""
+
+    branch_name: str | None
+    branch_exists: bool
+    base_branch: str
+    commits_ahead: int
+    commits_behind: int
+    can_merge: bool
+    has_conflicts: bool
+
+
+class MergeBranchRequest(BaseModel):
+    """Schema for merging a task branch."""
+
+    target_branch: str | None = None
+    delete_branch: bool = False
+
+
+class MergeBranchResponse(BaseModel):
+    """Schema for merge branch response."""
+
+    success: bool
+    merge_commit: str
+    message: str

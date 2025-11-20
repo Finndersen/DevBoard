@@ -6,14 +6,17 @@ from devboard.db.repositories import DocumentRepository
 from devboard.services.document_editor import DocumentEditorService
 
 
-def create_document_edit_tool(document: Document, document_repo: DocumentRepository) -> Tool:
+def create_document_edit_tool(
+    document: Document, document_repo: DocumentRepository, requires_approval: bool = True
+) -> Tool:
     """Create an engine-agnostic document editing tool.
 
-    The tool validates edits before applying them and requires approval for execution.
+    The tool validates edits before applying them.
 
     Args:
         document: Document model to edit
         document_repo: Repository for document operations
+        requires_approval: Whether to require approval before executing edits (default: True)
     """
 
     def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
@@ -46,20 +49,27 @@ def create_document_edit_tool(document: Document, document_repo: DocumentReposit
         return f"Edits applied successfully to {document.document_type}."
 
     return Tool(
-        function=edit_document_tool, name=f"edit_{document.document_type}", requires_approval=True, takes_ctx=False
+        function=edit_document_tool,
+        name=f"edit_{document.document_type}",
+        requires_approval=requires_approval,
+        takes_ctx=False,
     )
 
 
-def create_set_document_content_tool(document: Document, document_repo: DocumentRepository) -> Tool:
+def create_set_document_content_tool(
+    document: Document, document_repo: DocumentRepository, requires_approval: bool | None = None
+) -> Tool:
     """Create an engine-agnostic tool for setting the content of a document.
 
     This tool can be used on both blank and non-blank documents:
-    - For blank documents: No approval required (non-destructive)
-    - For non-blank documents: Requires approval (destructive - replaces existing content)
+    - For blank documents: No approval required by default (non-destructive)
+    - For non-blank documents: Requires approval by default (destructive - replaces existing content)
 
     Args:
         document: Document model to set content for
         document_repo: Repository for document operations
+        requires_approval: Whether to require approval. If None, uses smart logic:
+            requires approval only if document already has content (default: None)
     """
 
     def set_document_content_tool(content: str, reasoning: str = "") -> str:
@@ -83,10 +93,13 @@ def create_set_document_content_tool(document: Document, document_repo: Document
 
         return f"Content set successfully for {document.document_type}."
 
-    document_has_content = bool(document.content and document.content.strip())
+    # Determine approval requirement: use provided value or smart logic based on content
+    if requires_approval is None:
+        requires_approval = bool(document.content and document.content.strip())
+
     return Tool(
         function=set_document_content_tool,
         name=f"set_{document.document_type}_content",
-        requires_approval=document_has_content,
+        requires_approval=requires_approval,
         takes_ctx=False,
     )

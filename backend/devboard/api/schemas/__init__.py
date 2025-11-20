@@ -39,13 +39,25 @@ from .resource import (
 )
 from .task import (
     FileDiff,
+    MergeBranchRequest,
+    MergeBranchResponse,
     StateTransitionRequest,
     TaskBase,
     TaskCreate,
     TaskCreateNested,
     TaskDiffResponse,
+    TaskGitStatusResponse,
     TaskResponse,
     TaskUpdate,
+)
+from .worktree import (
+    CreateWorktreeSlotRequest,
+    ReconcileWorktreePoolResponse,
+    WorkspaceAllocationErrorResponse,
+    WorkspaceAllocationResponse,
+    WorktreePoolStatusResponse,
+    WorktreeSlotResponse,
+    WorktreeSlotWithTaskInfo,
 )
 
 __all__ = [
@@ -96,11 +108,22 @@ __all__ = [
     # Task
     "DocumentEdit",
     "FileDiff",
+    "MergeBranchRequest",
+    "MergeBranchResponse",
     "StateTransitionRequest",
     "TaskBase",
     "TaskCreate",
     "TaskCreateNested",
     "TaskDiffResponse",
+    "TaskGitStatusResponse",
     "TaskResponse",
     "TaskUpdate",
+    # Worktree
+    "CreateWorktreeSlotRequest",
+    "ReconcileWorktreePoolResponse",
+    "WorkspaceAllocationErrorResponse",
+    "WorkspaceAllocationResponse",
+    "WorktreePoolStatusResponse",
+    "WorktreeSlotResponse",
+    "WorktreeSlotWithTaskInfo",
 ]

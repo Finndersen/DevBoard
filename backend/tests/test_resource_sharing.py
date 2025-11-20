@@ -2,8 +2,10 @@
 
 import pytest
 
+from devboard.db.models import Codebase
 from devboard.db.models.document import DocumentType
 from devboard.db.repositories import (
+    CodebaseRepository,
     ContextProviderResourceRepository,
     DocumentRepository,
     ProjectRepository,
@@ -42,6 +44,20 @@ def test_tasks_data():
             "project_id": 2,
         },
     ]
+
+
+@pytest.fixture
+def test_codebase(db_session):
+    """Create a test codebase for tasks."""
+    codebase_repo = CodebaseRepository(db_session)
+    codebase = Codebase(
+        name="Test Codebase",
+        description="A test codebase",
+        local_path="/tmp/test-codebase",
+    )
+    codebase = codebase_repo.create(codebase)
+    db_session.commit()
+    return codebase
 
 
 class TestResourceSharing:
@@ -92,7 +108,9 @@ class TestResourceSharing:
         assert len(proj2_resources) == 1
         assert proj1_resources[0]["id"] == proj2_resources[0]["id"]
 
-    def test_resource_sharing_across_projects_and_tasks(self, client, db_session, test_projects_data, test_tasks_data):
+    def test_resource_sharing_across_projects_and_tasks(
+        self, client, db_session, test_codebase, test_projects_data, test_tasks_data
+    ):
         """Test that resources can be shared between projects and tasks."""
         # Create projects and tasks
         document_repo = DocumentRepository(db_session)
@@ -113,6 +131,8 @@ class TestResourceSharing:
             **task_data,
             specification=task_spec_doc,
             implementation_plan=task_plan_doc,
+            base_branch="main",
+            codebase_id=test_codebase.id,
         )
         db_session.commit()
 

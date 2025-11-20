@@ -21,7 +21,7 @@ from devboard.api.schemas.codebase import (
 )
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
-from devboard.integrations.codebase import detect_git_remote_url
+from devboard.integrations.git import GitIntegration
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 
 router = APIRouter()
@@ -54,7 +54,8 @@ async def create_codebase(
         )
 
     # Auto-detect git remote URL if the directory is a git repository
-    repository_url = detect_git_remote_url(codebase.local_path)
+    git = GitIntegration(codebase.local_path)
+    repository_url = await git.detect_git_remote_url()
 
     # Create the codebase with auto-detected repository URL
     codebase_data = codebase.model_dump()

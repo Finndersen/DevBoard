@@ -10,13 +10,13 @@ from devboard.agents.tools import (
     create_file_search_tool,
     create_text_search_tool,
 )
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 
 @pytest.fixture
 def mock_codebase_integration():
-    """Create a mock CodebaseIntegration."""
-    integration = Mock(spec=CodebaseIntegration)
+    """Create a mock FilesystemIntegration."""
+    integration = Mock(spec=FilesystemIntegration)
     integration.search_file_content = AsyncMock()
     integration.search_files = AsyncMock()
     integration.search_code_structure = AsyncMock()

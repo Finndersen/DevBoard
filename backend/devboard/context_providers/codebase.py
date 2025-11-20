@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import logfire
 
 from devboard.agents.engines.gemini_cli import GeminiCliError, execute_gemini_prompt
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 from .base import (
     BaseContextProvider,
@@ -37,13 +37,13 @@ class CodebaseContextProvider(BaseContextProvider):
 
         try:
             current_dir = os.getcwd()
-            integration = CodebaseIntegration(current_dir)
+            integration = FilesystemIntegration(current_dir)
             return cls(integration)
         except Exception as e:
             raise ContextProviderUnavailable(f"Failed to initialize Codebase integration: {e}") from e
 
-    def __init__(self, integration: CodebaseIntegration):
-        """Initialize with Codebase integration."""
+    def __init__(self, integration: FilesystemIntegration):
+        """Initialize with Filesystem integration."""
         self.integration = integration
         self.base_path = integration.codebase_path
 
@@ -169,7 +169,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
             if full_path.is_file():
                 # Get file info and generate description
                 file_info = await self.integration.get_file_info(file_path)
-                file_size = file_info.get("size", 0)
+                file_size = file_info.size
 
                 # Try to determine file type from extension
                 suffix = full_path.suffix

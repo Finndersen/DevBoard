@@ -8,7 +8,7 @@ import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from starlette.testclient import TestClient
 
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles import AgentRoleType

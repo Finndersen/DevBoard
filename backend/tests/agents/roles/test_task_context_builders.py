@@ -4,9 +4,24 @@ from pytest import fixture
 
 from devboard.agents.roles.task_planning import build_task_planning_context
 from devboard.agents.roles.task_specification import build_task_specification_context
-from devboard.db.models import DocumentType, Project, Task
+from devboard.db.models import Codebase, DocumentType, Project, Task
 from devboard.db.models.task import TaskStatus
-from devboard.db.repositories import DocumentRepository, ProjectRepository, TaskRepository
+from devboard.db.repositories import CodebaseRepository, DocumentRepository, ProjectRepository, TaskRepository
+
+
+@fixture
+def sample_codebase(db_session) -> Codebase:
+    """Create a sample codebase for testing."""
+    codebase_repo = CodebaseRepository(db_session)
+    codebase = Codebase(
+        name="Test Codebase",
+        description="A test codebase",
+        local_path="/tmp/test-codebase",
+    )
+    codebase = codebase_repo.create(codebase)
+    db_session.commit()
+    db_session.refresh(codebase)
+    return codebase
 
 
 @fixture
@@ -34,7 +49,7 @@ def project_with_spec(db_session) -> Project:
 
 
 @fixture
-def task_with_documents(db_session, project_with_spec: Project) -> Task:
+def task_with_documents(db_session, project_with_spec: Project, sample_codebase: Codebase) -> Task:
     """Create a task with specification and implementation plan documents."""
     task_repo = TaskRepository(db_session)
     document_repo = DocumentRepository(db_session)
@@ -58,6 +73,8 @@ def task_with_documents(db_session, project_with_spec: Project) -> Task:
         status=TaskStatus.PLANNING,
         specification=spec_doc,
         implementation_plan=impl_doc,
+        base_branch="main",
+        codebase_id=sample_codebase.id,
     )
 
     db_session.commit()
@@ -84,7 +101,7 @@ class TestBuildTaskSpecificationContext:
         assert "TASK SPECIFICATION DOCUMENT" in context
         assert "Implement feature X" in context
 
-    def test_handles_empty_task_specification(self, db_session, project_with_spec: Project):
+    def test_handles_empty_task_specification(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
         """Test that empty task specification shows <EMPTY>."""
         task_repo = TaskRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -106,6 +123,8 @@ class TestBuildTaskSpecificationContext:
             status=TaskStatus.DEFINING,
             specification=spec_doc,
             implementation_plan=impl_doc,
+            base_branch="main",
+            codebase_id=sample_codebase.id,
         )
 
         db_session.commit()
@@ -115,7 +134,7 @@ class TestBuildTaskSpecificationContext:
 
         assert "<EMPTY>" in context
 
-    def test_handles_empty_project_specification(self, db_session):
+    def test_handles_empty_project_specification(self, db_session, sample_codebase: Codebase):
         """Test that empty project specification shows <EMPTY>."""
         project_repo = ProjectRepository(db_session)
         task_repo = TaskRepository(db_session)
@@ -150,6 +169,8 @@ class TestBuildTaskSpecificationContext:
             status=TaskStatus.DEFINING,
             specification=spec_doc,
             implementation_plan=impl_doc,
+            base_branch="main",
+            codebase_id=sample_codebase.id,
         )
 
         db_session.commit()
@@ -185,7 +206,7 @@ class TestBuildTaskPlanningContext:
         assert "TASK IMPLEMENTATION PLAN DOCUMENT:" in context
         assert "Implementation Steps" in context
 
-    def test_handles_empty_documents(self, db_session, project_with_spec: Project):
+    def test_handles_empty_documents(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
         """Test that empty documents show <EMPTY>."""
         task_repo = TaskRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -207,6 +228,8 @@ class TestBuildTaskPlanningContext:
             status=TaskStatus.PLANNING,
             specification=spec_doc,
             implementation_plan=impl_doc,
+            base_branch="main",
+            codebase_id=sample_codebase.id,
         )
 
         db_session.commit()
@@ -217,7 +240,7 @@ class TestBuildTaskPlanningContext:
         # Should have <EMPTY> for both task documents (but not project spec)
         assert context.count("<EMPTY>") == 2
 
-    def test_lazy_loads_project_relationship(self, db_session, project_with_spec: Project):
+    def test_lazy_loads_project_relationship(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
         """Test that project relationship is lazy loaded when needed."""
         task_repo = TaskRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -238,6 +261,8 @@ class TestBuildTaskPlanningContext:
             status=TaskStatus.PLANNING,
             specification=spec_doc,
             implementation_plan=impl_doc,
+            base_branch="main",
+            codebase_id=sample_codebase.id,
         )
 
         db_session.commit()

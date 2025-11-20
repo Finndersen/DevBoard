@@ -1,33 +1,30 @@
-"""Codebase integration for exploring and analyzing code repositories."""
+"""Filesystem integration for codebase file operations."""
 
-import subprocess
 from pathlib import Path
-from typing import Any
 
 import logfire
 
 from .base import IntegrationConnectionResult
 from .shell import execute_shell_command
+from .types import FileInfo
 
 
-class CodebaseIntegration:
+class FilesystemIntegration:
     """
-    Integration for codebase exploration and analysis. Follows different pattern to other "external" integrations
-    - Filesystem access for reading and listing files
-    - File and content search
-    - Git operations
+    Integration for filesystem operations on codebases.
+    Provides file reading, searching, and directory listing capabilities.
     """
 
     def __init__(self, codebase_path: str | Path):
-        """Initialize codebase integration.
+        """Initialize filesystem integration.
 
         Args:
-            codebase_path: Path to the git repository root
+            codebase_path: Path to the codebase directory
         """
         self.codebase_path = Path(codebase_path).resolve()
 
     async def validate(self) -> IntegrationConnectionResult:
-        """Test codebase access and git repository detection."""
+        """Test filesystem access to codebase directory."""
         if not self.codebase_path.exists():
             return IntegrationConnectionResult(
                 success=False, message=f"Codebase path does not exist: {self.codebase_path}"
@@ -38,24 +35,7 @@ class CodebaseIntegration:
                 success=False, message=f"Codebase path is not a directory: {self.codebase_path}"
             )
 
-        git_dir = self.codebase_path / ".git"
-        if not git_dir.exists():
-            return IntegrationConnectionResult(
-                success=True, message=f"Directory accessible but not a git repository: {self.codebase_path}"
-            )
-
-        return IntegrationConnectionResult(success=True, message=f"Git repository accessible at: {self.codebase_path}")
-
-    def _run_git_command(self, args: list[str]) -> str:
-        """Run a git command in the codebase directory."""
-        result = subprocess.run(
-            ["git"] + args,
-            cwd=str(self.codebase_path),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
+        return IntegrationConnectionResult(success=True, message=f"Directory accessible at: {self.codebase_path}")
 
     async def read_file(
         self,
@@ -381,131 +361,30 @@ class CodebaseIntegration:
         else:
             return f"Error generating file tree: {result.stderr}"
 
-    async def get_git_log(self, max_count: int = 10, file_path: str | None = None) -> list[dict[str, str]]:
-        """Get git commit history.
-
-        Args:
-            max_count: Maximum number of commits to retrieve
-            file_path: Optional file path to get history for specific file
-
-        Returns:
-            List of commit dictionaries with hash, author, date, message
-        """
-        args = [
-            "log",
-            f"--max-count={max_count}",
-            "--pretty=format:%H|%an|%ad|%s",
-            "--date=iso",
-        ]
-        if file_path:
-            args.append("--")
-            args.append(file_path)
-
-        output = self._run_git_command(args)
-
-        commits = []
-        for line in output.split("\n"):
-            if line.strip():
-                parts = line.split("|", 3)
-                if len(parts) >= 4:
-                    commits.append(
-                        {
-                            "hash": parts[0],
-                            "author": parts[1],
-                            "date": parts[2],
-                            "message": parts[3],
-                        }
-                    )
-
-        return commits
-
-    async def get_git_diff(
-        self,
-        commit1: str | None = None,
-        commit2: str | None = None,
-        file_path: str | None = None,
-    ) -> str:
-        """Get git diff between commits or working directory.
-
-        Args:
-            commit1: First commit hash/reference
-            commit2: Second commit hash/reference (optional)
-            file_path: Optional file path to get diff for specific file
-
-        Returns:
-            Diff output as string
-        """
-        args = ["diff"]
-        if commit1:
-            if commit2:
-                args.append(f"{commit1}..{commit2}")
-            else:
-                args.append(commit1)
-
-        if file_path:
-            args.append("--")
-            args.append(file_path)
-
-        return self._run_git_command(args)
-
-    async def get_git_branches(self, remote: bool = False) -> list[str]:
-        """Get list of git branches.
-
-        Args:
-            remote: Whether to list remote branches
-
-        Returns:
-            List of branch names
-        """
-        args = ["branch"]
-        if remote:
-            args.append("-r")
-
-        output = self._run_git_command(args)
-        branches = []
-        for line in output.split("\n"):
-            branch = line.strip()
-            if branch and not branch.startswith("*"):
-                branches.append(branch)
-            elif branch.startswith("* "):
-                branches.append(branch[2:])
-
-        return branches
-
-    async def get_file_info(self, file_path: str) -> dict[str, Any]:
+    async def get_file_info(self, file_path: str) -> FileInfo:
         """Get detailed information about a file.
 
         Args:
             file_path: Relative path to file from codebase root
 
         Returns:
-            Dictionary with file metadata and git information
+            FileInfo object with file metadata
+
+        Raises:
+            FileNotFoundError: If the file does not exist
         """
         full_path = self.codebase_path / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
         stat = full_path.stat()
-        info = {
-            "path": file_path,
-            "size": stat.st_size,
-            "modified": stat.st_mtime,
-            "is_file": full_path.is_file(),
-            "is_dir": full_path.is_dir(),
-        }
-
-        git_log = self._run_git_command(["log", "-1", "--pretty=format:%H|%an|%ad|%s", "--date=iso", "--", file_path])
-        if git_log:
-            parts = git_log.split("|", 3)
-            if len(parts) >= 4:
-                info["git"] = {
-                    "last_commit": parts[0],
-                    "last_author": parts[1],
-                    "last_modified": parts[2],
-                    "last_message": parts[3],
-                }
-
-        return info
+        return FileInfo(
+            path=file_path,
+            size=stat.st_size,
+            modified=stat.st_mtime,
+            is_file=full_path.is_file(),
+            is_dir=full_path.is_dir(),
+        )
 
     def parse_file_url(self, url: str) -> str | None:
         """Parse file URL to extract relative file path.
@@ -531,45 +410,3 @@ class CodebaseIntegration:
         except ValueError:
             logfire.warning(f"File path outside codebase directory: {file_path}")
             return None
-
-
-def detect_git_remote_url(local_path: str) -> str | None:
-    """Detect git remote URL from a local repository path.
-
-    Args:
-        local_path: Path to local git repository
-
-    Returns:
-        Remote URL if found, None otherwise
-    """
-    try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(local_path),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-
-        result = subprocess.run(["git", "remote"], cwd=str(local_path), capture_output=True, text=True, timeout=10)
-
-        if result.returncode == 0 and result.stdout.strip():
-            first_remote = result.stdout.strip().split("\n")[0]
-            result = subprocess.run(
-                ["git", "remote", "get-url", first_remote],
-                cwd=str(local_path),
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-
-        return None
-
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError, FileNotFoundError):
-        return None

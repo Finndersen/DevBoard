@@ -3,7 +3,7 @@
 import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
@@ -337,6 +337,16 @@ class TestProjectTasksRouter:
 
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/tmp/test-codebase",
+        )
+        codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
         # Create test project
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -356,6 +366,8 @@ class TestProjectTasksRouter:
             status=test_task_data["status"],
             specification=task1_spec,
             implementation_plan=task1_plan,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
         task2_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
         task2_plan = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
@@ -365,6 +377,8 @@ class TestProjectTasksRouter:
             status=test_task_data["status"],
             specification=task2_spec,
             implementation_plan=task2_plan,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
 
         # Create conversations for tasks

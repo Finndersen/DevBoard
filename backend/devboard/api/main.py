@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import logfire
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,9 +18,15 @@ from devboard.api.routers import (
     settings,
     tasks,
     tool_approvals,
+    worktrees,
 )
 from devboard.config.logfire_config import setup_logfire
+from devboard.db.database import SessionLocal
+from devboard.db.repositories.codebase import CodebaseRepository
+from devboard.db.repositories.task import TaskRepository
+from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.mcp import mcp
+from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
@@ -48,7 +55,53 @@ ss_mcp = SingleSessionMCP(mcp)
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
     await ss_mcp.start_session()
+    await cleanup_stale_locks_on_startup()
     yield
+
+
+async def cleanup_stale_locks_on_startup():
+    """Cleanup stale worktree locks from crashed/stopped agents on startup.
+
+    Releases locks for tasks with no active conversations and locks older than 24 hours.
+    Does NOT perform worktree reconciliation - assumes worktrees are application-managed only.
+    """
+    db = SessionLocal()
+    try:
+        codebase_repo = CodebaseRepository(db)
+        task_repo = TaskRepository(db)
+        worktree_slot_repo = WorktreeSlotRepository(db)
+
+        workspace_service = WorkspaceAllocationService(
+            worktree_slot_repo=worktree_slot_repo,
+            task_repo=task_repo,
+        )
+
+        # Get all codebases
+        codebases = codebase_repo.get_all()
+
+        total_released = 0
+        for codebase in codebases:
+            try:
+                released = await workspace_service.cleanup_stale_locks(codebase.id)
+                if released > 0:
+                    logfire.info(f"Released {released} stale lock(s) for codebase {codebase.name}")
+                total_released += released
+            except Exception as e:
+                # Log error but continue with other codebases
+                logfire.error(f"Error cleaning up locks for codebase {codebase.name}: {e}")
+
+        if total_released > 0:
+            logfire.info(f"Startup: Released {total_released} stale lock(s) total")
+        else:
+            logfire.info("Startup: No stale locks found")
+
+        # Commit all changes
+        db.commit()
+    except Exception as e:
+        logfire.error(f"Error during startup lock cleanup: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 app = FastAPI(
@@ -77,6 +130,7 @@ app.include_router(configurations.router, prefix="/api/configurations", tags=["c
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
+app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])
 app.include_router(tool_approvals.router, prefix="/api")
 
 # Mount MCP server as ASGI application

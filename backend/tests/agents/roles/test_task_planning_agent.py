@@ -224,6 +224,23 @@ class TestDocumentEditTool:
         assert args[0] == mock_document
         assert "Modified content" == args[1]
 
+    def test_tool_creation_without_approval(self, mock_document, mock_document_repo):
+        """Test document edit tool can be created without approval requirement."""
+        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=False)
+
+        # Verify tool name
+        assert tool.name == f"edit_{mock_document.document_type}"
+
+        # Verify tool does NOT require approval when explicitly set to False
+        assert tool.requires_approval is False
+
+    def test_tool_creation_with_explicit_approval(self, mock_document, mock_document_repo):
+        """Test document edit tool respects explicit approval requirement."""
+        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=True)
+
+        # Verify tool requires approval when explicitly set to True
+        assert tool.requires_approval is True
+
 
 class TestSetDocumentContentTool:
     """Test the document content setting tool creation and behavior."""
@@ -321,6 +338,34 @@ class TestSetDocumentContentTool:
         args = mock_document_repo.update_content.call_args[0]
         assert args[0] == mock_document_with_content
         assert args[1] == new_content
+
+    def test_tool_override_approval_for_blank_document(self, mock_blank_document, mock_document_repo):
+        """Test tool can require approval for blank document when explicitly set."""
+        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=True)
+
+        # Verify tool requires approval even for blank document when explicitly set
+        assert tool.requires_approval is True
+
+    def test_tool_override_approval_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+        """Test tool can skip approval for document with content when explicitly set."""
+        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo, requires_approval=False)
+
+        # Verify tool does not require approval when explicitly set to False
+        assert tool.requires_approval is False
+
+    def test_tool_smart_approval_logic_with_none(
+        self, mock_blank_document, mock_document_with_content, mock_document_repo
+    ):
+        """Test tool uses smart approval logic when requires_approval is None (default)."""
+        # Blank document should not require approval
+        tool_blank = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=None)
+        assert tool_blank.requires_approval is False
+
+        # Document with content should require approval
+        tool_with_content = create_set_document_content_tool(
+            mock_document_with_content, mock_document_repo, requires_approval=None
+        )
+        assert tool_with_content.requires_approval is True
 
 
 class TestRoleToolSelection:

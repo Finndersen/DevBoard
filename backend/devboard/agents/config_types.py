@@ -6,7 +6,7 @@ separated to avoid circular import issues.
 
 from pydantic import BaseModel
 
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.language_models import LLMProvider, ModelType
 
 

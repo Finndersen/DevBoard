@@ -36,8 +36,9 @@ Keep it as concise as possible while capturing all necessary detail to be action
 - **Testing Strategy**: High level overview of tests to be added or updated
 
 It should NOT include:
-- ❌ Duplication of information already captured in the task specification document (can reference it if required)
-- ❌ Full code change snippets or specific implementation details (implementation agent can decide)
+- ❌ NO Duplication of information already captured in the task specification document (can reference it if required)
+- ❌ NO Full code change snippets or specific implementation details (implementation agent can decide)
+- ❌ NO Implementation time estimates
 
 BEHAVIOUR GUIDELINES:
 - You are in DESIGN AND PLANNING mode and not able to make any destructive changes other than editing the Task Specification and Implementation Plan Document.
@@ -136,11 +137,19 @@ class TaskPlanningRole(Role):
             create_document_edit_tool(self.task.specification, self.document_repository),
         ]
 
-        # Tools for implementation plan document
+        # Tools for implementation plan document (never require approval)
         if self.task.implementation_plan:
-            tools.append(create_set_document_content_tool(self.task.implementation_plan, self.document_repository))
+            tools.append(
+                create_set_document_content_tool(
+                    self.task.implementation_plan, self.document_repository, requires_approval=False
+                )
+            )
             if self.task.implementation_plan.content:
-                tools.append(create_document_edit_tool(self.task.implementation_plan, self.document_repository))
+                tools.append(
+                    create_document_edit_tool(
+                        self.task.implementation_plan, self.document_repository, requires_approval=False
+                    )
+                )
 
         # Add codebase investigation tool if codebase is configured
         if self.task.codebase:

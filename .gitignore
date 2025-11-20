@@ -13,3 +13,6 @@ __pycache__/
 
 # Development files
 backend/.env
+
+# Data files
+backend/data/*

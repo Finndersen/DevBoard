@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 
 @dataclass
 class BaseDeps:
     """Base context class for all agents."""
 
-    codebase_integration: CodebaseIntegration | None = None
+    codebase_integration: FilesystemIntegration | None = None

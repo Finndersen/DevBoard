@@ -7,7 +7,7 @@ from pydantic_ai.messages import (
 )
 from sqlalchemy.orm import Session
 
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project

@@ -3,7 +3,7 @@
 import pytest
 
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
-from devboard.agents.engines.agent_engines import AgentEngine, agent_engine_registry
+from devboard.agents.engines import AgentEngine, agent_engine_registry
 from devboard.agents.language_models import ModelType, llm_registry
 from devboard.agents.roles import AgentRoleType
 

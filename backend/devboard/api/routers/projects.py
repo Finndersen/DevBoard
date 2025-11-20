@@ -5,8 +5,9 @@ from typing import Any
 import logfire
 from fastapi import APIRouter, Depends, HTTPException
 
-from devboard.api.dependencies.entities import get_verified_project
+from devboard.api.dependencies.entities import get_verified_codebase, get_verified_project
 from devboard.api.dependencies.repositories import (
+    get_codebase_repository,
     get_conversation_repository,
     get_document_repository,
     get_project_repository,
@@ -33,12 +34,14 @@ from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.models import ParentEntityType
 from devboard.db.models.project import Project
 from devboard.db.repositories import (
+    CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
 )
 from devboard.db.repositories.conversation import NoActiveConversationError
+from devboard.integrations.git import GitIntegration
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
@@ -153,7 +156,6 @@ async def delete_project(
 @router.get("/{project_id}/tasks", response_model=list[TaskResponse])
 async def list_project_tasks(
     project_id: int,
-    project: Project = Depends(get_verified_project),
     task_repo: TaskRepository = Depends(get_task_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
@@ -163,6 +165,7 @@ async def list_project_tasks(
     # Get conversations for all tasks
     task_responses = []
     for task in tasks:
+        # TODO: Make SimpleTaskResponse model with limited fields for list view
         try:
             conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
         except NoActiveConversationError:
@@ -193,12 +196,20 @@ async def list_project_tasks(
 async def create_project_task(
     project_id: int,
     task: TaskCreateNested,
-    project: Project = Depends(get_verified_project),
     task_service: TaskService = Depends(get_task_service),
-    task_repo: TaskRepository = Depends(get_task_repository),
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ):
     """Create a new task under a project with initial conversation."""
+
+    codebase = get_verified_codebase(task.codebase_id, codebase_repo)
+
+    git = GitIntegration(codebase.local_path)
+    if task.base_branch:
+        base_branch = task.base_branch
+    else:
+        base_branch = await git.get_default_branch()
+
     # Create task using service (creates task + documents + conversation)
     # Tasks always start in DEFINING status
     created_task = task_service.create_task(
@@ -207,10 +218,9 @@ async def create_project_task(
         codebase_id=task.codebase_id,
         remote_task_id=task.remote_task_id,
         specification_content=task.specification_content or "",
+        branch_name=task.branch_name,
+        base_branch=base_branch,
     )
-
-    task_repo.db.commit()
-    task_repo.db.refresh(created_task)
 
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found

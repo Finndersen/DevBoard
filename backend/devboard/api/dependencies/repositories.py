@@ -12,6 +12,7 @@ from devboard.db.repositories import (
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
+    WorktreeSlotRepository,
 )
 
 
@@ -52,3 +53,8 @@ def get_task_repository(db: Session = Depends(get_db)) -> TaskRepository:
 def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRepository:
     """Get ConversationRepository instance."""
     return ConversationRepository(db)
+
+
+def get_worktree_slot_repository(db: Session = Depends(get_db)) -> WorktreeSlotRepository:
+    """Get WorktreeSlotRepository instance."""
+    return WorktreeSlotRepository(db)

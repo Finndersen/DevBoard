@@ -9,7 +9,7 @@ from devboard.agents.tools import (
 )
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
 You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
@@ -88,7 +88,7 @@ class TaskImplementationRole(Role):
         """
         self.task = task
         self.document_repository = document_repository
-        self.codebase_integration = CodebaseIntegration(task.codebase.local_path) if task.codebase else None
+        self.codebase_integration = FilesystemIntegration(task.codebase.local_path) if task.codebase else None
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -106,12 +106,14 @@ class TaskImplementationRole(Role):
             raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
         tools = [
-            # Tools for task specification document
+            # Tools for task specification document (uses default approval behavior)
             create_set_document_content_tool(self.task.specification, self.document_repository),
             create_document_edit_tool(self.task.specification, self.document_repository),
-            # Tools for implementation plan document
-            create_set_document_content_tool(self.task.implementation_plan, self.document_repository),
-            create_document_edit_tool(self.task.implementation_plan, self.document_repository),
+            # Tools for implementation plan document (never require approval)
+            create_set_document_content_tool(
+                self.task.implementation_plan, self.document_repository, requires_approval=False
+            ),
+            create_document_edit_tool(self.task.implementation_plan, self.document_repository, requires_approval=False),
         ]
         if self.codebase_integration:
             tools += [

@@ -12,6 +12,7 @@ from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.task_git_service import TaskGitService
 
 
 class TaskTransitionError(Exception):
@@ -35,6 +36,7 @@ class TaskService:
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
         conversation_repo: ConversationRepository,
+        task_git_service: TaskGitService | None = None,
     ):
         """Initialize service.
 
@@ -43,19 +45,23 @@ class TaskService:
             document_repo: Repository for document operations
             task_repo: Repository for task operations
             conversation_repo: Repository for conversation operations
+            task_git_service: Optional service for task git operations
         """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
+        self.task_git_service = task_git_service
         self.conversation_repo = conversation_repo
 
     def create_task(
         self,
         project_id: int,
         title: str,
-        codebase_id: int | None = None,
+        base_branch: str,
+        codebase_id: int,
         remote_task_id: str | None = None,
         specification_content: str = "",
+        branch_name: str | None = None,
     ) -> Task:
         """Create a new task with initial conversation.
 
@@ -63,13 +69,17 @@ class TaskService:
         configured with the appropriate agent role, engine, and model based on the
         task's initial status.
 
+        If no branch name is provided, a branch name will be auto-generated and the
+        branch will be created in git (if it doesn't already exist).
+
         Args:
             project_id: ID of the project this task belongs to
             title: Task title
-            status: Initial task status (defaults to DEFINING)
-            codebase_id: Optional codebase ID
+            base_branch: Base branch for git operations
+            codebase_id: Codebase ID
             remote_task_id: Optional remote task identifier (e.g., Jira issue key)
             specification_content: Initial content for the specification document (defaults to empty string)
+            branch_name: Optional git branch name (auto-generated if not provided)
 
         Returns:
             Created Task instance with active conversation
@@ -86,6 +96,8 @@ class TaskService:
             status=TaskStatus.DEFINING,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,
+            branch_name=branch_name,
+            base_branch=base_branch,
         )
 
         # Create initial conversation

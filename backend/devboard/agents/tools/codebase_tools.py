@@ -1,13 +1,13 @@
 from pydantic_ai import Tool
 
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 
-def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
+def create_text_search_tool(codebase_integration: FilesystemIntegration) -> Tool:
     """Create a text search tool using ripgrep for finding specific content within files.
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_file_content(
@@ -65,11 +65,11 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     )
 
 
-def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
+def create_file_search_tool(codebase_integration: FilesystemIntegration) -> Tool:
     """Create a file search tool using fd for finding files by name patterns.
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_files_by_name(
@@ -131,7 +131,7 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     )
 
 
-def create_code_structure_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
+def create_code_structure_search_tool(codebase_integration: FilesystemIntegration) -> Tool:
     """Create a code structure search tool using ast-grep for AST-based pattern matching.
 
     This tool uses ast-grep to search for structural code patterns based on Abstract Syntax Trees,
@@ -143,7 +143,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     - Locating specific import/export patterns or decorators
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_code_structure(
@@ -195,7 +195,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     )
 
 
-def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
+def create_directory_tree_tool(codebase_integration: FilesystemIntegration) -> Tool:
     """Create a directory tree tool for visualizing tracked files in tree format.
 
     This tool displays the structure of git-tracked files in a hierarchical tree view,
@@ -207,7 +207,7 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
     - Finding the location of specific modules or components
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def show_directory_tree(
@@ -240,7 +240,7 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
     )
 
 
-def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
+def create_file_read_tool(codebase_integration: FilesystemIntegration) -> Tool:
     """Create a file reading tool for reading file contents with optional line ranges.
 
     This tool reads file contents from the codebase with optional line range specification,
@@ -252,7 +252,7 @@ def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
     - Understanding code structure and implementation patterns
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def read_file(

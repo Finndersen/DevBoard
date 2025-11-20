@@ -8,7 +8,7 @@ from devboard.agents.agent_config_service import (
     AgentEngineModelConfig,
     AvailableModelsByEngine,
 )
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import (
     AgentRoleType,
 )

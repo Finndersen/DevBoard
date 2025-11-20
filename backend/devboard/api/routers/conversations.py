@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_conversation

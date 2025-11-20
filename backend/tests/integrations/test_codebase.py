@@ -1,10 +1,11 @@
-"""Tests for CodebaseIntegration."""
+"""Tests for Filesystem and Git integrations."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
-from devboard.integrations.codebase import CodebaseIntegration, detect_git_remote_url
+from devboard.integrations.filesystem import FilesystemIntegration
+from devboard.integrations.git import GitIntegration
 from devboard.integrations.shell import ShellCommandResult
 
 
@@ -26,21 +27,21 @@ def temp_codebase(tmp_path):
     return codebase_path
 
 
-class TestCodebaseIntegrationMethods:
-    """Tests for CodebaseIntegration methods."""
+class TestFilesystemIntegrationMethods:
+    """Tests for FilesystemIntegration methods."""
 
     @pytest.mark.asyncio
     async def test_test_connection_success(self, temp_codebase):
         """Test successful connection test."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         result = await integration.validate()
         assert result.success is True
-        assert "Git repository accessible at:" in result.message
+        assert "Directory accessible at:" in result.message
 
     @pytest.mark.asyncio
     async def test_test_connection_nonexistent_path(self):
         """Test connection test with nonexistent path."""
-        integration = CodebaseIntegration("/nonexistent/path")
+        integration = FilesystemIntegration("/nonexistent/path")
         result = await integration.validate()
         assert result.success is False
         assert "Codebase path does not exist:" in result.message
@@ -48,21 +49,21 @@ class TestCodebaseIntegrationMethods:
     @pytest.mark.asyncio
     async def test_read_file(self, temp_codebase):
         """Test reading file contents."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("test.py")
         assert "def hello():" in content
 
     @pytest.mark.asyncio
     async def test_read_nonexistent_file(self, temp_codebase):
         """Test reading nonexistent file raises FileNotFoundError."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         with pytest.raises(FileNotFoundError, match="File not found"):
             await integration.read_file("nonexistent.py")
 
     @pytest.mark.asyncio
     async def test_read_file_without_line_numbers(self, temp_codebase):
         """Test reading file without line numbers (default)."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("test.py")
         # By default, line numbers should not be included
         lines = content.split("\n")
@@ -72,7 +73,7 @@ class TestCodebaseIntegrationMethods:
     @pytest.mark.asyncio
     async def test_read_file_with_line_numbers(self, temp_codebase):
         """Test reading file with line numbers in output."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("test.py", include_line_numbers=True)
         # Check that line numbers are included in format "  1→content"
         lines = content.split("\n")
@@ -86,7 +87,7 @@ class TestCodebaseIntegrationMethods:
         test_file = temp_codebase / "multiline.py"
         test_file.write_text("line 1\nline 2\nline 3\nline 4\nline 5\n")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("multiline.py", start_line=2, end_line=4, include_line_numbers=True)
 
         lines = content.split("\n")
@@ -105,7 +106,7 @@ class TestCodebaseIntegrationMethods:
         test_file = temp_codebase / "multiline.py"
         test_file.write_text("line 1\nline 2\nline 3\n")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("multiline.py", start_line=2)
 
         lines = content.split("\n")
@@ -119,7 +120,7 @@ class TestCodebaseIntegrationMethods:
         test_file = temp_codebase / "multiline.py"
         test_file.write_text("line 1\nline 2\nline 3\n")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         content = await integration.read_file("multiline.py", end_line=2)
 
         lines = content.split("\n")
@@ -130,7 +131,7 @@ class TestCodebaseIntegrationMethods:
     @pytest.mark.asyncio
     async def test_read_file_invalid_range(self, temp_codebase):
         """Test reading with invalid line range raises ValueError."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         # start > end
         with pytest.raises(ValueError, match="start_line .* must be <= end_line"):
@@ -150,7 +151,7 @@ class TestCodebaseIntegrationMethods:
         test_file = temp_codebase / "short.py"
         test_file.write_text("line 1\nline 2\n")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         # Request lines beyond file length - should return available lines
         content = await integration.read_file("short.py", start_line=1, end_line=100)
 
@@ -162,7 +163,7 @@ class TestCodebaseIntegrationMethods:
     @pytest.mark.asyncio
     async def test_list_directory_contents_files_only(self, temp_codebase):
         """Test listing files in directory (default behavior)."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         files = await integration.list_directory_contents("subdir")
         assert "file.txt" in files
         # Should not include directories by default
@@ -175,7 +176,7 @@ class TestCodebaseIntegrationMethods:
         (temp_codebase / "subdir" / "nested").mkdir()
         (temp_codebase / "subdir" / "nested" / "deep.txt").write_text("deep")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         entries = await integration.list_directory_contents("subdir", include_directories=True)
 
         # Should include files
@@ -191,7 +192,7 @@ class TestCodebaseIntegrationMethods:
         (temp_codebase / "subdir" / "nested").mkdir()
         (temp_codebase / "subdir" / "nested" / "deep.txt").write_text("deep")
 
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         files = await integration.list_directory_contents("subdir")
 
         # Should include nested files recursively
@@ -201,14 +202,14 @@ class TestCodebaseIntegrationMethods:
     @pytest.mark.asyncio
     async def test_parse_file_url_with_file_prefix(self, temp_codebase):
         """Test parsing file:// URL."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         result = integration.parse_file_url(f"file://{temp_codebase}/test.py")
         assert result == "test.py"
 
     @pytest.mark.asyncio
     async def test_parse_file_url_with_relative_path(self, temp_codebase):
         """Test parsing relative path."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
         result = integration.parse_file_url("subdir/file.txt")
         assert result == "subdir/file.txt"
 
@@ -219,13 +220,13 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_success(self, temp_codebase):
         """Test successful text search."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         rg_output = "test.py:1:def hello():\n"
 
         mock_result = ShellCommandResult(rg_output, "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result):
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result):
             result = await integration.search_file_content("hello")
 
             assert len(result) == 1
@@ -234,11 +235,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_with_pattern(self, temp_codebase):
         """Test text search with file pattern filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("", "", 1)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_file_content("hello", file_pattern="*.py")
 
             call_args = mock_exec.call_args[0][0]
@@ -249,11 +250,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_case_sensitive(self, temp_codebase):
         """Test case sensitive search."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("", "", 1)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_file_content("HELLO", case_sensitive=True)
 
             call_args = mock_exec.call_args[0][0]
@@ -263,11 +264,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_search_hidden(self, temp_codebase):
         """Test search with hidden files enabled."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("", "", 1)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_file_content("hello", search_hidden=True)
 
             call_args = mock_exec.call_args[0][0]
@@ -277,11 +278,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_with_subdirectory(self, temp_codebase):
         """Test search with path filter (subdirectory)."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("tests/test_auth.py:10:def test_login():\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_file_content("def test_", path="tests")
 
             # Verify path was passed to rg command
@@ -294,11 +295,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_subdirectory_with_trailing_slash(self, temp_codebase):
         """Test search handles trailing slash in path."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("backend/models/user.py:5:class User:\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             # Test with trailing slash - should be stripped
             await integration.search_file_content("class", path="backend/models/")
 
@@ -310,11 +311,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_with_context_before(self, temp_codebase):
         """Test search with context lines before matches."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             await integration.search_file_content("def hello", context_before=3)
 
             # Verify -B flag was passed with correct value
@@ -326,11 +327,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_with_context_after(self, temp_codebase):
         """Test search with context lines after matches."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py:1:def hello():\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             await integration.search_file_content("def hello", context_after=5)
 
             # Verify -A flag was passed with correct value
@@ -342,11 +343,11 @@ class TestSearchFileContent:
     @pytest.mark.asyncio
     async def test_search_file_content_with_both_context(self, temp_codebase):
         """Test search with both before and after context."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py:10:    result = func()\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             await integration.search_file_content("result = ", context_before=2, context_after=3)
 
             # Verify both -B and -A flags were passed
@@ -365,11 +366,11 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_files_success(self, temp_codebase):
         """Test successful file search by pattern."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py\nsubdir/file.txt\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result):
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result):
             files = await integration.search_files("test")
 
             assert len(files) == 2
@@ -379,11 +380,11 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_files_with_extension(self, temp_codebase):
         """Test file search with extension filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             await integration.search_files("test", extension="py")
 
             call_args = mock_exec.call_args[0][0]
@@ -393,11 +394,11 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_files_with_exclude(self, temp_codebase):
         """Test file search with exclude pattern."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("test.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             await integration.search_files("test", exclude_pattern="*.txt")
 
             call_args = mock_exec.call_args[0][0]
@@ -407,11 +408,11 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_files_with_subdirectory(self, temp_codebase):
         """Test file search with subdirectory filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("tests/test_auth.py\ntests/test_user.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             files = await integration.search_files("test", subdirectory="tests")
 
             # Verify subdirectory was passed to fd command
@@ -425,11 +426,11 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_files_subdirectory_with_trailing_slash(self, temp_codebase):
         """Test file search handles trailing slash in subdirectory."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("src/components/Button.tsx\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             # Test with trailing slash - should be stripped
             await integration.search_files("Button", subdirectory="src/components/")
 
@@ -445,13 +446,13 @@ class TestSearchCodeStructure:
     @pytest.mark.asyncio
     async def test_search_code_structure_success(self, temp_codebase):
         """Test successful code structure search."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         ast_grep_output = "test.py:1:1:def hello():\n"
 
         mock_result = ShellCommandResult(ast_grep_output, "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result):
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result):
             matches = await integration.search_code_structure("def $FUNC($$$ARGS)")
 
             assert len(matches) == 1
@@ -460,11 +461,11 @@ class TestSearchCodeStructure:
     @pytest.mark.asyncio
     async def test_search_code_structure_with_language(self, temp_codebase):
         """Test code structure search with language filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_code_structure("class $NAME", language="python")
 
             call_args = mock_exec.call_args[0][0]
@@ -475,11 +476,11 @@ class TestSearchCodeStructure:
     @pytest.mark.asyncio
     async def test_search_code_structure_with_path(self, temp_codebase):
         """Test code structure search with path filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("backend/models/user.py:5:1:class User:\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             result = await integration.search_code_structure("class $NAME", path="backend/models")
 
             # Verify path was passed to ast-grep command
@@ -492,11 +493,11 @@ class TestSearchCodeStructure:
     @pytest.mark.asyncio
     async def test_search_code_structure_path_with_trailing_slash(self, temp_codebase):
         """Test code structure search handles trailing slash in path."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         mock_result = ShellCommandResult("src/components/Button.tsx:10:1:class Button:\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=mock_result) as mock_exec:
             # Test with trailing slash - should be stripped
             await integration.search_code_structure("class $NAME", path="src/components/")
 
@@ -512,11 +513,11 @@ class TestGetGitFileTree:
     @pytest.mark.asyncio
     async def test_get_git_file_tree_success(self, temp_codebase):
         """Test successful git file tree generation."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         tree_result = ShellCommandResult(".\n├── test.py\n└── subdir\n    └── file.txt\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=tree_result) as mock_exec:
             tree = await integration.get_directory_tree()
 
             assert "test.py" in tree
@@ -530,11 +531,11 @@ class TestGetGitFileTree:
     @pytest.mark.asyncio
     async def test_get_git_file_tree_with_max_depth(self, temp_codebase):
         """Test git file tree with max depth."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         tree_result = ShellCommandResult(".\n└── test.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=tree_result) as mock_exec:
             await integration.get_directory_tree(max_depth=2)
 
             # Verify the method was called
@@ -545,11 +546,11 @@ class TestGetGitFileTree:
     @pytest.mark.asyncio
     async def test_get_git_file_tree_with_subdirectory(self, temp_codebase):
         """Test git file tree with subdirectory filter."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         tree_result = ShellCommandResult("src\n└── main.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=tree_result) as mock_exec:
             await integration.get_directory_tree(subdirectory="src")
 
             # Verify the method was called with subdirectory filter
@@ -560,11 +561,11 @@ class TestGetGitFileTree:
     @pytest.mark.asyncio
     async def test_get_git_file_tree_with_subdirectory_and_max_depth(self, temp_codebase):
         """Test git file tree with both subdirectory and max depth."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         tree_result = ShellCommandResult("src\n└── components\n    └── Button.js\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=tree_result) as mock_exec:
             await integration.get_directory_tree(max_depth=2, subdirectory="src/components")
 
             # Verify the method was called with both parameters
@@ -576,11 +577,11 @@ class TestGetGitFileTree:
     @pytest.mark.asyncio
     async def test_get_git_file_tree_subdirectory_with_trailing_slash(self, temp_codebase):
         """Test git file tree handles trailing slash in subdirectory."""
-        integration = CodebaseIntegration(temp_codebase)
+        integration = FilesystemIntegration(temp_codebase)
 
         tree_result = ShellCommandResult("tests\n└── test_main.py\n", "", 0)
 
-        with patch("devboard.integrations.codebase.execute_shell_command", return_value=tree_result) as mock_exec:
+        with patch("devboard.integrations.filesystem.execute_shell_command", return_value=tree_result) as mock_exec:
             # Test with trailing slash - should be stripped
             await integration.get_directory_tree(subdirectory="tests/")
 
@@ -591,44 +592,53 @@ class TestGetGitFileTree:
 
 
 class TestDetectGitRemoteUrl:
-    """Tests for detect_git_remote_url utility function."""
+    """Tests for GitIntegration.detect_git_remote_url method."""
 
-    def test_detect_git_remote_url_success(self):
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_success(self, temp_codebase):
         """Test successful git remote URL detection."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "https://github.com/user/repo.git\n"
+        integration = GitIntegration(temp_codebase)
 
-        with patch("subprocess.run", return_value=mock_result):
-            url = detect_git_remote_url("/path/to/repo")
+        origin_result = ShellCommandResult("https://github.com/user/repo.git\n", "", 0)
+
+        with patch("devboard.integrations.git.execute_shell_command", return_value=origin_result) as mock_exec:
+            url = await integration.detect_git_remote_url()
             assert url == "https://github.com/user/repo.git"
 
-    def test_detect_git_remote_url_no_origin(self):
+            # Verify git remote get-url origin was called
+            mock_exec.assert_called_once()
+            call_args = mock_exec.call_args[0][0]
+            assert call_args == ["git", "remote", "get-url", "origin"]
+
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_no_origin(self, temp_codebase):
         """Test git remote URL detection when no origin exists."""
-        mock_no_origin = Mock()
-        mock_no_origin.returncode = 1
-        mock_no_origin.stdout = ""
+        integration = GitIntegration(temp_codebase)
 
-        mock_list_remotes = Mock()
-        mock_list_remotes.returncode = 0
-        mock_list_remotes.stdout = "upstream\n"
+        # First call fails (no origin)
+        no_origin_result = ShellCommandResult("", "", 1)
+        # Second call lists remotes
+        list_remotes_result = ShellCommandResult("upstream\n", "", 0)
+        # Third call gets URL of first remote
+        get_url_result = ShellCommandResult("https://github.com/user/repo.git\n", "", 0)
 
-        mock_get_url = Mock()
-        mock_get_url.returncode = 0
-        mock_get_url.stdout = "https://github.com/user/repo.git\n"
+        with patch("devboard.integrations.git.execute_shell_command") as mock_exec:
+            mock_exec.side_effect = [no_origin_result, list_remotes_result, get_url_result]
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = [mock_no_origin, mock_list_remotes, mock_get_url]
-
-            url = detect_git_remote_url("/path/to/repo")
+            url = await integration.detect_git_remote_url()
             assert url == "https://github.com/user/repo.git"
 
-    def test_detect_git_remote_url_no_remotes(self):
-        """Test git remote URL detection when no remotes exist."""
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
+            # Should have been called 3 times
+            assert mock_exec.call_count == 3
 
-        with patch("subprocess.run", return_value=mock_result):
-            url = detect_git_remote_url("/path/to/repo")
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_no_remotes(self, temp_codebase):
+        """Test git remote URL detection when no remotes exist."""
+        integration = GitIntegration(temp_codebase)
+
+        # Both calls fail
+        failed_result = ShellCommandResult("", "", 1)
+
+        with patch("devboard.integrations.git.execute_shell_command", return_value=failed_result):
+            url = await integration.detect_git_remote_url()
             assert url is None

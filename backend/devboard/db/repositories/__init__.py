@@ -8,14 +8,16 @@ from .conversation import ConversationRepository
 from .document import DocumentRepository
 from .project import ProjectRepository
 from .task import TaskRepository
+from .worktree_slot import WorktreeSlotRepository
 
 __all__ = [
     "BaseRepository",
-    "ProjectRepository",
-    "ContextProviderResourceRepository",
-    "ConfigurationRepository",
     "CodebaseRepository",
+    "ConfigurationRepository",
+    "ContextProviderResourceRepository",
     "ConversationRepository",
     "DocumentRepository",
+    "ProjectRepository",
     "TaskRepository",
+    "WorktreeSlotRepository",
 ]

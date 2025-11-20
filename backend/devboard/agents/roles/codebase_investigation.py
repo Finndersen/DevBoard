@@ -13,7 +13,7 @@ from devboard.agents.tools import (
     create_text_search_tool,
 )
 from devboard.db.models.codebase import Codebase
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.filesystem import FilesystemIntegration
 
 INVESTIGATION_ROLE_PROMPT = """
 You are a Codebase Investigation Specialist for DevBoard, helping parent agents understand codebase implementation details.
@@ -82,7 +82,7 @@ class CodebaseInvestigationRole(Role):
             codebase: Codebase model instance containing name, description, and local_path
         """
         self.codebase = codebase
-        self.codebase_integration = CodebaseIntegration(codebase.local_path)
+        self.codebase_integration = FilesystemIntegration(codebase.local_path)
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for codebase investigation role."""

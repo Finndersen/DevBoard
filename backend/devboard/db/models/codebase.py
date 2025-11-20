@@ -10,6 +10,7 @@ from .base import Base, project_codebase_association
 if TYPE_CHECKING:
     from .project import Project
     from .task import Task
+    from .worktree_slot import WorktreeSlot
 
 
 class Codebase(Base):
@@ -25,3 +26,4 @@ class Codebase(Base):
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")
     tasks: Mapped[list["Task"]] = relationship(back_populates="codebase")
+    worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(back_populates="codebase")

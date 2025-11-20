@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
@@ -18,9 +18,26 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     title: '',
     codebase_id: null as number | null,
     remote_task_id: null as string | null,
-    specification_content: ''
+    specification_content: '',
+    base_branch: 'main',
+    use_default_base_branch: true
   })
   const [isCreating, setIsCreating] = useState(false)
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setNewTask({
+        title: '',
+        codebase_id: null,
+        remote_task_id: null,
+        specification_content: '',
+        base_branch: 'main',
+        use_default_base_branch: true
+      })
+      setIsCreating(false)
+    }
+  }, [isOpen])
 
   // Individual change handlers to avoid object spread on every keystroke
   const handleTaskTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,16 +52,30 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     setNewTask(prev => ({ ...prev, specification_content: e.target.value }))
   }, [])
 
+  const handleBaseBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewTask(prev => ({ ...prev, base_branch: e.target.value }))
+  }, [])
+
+  const handleUseDefaultBaseBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewTask(prev => ({ ...prev, use_default_base_branch: e.target.checked }))
+  }, [])
+
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setIsCreating(true)
     try {
-      const taskData = {
+      const taskData: any = {
         title: newTask.title,
         codebase_id: newTask.codebase_id,
         remote_task_id: newTask.remote_task_id,
         specification_content: newTask.specification_content
       }
+
+      // Add git branch configuration if codebase is selected
+      if (newTask.codebase_id && !newTask.use_default_base_branch && newTask.base_branch) {
+        taskData.base_branch = newTask.base_branch
+      }
+
       const createdTask = await apiClient.createTask(projectId, taskData)
 
       // Reset form
@@ -52,7 +83,9 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         title: '',
         codebase_id: null,
         remote_task_id: null,
-        specification_content: ''
+        specification_content: '',
+        base_branch: 'main',
+        use_default_base_branch: true
       })
 
       onClose()
@@ -88,14 +121,15 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Codebase (Optional)
+            Codebase
           </label>
           <select
             value={newTask.codebase_id ?? ''}
             onChange={handleTaskCodebaseChange}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            required
           >
-            <option value="">None</option>
+            <option value="">Select a codebase</option>
             {codebases?.map((codebase) => (
               <option key={codebase.id} value={codebase.id}>
                 {codebase.name}
@@ -103,6 +137,35 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             ))}
           </select>
         </div>
+
+        {/* Base Branch Configuration */}
+        {newTask.codebase_id && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Base branch (to create task working branch from)
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={newTask.use_default_base_branch}
+                  onChange={handleUseDefaultBaseBranchChange}
+                  className="text-blue-600 focus:ring-blue-500 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Use default</span>
+              </label>
+
+              {!newTask.use_default_base_branch && (
+                <Input
+                  type="text"
+                  value={newTask.base_branch}
+                  onChange={handleBaseBranchChange}
+                  placeholder="main"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -129,7 +192,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             type="submit"
             variant="primary"
             loading={isCreating}
-            disabled={!newTask.title.trim() || isCreating}
+            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating}
           >
             Create Task
           </Button>
