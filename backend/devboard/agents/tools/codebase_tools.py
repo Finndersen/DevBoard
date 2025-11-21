@@ -7,7 +7,7 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """Create a text search tool using ripgrep for finding specific content within files.
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_file_content(
@@ -69,7 +69,7 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
     """Create a file search tool using fd for finding files by name patterns.
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_files_by_name(
@@ -143,7 +143,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
     - Locating specific import/export patterns or decorators
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def search_code_structure(
@@ -207,7 +207,7 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
     - Finding the location of specific modules or components
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def show_directory_tree(
@@ -252,7 +252,7 @@ def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
     - Understanding code structure and implementation patterns
 
     Args:
-        codebase_integration: CodebaseIntegration instance for file system access
+        codebase_integration: FilesystemIntegration instance for file system access
     """
 
     async def read_file(

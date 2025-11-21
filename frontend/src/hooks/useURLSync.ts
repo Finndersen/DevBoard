@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useUIStore } from '../stores/uiStore'
 import type { TabType } from '../stores/uiStore'
@@ -13,6 +13,10 @@ export function useURLSync() {
   const navigate = useNavigate()
   const { openTab, switchTab, getActiveTab, findTabByEntity } = useUIStore()
   const activeTabId = useUIStore(state => state.activeTabId)
+  const shouldPushHistory = useUIStore(state => state.shouldPushHistory)
+
+  // Track if we initiated the navigation to avoid pushing duplicate history entries
+  const isNavigatingRef = useRef(false)
 
   // Parse URL to determine tab type and entity ID
   const parseURL = (pathname: string): { type: TabType; entityId: string; title: string } | null => {
@@ -49,6 +53,12 @@ export function useURLSync() {
 
   // Sync URL to tabs (URL changed -> open/switch tab)
   useEffect(() => {
+    // Skip if we initiated this navigation
+    if (isNavigatingRef.current) {
+      isNavigatingRef.current = false
+      return
+    }
+
     const tabInfo = parseURL(location.pathname)
     if (!tabInfo) return
 
@@ -56,10 +66,12 @@ export function useURLSync() {
     const existingTab = findTabByEntity(tabInfo.type, tabInfo.entityId)
     if (existingTab) {
       // Switch to existing tab if not already active
-      switchTab(existingTab.id)
+      // Pass fromUrlSync=true to avoid setting shouldPushHistory (URL already changed)
+      switchTab(existingTab.id, { fromUrlSync: true })
     } else {
       // Open new tab
-      openTab(tabInfo)
+      // Pass fromUrlSync=true to avoid setting shouldPushHistory (URL already changed)
+      openTab(tabInfo, { fromUrlSync: true })
     }
   }, [location.pathname, openTab, switchTab, findTabByEntity])
 
@@ -68,7 +80,7 @@ export function useURLSync() {
     const activeTab = getActiveTab()
     if (!activeTab) return
 
-    // Generate URL from active tab
+    // Generate URL from active tab (base path only, ignore query params)
     let targetPath = '/'
 
     switch (activeTab.type) {
@@ -89,9 +101,17 @@ export function useURLSync() {
         break
     }
 
-    // Only navigate if URL needs to change (prevent infinite loop)
+    // Only navigate if URL pathname needs to change (ignore query params here)
+    // Query param changes (like tab switches within a project) are handled by the component itself
     if (location.pathname !== targetPath) {
-      navigate(targetPath, { replace: true })
+      // Mark that we're initiating navigation
+      isNavigatingRef.current = true
+
+      // Determine if we should push or replace:
+      // - Push for new tabs (shouldPushHistory = true) to create history entries
+      // - Replace when already on the same tab (shouldPushHistory = false) to avoid duplicates
+      // Use the flag from the store which is set by openTab/switchTab
+      navigate(targetPath, { replace: !shouldPushHistory })
     }
-  }, [activeTabId, location.pathname, navigate, getActiveTab])
+  }, [activeTabId, location.pathname, navigate, getActiveTab, shouldPushHistory])
 }

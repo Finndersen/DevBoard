@@ -2,6 +2,7 @@
 
 from typing import TypeVar
 
+import logfire
 from sqlalchemy.orm import Session
 
 T = TypeVar("T")
@@ -17,3 +18,11 @@ class BaseRepository[T]:
             db_session: SQLAlchemy session for database operations
         """
         self.db = db_session
+
+    def commit(self):
+        """
+        Commit changes to the database.
+        Commits all changes in the DB session, not just for this repository.
+        """
+        logfire.info("Committing DB transaction")
+        self.db.commit()

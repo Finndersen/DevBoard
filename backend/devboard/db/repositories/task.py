@@ -3,9 +3,8 @@
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from devboard.db.models import Document, Task
+from devboard.db.models import Conversation, Document, ParentEntityType, Task, TaskStatus
 from devboard.db.models.base import task_context_resource_association
-from devboard.db.models.task import TaskStatus
 from devboard.db.repositories.base import BaseRepository
 
 
@@ -20,10 +19,12 @@ class TaskRepository(BaseRepository[Task]):
         project_id: int,
         title: str,
         specification: "Document",
+        base_branch: str,
+        codebase_id: int,
         implementation_plan: "Document | None" = None,
         status: TaskStatus = TaskStatus.DEFINING,
-        codebase_id: int | None = None,
         remote_task_id: str | None = None,
+        branch_name: str | None = None,
     ) -> Task:
         """Create a new task.
 
@@ -31,10 +32,12 @@ class TaskRepository(BaseRepository[Task]):
             project_id: ID of the parent project
             title: Task title
             specification: Specification document instance
+            base_branch: Base branch for git operations
+            codebase_id: Codebase ID
             implementation_plan: Optional implementation plan document instance
             status: Initial task status (defaults to DEFINING)
-            codebase_id: Optional codebase ID
             remote_task_id: Optional remote task identifier
+            branch_name: Optional git branch name
 
         Returns:
             Created Task instance
@@ -47,6 +50,8 @@ class TaskRepository(BaseRepository[Task]):
             status=status,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,
+            branch_name=branch_name,
+            base_branch=base_branch,
         )
         self.db.add(task)
         self.db.flush()
@@ -118,3 +123,24 @@ class TaskRepository(BaseRepository[Task]):
         """
         self.db.delete(task)
         self.db.flush()
+
+    def get_tasks_with_active_conversations(self, codebase_id: int | None = None) -> list[Task]:
+        """Get tasks that have active conversations.
+
+        Args:
+            codebase_id: Optional codebase ID to filter by
+        """
+
+        stmt = (
+            select(Task)
+            .join(Conversation, Conversation.parent_entity_id == Task.id)
+            .where(
+                Conversation.parent_entity_type == ParentEntityType.TASK,
+                Conversation.is_active == True,  # noqa: E712
+            )
+        )
+
+        if codebase_id is not None:
+            stmt = stmt.where(Task.codebase_id == codebase_id)
+
+        return list(self.db.execute(stmt).scalars().all())

@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { apiClient } from '../../lib/api'
 import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '../../lib/api'
-import { processConversationStream } from '../../lib/streamProcessor'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useEventHandlerRegistryForStream } from '../../hooks/useConversationEventHandlers'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
@@ -13,10 +12,6 @@ import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
 import { useUIStore } from '../../stores/uiStore'
 
-export interface ConversationChatHandle {
-  processEventStream: (stream: AsyncGenerator<ConversationEvent>) => Promise<void>
-}
-
 interface ConversationChatProps {
   conversationId: number
   placeholder?: string
@@ -26,14 +21,14 @@ interface ConversationChatProps {
   onStreamingStarted?: () => void
 }
 
-const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProps>(({
+const ConversationChat = ({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   isTransitioning = false,
   transitionMessage = '',
   onStreamingStarted
-}, ref) => {
+}: ConversationChatProps) => {
   // Subscribe to streaming store state
   // IMPORTANT: Use stable references to avoid infinite loops
   const streamMessages = useConversationStreamStore(
@@ -285,8 +280,14 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
         timestamp: new Date().toISOString()
       }
 
+      // Create stream from API
+      const stream = apiClient.streamConversationMessage(
+        conversationId,
+        { message: messageText }
+      )
+
       // Start streaming via store - include user message in initial state
-      await startStream(conversationId, messageText, eventHandlerRegistry, [...messages, userMessage])
+      await startStream(conversationId, stream, eventHandlerRegistry, [...messages, userMessage])
     } catch (error) {
       console.error('Failed to send message:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
@@ -360,34 +361,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       setApprovalError(`Failed to process approval: ${errorMsg}. Please try again.`)
     }
   }
-
-  const processEventStream = useCallback(async (stream: AsyncGenerator<ConversationEvent>) => {
-    // For external stream processing (e.g., from prompt actions)
-    // NOTE: This bypasses the store since it's for one-off streams
-    // But we still need to invoke event handlers for system events
-    try {
-      onStreamingStarted?.()
-
-      const { toolRequests } = await processConversationStream({
-        stream,
-        onEvent: (event) => {
-          setMessages(prev => [...prev, event])
-        },
-        eventHandlerRegistry
-      })
-
-      // Handle tool requests if any
-      if (toolRequests.length > 0) {
-        console.warn('processEventStream: Received tool requests but not handling them')
-      }
-    } catch (error) {
-      console.error('Failed to process event stream:', error)
-    }
-  }, [onStreamingStarted, eventHandlerRegistry])
-
-  useImperativeHandle(ref, () => ({
-    processEventStream
-  }), [processEventStream])
 
   // Cleanup: stop stream if component unmounts while streaming
   // Note: This won't actually stop background streams in the store,
@@ -482,6 +455,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       </div>
     </div>
   )
-})
+}
 
 export default ConversationChat

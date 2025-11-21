@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ToolCall, ToolResult } from '../../lib/api'
-import { formatTimestamp, formatDuration } from '../../styles/messageStyles'
+import { formatDuration } from '../../styles/messageStyles'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
@@ -78,21 +78,15 @@ export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDispla
               <span className="text-xs text-blue-600 dark:text-blue-400">Running...</span>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Timestamp */}
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              {formatTimestamp(toolCall.timestamp)}
-            </div>
-            {/* Expand/Collapse Chevron */}
-            <svg
-              className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
+          {/* Expand/Collapse Chevron */}
+          <svg
+            className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
 
           {/* Expanded Details */}
@@ -122,7 +116,7 @@ export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDispla
                         {isError ? 'Error:' : 'Result:'}
                       </div>
                       <div className="text-xs text-gray-600 dark:text-gray-500 select-none">
-                        Returned: {formatTimestamp(toolResult.timestamp)} ({formatDuration(duration)})
+                        {formatDuration(duration)}
                       </div>
                     </div>
                     <div className={`text-xs ${isError ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-300'} whitespace-pre-wrap font-mono max-h-96 overflow-y-auto overflow-x-auto select-text cursor-text min-w-0`}>

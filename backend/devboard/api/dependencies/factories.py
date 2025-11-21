@@ -2,7 +2,7 @@ from fastapi import HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.agent_conversation import ClaudeCodeConversationService
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.roles import AgentRoleType, Role

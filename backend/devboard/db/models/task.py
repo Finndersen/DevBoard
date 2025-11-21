@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .configuration import ContextProviderResource
     from .document import Document
     from .project import Project
+    from .worktree_slot import WorktreeSlot
 
 
 class TaskStatus(StrEnum):
@@ -33,11 +34,15 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
-    codebase_id: Mapped[int | None] = mapped_column(ForeignKey("codebases.id"))
+    codebase_id: Mapped[int] = mapped_column(ForeignKey("codebases.id"))
 
     title: Mapped[str] = mapped_column(String(255))
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.DEFINING)
     remote_task_id: Mapped[str | None] = mapped_column(String(100))
+
+    # Git branch configuration
+    branch_name: Mapped[str | None] = mapped_column(String(255))
+    base_branch: Mapped[str] = mapped_column(String(255))
 
     # Document relationships
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
@@ -46,10 +51,22 @@ class Task(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
-    codebase: Mapped["Codebase | None"] = relationship(back_populates="tasks")
+    codebase: Mapped["Codebase"] = relationship(back_populates="tasks")
     context_resources: Mapped[list["ContextProviderResource"]] = relationship(
         secondary=task_context_resource_association, back_populates="tasks"
     )
+    worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(
+        foreign_keys="WorktreeSlot.last_used_by_task_id", back_populates="last_used_by_task"
+    )
+
+    @property
+    def current_worktree_slot(self) -> "WorktreeSlot | None":
+        """Get the currently locked worktree slot for this task.
+
+        Returns:
+            The WorktreeSlot that is currently locked by this task, or None if no slot is locked
+        """
+        return next((slot for slot in self.worktree_slots if slot.locked), None)
 
     # Document relationships with eager loading
     specification: Mapped["Document"] = relationship(

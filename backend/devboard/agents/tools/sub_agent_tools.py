@@ -3,9 +3,10 @@ from typing import Literal
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
+from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
 from devboard.db.models.codebase import Codebase
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
@@ -57,7 +58,11 @@ def create_codebase_investigation_tool(
         - How workflows or processes work
         - Code organization and conventions
 
-        Be specific about what you want to know and what level of detail is required.
+        Guidelines:
+        - Be specific about what you want to know and what level of detail is required.
+        - Make your query targeted about one specific topic and call this tool multiple times in parallel for different unrelated topics.
+        - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
+          focus its analysis and provide more accurate and targeted answers.
 
         Args:
             query: Specific question about the codebase. Be as detailed as possible about what you want to know.
@@ -74,9 +79,6 @@ def create_codebase_investigation_tool(
         config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
 
         language_model = agent_config_service.llm_registry.get(config.model_id) if config.model_id else None
-
-        # Lazy import to avoid circular dependency
-        from devboard.agents.roles.implementations import CodebaseInvestigationRole
 
         # Create investigation role with selected codebase (role is stateless and reusable)
         investigation_role = CodebaseInvestigationRole(codebase=codebase)

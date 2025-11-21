@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ConversationEvent, ToolResult } from '../../lib/api'
 import {
-  getMessageBubbleClasses,
-  formatTimestamp
+  getMessageBubbleClasses
 } from '../../styles/messageStyles'
 import { Markdown } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
@@ -65,13 +64,12 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               />
             )}
           </div>
-          {/* Show more/less button (centered) and timestamp (right-aligned) on same line */}
-          <div className="flex justify-between items-center mt-1">
-            <div className="flex-1"></div>
-            {needsExpansion && (
+          {/* Show more/less button (centered) */}
+          {needsExpansion && (
+            <div className="flex justify-center mt-1">
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className={`text-xs font-medium hover:underline flex-shrink-0 ${
+                className={`text-xs font-medium hover:underline ${
                   isUser
                     ? 'text-blue-100 hover:text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
@@ -79,13 +77,8 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               >
                 {isExpanded ? '▲ Show less' : '▼ Show more'}
               </button>
-            )}
-            <div className="flex-1 flex justify-end">
-              <div className={`text-xs ${isUser ? 'text-blue-200 dark:text-blue-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                {formatTimestamp(message.timestamp)}
-              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     )
@@ -105,26 +98,21 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     return (
       <div className="flex w-full min-w-0">
         <div className="rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px]">
-          <div className="px-3 py-1.5 bg-yellow-800/20 border-b border-yellow-600 flex items-center justify-between gap-2 min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <svg
-                className="w-4 h-4 text-yellow-400 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <span className="font-medium text-sm text-yellow-200 truncate">Awaiting Approval: {message.tool_name}</span>
-            </div>
-            <div className="text-xs text-yellow-300/70 flex-shrink-0">
-              {formatTimestamp(message.timestamp)}
-            </div>
+          <div className="px-3 py-1.5 bg-yellow-800/20 border-b border-yellow-600 flex items-center gap-2 min-w-0">
+            <svg
+              className="w-4 h-4 text-yellow-400 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span className="font-medium text-sm text-yellow-200 truncate">Awaiting Approval: {message.tool_name}</span>
           </div>
           {message.tool_args && typeof message.tool_args === 'object' && Object.keys(message.tool_args).length > 0 && (
             <div className="px-3 py-2">

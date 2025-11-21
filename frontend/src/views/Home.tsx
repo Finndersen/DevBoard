@@ -72,6 +72,7 @@ export default function Home() {
       }
       await createProject(projectData)
       await refetchProjects()
+      await fetchProjects()
       setShowCreateProjectModal(false)
       setNewProject({
         name: '',
@@ -95,6 +96,7 @@ export default function Home() {
     try {
       await createCodebase(newCodebase)
       await refetchCodebases()
+      await fetchCodebases()
       setShowCreateCodebaseModal(false)
       setNewCodebase({ name: '', description: '', local_path: '' })
     } catch (error) {
@@ -107,6 +109,7 @@ export default function Home() {
     try {
       await deleteCodebase(codebaseId)
       await refetchCodebases()
+      await fetchCodebases()
     } catch (error) {
       console.error('Failed to delete codebase:', error)
     }
@@ -180,11 +183,8 @@ export default function Home() {
                     {project.name}
                   </h3>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                   {project.description}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500">
-                  Created {new Date(project.created_at).toLocaleDateString()}
                 </p>
               </Card>
             ))}

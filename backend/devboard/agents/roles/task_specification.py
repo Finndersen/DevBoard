@@ -79,14 +79,12 @@ TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
 ```markdown
 {task.specification.content or "<EMPTY>"}
 ```
+
+RELEVANT CODEBASE:
+- Name: {task.codebase.name}
+- Local Path: {task.codebase.local_path}
+- Description: {task.codebase.description or "N/A"}
 """
-    if task.codebase:
-        context += f"""
-    RELEVANT CODEBASE:
-    - Name: {task.codebase.name}
-    - Local Path: {task.codebase.local_path}
-    - Description: {task.codebase.description or "N/A"}
-    """
 
     return context
 
@@ -128,13 +126,13 @@ class TaskSpecificationRole(Role):
         if self.task.specification.content:
             tools.append(create_document_edit_tool(self.task.specification, self.document_repository))
 
-        if self.task.codebase:
-            tools.append(
-                create_codebase_investigation_tool(
-                    [self.task.codebase],
-                    self.agent_config_service,
-                )
+        # Add codebase investigation tool
+        tools.append(
+            create_codebase_investigation_tool(
+                [self.task.codebase],
+                self.agent_config_service,
             )
+        )
 
         return tools
 

@@ -102,6 +102,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
                 # Update session_id if changed
                 if agent.session_id != self.conversation.external_session_id:
                     self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
+                    self.conversation_repo.commit()
 
                 yield event
 

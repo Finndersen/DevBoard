@@ -15,7 +15,7 @@ from devboard.integrations.codebase import CodebaseIntegration
 
 @pytest.fixture
 def mock_codebase_integration():
-    """Create a mock CodebaseIntegration."""
+    """Create a mock FilesystemIntegration."""
     integration = Mock(spec=CodebaseIntegration)
     integration.search_file_content = AsyncMock()
     integration.search_files = AsyncMock()

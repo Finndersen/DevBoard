@@ -67,13 +67,14 @@ class TestTaskSpecificationRole:
         """Test role creates correct tools for specification."""
         tools = role.get_tools()
 
-        # Should have both set_content and edit tools for specification
-        assert len(tools) == 2
+        # Should have set_content, edit tools for specification, and codebase investigation tool
+        assert len(tools) == 3
         tool_names = [tool.name for tool in tools]
 
-        # Should have both set_content and edit tools
+        # Should have set_content, edit, and codebase investigation tools
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert "investigate_codebase" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content(self, role, mock_task):
@@ -135,13 +136,14 @@ class TestTaskPlanningRole:
         """Test role creates tools for both documents in planning."""
         tools = role.get_tools()
 
-        # Should have set_content for implementation plan and edit tools for both documents
-        assert len(tools) == 3
+        # Should have set_content for implementation plan, edit tools for both documents, and codebase investigation tool
+        assert len(tools) == 4
 
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+        assert "investigate_codebase" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content(self, role, mock_task):
@@ -223,6 +225,23 @@ class TestDocumentEditTool:
         args = mock_document_repo.update_content.call_args[0]
         assert args[0] == mock_document
         assert "Modified content" == args[1]
+
+    def test_tool_creation_without_approval(self, mock_document, mock_document_repo):
+        """Test document edit tool can be created without approval requirement."""
+        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=False)
+
+        # Verify tool name
+        assert tool.name == f"edit_{mock_document.document_type}"
+
+        # Verify tool does NOT require approval when explicitly set to False
+        assert tool.requires_approval is False
+
+    def test_tool_creation_with_explicit_approval(self, mock_document, mock_document_repo):
+        """Test document edit tool respects explicit approval requirement."""
+        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=True)
+
+        # Verify tool requires approval when explicitly set to True
+        assert tool.requires_approval is True
 
 
 class TestSetDocumentContentTool:
@@ -322,6 +341,34 @@ class TestSetDocumentContentTool:
         assert args[0] == mock_document_with_content
         assert args[1] == new_content
 
+    def test_tool_override_approval_for_blank_document(self, mock_blank_document, mock_document_repo):
+        """Test tool can require approval for blank document when explicitly set."""
+        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=True)
+
+        # Verify tool requires approval even for blank document when explicitly set
+        assert tool.requires_approval is True
+
+    def test_tool_override_approval_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+        """Test tool can skip approval for document with content when explicitly set."""
+        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo, requires_approval=False)
+
+        # Verify tool does not require approval when explicitly set to False
+        assert tool.requires_approval is False
+
+    def test_tool_smart_approval_logic_with_none(
+        self, mock_blank_document, mock_document_with_content, mock_document_repo
+    ):
+        """Test tool uses smart approval logic when requires_approval is None (default)."""
+        # Blank document should not require approval
+        tool_blank = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=None)
+        assert tool_blank.requires_approval is False
+
+        # Document with content should require approval
+        tool_with_content = create_set_document_content_tool(
+            mock_document_with_content, mock_document_repo, requires_approval=None
+        )
+        assert tool_with_content.requires_approval is True
+
 
 class TestRoleToolSelection:
     """Test that roles select the correct tools based on document state."""
@@ -361,24 +408,9 @@ class TestRoleToolSelection:
     def test_specification_role_providesonly_set_content_for_empty(
         self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service
     ):
-        """Test TaskSpecificationRole provides only set_content for empty documents."""
+        """Test TaskSpecificationRole provides set_content and investigation tool for empty documents."""
         role = TaskSpecificationRole(
             task=mock_task_with_blank_spec,
-            document_repository=mock_document_repo,
-            agent_config_service=mock_agent_config_service,
-        )
-
-        tools = role.get_tools()
-        assert len(tools) == 1
-        tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
-
-    def test_specification_role_provides_both_tools_for_document_with_content(
-        self, mock_task_with_content, mock_document_repo, mock_agent_config_service
-    ):
-        """Test TaskSpecificationRole provides both tools even when document has content."""
-        role = TaskSpecificationRole(
-            task=mock_task_with_content,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
         )
@@ -387,38 +419,57 @@ class TestRoleToolSelection:
         assert len(tools) == 2
         tool_names = [tool.name for tool in tools]
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        assert "investigate_codebase" in tool_names
+
+    def test_specification_role_provides_both_tools_for_document_with_content(
+        self, mock_task_with_content, mock_document_repo, mock_agent_config_service
+    ):
+        """Test TaskSpecificationRole provides document tools and investigation tool when document has content."""
+        role = TaskSpecificationRole(
+            task=mock_task_with_content,
+            document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        tools = role.get_tools()
+        assert len(tools) == 3
+        tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert "investigate_codebase" in tool_names
 
     def test_planning_role_provides_only_set_content_for_empty_plan(
         self, mock_task_with_blank_spec, mock_document_repo
     ):
-        """Test TaskPlanningRole provides only set_content for empty implementation plan."""
+        """Test TaskPlanningRole provides set_content for plan, edit for specification, and investigation tool."""
         role = TaskPlanningRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 2  # set_content for plan and edit for specification
+        assert len(tools) == 3  # set_content for plan, edit for specification, and investigation tool
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
+        assert "investigate_codebase" in tool_names
 
     def test_planning_role_provides_set_and_edit_for_plan_with_content(
         self, mock_task_with_content, mock_document_repo
     ):
-        """Test TaskPlanningRole provides all tools even when documents have content."""
+        """Test TaskPlanningRole provides all tools when documents have content."""
         role = TaskPlanningRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 3  # set_content + edit for plan, edit for specification
+        assert len(tools) == 4  # set_content + edit for plan, edit for specification, investigation tool
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+        assert "investigate_codebase" in tool_names
 
 
 class TestDocumentEdit:

@@ -17,7 +17,7 @@ from pydantic_ai.tools import (
 )
 from sqlalchemy.orm import Session
 
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles import AgentRoleType, Role

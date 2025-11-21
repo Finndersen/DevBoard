@@ -16,9 +16,9 @@ export function useCreateCodebase() {
   )
 }
 
-export function useUpdateCodebase() {
-  return useMutation((data: { id: number | string; codebase: Partial<Codebase> }) => 
-    apiClient.updateCodebase(data.id, data.codebase)
+export function useUpdateCodebase(options?: { updateCache?: (data: Codebase) => void }) {
+  return useMutation((data: { id: number | string; codebase: Partial<Codebase> }) =>
+    apiClient.updateCodebase(data.id, data.codebase), options
   )
 }
 

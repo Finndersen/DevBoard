@@ -17,15 +17,19 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_resource_service,
+    get_task_git_service,
     get_task_service,
 )
 from devboard.api.schemas import (
     DeleteResponse,
     DocumentResponse,
     FileDiff,
+    MergeBranchRequest,
+    MergeBranchResponse,
     PromptActionRequest,
     ResourceResponse,
     TaskDiffResponse,
+    TaskGitStatusResponse,
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
@@ -39,11 +43,12 @@ from devboard.db.repositories import (
     DocumentRepository,
     TaskRepository,
 )
-from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.git import GitRepoIntegration
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService, TaskTransitionError
 from devboard.workflow_actions.registry import workflow_action_registry
 
@@ -215,16 +220,8 @@ async def get_task_diff(
         TaskDiffResponse with per-file diffs and statistics
 
     Raises:
-        HTTPException: 400 if task has no associated codebase, 404 if codebase not found,
-                      500 if git operation fails
+        HTTPException: 404 if codebase not found, 500 if git operation fails
     """
-    # Check task has a codebase
-    if not task.codebase_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Task has no associated codebase. Cannot retrieve diff.",
-        )
-
     # Get codebase
     codebase = codebase_repo.get_by_id(task.codebase_id)
     if not codebase:
@@ -233,18 +230,18 @@ async def get_task_diff(
             detail=f"Codebase with id {task.codebase_id} not found.",
         )
 
-    # Initialize codebase integration
+    # Initialize git integration
     try:
-        codebase_integration = CodebaseIntegration(codebase.local_path)
+        git_integration = GitRepoIntegration(codebase.local_path)
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to initialize codebase integration: {str(e)}",
+            detail=f"Failed to initialize git integration: {str(e)}",
         ) from e
 
     # Get git diff (all uncommitted changes)
     try:
-        raw_diff = await codebase_integration.get_git_diff(commit1="HEAD")
+        raw_diff = await git_integration.get_git_diff(commit1="HEAD")
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -371,3 +368,101 @@ async def execute_workflow_action(
 
     # Stream events from the action
     return stream_conversation_events(action.run(), exception_handler=handle_exception)
+
+
+# Git endpoints
+
+
+@router.get("/{task_id}/git-status", response_model=TaskGitStatusResponse)
+async def get_task_git_status(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+) -> TaskGitStatusResponse:
+    """Get git status for a task's branch.
+
+    Returns information about the task's git branch including:
+    - Branch existence
+    - Commits ahead/behind base branch
+    - Merge conflicts
+    - Merge readiness
+
+    Raises:
+        HTTPException: 404 if task not found, 400 if operation fails
+    """
+    try:
+        status = await task_git_service.get_task_git_status(task)
+        return TaskGitStatusResponse(**status)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/{task_id}/merge-branch", response_model=MergeBranchResponse)
+async def merge_task_branch(
+    task_id: int,
+    request: MergeBranchRequest,
+    task: Task = Depends(get_verified_task),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+) -> MergeBranchResponse:
+    """Merge a task's branch into its base branch.
+
+    Optionally deletes the task branch after successful merge.
+
+    Args:
+        task_id: ID of the task
+        request: Merge configuration (target branch, delete after merge)
+
+    Returns:
+        Merge result with commit hash
+
+    Raises:
+        HTTPException: 404 if task not found, 400 if merge fails
+    """
+    if not task.branch_name:
+        raise HTTPException(status_code=400, detail="Task has no branch configured")
+
+    try:
+        merge_commit = await task_git_service.merge_task_branch(
+            task,
+            target_branch=request.target_branch,
+            delete_branch=request.delete_branch,
+        )
+        return MergeBranchResponse(
+            success=True,
+            merge_commit=merge_commit,
+            message=f"Successfully merged {task.branch_name} into {request.target_branch or task.base_branch}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.delete("/{task_id}/branch")
+async def delete_task_branch(
+    task_id: int,
+    force: bool = False,
+    task: Task = Depends(get_verified_task),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+) -> DeleteResponse:
+    """Delete a task's git branch.
+
+    Args:
+        task_id: ID of the task
+        force: Force deletion even if not fully merged
+
+    Returns:
+        Deletion confirmation
+
+    Raises:
+        HTTPException: 404 if task not found, 400 if deletion fails
+    """
+    if not task.branch_name:
+        raise HTTPException(status_code=400, detail="Task has no branch configured")
+
+    try:
+        await task_git_service.delete_task_branch(task, force=force)
+        return DeleteResponse(
+            success=True,
+            message=f"Successfully deleted branch {task.branch_name}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

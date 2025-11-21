@@ -29,13 +29,14 @@ interface UIState {
   activeTabId: string | null
   navigationMenuOpen: boolean
   visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
+  shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
 }
 
 interface UIActions {
   // Tab management
-  openTab: (tabData: Omit<TabState, 'id' | 'activityStatus' | 'hasUnsavedChanges' | 'lastActivity'>) => string
+  openTab: (tabData: Omit<TabState, 'id' | 'activityStatus' | 'hasUnsavedChanges' | 'lastActivity'>, options?: { fromUrlSync?: boolean }) => string
   closeTab: (tabId: string) => void
-  switchTab: (tabId: string) => void
+  switchTab: (tabId: string, options?: { fromUrlSync?: boolean }) => void
   updateTab: (tabId: string, updates: Partial<Omit<TabState, 'id'>>) => void
   reorderTabs: (fromIndex: number, toIndex: number) => void
   markTabVisited: (tabId: string) => void
@@ -66,9 +67,10 @@ export const useUIStore = create<UIStore>()(
       activeTabId: null,
       navigationMenuOpen: false,
       visitedTabs: new Set<string>(),
+      shouldPushHistory: false,
 
       // Tab management actions
-      openTab: (tabData) => {
+      openTab: (tabData, options = {}) => {
         const state = get()
 
         // Check if tab already exists for this entity
@@ -76,8 +78,15 @@ export const useUIStore = create<UIStore>()(
         if (existingTab) {
           // Switch to existing tab instead of creating duplicate
           set((draft) => {
+            const wasActive = draft.activeTabId === existingTab.id
             draft.activeTabId = existingTab.id
             draft.visitedTabs.add(existingTab.id)
+            // Only set shouldPushHistory if not from URL sync
+            if (!options.fromUrlSync) {
+              // Push to history if switching FROM a different tab (not already active)
+              // Replace if already on this tab (just updating URL, e.g., query params)
+              draft.shouldPushHistory = !wasActive
+            }
             const tab = draft.tabs.find(t => t.id === existingTab.id)
             if (tab) {
               tab.lastActivity = new Date()
@@ -100,6 +109,10 @@ export const useUIStore = create<UIStore>()(
           draft.tabs.push(newTab)
           draft.activeTabId = newTabId
           draft.visitedTabs.add(newTabId)
+          // Only set shouldPushHistory if not from URL sync (which means URL already changed)
+          if (!options.fromUrlSync) {
+            draft.shouldPushHistory = true // Push to history when opening new tab
+          }
         })
 
         return newTabId
@@ -118,23 +131,34 @@ export const useUIStore = create<UIStore>()(
           if (draft.activeTabId === tabId) {
             if (draft.tabs.length === 0) {
               draft.activeTabId = null
-            } else if (tabIndex >= draft.tabs.length) {
-              // Select previous tab
-              draft.activeTabId = draft.tabs[draft.tabs.length - 1].id
             } else {
-              // Select next tab
-              draft.activeTabId = draft.tabs[tabIndex].id
+              // When switching to another tab after close, use replace (not push)
+              draft.shouldPushHistory = false
+              if (tabIndex >= draft.tabs.length) {
+                // Select previous tab
+                draft.activeTabId = draft.tabs[draft.tabs.length - 1].id
+              } else {
+                // Select next tab
+                draft.activeTabId = draft.tabs[tabIndex].id
+              }
             }
           }
         })
       },
 
-      switchTab: (tabId) => {
+      switchTab: (tabId, options = {}) => {
         set((draft) => {
           const tab = draft.tabs.find(t => t.id === tabId)
           if (tab) {
+            const wasActive = draft.activeTabId === tabId
             draft.activeTabId = tabId
             draft.visitedTabs.add(tabId)
+            // Only set shouldPushHistory if not from URL sync (which means URL already changed)
+            if (!options.fromUrlSync) {
+              // Push to history if switching FROM a different tab (not already active)
+              // Replace if already on this tab (shouldn't happen, but handle it)
+              draft.shouldPushHistory = !wasActive
+            }
             tab.lastActivity = new Date()
           }
         })

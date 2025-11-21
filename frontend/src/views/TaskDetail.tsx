@@ -4,12 +4,12 @@ import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon,
 import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useToolResultHandler, useSystemEventHandler } from '../hooks/useConversationEventHandlers'
+import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
+import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
-import type { ConversationChatHandle } from '../components/chat/ConversationChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import { apiClient } from '../lib/api'
@@ -22,9 +22,19 @@ interface TaskDetailProps {
 function TaskDetail({ id }: TaskDetailProps) {
   const navigate = useNavigate()
   const { data: task, loading, error, refetch } = useTask(id)
-  const { setTask } = useDataStore()
+  const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
+
+  // Get event handler registry for passing to stream processor
+  const eventHandlerRegistry = useEventHandlerRegistryForStream()
+
+  // Get stream store methods for workflow actions
+  const startStream = useConversationStreamStore(state => state.startStream)
+  const migrateStream = useConversationStreamStore(state => state.migrateStream)
+  const isConversationStreaming = useConversationStreamStore(
+    state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
+  )
 
   // Fetch task when id changes (supports both initial mount and tab switching with keep-mounted components)
   useEffect(() => {
@@ -53,7 +63,6 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
-  const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string>('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
@@ -67,8 +76,12 @@ function TaskDetail({ id }: TaskDetailProps) {
   const refetchRef = useRef(refetch)
   refetchRef.current = refetch
 
-  // Ref for AgentChat to access its methods
-  const agentChatRef = useRef<ConversationChatHandle>(null)
+  // Clear transition message when streaming starts
+  useEffect(() => {
+    if (isConversationStreaming && transitionMessage) {
+      setTransitionMessage('')
+    }
+  }, [isConversationStreaming, transitionMessage])
 
   // Memoize the updateCache function to prevent infinite re-creation
   const updateCache = useCallback(() => {
@@ -109,6 +122,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     try {
       await deleteTask(task.id)
 
+      // Update cache
+      await deleteTaskFromStore(String(task.id))
+      await fetchProjectTasks(String(task.project_id))
+
       // Show success notification
       addNotification({
         type: 'system_error', // Using system_error as closest match for success
@@ -129,7 +146,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     } finally {
       setShowDeleteConfirm(false)
     }
-  }, [task, project, deleteTask, addNotification, navigate])
+  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
@@ -168,7 +185,6 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Memoize the refresh handler to prevent infinite loops
   const refreshHandler = useCallback(async () => {
-    console.log('TaskDetail: Executing task refresh handler')
     await refetchRef.current() // Refresh task data to get updated specification and implementation plan
   }, [])
 
@@ -177,55 +193,81 @@ function TaskDetail({ id }: TaskDetailProps) {
     if (task?.conversation_id) {
       const conversationId = task.conversation_id
 
-      console.log('TaskDetail: Registering refresh handlers for conversation:', conversationId)
-
       // Register refresh handler for task-related approvals
       registerRefreshHandler(conversationId, 'refresh_task', refreshHandler)
 
       // Cleanup on unmount or conversation change
       return () => {
-        console.log('TaskDetail: Unregistering refresh handlers for conversation:', conversationId)
         unregisterRefreshHandlers(conversationId)
       }
     }
   }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
 
-  // Handle specification document updates from MCP tools
-  useToolResultHandler(
-    (toolName) => toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content'),
-    async (result) => {
-      console.log('TaskDetail: Specification updated, refetching task data...')
+
+  // Memoize matchers and handlers to prevent re-registration on every render
+  const specificationMatcher = useCallback(
+    (toolName: string) => toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content'),
+    []
+  )
+
+  const specificationHandler = useCallback(async (result: any) => {
+    try {
       await refetch()
       // Switch to specification tab to show the updated content
       setActiveTab('specification')
+    } catch (error) {
+      console.error('Failed to refetch task after specification update:', error)
     }
+  }, [task?.specification?.content?.length, refetch, setActiveTab])
+
+  // Handle specification document updates from MCP tools
+  useToolResultHandler(specificationMatcher, specificationHandler)
+
+  const implementationPlanMatcher = useCallback(
+    (toolName: string) => toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content'),
+    []
   )
 
-  // Handle implementation plan document updates from MCP tools
-  useToolResultHandler(
-    (toolName) => toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content'),
-    async (result) => {
-      console.log('TaskDetail: Implementation plan updated, refetching task data...')
+  const implementationPlanHandler = useCallback(async (result: any) => {
+    try {
       await refetch()
       // Switch to plan tab to show the updated content
       setActiveTab('plan')
+    } catch (error) {
+      console.error('Failed to refetch task after implementation plan update:', error)
     }
-  )
+  }, [task?.implementation_plan?.content?.length, refetch, setActiveTab])
+
+  // Handle implementation plan document updates from MCP tools
+  useToolResultHandler(implementationPlanMatcher, implementationPlanHandler)
+
+  const systemEventMatcher = useCallback((event: any) => {
+    return event.type === 'task_updated' && event.data?.task_id === task?.id
+  }, [task?.id])
+
+  const systemEventHandler = useCallback(async (event: any) => {
+    // Check if conversation_id is changing
+    const oldConversationId = task?.conversation_id
+    const newConversationId = event.data?.updated_fields?.conversation_id
+
+    try {
+      // Migrate stream FIRST (before refetch updates conversation_id in state)
+      // This prevents race condition where component re-renders with new conversation_id
+      // but stream is still registered under old conversation_id
+      if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
+        migrateStream(oldConversationId, newConversationId)
+      }
+
+      // THEN refetch task to get updated status and conversation_id
+      await refetch()
+    } catch (error) {
+      console.error('Failed to refetch task after update event:', error)
+      // Don't throw - allow other handlers and stream to continue
+    }
+  }, [task?.id, task?.status, task?.conversation_id, migrateStream, refetch])
 
   // Handle task updates from SystemEvents (emitted during workflow actions)
-  useSystemEventHandler(
-    (event) => event.type === 'task_updated' && event.data?.task_id === task?.id,
-    async (event) => {
-      console.log('TaskDetail: Received TASK_UPDATED SystemEvent:', event)
-      // Refetch task to get updated status and conversation_id
-      try {
-        await refetch()
-      } catch (error) {
-        console.error('TaskDetail: Failed to refetch task after update event:', error)
-        // Don't throw - allow other handlers and stream to continue
-      }
-    }
-  )
+  useSystemEventHandler(systemEventMatcher, systemEventHandler)
 
   // Close codebase selector when clicking outside
   useEffect(() => {
@@ -243,18 +285,22 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [showCodebaseSelector])
 
   const executeWorkflowAction = async (actionKey: string, message: string) => {
-    if (!task?.id) return
+    if (!task?.id || !task?.conversation_id) return
 
-    setIsTransitioning(true)
     setTransitionMessage(message)
     try {
-      // Stream workflow action with task ID and pass to AgentChat for processing
+      // Create workflow action stream
       const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
-      await agentChatRef.current?.processEventStream(stream)
+
+      // Use store startStream for unified streaming behavior
+      // This immediately sets isStreaming=true in the store, which disables buttons
+      // Event handlers are already registered via hooks at component level
+      // Pass eventHandlerRegistry so tool results and system events are processed
+      // Note: Transition message will be cleared by the effect watching isConversationStreaming
+      await startStream(task.conversation_id, stream, eventHandlerRegistry)
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
-    } finally {
-      setIsTransitioning(false)
+      // Clear transition message on error
       setTransitionMessage('')
     }
   }
@@ -270,7 +316,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           <Button
             onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
             variant="primary"
-            disabled={!task.specification?.content || task.specification.content.trim() === '' || isTransitioning}
+            disabled={!task.specification?.content || task.specification.content.trim() === '' || isConversationStreaming}
           >
             Begin Planning
           </Button>
@@ -281,7 +327,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             onClick={() => executeWorkflowAction('task.begin_implementation', 'Starting Implementation...')}
             variant="primary"
             className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
-            disabled={isTransitioning}
+            disabled={isConversationStreaming}
           >
             Start Implementation
           </Button>
@@ -419,10 +465,10 @@ function TaskDetail({ id }: TaskDetailProps) {
                 // Read-only display with link to codebase detail
                 <Link
                   to={`/codebases/${selectedCodebase.id}`}
-                  className="flex items-center space-x-1 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   title="View codebase details"
                 >
-                  <span className={`font-medium ${textColors.secondary}`}>Codebase:</span>
+                  <CodeBracketIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                   <span className="text-blue-600 dark:text-blue-400 hover:underline">{selectedCodebase.name}</span>
                 </Link>
               ) : (
@@ -430,11 +476,11 @@ function TaskDetail({ id }: TaskDetailProps) {
                 <>
                   <button
                     onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
-                    className={`flex items-center space-x-1 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+                    className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
                     title="Select codebase"
                   >
-                    <span className="font-medium">Codebase:</span>
-                    <span>None</span>
+                    <CodeBracketIcon className="w-4 h-4" />
+                    <span className="italic">No codebase</span>
                     <ChevronDownIcon className="w-3 h-3" />
                   </button>
 
@@ -459,10 +505,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                 </>
               )}
             </div>
-
-            <span className={`${textColors.secondary} text-sm`}>
-              Created {new Date(task.created_at).toLocaleDateString()}
-            </span>
           </div>
         </div>
         
@@ -645,18 +687,13 @@ function TaskDetail({ id }: TaskDetailProps) {
         {/* Right Column: Task Agent Chat */}
         <div className="h-full overflow-hidden">
           <AgentChat
-            ref={agentChatRef}
             conversationId={task.conversation_id}
             placeholder="Ask me to help with task specification or implementation planning..."
             emptyStateMessage="Welcome to the Task Agent!"
             className="h-full flex flex-col overflow-hidden"
             padding="xs"
-            isTransitioning={isTransitioning}
+            isTransitioning={isConversationStreaming}
             transitionMessage={transitionMessage}
-            onStreamingStarted={() => {
-              setIsTransitioning(false)
-              setTransitionMessage('')
-            }}
           />
         </div>
       </div>

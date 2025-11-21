@@ -63,9 +63,6 @@ Getting started guide, testing strategies, deployment instructions, and contribu
 - Testing strategies: pytest (backend), vitest (frontend)
 - Docker deployment and production configuration
 
-## Maintenance
-
-This documentation is a living system that evolves with the codebase. See **[MAINTENANCE_GUIDE.md](./MAINTENANCE_GUIDE.md)** for comprehensive guidelines on creating and updating documentation files.
 
 ## Additional Resources
 

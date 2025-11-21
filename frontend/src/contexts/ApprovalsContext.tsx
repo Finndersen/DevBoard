@@ -96,10 +96,8 @@ interface ApprovalsProviderProps {
 function initializeApprovals(): ApprovalsState {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    console.log('ApprovalsProvider: Initializing from localStorage, found:', stored)
     if (stored) {
       const parsedApprovals = JSON.parse(stored)
-      console.log('ApprovalsProvider: Parsed initial approvals:', parsedApprovals)
       return { approvals: parsedApprovals }
     }
   } catch (error) {
@@ -123,7 +121,6 @@ export function ApprovalsProvider({ children }: ApprovalsProviderProps) {
   useEffect(() => {
     if (isInitialized) {
       try {
-        console.log('ApprovalsProvider: Saving to localStorage:', state.approvals)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state.approvals))
       } catch (error) {
         console.warn('Failed to save approvals to localStorage:', error)

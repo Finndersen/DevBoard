@@ -1,4 +1,4 @@
-import { useEffect, useCallback, memo } from 'react'
+import { useEffect, useCallback, memo, useRef } from 'react'
 import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { Codebase } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
@@ -30,8 +30,17 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   // Update tab title when codebase data is loaded
   useTabTitle('codebase', id)
 
+  // Use ref to store refetch function to avoid dependency issues
+  const refetchRef = useRef(refetch)
+  refetchRef.current = refetch
+
+  // Memoize the updateCache function to refetch after updates
+  const updateCache = useCallback(() => {
+    refetchRef.current()
+  }, [])
+
   // Memoize save functions to prevent infinite re-creation
-  const { mutate: updateCodebase } = useUpdateCodebase()
+  const { mutate: updateCodebase } = useUpdateCodebase({ updateCache })
 
   const saveNameField = useCallback(
     (value: string) => updateCodebase({ id: id!, codebase: { name: value } }),

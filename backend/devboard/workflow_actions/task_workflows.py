@@ -69,6 +69,9 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
                 new_agent_role=new_agent_role,
             )
 
+        # Commit changes before sending event
+        self.conversation_repo.commit()
+
         # Emit SystemEvent for task update
         yield SystemEvent(
             event_type="system",
@@ -134,6 +137,8 @@ class BeginImplementationAction(TaskWorkflowAction):
             entity_id=self.task.id,
             new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
         )
+        # Commit changes before sending event
+        self.conversation_repo.commit()
 
         # Emit SystemEvent for task update
         yield SystemEvent(

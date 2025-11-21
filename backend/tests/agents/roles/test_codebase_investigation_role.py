@@ -46,9 +46,9 @@ class TestCodebaseInvestigationRole:
         """Test role initializes with correct parameters."""
         role = CodebaseInvestigationRole(codebase=mock_codebase)
 
-        assert role.codebase == mock_codebase
-        assert role.codebase_integration is not None
-        assert str(role.codebase_integration.codebase_path) == mock_codebase.local_path
+        assert role._codebase == mock_codebase
+        assert role._codebase_integration is not None
+        assert str(role._codebase_integration._codebase_path) == mock_codebase.local_path
 
     def test_system_prompt(self, mock_codebase):
         """Test role has appropriate system prompt."""

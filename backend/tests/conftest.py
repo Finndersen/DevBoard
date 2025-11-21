@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from devboard.agents.agent_config_service import AgentEngineModelConfig
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.api.main import app
 from devboard.db.database import get_db
@@ -137,6 +137,94 @@ def conversation_repository(db_session):
     return ConversationRepository(db_session)
 
 
+# Test data fixtures
+@fixture
+def test_codebase(db_session, tmp_path):
+    """Create a test codebase for tasks."""
+    import subprocess
+
+    from devboard.db.models.codebase import Codebase
+    from devboard.db.repositories import CodebaseRepository
+
+    # Create a real directory with git repo for testing
+    codebase_path = tmp_path / "test-codebase"
+    codebase_path.mkdir(parents=True, exist_ok=True)
+
+    # Initialize git repo
+    subprocess.run(["git", "init"], cwd=str(codebase_path), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=str(codebase_path), check=True, capture_output=True
+    )
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=str(codebase_path), check=True, capture_output=True)
+
+    # Create an initial commit
+    (codebase_path / "README.md").write_text("# Test Codebase")
+    subprocess.run(["git", "add", "."], cwd=str(codebase_path), check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=str(codebase_path), check=True, capture_output=True)
+
+    codebase_repo = CodebaseRepository(db_session)
+    codebase = Codebase(
+        name="Test Codebase",
+        description="A test codebase",
+        local_path=str(codebase_path),
+    )
+    codebase = codebase_repo.create(codebase)
+    db_session.commit()
+    return codebase
+
+
+@fixture
+def test_task(db_session, test_codebase):
+    """Create a complete test task with all required relationships."""
+    from devboard.agents.engines import AgentEngine
+    from devboard.agents.roles import AgentRoleType
+    from devboard.db.models import ParentEntityType
+    from devboard.db.models.document import DocumentType
+    from devboard.db.models.task import TaskStatus
+    from devboard.db.repositories import (
+        ConversationRepository,
+        DocumentRepository,
+        ProjectRepository,
+        TaskRepository,
+    )
+
+    project_repo = ProjectRepository(db_session)
+    document_repo = DocumentRepository(db_session)
+    task_repo = TaskRepository(db_session)
+    conversation_repo = ConversationRepository(db_session)
+
+    # Create project
+    spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+    project = project_repo.create(
+        name="Test Project",
+        description="A test project for development",
+        specification=spec_doc,
+    )
+
+    # Create task
+    task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "Test task specification")
+    task = task_repo.create(
+        project_id=project.id,
+        title="Test Task",
+        status=TaskStatus.DEFINING,
+        specification=task_spec_doc,
+        base_branch="main",
+        codebase_id=test_codebase.id,
+    )
+
+    # Create conversation for task
+    conversation_repo.create(
+        parent_entity_type=ParentEntityType.TASK,
+        parent_entity_id=task.id,
+        agent_role=AgentRoleType.TASK_SPECIFICATION,
+        engine=AgentEngine.INTERNAL,
+        model_id="openai:gpt-4",
+    )
+    db_session.commit()
+
+    return task
+
+
 # Service fixtures with real repositories (no mocking at service level)
 @fixture
 def config_service(configuration_repository):
@@ -226,10 +314,10 @@ def create_mock_task(
     status: TaskStatus = TaskStatus.DEFINING,
     specification_content: str = "",
     implementation_plan_content: str | None = None,
-    with_codebase: bool = False,
-    codebase_path: str | None = None,
+    codebase_path: str = "/tmp/test-codebase",
+    codebase_id: int | None = None,
 ) -> Mock:
-    """Create a mock Task with proper codebase handling.
+    """Create a mock Task with codebase (now required).
 
     Args:
         task_id: Task ID
@@ -237,16 +325,18 @@ def create_mock_task(
         status: Task status
         specification_content: Content for specification document
         implementation_plan_content: Content for implementation plan document, or None to not include one
-        with_codebase: Whether to include a codebase
-        codebase_path: Path to codebase (defaults to /tmp/test-codebase if with_codebase is True)
+        codebase_path: Path to codebase (defaults to /tmp/test-codebase)
+        codebase_id: Codebase ID (defaults to task_id * 100)
 
     Returns:
-        Mock Task object with proper codebase relationship
+        Mock Task object with codebase relationship
     """
     task = Mock(spec=Task)
     task.id = task_id
     task.title = title
     task.status = status
+    task.base_branch = "main"
+    task.branch_name = f"task-{task_id}-{title.lower().replace(' ', '-')}"
 
     # Mock specification document
     spec_doc = Mock(spec=Document)
@@ -265,14 +355,12 @@ def create_mock_task(
     else:
         task.implementation_plan = None
 
-    # Handle codebase - set to None or create proper mock
-    if with_codebase:
-        codebase = Mock(spec=Codebase)
-        codebase.id = task_id * 100
-        codebase.name = "Test Codebase"
-        codebase.local_path = codebase_path or "/tmp/test-codebase"
-        task.codebase = codebase
-    else:
-        task.codebase = None
+    # Codebase is now required
+    codebase = Mock(spec=Codebase)
+    codebase.id = codebase_id if codebase_id is not None else task_id * 100
+    codebase.name = "Test Codebase"
+    codebase.local_path = codebase_path
+    task.codebase = codebase
+    task.codebase_id = codebase.id
 
     return task

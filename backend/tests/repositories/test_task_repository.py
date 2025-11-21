@@ -1,10 +1,10 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from devboard.db.models import Project
+from devboard.db.models import Codebase, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
-from devboard.db.repositories import DocumentRepository, TaskRepository
+from devboard.db.repositories import CodebaseRepository, DocumentRepository, TaskRepository
 from devboard.db.repositories.project import ProjectRepository
 
 
@@ -16,6 +16,19 @@ class TestTaskRepository:
         return TaskRepository(db_session)
 
     @pytest.fixture
+    def codebase(self, db_session: Session) -> Codebase:
+        """Create a test codebase."""
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/tmp/test-codebase",
+        )
+        codebase = codebase_repo.create(codebase)
+        db_session.flush()
+        return codebase
+
+    @pytest.fixture
     def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
         """Create a test project for task relationships."""
         project_repo = ProjectRepository(db_session)
@@ -25,7 +38,7 @@ class TestTaskRepository:
         return project
 
     @pytest.fixture
-    def sample_task_data(self, project: Project, document_repository: DocumentRepository) -> dict:
+    def sample_task_data(self, project: Project, codebase: Codebase, document_repository: DocumentRepository) -> dict:
         spec_doc = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
         return {
@@ -33,6 +46,8 @@ class TestTaskRepository:
             "project_id": project.id,
             "specification": spec_doc,
             "implementation_plan": plan_doc,
+            "base_branch": "main",
+            "codebase_id": codebase.id,
         }
 
     def test_create_task(self, repo: TaskRepository, sample_task_data: dict, db_session):
@@ -59,12 +74,24 @@ class TestTaskRepository:
         assert result is None
 
     def test_get_all_without_filter(
-        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session,
     ):
         """Test getting all tasks without project filter."""
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
+        repo.create(
+            project_id=project.id,
+            title="Task 1",
+            specification=spec_doc1,
+            implementation_plan=plan_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
@@ -74,6 +101,8 @@ class TestTaskRepository:
             specification=spec_doc2,
             implementation_plan=plan_doc2,
             status=TaskStatus.COMPLETE,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
         db_session.commit()
 
@@ -84,7 +113,12 @@ class TestTaskRepository:
         assert "Task 2" in task_titles
 
     def test_get_all_with_project_filter(
-        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session: Session
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
     ):
         """Test getting all tasks filtered by project."""
         # Create another project
@@ -95,11 +129,25 @@ class TestTaskRepository:
 
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
+        repo.create(
+            project_id=project.id,
+            title="Task 1",
+            specification=spec_doc1,
+            implementation_plan=plan_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        repo.create(project_id=project2.id, title="Task 2", specification=spec_doc2, implementation_plan=plan_doc2)
+        repo.create(
+            project_id=project2.id,
+            title="Task 2",
+            specification=spec_doc2,
+            implementation_plan=plan_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
         db_session.commit()
 
         project_tasks = repo.get_for_project(project.id)
@@ -108,12 +156,24 @@ class TestTaskRepository:
         assert project_tasks[0].project_id == project.id
 
     def test_get_by_project(
-        self, repo: TaskRepository, project: Project, document_repository: DocumentRepository, db_session
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session,
     ):
         """Test getting tasks by project."""
         spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc1 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        repo.create(project_id=project.id, title="Task 1", specification=spec_doc1, implementation_plan=plan_doc1)
+        repo.create(
+            project_id=project.id,
+            title="Task 1",
+            specification=spec_doc1,
+            implementation_plan=plan_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
         plan_doc2 = document_repository.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
@@ -123,6 +183,8 @@ class TestTaskRepository:
             specification=spec_doc2,
             implementation_plan=plan_doc2,
             status=TaskStatus.COMPLETE,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
         db_session.commit()
 

@@ -216,7 +216,7 @@ class TestCodebaseContextProvider:
     def mock_integration(self, tmp_path):
         """Mock Codebase integration."""
         integration = Mock()
-        integration.codebase_path = tmp_path
+        integration._codebase_path = tmp_path
         integration.read_file = AsyncMock(return_value="file content")
         integration.get_file_info = AsyncMock(return_value={"size": 100})
         integration.investigate_codebase = AsyncMock(return_value="Analysis result")

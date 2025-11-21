@@ -81,8 +81,8 @@ class CodebaseInvestigationRole(Role):
         Args:
             codebase: Codebase model instance containing name, description, and local_path
         """
-        self.codebase = codebase
-        self.codebase_integration = CodebaseIntegration(codebase.local_path)
+        self._codebase = codebase
+        self._codebase_integration = CodebaseIntegration(codebase.local_path)
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for codebase investigation role."""
@@ -95,11 +95,11 @@ class CodebaseInvestigationRole(Role):
             List of codebase search and reading tools
         """
         return [
-            create_text_search_tool(self.codebase_integration),
-            create_file_search_tool(self.codebase_integration),
-            create_code_structure_search_tool(self.codebase_integration),
-            create_directory_tree_tool(self.codebase_integration),
-            create_file_read_tool(self.codebase_integration),
+            create_text_search_tool(self._codebase_integration),
+            create_file_search_tool(self._codebase_integration),
+            create_code_structure_search_tool(self._codebase_integration),
+            create_directory_tree_tool(self._codebase_integration),
+            create_file_read_tool(self._codebase_integration),
         ]
 
     async def get_context_content(self) -> str:
@@ -109,13 +109,13 @@ class CodebaseInvestigationRole(Role):
             Formatted context containing codebase info, directory tree, and docs index
         """
         # Add directory tree with depth 3 for reasonable overview
-        directory_tree = await self.codebase_integration.get_directory_tree(max_depth=3)
+        directory_tree = await self._codebase_integration.get_directory_tree(max_depth=3)
 
         base_context = f"""
 CODEBASE INFORMATION:
-- Name: {self.codebase.name or "N/A"}
-- Path: {self.codebase_integration.codebase_path}
-- Description: {self.codebase.description or "N/A"}
+- Name: {self._codebase.name or "N/A"}
+- Path: {self._codebase.local_path}
+- Description: {self._codebase.description or "N/A"}
 
 DIRECTORY STRUCTURE (depth=3):
 ```
@@ -125,9 +125,9 @@ DIRECTORY STRUCTURE (depth=3):
 
         # Add docs/INDEX.md if it exists
         # TODO: Abstract this away into some kind of codebase docs service?
-        docs_index_path = Path(self.codebase_integration.codebase_path) / "docs" / "INDEX.md"
+        docs_index_path = Path(self._codebase.local_path) / "docs" / "INDEX.md"
         if docs_index_path.exists():
-            docs_index = await self.codebase_integration.read_file("docs/INDEX.md")
+            docs_index = await self._codebase_integration.read_file("docs/INDEX.md")
             base_context += f"""
 
 DOCUMENTATION INDEX (docs/INDEX.md):

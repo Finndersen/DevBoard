@@ -7,12 +7,11 @@ from .conversation import Conversation, ParentEntityType
 from .document import Document, DocumentType
 from .messages import ConversationMessage, MessageType
 from .project import Project
-from .task import Task
+from .task import Task, TaskStatus
+from .worktree_slot import WorktreeSlot
 
 __all__ = [
     "Base",
-    "Project",
-    "Task",
     "Codebase",
     "Configuration",
     "ContextProviderResource",
@@ -22,4 +21,8 @@ __all__ = [
     "DocumentType",
     "MessageType",
     "ParentEntityType",
+    "Project",
+    "Task",
+    "TaskStatus",
+    "WorktreeSlot",
 ]

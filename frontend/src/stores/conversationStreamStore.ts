@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { ConversationEvent, UserPrompt, ToolApprovalRequest, ToolCallRequest } from '../lib/api'
+import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '../lib/api'
 import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
@@ -39,17 +39,17 @@ interface ConversationStreamState {
  */
 interface ConversationStreamActions {
   /**
-   * Start streaming a conversation message.
+   * Start streaming conversation events.
    * The stream runs independently of component lifecycle.
    *
    * @param conversationId - The conversation to stream
-   * @param message - The user message to send
+   * @param stream - The event stream to process
    * @param eventHandlerRegistry - Optional registry for invoking event handlers
    * @param initialMessages - Optional initial messages to include (e.g., user message)
    */
   startStream: (
     conversationId: number,
-    message: string,
+    stream: AsyncGenerator<ConversationEvent>,
     eventHandlerRegistry?: EventHandlerRegistry,
     initialMessages?: ConversationEvent[]
   ) => Promise<void>
@@ -148,6 +148,15 @@ interface ConversationStreamActions {
    * @param eventHandlerRegistry - The new event handler registry
    */
   updateEventHandlerRegistry: (conversationId: number, eventHandlerRegistry: EventHandlerRegistry | undefined) => void
+
+  /**
+   * Migrate an active stream to a new conversation ID.
+   * Used when workflow actions create/replace conversations mid-stream.
+   *
+   * @param oldConversationId - The current conversation ID
+   * @param newConversationId - The new conversation ID to migrate to
+   */
+  migrateStream: (oldConversationId: number, newConversationId: number) => void
 }
 
 type ConversationStreamStore = ConversationStreamState & ConversationStreamActions
@@ -176,8 +185,9 @@ type ConversationStreamStore = ConversationStreamState & ConversationStreamActio
  *   state => state.isConversationStreaming(conversationId)
  * )
  *
- * // Start streaming
- * await startStream(conversationId, "Hello", eventHandlerRegistry)
+ * // Create a stream and start processing
+ * const stream = apiClient.streamConversationMessage(conversationId, { message: "Hello" })
+ * await startStream(conversationId, stream, eventHandlerRegistry)
  * ```
  */
 export const useConversationStreamStore = create<ConversationStreamStore>()(
@@ -186,7 +196,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     activeStreams: new Map(),
 
     // Actions
-    startStream: async (conversationId, message, eventHandlerRegistry, initialMessages) => {
+    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages) => {
       // Create abort controller for this stream
       const abortController = new AbortController()
 
@@ -209,14 +219,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       try {
-        // Start streaming from API with abort signal
-        const stream = apiClient.streamConversationMessage(
-          conversationId,
-          { message } as UserPrompt,
-          abortController.signal
-        )
-
-        // Process stream events and collect tool requests
+        // Process the provided stream events and collect tool requests
         // Use registry from separate map so it can be updated during streaming
         const { toolRequests } = await processConversationStream({
           stream,
@@ -447,6 +450,28 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
       } else {
         eventHandlerRegistries.delete(conversationId)
+      }
+    },
+
+    migrateStream: (oldConversationId, newConversationId) => {
+      const stream = get().activeStreams.get(oldConversationId)
+      if (stream) {
+        set((draft) => {
+          // Remove from old conversation ID
+          draft.activeStreams.delete(oldConversationId)
+          // Add to new conversation ID with updated conversationId field
+          draft.activeStreams.set(newConversationId, {
+            ...stream,
+            conversationId: newConversationId
+          })
+        })
+
+        // Migrate event handler registry as well
+        const registry = eventHandlerRegistries.get(oldConversationId)
+        if (registry) {
+          eventHandlerRegistries.delete(oldConversationId)
+          eventHandlerRegistries.set(newConversationId, registry)
+        }
       }
     }
   }))

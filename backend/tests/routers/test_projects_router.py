@@ -3,7 +3,7 @@
 import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
-from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
@@ -337,6 +337,16 @@ class TestProjectTasksRouter:
 
     def test_list_project_tasks_with_data(self, client, db_session, test_project_data, test_task_data):
         """Test listing project tasks with existing data."""
+        # Create test codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path="/tmp/test-codebase",
+        )
+        codebase = codebase_repo.create(codebase)
+        db_session.commit()
+
         # Create test project
         project_repo = ProjectRepository(db_session)
         document_repo = DocumentRepository(db_session)
@@ -356,6 +366,8 @@ class TestProjectTasksRouter:
             status=test_task_data["status"],
             specification=task1_spec,
             implementation_plan=task1_plan,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
         task2_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
         task2_plan = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
@@ -365,6 +377,8 @@ class TestProjectTasksRouter:
             status=test_task_data["status"],
             specification=task2_spec,
             implementation_plan=task2_plan,
+            base_branch="main",
+            codebase_id=codebase.id,
         )
 
         # Create conversations for tasks
@@ -398,7 +412,7 @@ class TestProjectTasksRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
 
-    def test_create_project_task(self, client, db_session, test_project_data, test_task_data):
+    def test_create_project_task(self, client, db_session, test_project_data, test_task_data, test_codebase):
         """Test creating a new task under a project."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -412,6 +426,8 @@ class TestProjectTasksRouter:
         # Create task under project (no project_id or status in body - status always defaults to DEFINING)
         api_task_data = {
             "title": test_task_data["title"],
+            "codebase_id": test_codebase.id,
+            "base_branch": "main",
         }
 
         response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
@@ -425,7 +441,7 @@ class TestProjectTasksRouter:
         assert "conversation_id" in task_data
         assert isinstance(task_data["conversation_id"], int)
 
-    def test_create_project_task_with_specification_content(self, client, db_session, test_project_data):
+    def test_create_project_task_with_specification_content(self, client, db_session, test_project_data, test_codebase):
         """Test creating a task with initial specification content."""
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -440,6 +456,8 @@ class TestProjectTasksRouter:
         api_task_data = {
             "title": "Task with Specification",
             "specification_content": "This is the initial task specification content.",
+            "codebase_id": test_codebase.id,
+            "base_branch": "main",
         }
 
         response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
@@ -451,7 +469,7 @@ class TestProjectTasksRouter:
         assert task_data["specification"]["content"] == api_task_data["specification_content"]
         assert task_data["implementation_plan"] is None  # Should be None initially
 
-    def test_create_project_task_with_codebase(self, client, db_session, test_project_data):
+    def test_create_project_task_with_codebase(self, client, db_session, test_project_data, test_codebase):
         """Test creating a task with a codebase association."""
 
         # Create test project
@@ -461,21 +479,13 @@ class TestProjectTasksRouter:
         created_project = project_repo.create(
             name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
-
-        # Create test codebase
-        codebase_repo = CodebaseRepository(db_session)
-        codebase = Codebase(
-            name="Test Codebase",
-            description="A test codebase",
-            local_path="/path/to/codebase",
-        )
-        codebase = codebase_repo.create(codebase)
         db_session.commit()
 
         # Create task with codebase (status not provided, defaults to DEFINING)
         api_task_data = {
             "title": "Task with Codebase",
-            "codebase_id": codebase.id,
+            "codebase_id": test_codebase.id,
+            "base_branch": "main",
         }
 
         response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
@@ -484,9 +494,11 @@ class TestProjectTasksRouter:
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
         assert task_data["status"] == "defining"  # Always DEFINING when created
-        assert task_data["codebase_id"] == codebase.id
+        assert task_data["codebase_id"] == test_codebase.id
 
-    def test_create_project_task_with_specification_and_codebase(self, client, db_session, test_project_data):
+    def test_create_project_task_with_specification_and_codebase(
+        self, client, db_session, test_project_data, test_codebase
+    ):
         """Test creating a task with both specification content and codebase."""
 
         # Create test project
@@ -496,22 +508,14 @@ class TestProjectTasksRouter:
         created_project = project_repo.create(
             name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
         )
-
-        # Create test codebase
-        codebase_repo = CodebaseRepository(db_session)
-        codebase = Codebase(
-            name="Test Codebase",
-            description="A test codebase",
-            local_path="/path/to/codebase",
-        )
-        codebase = codebase_repo.create(codebase)
         db_session.commit()
 
         # Create task with both (status not provided, defaults to DEFINING)
         api_task_data = {
             "title": "Task with Both",
             "specification_content": "Task specification for the codebase work.",
-            "codebase_id": codebase.id,
+            "codebase_id": test_codebase.id,
+            "base_branch": "main",
         }
 
         response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
@@ -521,12 +525,14 @@ class TestProjectTasksRouter:
         assert task_data["title"] == api_task_data["title"]
         assert task_data["status"] == "defining"  # Always DEFINING when created
         assert task_data["specification"]["content"] == api_task_data["specification_content"]
-        assert task_data["codebase_id"] == codebase.id
+        assert task_data["codebase_id"] == test_codebase.id
 
-    def test_create_project_task_project_not_found(self, client, test_task_data):
+    def test_create_project_task_project_not_found(self, client, test_task_data, test_codebase):
         """Test creating a task for non-existent project."""
         api_task_data = {
             "title": test_task_data["title"],
+            "codebase_id": test_codebase.id,
+            "base_branch": "main",
         }
         response = client.post("/api/projects/999/tasks", json=api_task_data)
         assert response.status_code == 404

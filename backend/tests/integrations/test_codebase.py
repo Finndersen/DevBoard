@@ -1,10 +1,11 @@
-"""Tests for CodebaseIntegration."""
+"""Tests for Filesystem and Git integrations."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
-from devboard.integrations.codebase import CodebaseIntegration, detect_git_remote_url
+from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandResult
 
 
@@ -26,8 +27,8 @@ def temp_codebase(tmp_path):
     return codebase_path
 
 
-class TestCodebaseIntegrationMethods:
-    """Tests for CodebaseIntegration methods."""
+class TestFilesystemIntegrationMethods:
+    """Tests for FilesystemIntegration methods."""
 
     @pytest.mark.asyncio
     async def test_test_connection_success(self, temp_codebase):
@@ -35,7 +36,7 @@ class TestCodebaseIntegrationMethods:
         integration = CodebaseIntegration(temp_codebase)
         result = await integration.validate()
         assert result.success is True
-        assert "Git repository accessible at:" in result.message
+        assert "Directory accessible at:" in result.message
 
     @pytest.mark.asyncio
     async def test_test_connection_nonexistent_path(self):
@@ -591,44 +592,53 @@ class TestGetGitFileTree:
 
 
 class TestDetectGitRemoteUrl:
-    """Tests for detect_git_remote_url utility function."""
+    """Tests for GitIntegration.detect_git_remote_url method."""
 
-    def test_detect_git_remote_url_success(self):
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_success(self, temp_codebase):
         """Test successful git remote URL detection."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "https://github.com/user/repo.git\n"
+        integration = GitRepoIntegration(temp_codebase)
 
-        with patch("subprocess.run", return_value=mock_result):
-            url = detect_git_remote_url("/path/to/repo")
+        origin_result = ShellCommandResult("https://github.com/user/repo.git\n", "", 0)
+
+        with patch("devboard.integrations.git.execute_shell_command", return_value=origin_result) as mock_exec:
+            url = await integration.detect_git_remote_url()
             assert url == "https://github.com/user/repo.git"
 
-    def test_detect_git_remote_url_no_origin(self):
+            # Verify git remote get-url origin was called
+            mock_exec.assert_called_once()
+            call_args = mock_exec.call_args[0][0]
+            assert call_args == ["git", "remote", "get-url", "origin"]
+
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_no_origin(self, temp_codebase):
         """Test git remote URL detection when no origin exists."""
-        mock_no_origin = Mock()
-        mock_no_origin.returncode = 1
-        mock_no_origin.stdout = ""
+        integration = GitRepoIntegration(temp_codebase)
 
-        mock_list_remotes = Mock()
-        mock_list_remotes.returncode = 0
-        mock_list_remotes.stdout = "upstream\n"
+        # First call fails (no origin)
+        no_origin_result = ShellCommandResult("", "", 1)
+        # Second call lists remotes
+        list_remotes_result = ShellCommandResult("upstream\n", "", 0)
+        # Third call gets URL of first remote
+        get_url_result = ShellCommandResult("https://github.com/user/repo.git\n", "", 0)
 
-        mock_get_url = Mock()
-        mock_get_url.returncode = 0
-        mock_get_url.stdout = "https://github.com/user/repo.git\n"
+        with patch("devboard.integrations.git.execute_shell_command") as mock_exec:
+            mock_exec.side_effect = [no_origin_result, list_remotes_result, get_url_result]
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = [mock_no_origin, mock_list_remotes, mock_get_url]
-
-            url = detect_git_remote_url("/path/to/repo")
+            url = await integration.detect_git_remote_url()
             assert url == "https://github.com/user/repo.git"
 
-    def test_detect_git_remote_url_no_remotes(self):
-        """Test git remote URL detection when no remotes exist."""
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
+            # Should have been called 3 times
+            assert mock_exec.call_count == 3
 
-        with patch("subprocess.run", return_value=mock_result):
-            url = detect_git_remote_url("/path/to/repo")
+    @pytest.mark.asyncio
+    async def test_detect_git_remote_url_no_remotes(self, temp_codebase):
+        """Test git remote URL detection when no remotes exist."""
+        integration = GitRepoIntegration(temp_codebase)
+
+        # Both calls fail
+        failed_result = ShellCommandResult("", "", 1)
+
+        with patch("devboard.integrations.git.execute_shell_command", return_value=failed_result):
+            url = await integration.detect_git_remote_url()
             assert url is None

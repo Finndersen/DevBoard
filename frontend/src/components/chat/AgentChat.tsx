@@ -1,6 +1,6 @@
-import { useState, useEffect, forwardRef, useRef, useImperativeHandle } from 'react'
+import { useState, useEffect } from 'react'
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
-import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
+import ConversationChat from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -26,7 +26,7 @@ interface AgentChatProps {
   onStreamingStarted?: () => void
 }
 
-const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
+const AgentChat = ({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
@@ -35,19 +35,9 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
   isTransitioning = false,
   transitionMessage = '',
   onStreamingStarted
-}, ref) => {
+}: AgentChatProps) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
-
-  // Ref for ConversationChat to access its methods
-  const conversationChatRef = useRef<ConversationChatHandle>(null)
-
-  // Forward ref to parent
-  useImperativeHandle(ref, () => ({
-    processEventStream: async (stream: AsyncGenerator<ConversationEvent>) => {
-      await conversationChatRef.current?.processEventStream(stream)
-    }
-  }), [])
 
   // Use new custom hooks to eliminate boilerplate
   const clearChatModal = useModal()
@@ -145,7 +135,6 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
         <div className="flex-1 overflow-hidden">
           {conversationId ? (
             <ConversationChat
-              ref={conversationChatRef}
               conversationId={conversationId}
               placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
@@ -180,6 +169,6 @@ const AgentChat = forwardRef<ConversationChatHandle, AgentChatProps>(({
       )}
     </>
   )
-})
+}
 
 export default AgentChat

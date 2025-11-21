@@ -28,7 +28,9 @@
 - Handle CC AWS Bedrock SSO login? message: "API Error: The SSO session associated with this profile has expired. To refresh this SSO session run aws sso login with the corresponding profile."
 - Add Post-Implementation agent role that has Github/Jira tools etc and can still make code changes.  These integrations are not required during normal implementation phase before approval.
 - For tool approvals, send both a ToolCallRequest and ToolCall events so that hte tool call result can eb matched, or just udpate frontend to handle ToolCallRequest by creating a ToolCall event/message
-For Implementation agent:
+- Make implementation plan more structured, i.e. list of steps with descriptions, further context and status
+
+- For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
 - Add interface for viewing & editing user-level Claude custom commands
 - Add interface for viewing & editing user-level Claude MCP server config

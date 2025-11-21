@@ -14,7 +14,7 @@ export interface Task {
   title: string
   status: string
   project_id: number
-  codebase_id: number | null
+  codebase_id: number
   remote_task_id: string | null
   conversation_id: number
   created_at: string
@@ -24,9 +24,11 @@ export interface Task {
 
 export interface TaskCreate {
   title: string
-  codebase_id: number | null
+  codebase_id: number
   remote_task_id: string | null
   specification_content: string | null
+  branch_name?: string  // Optional - auto-generated if not provided
+  base_branch?: string  // Optional - defaults to "main"
 }
 
 export interface DocumentResponse {
@@ -152,6 +154,78 @@ export interface Codebase {
   local_path: string
 }
 
+// Git and Worktree Management
+export interface TaskGitStatus {
+  branch_name: string
+  branch_exists: boolean
+  base_branch: string
+  commits_ahead: number
+  commits_behind: number
+  can_merge: boolean
+  has_conflicts: boolean
+  worktree_slot: WorktreeSlotInfo | null
+}
+
+export interface WorktreeSlotInfo {
+  id: number
+  path: string
+  locked: boolean
+  locked_since: string | null
+}
+
+export interface WorktreeSlot {
+  id: number
+  path: string
+  is_main_repo: boolean
+  status: 'locked' | 'available'
+  current_branch: string | null
+  last_used_at: string | null
+  locked_by_task: TaskInfo | null
+  locked_at: string | null
+}
+
+export interface TaskInfo {
+  id: number
+  title: string
+  branch: string
+}
+
+export interface WorktreePoolStatus {
+  codebase_id: number
+  codebase_path: string
+  slots: WorktreeSlot[]
+  stats: {
+    total_slots: number
+    available: number
+    locked: number
+  }
+}
+
+export interface MergeBranchRequest {
+  target_branch?: string
+  delete_branch?: boolean
+}
+
+export interface MergeBranchResponse {
+  success: boolean
+  merge_commit: string
+}
+
+export interface WorkspaceAllocationResponse {
+  slot: WorktreeSlotInfo
+  branch_checked_out: boolean
+  ready: boolean
+}
+
+export interface AllSlotsLockedResponse {
+  error: 'ALL_SLOTS_LOCKED'
+  locked_by: Array<{
+    task_id: number
+    title: string
+    slot: string
+  }>
+  can_create_new: boolean
+}
 
 export interface ArchitectureDocument {
   exists: boolean
@@ -537,7 +611,7 @@ export class ApiClient {
   }
 
   async generateArchitecture(
-    codebaseId: number | string, 
+    codebaseId: number | string,
     options: ArchitectureGenerationRequest = {}
   ): Promise<ArchitectureGenerationResponse> {
     return this.request<ArchitectureGenerationResponse>(
@@ -547,6 +621,52 @@ export class ApiClient {
         body: JSON.stringify(options),
       }
     )
+  }
+
+  // Git and Worktree Management
+  async getTaskGitStatus(taskId: number | string): Promise<TaskGitStatus> {
+    return this.request<TaskGitStatus>(`/api/tasks/${taskId}/git-status`)
+  }
+
+  async mergeTaskBranch(taskId: number | string, request: MergeBranchRequest): Promise<MergeBranchResponse> {
+    return this.request<MergeBranchResponse>(`/api/tasks/${taskId}/merge-branch`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async deleteTaskBranch(taskId: number | string, force: boolean = false): Promise<void> {
+    return this.request<void>(`/api/tasks/${taskId}/branch?force=${force}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getWorktreePoolStatus(codebaseId: number | string): Promise<WorktreePoolStatus> {
+    return this.request<WorktreePoolStatus>(`/api/codebases/${codebaseId}/worktree-pool`)
+  }
+
+  async deleteWorktreeSlot(slotId: number | string, force: boolean = false): Promise<void> {
+    return this.request<void>(`/api/worktree-slots/${slotId}?force=${force}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async reconcileWorktreePool(codebaseId: number | string): Promise<void> {
+    return this.request<void>(`/api/codebases/${codebaseId}/worktree-pool/reconcile`, {
+      method: 'POST',
+    })
+  }
+
+  async allocateWorkspaceForTask(taskId: number | string): Promise<WorkspaceAllocationResponse | AllSlotsLockedResponse> {
+    return this.request<WorkspaceAllocationResponse | AllSlotsLockedResponse>(`/api/tasks/${taskId}/allocate-workspace`, {
+      method: 'POST',
+    })
+  }
+
+  async releaseWorktreeSlot(slotId: number | string): Promise<void> {
+    return this.request<void>(`/api/worktree-slots/${slotId}/release`, {
+      method: 'POST',
+    })
   }
 }
 
