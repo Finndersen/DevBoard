@@ -3,10 +3,10 @@ from pydantic_ai import Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import (
-    create_codebase_investigation_tool,
     create_document_edit_tool,
     create_set_document_content_tool,
 )
+from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
 
@@ -92,7 +92,7 @@ TASK IMPLEMENTATION PLAN DOCUMENT:
 
 RELEVANT CODEBASE:
 - Name: {task.codebase.name}
-- Local Path: {task.codebase.local_path}
+- Worktree directory: {task.get_current_workspace_dir()}
 - Description: {task.codebase.description or "N/A"}
 """
 
@@ -150,12 +150,7 @@ class TaskPlanningRole(Role):
                 )
 
         # Add codebase investigation tool
-        tools.append(
-            create_codebase_investigation_tool(
-                [self.task.codebase],
-                self.agent_config_service,
-            )
-        )
+        tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
 
         return tools
 

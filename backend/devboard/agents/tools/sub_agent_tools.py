@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic_ai import Tool
@@ -7,6 +8,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
+from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
@@ -15,8 +17,14 @@ Your answer should be concise and to the point with no unnecessary preamble or s
 Query: {query}"""
 
 
-def create_codebase_investigation_tool(
-    codebases: list[Codebase],
+@dataclass
+class CodebaseInvestigationContext:
+    codebase: Codebase
+    working_dir: str  # Allows specifying worktree working dir for the codebase
+
+
+def create_multi_codebase_investigation_tool(
+    codebases: list[CodebaseInvestigationContext],
     agent_config_service: AgentConfigService,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
@@ -35,7 +43,7 @@ def create_codebase_investigation_tool(
     - Getting comprehensive answers without multiple follow-up queries
 
     Args:
-        codebases: List of Codebase model instances. Must contain at least one codebase.
+        codebases: List of CodebaseInvestigationContext instances. Must contain at least one codebase.
         agent_config_service: AgentConfigService for getting configured LLM
 
     Raises:
@@ -45,7 +53,9 @@ def create_codebase_investigation_tool(
         raise ValueError("At least one codebase must be provided")
 
     # Create name -> codebase mapping for dispatch
-    codebase_map: dict[str, Codebase] = {cb.name: cb for cb in codebases}
+    codebase_map: dict[str, CodebaseInvestigationContext] = {
+        cb_config.codebase.name: cb_config for cb_config in codebases
+    }
 
     async def investigate_codebase(codebase_name: str, query: str) -> str:
         """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
@@ -63,6 +73,7 @@ def create_codebase_investigation_tool(
         - Make your query targeted about one specific topic and call this tool multiple times in parallel for different unrelated topics.
         - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
           focus its analysis and provide more accurate and targeted answers.
+        - Indicate specific directories or files to focus on if possible.
 
         Args:
             query: Specific question about the codebase. Be as detailed as possible about what you want to know.
@@ -72,16 +83,15 @@ def create_codebase_investigation_tool(
             Comprehensive answer with file paths, code references, and implementation details.
         """
         # Get the selected codebase
-        codebase = codebase_map[codebase_name]
-
-        # TODO: Create more generic interface for constructing an Agent from a Role type
+        codebase_config = codebase_map[codebase_name]
+        working_dir = codebase_config.working_dir
         # Get investigation agent configuration
         config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
 
         language_model = agent_config_service.llm_registry.get(config.model_id) if config.model_id else None
 
         # Create investigation role with selected codebase (role is stateless and reusable)
-        investigation_role = CodebaseInvestigationRole(codebase=codebase)
+        investigation_role = CodebaseInvestigationRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
 
         # Create and run investigation agent
         if config.engine == AgentEngine.INTERNAL:
@@ -103,7 +113,7 @@ def create_codebase_investigation_tool(
             investigation_agent = ClaudeCodeAgent(
                 role=investigation_role,
                 model=language_model,
-                codebase_path=codebase.local_path,
+                working_dir=working_dir,
             )
         else:
             raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
@@ -129,4 +139,15 @@ def create_codebase_investigation_tool(
     return Tool(
         function=investigate_codebase,
         name="investigate_codebase",
+    )
+
+
+def create_task_codebase_investigation_tool(
+    task: Task,
+    agent_config_service: AgentConfigService,
+) -> Tool:
+    """Create a codebase investigation tool for a specific task."""
+    return create_multi_codebase_investigation_tool(
+        [CodebaseInvestigationContext(codebase=task.codebase, working_dir=task.get_current_workspace_dir())],
+        agent_config_service,
     )

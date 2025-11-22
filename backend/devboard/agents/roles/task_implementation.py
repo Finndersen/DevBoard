@@ -58,7 +58,7 @@ TASK NAME: {task.title}
 TASK STATUS: {task.status.value}
 RELEVANT CODEBASE:
 - Name: {task.codebase.name}
-- Local Path: {task.codebase.local_path}
+- Worktree directory: {task.get_current_workspace_dir()}
 - Description: {task.codebase.description or "N/A"}
 
 TASK SPECIFICATION:
@@ -85,7 +85,6 @@ class TaskImplementationRole(Role):
         """
         self.task = task
         self.document_repository = document_repository
-        self.codebase_integration = CodebaseIntegration(task.codebase.local_path)
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -102,6 +101,8 @@ class TaskImplementationRole(Role):
         if not self.task.implementation_plan:
             raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
+        codebase_integration = CodebaseIntegration(self.task.get_current_workspace_dir())
+
         tools = [
             # Tools for task specification document (uses default approval behavior)
             create_set_document_content_tool(self.task.specification, self.document_repository),
@@ -111,12 +112,9 @@ class TaskImplementationRole(Role):
                 self.task.implementation_plan, self.document_repository, requires_approval=False
             ),
             create_document_edit_tool(self.task.implementation_plan, self.document_repository, requires_approval=False),
+            create_code_structure_search_tool(codebase_integration),
+            create_directory_tree_tool(codebase_integration),
         ]
-        if self.codebase_integration:
-            tools += [
-                create_code_structure_search_tool(self.codebase_integration),
-                create_directory_tree_tool(self.codebase_integration),
-            ]
 
         return tools
 

@@ -80,7 +80,7 @@ class ClaudeCodeAgent(BaseAgent):
         role: Role,
         model: LanguageModel | None,
         session_id: str | None = None,
-        codebase_path: str | None = None,
+        working_dir: str | None = None,
     ):
         """Initialize Claude Code agent with role.
 
@@ -88,7 +88,7 @@ class ClaudeCodeAgent(BaseAgent):
             role: Role defining agent behavior (prompts, tools, context)
             model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
-            codebase_path: Optional path to codebase directory
+            working_dir: Optional path to codebase directory
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
@@ -96,7 +96,7 @@ class ClaudeCodeAgent(BaseAgent):
         super().__init__(role, model)
 
         self.session_id = session_id
-        self.codebase_path = codebase_path
+        self.working_dir = working_dir
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._convert_tools_from_role()
 
@@ -134,6 +134,7 @@ class ClaudeCodeAgent(BaseAgent):
             Configured ClaudeClient instance
         """
         system_prompt = await self._build_system_prompt()
+        logfire.info(f"Initialising ClaudeClient in directory: {self.working_dir}")
 
         return ClaudeClient(
             session_id=self.session_id,
@@ -141,7 +142,7 @@ class ClaudeCodeAgent(BaseAgent):
             tools=self._function_tools,
             allowed_builtin_tools=self.role.allowed_builtin_tools,
             model=self.model.display_full_name if self.model else None,
-            cwd=self.codebase_path,
+            cwd=self.working_dir,
             include_builtin_system_prompt=self.role.include_builtin_system_prompt,
             load_settings=self.role.include_claude_md,
         )

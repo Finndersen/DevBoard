@@ -150,8 +150,8 @@ def test_codebase(db_session, tmp_path):
     codebase_path = tmp_path / "test-codebase"
     codebase_path.mkdir(parents=True, exist_ok=True)
 
-    # Initialize git repo
-    subprocess.run(["git", "init"], cwd=str(codebase_path), check=True, capture_output=True)
+    # Initialize git repo with main branch
+    subprocess.run(["git", "init", "-b", "main"], cwd=str(codebase_path), check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "test@example.com"], cwd=str(codebase_path), check=True, capture_output=True
     )

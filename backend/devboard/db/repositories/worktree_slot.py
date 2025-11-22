@@ -191,22 +191,7 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         self.db.delete(slot)
         self.db.flush()
 
-    def delete_by_id(self, slot_id: int) -> bool:
-        """Delete a worktree slot by ID.
-
-        Args:
-            slot_id: The slot ID to delete
-
-        Returns:
-            True if slot was deleted, False if not found
-        """
-        slot = self.get_by_id(slot_id)
-        if slot:
-            self.delete(slot)
-            return True
-        return False
-
-    def get_by_path(self, codebase_id: int, path: str) -> WorktreeSlot | None:
+    def get_by_path(self, path: str) -> WorktreeSlot | None:
         """Get a worktree slot by its path.
 
         Args:
@@ -216,5 +201,24 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         Returns:
             WorktreeSlot instance if found, None otherwise
         """
-        stmt = select(WorktreeSlot).where(WorktreeSlot.codebase_id == codebase_id, WorktreeSlot.path == path)
+        stmt = select(WorktreeSlot).where(WorktreeSlot.path == path)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_last_used_slot_for_task(self, task_id: int) -> WorktreeSlot | None:
+        """Get the most recently used worktree slot for a task.
+
+        Finds the slot with last_used_by_task_id equal to the task ID
+        and the latest last_used_at timestamp.
+
+        Args:
+            task_id: The task ID to search for
+
+        Returns:
+            WorktreeSlot instance if found, None otherwise
+        """
+        stmt = (
+            select(WorktreeSlot)
+            .where(WorktreeSlot.last_used_by_task_id == task_id)
+            .order_by(WorktreeSlot.last_used_at.desc())
+        )
         return self.db.execute(stmt).scalar_one_or_none()

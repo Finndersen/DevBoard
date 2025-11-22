@@ -122,7 +122,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Memoize task grouping to avoid recalculation on every render
   const taskGroups = useMemo(() => {
     if (!tasks) return {} as Record<string, Task[]>
-    return tasks.reduce((groups, task) => {
+    const groups = tasks.reduce((groups, task) => {
       const status = task.status
       if (!groups[status]) {
         groups[status] = []
@@ -130,6 +130,15 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       groups[status].push(task)
       return groups
     }, {} as Record<string, Task[]>)
+
+    // Sort tasks within each group by created_at descending (newest first)
+    Object.keys(groups).forEach(status => {
+      groups[status].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    })
+
+    return groups
   }, [tasks])
 
   if (loading) {

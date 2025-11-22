@@ -6,19 +6,62 @@ Handles allocation of worktree slots to tasks with intelligent strategies:
 - LRU allocation (least recently used available slot)
 """
 
-import asyncio
 import datetime
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import logfire
 
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
+from devboard.db.models.task import NoWorktreeAllocatedException
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandExecutionError
+
+
+@dataclass
+class LockedByTaskInfo:
+    """Information about the task that has locked a slot."""
+
+    id: int
+    title: str
+    branch: str | None
+
+
+@dataclass
+class SlotInfo:
+    """Information about a worktree slot."""
+
+    id: int
+    path: str
+    is_main_repo: bool
+    status: Literal["locked", "available"]
+    current_branch: str | None
+    last_used_at: str | None
+    locked_by_task: LockedByTaskInfo | None = None
+
+
+@dataclass
+class PoolStats:
+    """Statistics about the worktree pool."""
+
+    total_slots: int
+    available: int
+    locked: int
+
+
+@dataclass
+class PoolStatus:
+    """Status of all worktree slots for a codebase."""
+
+    codebase_id: int
+    codebase_path: str
+    slots: list[SlotInfo]
+    stats: PoolStats
 
 
 class AllSlotsLockedException(Exception):
@@ -93,7 +136,7 @@ class WorkspaceAllocationService:
 
         # Strategy 2: Branch optimization - slot already on base branch
         for slot in available_slots:
-            current_branch = await asyncio.to_thread(slot.get_current_branch)
+            current_branch = await slot.get_current_branch()
             if current_branch is not None and current_branch == task.base_branch:
                 logfire.info(
                     f"Using optimized slot {slot.id} (already on branch {task.base_branch}) for task {task.id}"
@@ -116,17 +159,13 @@ class WorkspaceAllocationService:
             ValueError: If git operations fail
         """
         # Get current branch dynamically
-        current_branch = await asyncio.to_thread(slot.get_current_branch)
+        current_branch = await slot.get_current_branch()
 
         # Checkout branch if different
         if current_branch != branch_name:
             logfire.info(f"Checking out branch {branch_name} in slot {slot.id}")
             git = GitRepoIntegration(slot.path)
-            try:
-                await git.checkout_branch(branch_name)
-            except ShellCommandExecutionError as e:
-                error_msg = e.stderr if hasattr(e, "stderr") else str(e)
-                raise ValueError(f"Failed to checkout branch {branch_name}: {error_msg}") from e
+            await git.checkout_branch(branch_name)
         else:
             logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
 
@@ -136,6 +175,7 @@ class WorkspaceAllocationService:
 
     def release_slot(self, slot: WorktreeSlot) -> None:
         self.worktree_slot_repo.unlock_slot(slot)
+        self.worktree_slot_repo.commit()
         logfire.info(f"Released slot {slot.id}")
 
     async def create_and_lock_slot(self, task: Task, use_main_slot: bool = False) -> WorktreeSlot:
@@ -150,20 +190,16 @@ class WorkspaceAllocationService:
         # Generate worktree path
         worktree_path = self._generate_new_worktree_path(task.codebase)
 
-        # Determine branch for worktree creation (use base_branch as default)
-        branch_for_worktree = task.branch_name or task.base_branch
-
-        # Create the worktree
-        git = GitRepoIntegration(task.codebase.local_path)
-        logfire.info(f"Creating worktree at {worktree_path} for task {task.id} on branch {branch_for_worktree}")
-        await git.create_worktree(worktree_path, branch_for_worktree)
-
-        # Create slot in database
+        # Create slot in database first
         slot = self.worktree_slot_repo.create(
             codebase_id=task.codebase.id,
             path=worktree_path,
             is_main_repo=False,
         )
+
+        # Create the worktree using shared method
+        logfire.info(f"Creating worktree at {worktree_path} for task {task.id}")
+        await self._create_worktree_for_slot(slot, task)
 
         # Lock the slot
         return self.worktree_slot_repo.lock_slot(slot, task)
@@ -215,7 +251,7 @@ class WorkspaceAllocationService:
     def bootstrap_main_repo_slot(self, codebase: Codebase) -> WorktreeSlot:
         """Create the main repository slot (slot 0) if it doesn't exist."""
         # Check if any slot with the main repo path exists
-        existing_main = self.worktree_slot_repo.get_by_path(codebase.id, codebase.local_path)
+        existing_main = self.worktree_slot_repo.get_by_path(codebase.local_path)
         if existing_main:
             return existing_main
 
@@ -227,39 +263,159 @@ class WorkspaceAllocationService:
             is_main_repo=True,
         )
 
-    @asynccontextmanager
-    async def allocate_workspace(
-        self,
-        task: Task,
-        max_worktrees: int | None = None,
-        use_main_slot: bool = False,
-    ) -> AsyncIterator[WorktreeSlot]:
-        """Allocate and manage a workspace for a task.
-
-        This context manager handles the complete workspace lifecycle:
-        1. Finds an appropriate free workspace and locks it
-        2. Checks out the task's base branch
-        3. Yields the workspace path for use
-        4. Unlocks the workspace on exit (success or failure)
+    async def delete_worktree_slot(self, slot: WorktreeSlot, force: bool = False) -> None:
+        """Delete a worktree slot and associated it worktree
 
         Args:
-            task: The task requiring a workspace
-            max_worktrees: Optional maximum number of worktrees allowed
-            use_main_slot: Whether to use the main repo slot if available
-
-        Yields:
-            WorktreeSlot instance allocated for the task
+            slot: The slot to delete
+            force: Force deletion even if locked or has uncommitted changes
 
         Raises:
-            ValueError: If task has invalid configuration
-            AllSlotsLockedException: If max_worktrees limit reached
+            ValueError: If slot not found, is locked (and not forced),
+                       is main repo, or git operations fail
         """
-        slot: WorktreeSlot | None = None
+        # Cannot delete main repo
+        if slot.is_main_repo:
+            raise ValueError("Cannot delete main repository slot")
 
+        # Check if locked (unless forced)
+        if slot.locked and not force:
+            raise ValueError(f"Slot {slot.id} is currently locked")
+
+        codebase = slot.codebase
+
+        # Remove the worktree from git (if it exists)
+        if Path(slot.path).exists():
+            git = GitRepoIntegration(codebase.local_path)
+            try:
+                await git.remove_worktree(slot.path, force=force)
+                logfire.info(f"Removed worktree at {slot.path}")
+            except ShellCommandExecutionError as e:
+                error_msg = e.stderr if hasattr(e, "stderr") else str(e)
+                raise ValueError(f"Failed to remove worktree at {slot.path}: {error_msg}") from e
+
+        # Delete from database
+        self.worktree_slot_repo.delete(slot)
+        logfire.info(f"Deleted worktree slot {slot.id}")
+
+    def _check_worktree_valid(self, slot: WorktreeSlot) -> bool:
+        """Check if a worktree exists and is valid.
+
+        For worktree slots (non-main repo), checks that the directory exists and contains
+        a valid .git file.
+
+        Args:
+            slot: The worktree slot to check
+
+        Returns:
+            True if worktree is valid, False if missing or invalid
+        """
+        # Main repo is always valid (it's the source repository)
+        if slot.is_main_repo:
+            return True
+
+        worktree_path = Path(slot.path)
+        git_path = worktree_path / ".git"
+
+        # Check if worktree directory exists and has .git file (worktrees have .git file, not directory)
+        return worktree_path.exists() and git_path.exists()
+
+    async def _create_worktree_for_slot(self, slot: WorktreeSlot, task: Task) -> None:
+        """Create a worktree for a slot.
+
+        Args:
+            slot: The worktree slot to create a worktree for
+            task: The task using this slot (for branch information)
+        """
+        logfire.warn(f"Creating worktree for slot {slot.id} at {slot.path}")
+        git = GitRepoIntegration(task.codebase.local_path)
+        branch_for_worktree = task.branch_name or task.base_branch
+        await git.create_worktree(slot.path, branch_for_worktree)
+
+    async def get_pool_status_for_codebase(self, codebase: Codebase) -> PoolStatus:
+        """Get status of all worktree slots for a codebase.
+
+        Args:
+            codebase: Codebase instance
+
+        Returns:
+            Pool status with codebase info, slot details, and statistics
+
+        Raises:
+            ValueError: If codebase not found
+        """
+        slots = self.worktree_slot_repo.get_by_codebase(codebase.id)
+
+        # Build slot information
+        slot_data: list[SlotInfo] = []
+        available_count = 0
+        locked_count = 0
+
+        for slot in slots:
+            if slot.locked:
+                locked_count += 1
+            else:
+                available_count += 1
+
+            # Get current branch dynamically
+            current_branch = await slot.get_current_branch()
+
+            # Build locked_by_task info if applicable
+            locked_by_task = None
+            if slot.locked and slot.last_used_by_task:
+                locked_by_task = LockedByTaskInfo(
+                    id=slot.last_used_by_task.id,
+                    title=slot.last_used_by_task.title,
+                    branch=slot.last_used_by_task.branch_name,
+                )
+
+            slot_info = SlotInfo(
+                id=slot.id,
+                path=slot.path,
+                is_main_repo=slot.is_main_repo,
+                status="locked" if slot.locked else "available",
+                current_branch=current_branch,
+                last_used_at=slot.last_used_at.isoformat() if slot.last_used_at else None,
+                locked_by_task=locked_by_task,
+            )
+
+            slot_data.append(slot_info)
+
+        stats = PoolStats(
+            total_slots=len(slots),
+            available=available_count,
+            locked=locked_count,
+        )
+
+        return PoolStatus(
+            codebase_id=codebase.id,
+            codebase_path=codebase.local_path,
+            slots=slot_data,
+            stats=stats,
+        )
+
+    async def run_task_agent_in_workspace(
+        self,
+        task: Task,
+        agent_stream: AsyncIterator[ConversationEvent],
+        max_worktrees: int | None = None,
+        use_main_slot: bool = False,
+    ) -> AsyncIterator[ConversationEvent]:
+        """Run the task agent in an available workspace slot."""
+        slot: WorktreeSlot | None = None
         try:
             # Try to allocate an existing slot
             try:
                 slot = await self.allocate_for_task(task, use_main_slot=use_main_slot)
+                self.worktree_slot_repo.commit()
+
+                # Emit SystemEvent for workspace allocation
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_ALLOCATE,
+                    data={"task_id": task.id, "slot_id": slot.id},
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+
             except AllSlotsLockedException:
                 # Check if we've reached the max worktree limit
                 if max_worktrees is not None:
@@ -270,17 +426,62 @@ class WorkspaceAllocationService:
 
                 # Create a new slot
                 logfire.info(f"All slots locked, creating new worktree for task {task.id}")
+
+                # Emit SystemEvent before creating worktree (this can take time for large repos)
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_CREATE,
+                    data={"task_id": task.id},
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+
                 slot = await self.create_and_lock_slot(task, use_main_slot=use_main_slot)
+                self.worktree_slot_repo.commit()
+
+                # Emit SystemEvent for workspace allocation (creation is a special case of allocation)
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_ALLOCATE,
+                    data={"task_id": task.id, "slot_id": slot.id},
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+
+            # Verify worktree exists and is valid before checkout (recreate if missing for worktree slots)
+            if not self._check_worktree_valid(slot):
+                # Emit SystemEvent before creating worktree (this can take time for large repos)
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_CREATE,
+                    data={"task_id": task.id, "slot_id": slot.id},
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+                # Create the worktree
+                await self._create_worktree_for_slot(slot, task)
 
             # Checkout base branch in the allocated slot
             await self.checkout_branch_in_slot(slot, task.base_branch)
 
+            # Emit SystemEvent for workspace branch checkout
+            yield SystemEvent(
+                type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
+                data={"task_id": task.id, "branch": task.base_branch},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
             # Yield the workspace path for use
             logfire.info(f"Allocated workspace {slot.path} for task {task.id}")
-            yield slot
+
+            # Run agent conversation in the allocated slot
+            async for event in agent_stream:
+                yield event
 
         finally:
             # Always unlock the slot on exit
             if slot:
                 self.release_slot(slot)
                 logfire.info(f"Released workspace {slot.path} for task {task.id}")
+
+
+def get_task_workspace_dir(task: Task) -> str:
+    """Get the workspace directory for a task, and raise exception if workspace is not allocated"""
+    allocated_workspace = task.current_worktree_slot
+    if not allocated_workspace:
+        raise NoWorktreeAllocatedException("Workspace not allocated for task #{task.id}")
+    return allocated_workspace.path

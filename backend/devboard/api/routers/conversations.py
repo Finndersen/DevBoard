@@ -12,7 +12,7 @@ from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
-from devboard.api.dependencies.services import get_agent_config_service
+from devboard.api.dependencies.services import get_agent_config_service, get_workspace_allocation_service
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ToolApprovals,
@@ -21,8 +21,9 @@ from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.api.streaming import stream_conversation_events
-from devboard.db.models import Conversation
+from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository
+from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 router = APIRouter()
 
@@ -63,26 +64,12 @@ async def get_conversation_messages(
     return await conversation_service.get_conversation_messages()
 
 
-@router.post("/{conversation_id}/messages", response_model=list[ConversationEvent])
-async def send_conversation_message(
-    request: ChatRequest,
-    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-) -> list[ConversationEvent]:
-    """Send message to any conversation.
-
-    Uses the appropriate agent engine (PydanticAI or Claude Code) based on
-    the conversation's configuration.
-
-    Returns all events generated from processing the message, including
-    tool calls, tool results, and the final response message.
-    """
-    return await conversation_service.send_message_or_approval(message_or_approvals=request.message)
-
-
 @router.post("/{conversation_id}/messages/stream")
 async def stream_conversation_message(
     request: ChatRequest,
-    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    conversation: Conversation = Depends(get_verified_conversation),
+    agent_conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream conversation events as they are generated.
 
@@ -92,29 +79,22 @@ async def stream_conversation_message(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    return stream_conversation_events(conversation_service.stream_events_for_message_or_approval(request.message))
+    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request.message)
+    conversation_parent = conversation.get_parent_entity()
+    if isinstance(conversation_parent, Task):
+        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
+            task=conversation_parent, agent_stream=agent_event_stream
+        )
 
-
-@router.post("/{conversation_id}/approve-tools", response_model=list[ConversationEvent])
-async def approve_conversation_tools(
-    request: ToolApprovals,
-    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
-) -> list[ConversationEvent]:
-    """Approve or deny tool calls for any conversation.
-
-    Processes tool approval decisions and continues agent execution
-    with the appropriate engine (PydanticAI or Claude Code).
-
-    Returns all events generated from processing the approvals, including
-    tool calls, tool results, and the final response message.
-    """
-    return await conversation_service.send_message_or_approval(message_or_approvals=request)
+    return stream_conversation_events(agent_event_stream)
 
 
 @router.post("/{conversation_id}/approve-tools/stream")
 async def stream_approve_conversation_tools(
     request: ToolApprovals,
-    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    conversation: Conversation = Depends(get_verified_conversation),
+    agent_conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream tool approval events as they are generated.
 
@@ -124,7 +104,14 @@ async def stream_approve_conversation_tools(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    return stream_conversation_events(conversation_service.stream_events_for_message_or_approval(request))
+    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request)
+    conversation_parent = conversation.get_parent_entity()
+    if isinstance(conversation_parent, Task):
+        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
+            task=conversation_parent, agent_stream=agent_event_stream
+        )
+
+    return stream_conversation_events(agent_event_stream)
 
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)
@@ -162,19 +149,6 @@ async def update_conversation_model(
     The model can be changed within the same engine (e.g., switching from
     Opus to Sonnet in Claude Code). The engine itself cannot be changed
     mid-conversation.
-
-    Args:
-        conversation_id: ID of the conversation to update
-        request: Request with new model_id
-        conversation_repo: Conversation repository
-        agent_config_service: Agent configuration service
-
-    Returns:
-        Updated conversation details
-
-    Raises:
-        HTTPException: 404 if conversation not found
-        HTTPException: 400 if validation fails
     """
     # Get conversation
     conversation = conversation_repo.get_by_id(conversation_id)

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.services.workspace_allocation_service import (
     AllSlotsLockedException,
@@ -226,3 +227,120 @@ def test_release_slot(service, mock_repos):
 
     # Verify: Unlocked the slot
     worktree_slot_repo.unlock_slot.assert_called_once_with(slot)
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
+    service, mock_repos, sample_task, sample_slot
+):
+    """Test that run_task_agent_in_workspace yields appropriate SystemEvents when allocating existing slot."""
+    worktree_slot_repo, task_repo = mock_repos
+
+    # Setup: Available slot
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+        mock_git.return_value.checkout_branch = AsyncMock()
+
+        # Mock agent stream that yields one message
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        # Execute and collect events
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Should have yielded WORKSPACE_ALLOCATE and WORKSPACE_BRANCH_CHECKOUT SystemEvents
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    assert len(system_events) == 2
+
+    # Verify first event: WORKSPACE_ALLOCATE
+    assert system_events[0].type == SystemEventType.WORKSPACE_ALLOCATE
+    assert system_events[0].data["task_id"] == sample_task.id
+    assert system_events[0].data["slot_id"] == sample_slot.id
+
+    # Verify second event: WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[1].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[1].data["task_id"] == sample_task.id
+    assert system_events[1].data["branch"] == sample_task.base_branch
+
+    # Verify slot was released
+    worktree_slot_repo.unlock_slot.assert_called_once_with(sample_slot)
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_yields_workspace_create_event(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Test that run_task_agent_in_workspace yields WORKSPACE_CREATE when creating new worktree."""
+    worktree_slot_repo, task_repo = mock_repos
+
+    # Setup: All slots locked (force creation of new slot)
+    locked_slot = MagicMock(spec=WorktreeSlot)
+    locked_slot.locked = True
+    worktree_slot_repo.get_by_codebase.return_value = [locked_slot]
+
+    # Mock slot creation
+    new_slot = MagicMock(spec=WorktreeSlot)
+    new_slot.id = 2
+    new_slot.path = "/projects/test-repo.worktree-1"
+    new_slot.is_main_repo = False
+    new_slot.locked = False
+    worktree_slot_repo.create.return_value = new_slot
+    worktree_slot_repo.lock_slot.return_value = new_slot
+
+    # Mock main repo slot bootstrap
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 0
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    worktree_slot_repo.get_by_path.return_value = main_slot
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.create_worktree = AsyncMock()
+        mock_git.return_value.checkout_branch = AsyncMock()
+
+        # Mock agent stream that yields one message
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        # Execute and collect events
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Should have yielded WORKSPACE_CREATE, WORKSPACE_ALLOCATE, and WORKSPACE_BRANCH_CHECKOUT
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    assert len(system_events) == 3
+
+    # Verify first event: WORKSPACE_CREATE
+    assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
+    assert system_events[0].data["task_id"] == sample_task.id
+
+    # Verify second event: WORKSPACE_ALLOCATE
+    assert system_events[1].type == SystemEventType.WORKSPACE_ALLOCATE
+    assert system_events[1].data["task_id"] == sample_task.id
+    assert system_events[1].data["slot_id"] == new_slot.id
+
+    # Verify third event: WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[2].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[2].data["task_id"] == sample_task.id
+    assert system_events[2].data["branch"] == sample_task.base_branch
+
+    # Verify worktree was created
+    mock_git.return_value.create_worktree.assert_called_once()
+
+    # Verify slot was released
+    worktree_slot_repo.unlock_slot.assert_called_once_with(new_slot)

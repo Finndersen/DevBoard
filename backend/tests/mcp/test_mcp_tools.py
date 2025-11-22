@@ -231,7 +231,7 @@ class TestInvestigateCodebase:
             patch("devboard.mcp.server.get_mcp_db_session") as mock_session,
             patch("devboard.mcp.server.CodebaseRepository") as mock_repo_class,
             patch("devboard.mcp.server.create_agent_config_service") as mock_agent_service,
-            patch("devboard.mcp.server.create_codebase_investigation_tool") as mock_create_tool,
+            patch("devboard.mcp.server.create_multi_codebase_investigation_tool") as mock_create_tool,
         ):
             # Setup mocks
             mock_db = Mock()
@@ -260,7 +260,9 @@ class TestInvestigateCodebase:
             mock_repo.get_by_name.assert_called_once_with("Test Codebase")
             mock_agent_service.assert_called_once_with(mock_db)
             mock_create_tool.assert_called_once()
-            mock_tool.function.assert_called_once_with("How is authentication implemented?")
+            mock_tool.function.assert_called_once_with(
+                codebase_name="Test Codebase", query="How is authentication implemented?"
+            )
 
     @pytest.mark.asyncio
     async def test_investigate_codebase_not_found(self):
@@ -292,7 +294,7 @@ class TestInvestigateCodebase:
             patch("devboard.mcp.server.get_mcp_db_session") as mock_session,
             patch("devboard.mcp.server.CodebaseRepository") as mock_repo_class,
             patch("devboard.mcp.server.create_agent_config_service") as mock_agent_service,
-            patch("devboard.mcp.server.create_codebase_investigation_tool") as mock_create_tool,
+            patch("devboard.mcp.server.create_multi_codebase_investigation_tool") as mock_create_tool,
         ):
             # Setup mocks
             mock_db = Mock()

@@ -13,12 +13,14 @@ from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_document_repository,
     get_task_repository,
+    get_worktree_slot_repository,
 )
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_resource_service,
     get_task_git_service,
     get_task_service,
+    get_workspace_allocation_service,
 )
 from devboard.api.schemas import (
     DeleteResponse,
@@ -42,6 +44,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     DocumentRepository,
     TaskRepository,
+    WorktreeSlotRepository,
 )
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.resource_service import (
@@ -50,6 +53,7 @@ from devboard.services.resource_service import (
 )
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService, TaskTransitionError
+from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 from devboard.workflow_actions.registry import workflow_action_registry
 
 router = APIRouter()
@@ -208,13 +212,18 @@ async def get_task_diff(
     task_id: int,
     task: Task = Depends(get_verified_task),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ) -> TaskDiffResponse:
-    """Get git diff of uncommitted changes in task's associated codebase.
+    """Get git diff of uncommitted changes in task's worktree workspace.
+
+    Uses the most recently used worktree slot for the task, or falls back
+    to the main codebase if no worktree has been used.
 
     Args:
         task_id: ID of the task
         task: Verified task instance
         codebase_repo: Codebase repository
+        worktree_slot_repo: Worktree slot repository
 
     Returns:
         TaskDiffResponse with per-file diffs and statistics
@@ -223,22 +232,15 @@ async def get_task_diff(
         HTTPException: 404 if codebase not found, 500 if git operation fails
     """
     # Get codebase
-    codebase = codebase_repo.get_by_id(task.codebase_id)
-    if not codebase:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Codebase with id {task.codebase_id} not found.",
-        )
+    codebase = task.codebase
 
-    # Initialize git integration
-    try:
-        git_integration = GitRepoIntegration(codebase.local_path)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to initialize git integration: {str(e)}",
-        ) from e
+    # Get the most recently used worktree slot for this task
+    last_used_slot = worktree_slot_repo.get_last_used_slot_for_task(task.id)
 
+    # Use worktree path if available, otherwise use main codebase path
+    repo_path = last_used_slot.path if last_used_slot else codebase.local_path
+
+    git_integration = GitRepoIntegration(repo_path)
     # Get git diff (all uncommitted changes)
     try:
         raw_diff = await git_integration.get_git_diff(commit1="HEAD")
@@ -321,6 +323,7 @@ async def execute_workflow_action(
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_service: TaskService = Depends(get_task_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream a task workflow action.
 
@@ -330,15 +333,6 @@ async def execute_workflow_action(
 
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent (TextMessage, ToolCall, ToolResult, or SystemEvent).
-
-    Args:
-        task_id: ID of the task
-        request: Request with action_key to execute
-        task: Task instance
-        conversation_repo: Repository for conversation operations
-        document_repo: Document repository
-        task_service: Service for task operations
-        agent_config_service: Service for agent configuration
 
     Raises:
         HTTPException: 404 if action_key not found
@@ -357,6 +351,7 @@ async def execute_workflow_action(
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
         document_repository=document_repo,
+        workspace_allocation_service=workspace_allocation_service,
     )
 
     # Define exception handler to convert task transition errors to HTTP exceptions

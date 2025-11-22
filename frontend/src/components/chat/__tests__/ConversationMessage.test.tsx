@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { render } from '../../../test/utils'
 import ConversationMessageComponent from '../ConversationMessage'
-import type { ConversationMessage, ToolCall, ToolResult, ToolCallRequest } from '../../../lib/api'
+import type { ConversationMessage, ToolCall, ToolResult, ToolCallRequest, SystemEvent } from '../../../lib/api'
 
 // Mock the Markdown and ToolCallDisplay components
 vi.mock('../../ui', () => ({
@@ -364,6 +364,102 @@ describe('ConversationMessage', () => {
 
       const card = innerContainer?.querySelector('.rounded-lg')
       expect(card).toBeInTheDocument()
+    })
+  })
+
+  describe('system events', () => {
+    it('renders workspace_create event as inline badge', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'workspace_create',
+        data: { task_id: 123 },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Check for centered container
+      const container = screen.getByText('Creating workspace').closest('.justify-center')
+      expect(container).toBeInTheDocument()
+
+      // Check for badge styling
+      const badge = screen.getByText('Creating workspace').closest('.rounded-full')
+      expect(badge).toBeInTheDocument()
+      expect(badge).toHaveClass('bg-blue-500/10', 'border-blue-500/20', 'text-blue-400')
+
+      // Check for info icon
+      const svg = badge?.querySelector('svg')
+      expect(svg).toBeInTheDocument()
+    })
+
+    it('does not render workspace_allocate event (hidden)', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'workspace_allocate',
+        data: { task_id: 123, slot_id: 1 },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Should render nothing
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render workspace_branch_checkout event (hidden)', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'workspace_branch_checkout',
+        data: { task_id: 123, branch: 'main' },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Should render nothing
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render task_updated event (hidden)', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'task_updated',
+        data: { task_id: 123, updated_fields: { status: 'planning' } },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Should render nothing
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render conversation_updated event (hidden)', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'conversation_updated',
+        data: { conversation_id: 456, updated_fields: { external_session_id: 'abc123' } },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Should render nothing
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render unknown system event types', () => {
+      const systemEvent = {
+        event_type: 'system',
+        type: 'unknown_system_event',
+        data: null,
+        timestamp: '2024-01-01T10:00:00Z',
+      } as unknown as SystemEvent
+
+      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+
+      // Should render nothing
+      expect(container.firstChild).toBeNull()
     })
   })
 

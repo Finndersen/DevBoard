@@ -15,10 +15,11 @@ from devboard.api.dependencies.factories import (
     create_agent_conversation_service,
     create_agent_role_for_conversation,
 )
-from devboard.db.models import Conversation, Task
+from devboard.db.models import Conversation, ParentEntityType, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.task_service import TaskService
+from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 
 class TaskWorkflowAction(ABC):
@@ -37,6 +38,7 @@ class TaskWorkflowAction(ABC):
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
         document_repository: DocumentRepository,
+        workspace_allocation_service: WorkspaceAllocationService,
     ):
         """Initialize the action with required services.
 
@@ -46,6 +48,7 @@ class TaskWorkflowAction(ABC):
             conversation_repo: Repository for conversation database operations
             agent_config_service: Service for agent configuration
             document_repository: Repository for document database operations
+            workspace_allocation_service: Service for workspace allocation
         """
         self.task = task
         self.task_service = task_service
@@ -56,8 +59,9 @@ class TaskWorkflowAction(ABC):
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
         )
+        self.workspace_allocation_service = workspace_allocation_service
 
-    def _create_agent_service_for_conversation(self, conversation: Conversation) -> BaseAgentConversationService:
+    def _create_agent_conversation_service(self, conversation: Conversation) -> BaseAgentConversationService:
         """Create a new agent service for the given conversation with appropriate role.
 
         This factory method handles creating both the role and service instances
@@ -69,13 +73,10 @@ class TaskWorkflowAction(ABC):
         Returns:
             BaseAgentConversationService instance configured with the correct role
         """
-        # Get the parent entity (performs database query)
-        parent_entity = conversation.get_parent_entity()
 
         # Create role using the conversation's parent entity
         role = create_agent_role_for_conversation(
             conversation=conversation,
-            parent_entity=parent_entity,
             document_repo=self.document_repository,
             agent_config_service=self.agent_config_service,
         )
@@ -84,7 +85,6 @@ class TaskWorkflowAction(ABC):
         return create_agent_conversation_service(
             conversation=conversation,
             role=role,
-            parent_entity=parent_entity,
             conversation_repo=self.conversation_repo,
         )
 
@@ -179,10 +179,8 @@ class PromptTemplateAction(TaskWorkflowAction):
             ConversationEvent objects from the agent's response
         """
         # Get current active conversation and create service
-        from devboard.db.models import ParentEntityType
-
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        agent_conversation_service = self._create_agent_service_for_conversation(conversation)
+        agent_conversation_service = self._create_agent_conversation_service(conversation)
 
         # Stream agent prompt events
         async for event in agent_conversation_service.stream_events_for_message_or_approval(

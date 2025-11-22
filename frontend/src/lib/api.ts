@@ -45,7 +45,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
 
-export type SystemEventType = 'task_updated' | 'conversation_updated'
+export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create'
 
 export interface ConversationMessage {
   event_type: 'message'

@@ -101,13 +101,28 @@ def client_with_mock_workflow_deps(
     mock_task_service_for_workflow,
 ) -> Iterator[TestClient]:
     """Client with mocked dependencies for workflow actions."""
-    from devboard.api.dependencies.services import get_task_service
+    from unittest.mock import Mock
+
+    from devboard.api.dependencies.services import get_task_service, get_workspace_allocation_service
     from devboard.api.main import app
 
+    # Mock workspace allocation service to avoid git worktree operations
+    mock_workspace_service = Mock()
+
+    # Make run_task_agent_in_workspace pass through the agent stream unchanged
+    async def passthrough_stream(task, agent_stream):
+        async for event in agent_stream:
+            yield event
+
+    mock_workspace_service.run_task_agent_in_workspace = passthrough_stream
+
     app.dependency_overrides[get_task_service] = lambda: mock_task_service_for_workflow
+    app.dependency_overrides[get_workspace_allocation_service] = lambda: mock_workspace_service
     yield client
     if get_task_service in app.dependency_overrides:
         del app.dependency_overrides[get_task_service]
+    if get_workspace_allocation_service in app.dependency_overrides:
+        del app.dependency_overrides[get_workspace_allocation_service]
 
 
 class TestTasksRouter:

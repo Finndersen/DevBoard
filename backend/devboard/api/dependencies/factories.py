@@ -10,13 +10,12 @@ from devboard.agents.roles.project_qa import ProjectQARole
 from devboard.agents.roles.task_implementation import TaskImplementationRole
 from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.agents.roles.task_specification import TaskSpecificationRole
-from devboard.db.models import Conversation, Project, Task
+from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 
 
 def create_agent_role_for_conversation(
     conversation: Conversation,
-    parent_entity: Project | Task,
     document_repo: DocumentRepository,
     agent_config_service: AgentConfigService,
 ) -> Role:
@@ -36,6 +35,7 @@ def create_agent_role_for_conversation(
     Raises:
         HTTPException: If agent role is unsupported for the entity type
     """
+    parent_entity = conversation.get_parent_entity()
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
         if conversation.agent_role == AgentRoleType.TASK_SPECIFICATION:
@@ -75,7 +75,6 @@ def create_agent_role_for_conversation(
 def create_agent_conversation_service(
     conversation: Conversation,
     role: Role,
-    parent_entity: Project | Task,
     conversation_repo: ConversationRepository,
 ) -> BaseAgentConversationService:
     """Create the appropriate service based on engine type.
@@ -102,17 +101,10 @@ def create_agent_conversation_service(
             conversation_repository=conversation_repo,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
-        # Get codebase path if parent is a task
-        if isinstance(parent_entity, Task):
-            codebase_path = parent_entity.codebase.local_path if parent_entity.codebase else None
-        else:
-            codebase_path = None
-
         return ClaudeCodeConversationService(
             conversation=conversation,
             role=role,
             conversation_repository=conversation_repo,
-            codebase_path=codebase_path,
         )
     else:
         raise HTTPException(

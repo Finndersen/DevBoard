@@ -24,7 +24,7 @@ from devboard.agents.roles.base import Role
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
-from devboard.db.models import Conversation
+from devboard.db.models import Codebase, Conversation, Task
 from devboard.db.repositories.conversation import ConversationRepository
 
 
@@ -86,25 +86,37 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             if is_approval and not self.session_id:
                 raise ValueError("No session ID available - cannot process tool approvals")
 
-            # Get model from conversation
-            model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
-
-            # Create agent with session_id
-            agent = ClaudeCodeAgent(
-                role=self.role,
-                model=model,
-                session_id=self.conversation.external_session_id,
-                codebase_path=self.codebase_path,
-            )
+            agent = self._get_agent()
 
             # Stream events from agent execution
             async for event in agent.stream_events(message_or_approvals):
                 # Update session_id if changed
                 if agent.session_id != self.conversation.external_session_id:
+                    logfire.info(
+                        f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
+                    )
                     self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
                     self.conversation_repo.commit()
 
                 yield event
+
+    def _get_agent(self) -> ClaudeCodeAgent:
+        """Create agent with session_id"""
+        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
+        conversation_parent = self.conversation.get_parent_entity()
+        if isinstance(conversation_parent, Task):
+            codebase_path = conversation_parent.get_current_workspace_dir()
+        elif isinstance(conversation_parent, Codebase):
+            codebase_path = conversation_parent.local_path
+        else:
+            codebase_path = None
+
+        return ClaudeCodeAgent(
+            role=self.role,
+            model=model,
+            session_id=self.conversation.external_session_id,
+            working_dir=codebase_path,
+        )
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all events for the Claude Code conversation.

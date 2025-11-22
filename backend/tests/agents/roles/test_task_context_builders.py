@@ -6,6 +6,7 @@ from devboard.agents.roles.task_planning import build_task_planning_context
 from devboard.agents.roles.task_specification import build_task_specification_context
 from devboard.db.models import Codebase, DocumentType, Project, Task
 from devboard.db.models.task import TaskStatus
+from devboard.db.models.worktree_slot import WorktreeSlot
 from devboard.db.repositories import CodebaseRepository, DocumentRepository, ProjectRepository, TaskRepository
 
 
@@ -77,6 +78,16 @@ def task_with_documents(db_session, project_with_spec: Project, sample_codebase:
         codebase_id=sample_codebase.id,
     )
 
+    # Create a worktree slot for the task
+    worktree_slot = WorktreeSlot(
+        codebase_id=sample_codebase.id,
+        path="/tmp/test-codebase",
+        is_main_repo=True,
+        locked=True,
+        last_used_by_task_id=task.id,
+    )
+    db_session.add(worktree_slot)
+
     db_session.commit()
     db_session.refresh(task)
     return task
@@ -127,6 +138,16 @@ class TestBuildTaskSpecificationContext:
             codebase_id=sample_codebase.id,
         )
 
+        # Create a worktree slot for the task
+        worktree_slot = WorktreeSlot(
+            codebase_id=sample_codebase.id,
+            path="/tmp/test-codebase",
+            is_main_repo=True,
+            locked=True,
+            last_used_by_task_id=task.id,
+        )
+        db_session.add(worktree_slot)
+
         db_session.commit()
         db_session.refresh(task)
 
@@ -172,6 +193,16 @@ class TestBuildTaskSpecificationContext:
             base_branch="main",
             codebase_id=sample_codebase.id,
         )
+
+        # Create a worktree slot for the task
+        worktree_slot = WorktreeSlot(
+            codebase_id=sample_codebase.id,
+            path="/tmp/test-codebase",
+            is_main_repo=True,
+            locked=True,
+            last_used_by_task_id=task.id,
+        )
+        db_session.add(worktree_slot)
 
         db_session.commit()
         db_session.refresh(task)
@@ -232,6 +263,16 @@ class TestBuildTaskPlanningContext:
             codebase_id=sample_codebase.id,
         )
 
+        # Create a worktree slot for the task
+        worktree_slot = WorktreeSlot(
+            codebase_id=sample_codebase.id,
+            path="/tmp/test-codebase",
+            is_main_repo=True,
+            locked=True,
+            last_used_by_task_id=task.id,
+        )
+        db_session.add(worktree_slot)
+
         db_session.commit()
         db_session.refresh(task)
 
@@ -264,6 +305,16 @@ class TestBuildTaskPlanningContext:
             base_branch="main",
             codebase_id=sample_codebase.id,
         )
+
+        # Create a worktree slot for the task
+        worktree_slot = WorktreeSlot(
+            codebase_id=sample_codebase.id,
+            path="/tmp/test-codebase",
+            is_main_repo=True,
+            locked=True,
+            last_used_by_task_id=task.id,
+        )
+        db_session.add(worktree_slot)
 
         db_session.commit()
         db_session.refresh(task)

@@ -6,7 +6,6 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
 from devboard.agents.language_models import llm_registry
 from devboard.api.dependencies.repositories import (
-    get_codebase_repository,
     get_configuration_repository,
     get_context_provider_resource_repository,
     get_conversation_repository,
@@ -17,7 +16,6 @@ from devboard.api.dependencies.repositories import (
 )
 from devboard.context_providers.registry import context_provider_registry
 from devboard.db.repositories import (
-    CodebaseRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
@@ -37,7 +35,6 @@ from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
-from devboard.services.worktree_pool_service import WorktreePoolService
 
 
 def get_context_assembly_service(
@@ -117,17 +114,6 @@ def get_workspace_allocation_service(
     return WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
         task_repo=task_repo,
-    )
-
-
-def get_worktree_pool_service(
-    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
-) -> WorktreePoolService:
-    """Get WorktreePoolService instance."""
-    return WorktreePoolService(
-        worktree_slot_repo=worktree_slot_repo,
-        codebase_repo=codebase_repo,
     )
 
 

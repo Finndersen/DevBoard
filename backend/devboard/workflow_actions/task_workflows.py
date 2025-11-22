@@ -88,10 +88,15 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
         )
 
         # Create agent service for the new conversation with correct role
-        agent_conversation_service = self._create_agent_service_for_conversation(new_conversation)
+        agent_conversation_service = self._create_agent_conversation_service(new_conversation)
+
+        agent_event_stream = self.workspace_allocation_service.run_task_agent_in_workspace(
+            task=self.task,
+            agent_stream=agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE),
+        )
 
         # Stream agent prompt events
-        async for event in agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+        async for event in agent_event_stream:
             yield event
 
 
@@ -155,8 +160,13 @@ class BeginImplementationAction(TaskWorkflowAction):
         )
 
         # Create agent service for the new conversation with correct role
-        agent_conversation_service = self._create_agent_service_for_conversation(new_conversation)
+        agent_conversation_service = self._create_agent_conversation_service(new_conversation)
+
+        agent_event_stream = self.workspace_allocation_service.run_task_agent_in_workspace(
+            task=self.task,
+            agent_stream=agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE),
+        )
 
         # Stream agent prompt events
-        async for event in agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE):
+        async for event in agent_event_stream:
             yield event

@@ -68,6 +68,13 @@ class Task(Base):
         """
         return next((slot for slot in self.worktree_slots if slot.locked), None)
 
+    def get_current_workspace_dir(self) -> str:
+        """Get the workspace directory for this task, and raise exception if workspace is not allocated"""
+        allocated_workspace = self.current_worktree_slot
+        if not allocated_workspace:
+            raise NoWorktreeAllocatedException("Workspace not allocated for task #{self.id}")
+        return allocated_workspace.path
+
     # Document relationships with eager loading
     specification: Mapped["Document"] = relationship(
         foreign_keys=[specification_id],
@@ -123,3 +130,9 @@ class Task(Base):
             pass
 
         return True, ""
+
+
+class NoWorktreeAllocatedException(Exception):
+    """Raised when a task has no allocated worktree slot."""
+
+    pass

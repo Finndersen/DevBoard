@@ -72,17 +72,15 @@ class CodebaseInvestigationRole(Role):
     rather than being stored in the role itself.
     """
 
-    def __init__(
-        self,
-        codebase: Codebase,
-    ):
+    def __init__(self, codebase: Codebase, worktree_dir: str | None = None):
         """Initialize codebase investigation role.
 
         Args:
             codebase: Codebase model instance containing name, description, and local_path
         """
         self._codebase = codebase
-        self._codebase_integration = CodebaseIntegration(codebase.local_path)
+        self._working_dir = worktree_dir or codebase.local_path
+        self._codebase_integration = CodebaseIntegration(self._working_dir)
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for codebase investigation role."""
@@ -114,7 +112,7 @@ class CodebaseInvestigationRole(Role):
         base_context = f"""
 CODEBASE INFORMATION:
 - Name: {self._codebase.name or "N/A"}
-- Path: {self._codebase.local_path}
+- Path: {self._working_dir}
 - Description: {self._codebase.description or "N/A"}
 
 DIRECTORY STRUCTURE (depth=3):
@@ -125,7 +123,7 @@ DIRECTORY STRUCTURE (depth=3):
 
         # Add docs/INDEX.md if it exists
         # TODO: Abstract this away into some kind of codebase docs service?
-        docs_index_path = Path(self._codebase.local_path) / "docs" / "INDEX.md"
+        docs_index_path = Path(self._working_dir) / "docs" / "INDEX.md"
         if docs_index_path.exists():
             docs_index = await self._codebase_integration.read_file("docs/INDEX.md")
             base_context += f"""

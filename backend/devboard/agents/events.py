@@ -25,6 +25,9 @@ class SystemEventType(StrEnum):
 
     TASK_UPDATED = "task_updated"
     CONVERSATION_UPDATED = "conversation_updated"
+    WORKSPACE_ALLOCATE = "workspace_allocate"
+    WORKSPACE_BRANCH_CHECKOUT = "workspace_branch_checkout"
+    WORKSPACE_CREATE = "workspace_create"
 
 
 class TextMessage(BaseModel):

@@ -8,7 +8,10 @@ from typing import Any, TypedDict
 
 from fastmcp import FastMCP
 
-from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
+from devboard.agents.tools.sub_agent_tools import (
+    CodebaseInvestigationContext,
+    create_multi_codebase_investigation_tool,
+)
 from devboard.db.repositories import CodebaseRepository, ProjectRepository, TaskRepository
 from devboard.mcp.dependencies import create_agent_config_service, get_mcp_db_session
 
@@ -173,13 +176,17 @@ async def investigate_codebase(codebase_name: str, query: str) -> str:
             agent_config_service = create_agent_config_service(db)
 
             # Create and use the investigation tool
-            investigation_tool = create_codebase_investigation_tool(
+            codebase_context = CodebaseInvestigationContext(
                 codebase=codebase,
-                agent_config_service=agent_config_service,
+                working_dir=codebase.local_path,
+            )
+            investigation_tool = create_multi_codebase_investigation_tool(
+                [codebase_context],
+                agent_config_service,
             )
 
-            # Run the investigation
-            result = await investigation_tool.function(query)
+            # Run the investigation (with codebase name since it's now required)
+            result = await investigation_tool.function(codebase_name=codebase.name, query=query)
             return result
 
     except Exception as e:

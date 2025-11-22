@@ -7,26 +7,39 @@ import pytest
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
+from devboard.agents.tools.sub_agent_tools import (
+    CodebaseInvestigationContext,
+    create_multi_codebase_investigation_tool,
+)
 from devboard.db.models.codebase import Codebase
 
 
 @pytest.fixture
 def mock_codebases():
-    """Create mock Codebase instances."""
-    backend = Mock(spec=Codebase)
-    backend.id = 1
-    backend.name = "backend"
-    backend.description = "Backend codebase"
-    backend.local_path = "/path/to/backend"
+    """Create mock CodebaseInvestigationContext instances."""
+    backend_codebase = Mock(spec=Codebase)
+    backend_codebase.id = 1
+    backend_codebase.name = "backend"
+    backend_codebase.description = "Backend codebase"
+    backend_codebase.local_path = "/path/to/backend"
 
-    frontend = Mock(spec=Codebase)
-    frontend.id = 2
-    frontend.name = "frontend"
-    frontend.description = "Frontend codebase"
-    frontend.local_path = "/path/to/frontend"
+    frontend_codebase = Mock(spec=Codebase)
+    frontend_codebase.id = 2
+    frontend_codebase.name = "frontend"
+    frontend_codebase.description = "Frontend codebase"
+    frontend_codebase.local_path = "/path/to/frontend"
 
-    return [backend, frontend]
+    backend_context = CodebaseInvestigationContext(
+        codebase=backend_codebase,
+        working_dir="/path/to/backend",
+    )
+
+    frontend_context = CodebaseInvestigationContext(
+        codebase=frontend_codebase,
+        working_dir="/path/to/frontend",
+    )
+
+    return [backend_context, frontend_context]
 
 
 @pytest.fixture
@@ -40,7 +53,7 @@ class TestCreateCodebaseInvestigationTool:
 
     def test_tool_creation_with_single_codebase(self, mock_codebases, mock_agent_config_service):
         """Test tool is created correctly with a single codebase."""
-        tool = create_codebase_investigation_tool(
+        tool = create_multi_codebase_investigation_tool(
             [mock_codebases[0]],
             mock_agent_config_service,
         )
@@ -51,7 +64,7 @@ class TestCreateCodebaseInvestigationTool:
 
     def test_tool_creation_with_multiple_codebases(self, mock_codebases, mock_agent_config_service):
         """Test tool is created correctly with multiple codebases."""
-        tool = create_codebase_investigation_tool(
+        tool = create_multi_codebase_investigation_tool(
             mock_codebases,
             mock_agent_config_service,
         )
@@ -63,11 +76,11 @@ class TestCreateCodebaseInvestigationTool:
     def test_raises_error_with_empty_list(self, mock_agent_config_service):
         """Test that empty codebase list raises ValueError."""
         with pytest.raises(ValueError, match="At least one codebase must be provided"):
-            create_codebase_investigation_tool([], mock_agent_config_service)
+            create_multi_codebase_investigation_tool([], mock_agent_config_service)
 
     def test_dynamic_literal_annotation_single_codebase(self, mock_codebases, mock_agent_config_service):
         """Test that Literal annotation is set correctly for single codebase."""
-        tool = create_codebase_investigation_tool(
+        tool = create_multi_codebase_investigation_tool(
             [mock_codebases[0]],
             mock_agent_config_service,
         )
@@ -86,7 +99,7 @@ class TestCreateCodebaseInvestigationTool:
 
     def test_dynamic_literal_annotation_multiple_codebases(self, mock_codebases, mock_agent_config_service):
         """Test that Literal annotation is set correctly for multiple codebases."""
-        tool = create_codebase_investigation_tool(
+        tool = create_multi_codebase_investigation_tool(
             mock_codebases,
             mock_agent_config_service,
         )
@@ -105,7 +118,7 @@ class TestCreateCodebaseInvestigationTool:
 
     def test_function_signature_has_codebase_name_parameter(self, mock_codebases, mock_agent_config_service):
         """Test that the tool function has a codebase_name parameter."""
-        tool = create_codebase_investigation_tool(
+        tool = create_multi_codebase_investigation_tool(
             mock_codebases,
             mock_agent_config_service,
         )

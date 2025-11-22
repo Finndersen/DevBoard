@@ -5,7 +5,7 @@ from pydantic_ai import Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import Role
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
-from devboard.agents.tools.sub_agent_tools import create_codebase_investigation_tool
+from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
 
@@ -103,8 +103,11 @@ class ProjectQARole(Role):
         # Add codebase investigation tool if project has codebases
         if self.project.codebases:
             tools.append(
-                create_codebase_investigation_tool(
-                    self.project.codebases,
+                create_multi_codebase_investigation_tool(
+                    [
+                        CodebaseInvestigationContext(codebase=cb, working_dir=cb.local_path)
+                        for cb in self.project.codebases
+                    ],
                     self.agent_config_service,
                 )
             )

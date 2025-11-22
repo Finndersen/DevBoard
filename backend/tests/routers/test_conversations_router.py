@@ -188,11 +188,14 @@ class TestConversationsRouter:
         message_request = {"message": "Help me analyze my project and answer questions."}
 
         response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages", json=message_request
+            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
         )
         assert response.status_code == 200
 
-        events = response.json()
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
         assert isinstance(events, list)
         assert len(events) == 1
         assert events[0]["event_type"] == "message"
@@ -227,11 +230,14 @@ class TestConversationsRouter:
         message_request = {"message": "Please update the document with better content"}
 
         response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages", json=message_request
+            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
         )
         assert response.status_code == 200
 
-        events = response.json()
+        # Parse NDJSON response
+        lines = response.text.strip().split("\n")
+        events = [json.loads(line) for line in lines if line]
+
         assert isinstance(events, list)
         assert len(events) == 2
         # First event should be the tool call
@@ -242,86 +248,6 @@ class TestConversationsRouter:
         assert events[1]["event_type"] == "tool_call_request"
         assert events[1]["tool_name"] == "edit_document"
         assert events[1]["tool_call_id"] == "test_call_1"
-
-    def test_approve_conversation_tools(self, client_with_mock_agent, test_conversation, db_session, mock_agent):
-        """Test approving tool calls in a conversation."""
-        conversation_repo = ConversationRepository(db_session)
-
-        # Setup: Add existing messages including a tool call message
-        user_msg = ModelRequest(parts=[UserPromptPart(content="Edit this document")])
-        tool_call_msg = ModelResponse(
-            parts=[ToolCallPart(tool_name="edit_document", tool_call_id="test_call_1", args={})]
-        )
-
-        conversation_repo.create_message(test_conversation.id, user_msg)
-        conversation_repo.create_message(test_conversation.id, tool_call_msg)
-        db_session.commit()
-
-        # Mock the agent to return approval result
-        agent_message_event = TextMessage(
-            role=MessageRole.AGENT,
-            text_content="Great! I've processed your tool approvals and made the requested edits.",
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-        mock_agent.run.return_value = [agent_message_event]
-
-        approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
-
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request
-        )
-        assert response.status_code == 200
-
-        events = response.json()
-        assert isinstance(events, list)
-        assert len(events) == 1
-        assert events[0]["event_type"] == "message"
-        assert events[0]["role"] == "agent"
-        assert "tool approvals" in events[0]["text_content"]
-
-    def test_approve_conversation_tools_mixed_approvals(
-        self, client_with_mock_agent, test_conversation, db_session, mock_agent
-    ):
-        """Test approving some tools and denying others."""
-        conversation_repo = ConversationRepository(db_session)
-
-        # Setup: Add existing messages with multiple tool calls
-        user_msg = ModelRequest(parts=[UserPromptPart(content="Make several edits")])
-        tool_call_msg = ModelResponse(
-            parts=[
-                ToolCallPart(tool_name="edit_document", tool_call_id="call_1", args={}),
-                ToolCallPart(tool_name="delete_file", tool_call_id="call_2", args={}),
-            ]
-        )
-
-        conversation_repo.create_message(test_conversation.id, user_msg)
-        conversation_repo.create_message(test_conversation.id, tool_call_msg)
-        db_session.commit()
-
-        # Mock the agent to return approval result
-        agent_message_event = TextMessage(
-            role=MessageRole.AGENT,
-            text_content="I've processed your approvals. I made the edit but skipped the deletion.",
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-        mock_agent.run.return_value = [agent_message_event]
-
-        approval_request = {
-            "approvals": {
-                "call_1": {"approved": True},
-                "call_2": {"approved": False, "feedback": "Don't delete this file"},
-            }
-        }
-
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request
-        )
-        assert response.status_code == 200
-
-        events = response.json()
-        assert isinstance(events, list)
-        assert len(events) >= 1
-        assert events[-1]["event_type"] == "message"
 
     def test_clear_conversation_messages_success(self, client, db_session, test_conversation):
         """Test clearing all messages from a conversation."""

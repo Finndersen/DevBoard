@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ConversationEvent, ToolResult } from '../../lib/api'
+import type { ConversationEvent, ToolResult, SystemEventType } from '../../lib/api'
 import {
   getMessageBubbleClasses
 } from '../../styles/messageStyles'
 import { Markdown } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
+
+function getSystemEventLabel(type: SystemEventType): string | null {
+  switch (type) {
+    case 'workspace_create':
+      return 'Creating workspace'
+    default:
+      return null
+  }
+}
 
 interface ConversationMessageProps {
   message: ConversationEvent
@@ -129,9 +138,25 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     )
   }
 
-  // System events - ignore for now (will add event-specific handling later)
+  // System events - render as inline badges (only for specific event types)
   if (message.event_type === 'system') {
-    return null
+    const label = getSystemEventLabel(message.type)
+
+    // Only render badge if we have a label for this event type
+    if (!label) {
+      return null
+    }
+
+    return (
+      <div className="flex w-full justify-center my-1">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <span>{label}</span>
+        </div>
+      </div>
+    )
   }
 
   // Fallback for unknown event types

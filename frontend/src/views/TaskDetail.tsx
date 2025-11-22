@@ -289,15 +289,19 @@ function TaskDetail({ id }: TaskDetailProps) {
 
     setTransitionMessage(message)
     try {
+      // Fetch existing conversation messages to preserve history
+      const existingMessages = await apiClient.getConversationMessages(task.conversation_id)
+
       // Create workflow action stream
       const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
 
       // Use store startStream for unified streaming behavior
+      // Pass existing messages to preserve conversation history
       // This immediately sets isStreaming=true in the store, which disables buttons
       // Event handlers are already registered via hooks at component level
       // Pass eventHandlerRegistry so tool results and system events are processed
       // Note: Transition message will be cleared by the effect watching isConversationStreaming
-      await startStream(task.conversation_id, stream, eventHandlerRegistry)
+      await startStream(task.conversation_id, stream, eventHandlerRegistry, existingMessages)
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
       // Clear transition message on error

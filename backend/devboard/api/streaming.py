@@ -10,13 +10,13 @@ from devboard.agents.events import ConversationEvent
 
 
 def stream_conversation_events(
-    events: AsyncIterator[ConversationEvent],
+    event_stream: AsyncIterator[ConversationEvent],
     exception_handler: Callable[[Exception], None] | None = None,
 ) -> StreamingResponse:
     """Create a StreamingResponse that streams ConversationEvents as NDJSON.
 
     Args:
-        events: AsyncIterator yielding ConversationEvent objects
+        event_stream: AsyncIterator yielding ConversationEvent objects
         exception_handler: Optional callback to handle exceptions raised during event iteration.
             Should raise an appropriate HTTPException. If None, exceptions propagate naturally.
 
@@ -26,7 +26,7 @@ def stream_conversation_events(
 
     async def event_generator():
         try:
-            async for event in events:
+            async for event in event_stream:
                 logfire.info(f"Streaming conversation event: {repr(event)}")
                 yield json.dumps(event.model_dump(mode="json")) + "\n"
         except Exception as e:

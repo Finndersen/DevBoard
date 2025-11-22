@@ -87,12 +87,8 @@ export async function processConversationStream(
       }
     }
 
-    // Skip system events from regular event processing (handlers deal with them)
-    if (event.event_type === 'system') {
-      continue
-    }
-
-    // Process all other events
+    // Process all events (including system events for temporary display during streaming)
+    // System events won't persist since the backend doesn't include them in message history
     await onEvent(event)
   }
 
