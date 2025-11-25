@@ -41,7 +41,6 @@ from devboard.db.repositories import (
     TaskRepository,
 )
 from devboard.db.repositories.conversation import NoActiveConversationError
-from devboard.integrations.git import GitRepoIntegration
 from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
@@ -216,11 +215,8 @@ async def create_project_task(
 
     codebase = get_verified_codebase(task.codebase_id, codebase_repo)
 
-    git = GitRepoIntegration(codebase.local_path)
-    if task.base_branch:
-        base_branch = task.base_branch
-    else:
-        base_branch = await git.get_default_branch()
+    # Use provided base_branch or fall back to codebase's default_branch
+    base_branch = task.base_branch or codebase.default_branch
 
     # Create task using service (creates task + documents + conversation)
     # Tasks always start in DEFINING status
@@ -233,6 +229,10 @@ async def create_project_task(
         branch_name=task.branch_name,
         base_branch=base_branch,
     )
+
+    # Create git branch immediately to ensure consistent codebase view during planning
+    # This uses TaskGitService which will auto-generate branch name if not provided
+    await task_service.task_git_service.ensure_task_branch(created_task)
 
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found
