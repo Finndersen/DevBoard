@@ -29,6 +29,8 @@
 - Add Post-Implementation agent role that has Github/Jira tools etc and can still make code changes.  These integrations are not required during normal implementation phase before approval.
 - For tool approvals, send both a ToolCallRequest and ToolCall events so that hte tool call result can eb matched, or just udpate frontend to handle ToolCallRequest by creating a ToolCall event/message
 - Make implementation plan more structured, i.e. list of steps with descriptions, further context and status
+- Task git branch details popup/modal with branch name, commits ahead/behind base branch, option to rebase
+- Update file changes view to show both uncommitted and commited changes from base branch
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

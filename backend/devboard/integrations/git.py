@@ -1,12 +1,13 @@
 """Git integration for repository operations."""
 
+import re
 from pathlib import Path
 
 import logfire
 
 from .base import IntegrationConnectionResult
 from .shell import execute_shell_command
-from .types import BranchComparison, GitLogEntry, WorktreeInfo
+from .types import BranchComparison, CommitDiff, FileDiff, GitLogEntry, StructuredDiff, WorktreeInfo
 
 
 class GitRepoIntegration:
@@ -134,6 +135,170 @@ class GitRepoIntegration:
             args.append(file_path)
 
         return await self._run_git_command(args)
+
+    async def get_merge_base(self, branch1: str, branch2: str) -> str:
+        """Get the merge base (common ancestor) between two branches.
+
+        Args:
+            branch1: First branch/commit reference
+            branch2: Second branch/commit reference
+
+        Returns:
+            Commit hash of the merge base
+        """
+        return await self._run_git_command(["merge-base", branch1, branch2])
+
+    async def get_commits_in_range(self, base_commit: str, head_commit: str) -> list[GitLogEntry]:
+        """Get commits in a range (base..head).
+
+        Args:
+            base_commit: Base commit hash/reference (exclusive)
+            head_commit: Head commit hash/reference (inclusive)
+
+        Returns:
+            List of GitLogEntry objects for commits in the range
+        """
+        args = [
+            "log",
+            f"{base_commit}..{head_commit}",
+            "--pretty=format:%H|%an|%ad|%s",
+            "--date=iso",
+        ]
+
+        output = await self._run_git_command(args)
+
+        commits = []
+        for line in output.split("\n"):
+            if line.strip():
+                parts = line.split("|", 3)
+                if len(parts) >= 4:
+                    commits.append(
+                        GitLogEntry(
+                            hash=parts[0],
+                            author=parts[1],
+                            date=parts[2],
+                            message=parts[3],
+                        )
+                    )
+
+        return commits
+
+    async def get_commit_diff(self, commit_hash: str) -> str:
+        """Get the diff for a specific commit.
+
+        Args:
+            commit_hash: Commit hash to get diff for
+
+        Returns:
+            Diff output as string
+        """
+        return await self._run_git_command(["show", "--format=", commit_hash])
+
+    def _parse_git_diff(self, raw_diff: str) -> StructuredDiff:
+        """Parse raw git diff output into structured per-file diffs.
+
+        Args:
+            raw_diff: Raw git diff output
+
+        Returns:
+            StructuredDiff with parsed files and stats
+        """
+        if not raw_diff.strip():
+            return StructuredDiff(files=[], additions=0, deletions=0)
+
+        files: list[FileDiff] = []
+
+        # Split by file headers (diff --git lines)
+        file_blocks = re.split(r"(?=^diff --git)", raw_diff, flags=re.MULTILINE)
+
+        for block in file_blocks:
+            block = block.strip()
+            if not block:
+                continue
+
+            # Extract file path from +++ b/path line
+            file_path_match = re.search(r"^\+\+\+ b/(.+)$", block, re.MULTILINE)
+            if not file_path_match:
+                # Try --- a/path for deletions
+                file_path_match = re.search(r"^--- a/(.+)$", block, re.MULTILINE)
+
+            if not file_path_match:
+                continue
+
+            file_path = file_path_match.group(1)
+
+            # Count additions and deletions (lines starting with + or -, but not +++ or ---)
+            additions = len(re.findall(r"^\+(?!\+\+)", block, re.MULTILINE))
+            deletions = len(re.findall(r"^-(?!--)", block, re.MULTILINE))
+
+            files.append(
+                FileDiff(
+                    file_path=file_path,
+                    diff_content=block,
+                    additions=additions,
+                    deletions=deletions,
+                )
+            )
+
+        total_additions = sum(f.additions for f in files)
+        total_deletions = sum(f.deletions for f in files)
+
+        return StructuredDiff(files=files, additions=total_additions, deletions=total_deletions)
+
+    async def get_structured_diff(
+        self,
+        commit1: str | None = None,
+        commit2: str | None = None,
+    ) -> StructuredDiff:
+        """Get structured git diff between commits or working directory.
+
+        Args:
+            commit1: First commit hash/reference
+            commit2: Second commit hash/reference (optional)
+
+        Returns:
+            StructuredDiff with parsed files and stats
+        """
+        raw_diff = await self.get_git_diff(commit1=commit1, commit2=commit2)
+        return self._parse_git_diff(raw_diff)
+
+    async def get_structured_commit_diff(self, commit_hash: str) -> CommitDiff:
+        """Get structured diff for a specific commit including metadata.
+
+        Args:
+            commit_hash: Commit hash to get diff for
+
+        Returns:
+            CommitDiff with commit metadata and parsed files
+        """
+        # Get commit metadata using show with format
+        output = await self._run_git_command(
+            [
+                "show",
+                "--no-patch",
+                "--pretty=format:%H|%an|%ad|%s",
+                "--date=iso",
+                commit_hash,
+            ]
+        )
+
+        parts = output.strip().split("|", 3)
+        if len(parts) < 4:
+            raise ValueError(f"Failed to get metadata for commit {commit_hash}")
+
+        # Get and parse diff
+        raw_diff = await self.get_commit_diff(commit_hash)
+        structured = self._parse_git_diff(raw_diff)
+
+        return CommitDiff(
+            commit_hash=parts[0],
+            author=parts[1],
+            date=parts[2],
+            message=parts[3],
+            files=structured.files,
+            additions=structured.additions,
+            deletions=structured.deletions,
+        )
 
     async def get_git_branches(self, remote: bool = False) -> list[str]:
         """Get list of git branches.

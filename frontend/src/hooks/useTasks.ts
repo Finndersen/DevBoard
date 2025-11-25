@@ -26,8 +26,8 @@ export function useUpdateTask(options?: { updateCache?: (data: Task) => void }) 
 }
 
 export function useDeleteTask() {
-  return useMutation((id: number | string) =>
-    apiClient.deleteTask(id)
+  return useMutation((id: number | string, deleteBranch?: boolean) =>
+    apiClient.deleteTask(id, deleteBranch)
   )
 }
 

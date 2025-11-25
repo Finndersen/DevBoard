@@ -4,6 +4,8 @@ Handles task creation, phase transitions, and conversation lifecycle management.
 Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
+import logfire
+
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
@@ -11,6 +13,7 @@ from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
+from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.task_git_service import TaskGitService
 
@@ -36,7 +39,7 @@ class TaskService:
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
         conversation_repo: ConversationRepository,
-        task_git_service: TaskGitService | None = None,
+        worktree_slot_repo: WorktreeSlotRepository,
     ):
         """Initialize service.
 
@@ -45,13 +48,13 @@ class TaskService:
             document_repo: Repository for document operations
             task_repo: Repository for task operations
             conversation_repo: Repository for conversation operations
-            task_git_service: Optional service for task git operations
+            worktree_slot_repo: Repository for worktree slot operations
         """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
-        self.task_git_service = task_git_service
         self.conversation_repo = conversation_repo
+        self.worktree_slot_repo = worktree_slot_repo
 
     def create_task(
         self,
@@ -175,7 +178,7 @@ class TaskService:
         task.status = TaskStatus.IMPLEMENTING
         return self.task_repo.update(task)
 
-    def delete_task(self, task: Task) -> None:
+    async def delete_task(self, task: Task, delete_branch: bool = False) -> None:
         """Hard-delete a task and all related data.
 
         Performs a transactional deletion of:
@@ -183,6 +186,11 @@ class TaskService:
         2. Conversations and their messages for the task
         3. The task itself
         4. Task-specific documents (specification and implementation plan)
+        5. Optionally delete the git branch (if requested)
+
+        Args:
+            task: Task to delete
+            delete_branch: If True, also delete the task's git branch (if it exists)
         """
         # 1. Delete task-context resource associations (required - no CASCADE on FK)
         self.task_repo.delete_task_context_resources(task)
@@ -199,3 +207,12 @@ class TaskService:
 
         # 3. Delete the task itself
         self.task_repo.delete(task)
+
+        # 4. Delete git branch if requested
+        task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
+        if delete_branch and task.branch_name:
+            try:
+                await task_git_service.delete_task_branch(task, force=True)
+            except Exception as e:
+                # Log error but don't fail task deletion
+                logfire.warning(f"Failed to delete branch {task.branch_name} for task {task.id}: {e}")

@@ -72,6 +72,25 @@ class StateTransitionRequest(BaseModel):
     new_state: TaskStatus  # 'Designing', 'Planning', 'Implementing'
 
 
+class CommitMetadata(BaseModel):
+    """Lightweight schema for commit metadata (no file diffs)."""
+
+    commit_hash: str
+    author: str
+    date: str
+    message: str
+
+
+class TaskBranchInfo(BaseModel):
+    """Schema for task branch information.
+
+    Used to populate UI dropdowns with commit list and uncommitted status.
+    """
+
+    commits: list[CommitMetadata]
+    has_uncommitted_changes: bool
+
+
 class FileDiff(BaseModel):
     """Schema for a single file's diff information."""
 
@@ -82,11 +101,15 @@ class FileDiff(BaseModel):
 
 
 class TaskDiffResponse(BaseModel):
-    """Schema for task git diff response."""
+    """Schema for task git diff response.
+
+    Returns a flat list of files with diffs for the requested view
+    (all changes, uncommitted only, or specific commit).
+    """
 
     files: list[FileDiff]
-    total_additions: int
-    total_deletions: int
+    additions: int
+    deletions: int
     generated_at: datetime.datetime
 
 

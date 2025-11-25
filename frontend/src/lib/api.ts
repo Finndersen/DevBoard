@@ -108,6 +108,18 @@ export interface PendingApproval {
   tool_args: Record<string, unknown> | null  // Generic tool arguments, structure depends on tool type
 }
 
+export interface CommitMetadata {
+  commit_hash: string
+  author: string
+  date: string
+  message: string
+}
+
+export interface TaskBranchInfo {
+  commits: CommitMetadata[]
+  has_uncommitted_changes: boolean
+}
+
 export interface FileDiff {
   file_path: string
   diff_content: string
@@ -117,8 +129,8 @@ export interface FileDiff {
 
 export interface TaskDiffResponse {
   files: FileDiff[]
-  total_additions: number
-  total_deletions: number
+  additions: number
+  deletions: number
   generated_at: string
 }
 
@@ -408,8 +420,9 @@ export class ApiClient {
     })
   }
 
-  async deleteTask(id: number | string): Promise<void> {
-    return this.request<void>(`/api/tasks/${id}`, { method: 'DELETE' })
+  async deleteTask(id: number | string, deleteBranch?: boolean): Promise<void> {
+    const queryParams = deleteBranch ? '?delete_branch=true' : ''
+    return this.request<void>(`/api/tasks/${id}${queryParams}`, { method: 'DELETE' })
   }
 
 
@@ -420,8 +433,12 @@ export class ApiClient {
     })
   }
 
-  async getTaskDiff(taskId: number | string): Promise<TaskDiffResponse> {
-    return this.request<TaskDiffResponse>(`/api/tasks/${taskId}/diff`)
+  async getTaskBranchInfo(taskId: number | string): Promise<TaskBranchInfo> {
+    return this.request<TaskBranchInfo>(`/api/tasks/${taskId}/branch-info`)
+  }
+
+  async getTaskDiff(taskId: number | string, view: string): Promise<TaskDiffResponse> {
+    return this.request<TaskDiffResponse>(`/api/tasks/${taskId}/diff?view=${encodeURIComponent(view)}`)
   }
 
   // Unified Conversation API

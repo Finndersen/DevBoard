@@ -21,6 +21,7 @@ from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandExecutionError
+from devboard.services.task_git_service import TaskGitService
 
 
 @dataclass
@@ -86,6 +87,7 @@ class WorkspaceAllocationService:
         """
         self.worktree_slot_repo = worktree_slot_repo
         self.task_repo = task_repo
+        self.task_git_service = TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
 
     async def slot_has_uncommitted_changes(self, slot: WorktreeSlot) -> bool:
         """Check if a worktree slot has uncommitted git changes."""
@@ -404,6 +406,12 @@ class WorkspaceAllocationService:
         """Run the task agent in an available workspace slot."""
         slot: WorktreeSlot | None = None
         try:
+            # Ensure task has a branch (create if needed, generate name if null)
+            # TODO: Make sure task branch already exists by this point so this can be removed
+            await self.task_git_service.ensure_task_branch(task)
+            # Commit to persist branch_name if it was just generated
+            self.task_repo.db.commit()
+
             # Try to allocate an existing slot
             try:
                 slot = await self.allocate_for_task(task, use_main_slot=use_main_slot)
@@ -455,13 +463,13 @@ class WorkspaceAllocationService:
                 # Create the worktree
                 await self._create_worktree_for_slot(slot, task)
 
-            # Checkout base branch in the allocated slot
-            await self.checkout_branch_in_slot(slot, task.base_branch)
+            # Checkout task branch in the allocated slot
+            await self.checkout_branch_in_slot(slot, task.branch_name)
 
             # Emit SystemEvent for workspace branch checkout
             yield SystemEvent(
                 type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
-                data={"task_id": task.id, "branch": task.base_branch},
+                data={"task_id": task.id, "branch": task.branch_name},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
 

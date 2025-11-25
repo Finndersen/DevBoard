@@ -1,22 +1,36 @@
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
-import type { TaskDiffResponse } from '../../lib/api'
+import { useState } from 'react'
+import type { TaskDiffResponse, TaskBranchInfo } from '../../lib/api'
 import GitDiffViewer from './GitDiffViewer'
 
 interface AllFilesDiffViewerProps {
+  branchInfo: TaskBranchInfo | null
   diffResponse: TaskDiffResponse | null
   loading: boolean
-  onRefresh: () => void
+  onRefresh: (view: string) => void
   lastUpdated: string | null
   className?: string
 }
 
 export default function AllFilesDiffViewer({
+  branchInfo,
   diffResponse,
   loading,
   onRefresh,
   lastUpdated,
   className = ''
 }: AllFilesDiffViewerProps) {
+  // Track selected view
+  const [selectedView, setSelectedView] = useState<string>('all')
+
+  const handleViewChange = (view: string) => {
+    setSelectedView(view)
+    onRefresh(view)
+  }
+
+  // Get files to display from current response
+  const displayFiles = diffResponse?.files || []
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
@@ -34,7 +48,7 @@ export default function AllFilesDiffViewer({
   }
 
   // Empty state - no changes
-  if (diffResponse && diffResponse.files.length === 0) {
+  if (diffResponse && displayFiles.length === 0) {
     return (
       <div className={`flex flex-col items-center justify-center py-12 ${className}`}>
         <div className="text-center max-w-md">
@@ -58,7 +72,7 @@ export default function AllFilesDiffViewer({
           </p>
           <div className="mt-4">
             <button
-              onClick={onRefresh}
+              onClick={() => onRefresh(selectedView)}
               disabled={loading}
               className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -73,48 +87,76 @@ export default function AllFilesDiffViewer({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {/* Header with stats and refresh */}
-      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center space-x-4">
-          {diffResponse && (
-            <>
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {diffResponse.files.length} file{diffResponse.files.length !== 1 ? 's' : ''} changed
-              </h3>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="text-green-600 dark:text-green-400">
-                  +{diffResponse.total_additions}
+      {/* Header with stats, view selector, and refresh */}
+      <div className="space-y-3 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+        {/* Stats row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {diffResponse && branchInfo && (
+              <>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {branchInfo.commits.length} commit{branchInfo.commits.length !== 1 ? 's' : ''}
+                  {branchInfo.has_uncommitted_changes && <span className="text-gray-500 dark:text-gray-400"> + uncommitted</span>}
+                </h3>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {displayFiles.length} file{displayFiles.length !== 1 ? 's' : ''} in view
                 </span>
-                {' '}
-                <span className="text-red-600 dark:text-red-400">
-                  -{diffResponse.total_deletions}
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-green-600 dark:text-green-400">
+                    +{diffResponse.additions}
+                  </span>
+                  {' '}
+                  <span className="text-red-600 dark:text-red-400">
+                    -{diffResponse.deletions}
+                  </span>
                 </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center space-x-3">
+            {lastUpdated && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Last updated: {formatTimestamp(lastUpdated)}
               </span>
-            </>
-          )}
+            )}
+            <button
+              onClick={() => onRefresh(selectedView)}
+              disabled={loading}
+              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ArrowPathIcon className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
-        <div className="flex items-center space-x-3">
-          {lastUpdated && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Last updated: {formatTimestamp(lastUpdated)}
-            </span>
-          )}
-          <button
-            onClick={onRefresh}
+
+        {/* View selector row */}
+        <div>
+          <select
+            id="view-select"
+            value={selectedView}
+            onChange={(e) => handleViewChange(e.target.value)}
             disabled={loading}
-            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full text-sm px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 hover:border-gray-400 dark:hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ArrowPathIcon className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+            <option value="all">All Changes (Combined)</option>
+            {branchInfo?.commits.map((commit) => (
+              <option key={commit.commit_hash} value={commit.commit_hash}>
+                {commit.commit_hash.substring(0, 7)} - {commit.message}
+              </option>
+            ))}
+            {branchInfo?.has_uncommitted_changes && (
+              <option value="uncommitted">Uncommitted Changes</option>
+            )}
+          </select>
         </div>
       </div>
 
-      {/* File diffs */}
-      <div className="space-y-4 overflow-y-auto flex-1">
-        {diffResponse?.files.map((file, index) => (
+      {/* File diffs - flat view based on selected option */}
+      <div className="space-y-3 overflow-y-auto flex-1">
+        {displayFiles.map((file, fileIndex) => (
           <GitDiffViewer
-            key={`${file.file_path}-${index}`}
+            key={`file-${fileIndex}-${file.file_path}`}
             diff={file.diff_content}
             fileName={file.file_path}
             stats={{ additions: file.additions, deletions: file.deletions }}

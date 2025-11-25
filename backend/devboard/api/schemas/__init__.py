@@ -38,11 +38,13 @@ from .resource import (
     TaskResourceCreate,
 )
 from .task import (
+    CommitMetadata,
     FileDiff,
     MergeBranchRequest,
     MergeBranchResponse,
     StateTransitionRequest,
     TaskBase,
+    TaskBranchInfo,
     TaskCreate,
     TaskCreateNested,
     TaskDiffResponse,
@@ -106,12 +108,14 @@ __all__ = [
     # Prompt Action
     "PromptActionRequest",
     # Task
+    "CommitMetadata",
     "DocumentEdit",
     "FileDiff",
     "MergeBranchRequest",
     "MergeBranchResponse",
     "StateTransitionRequest",
     "TaskBase",
+    "TaskBranchInfo",
     "TaskCreate",
     "TaskCreateNested",
     "TaskDiffResponse",

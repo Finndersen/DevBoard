@@ -101,9 +101,12 @@ def get_conversation_service(
     )
 
 
-def get_task_git_service() -> TaskGitService:
+def get_task_git_service(
+    task_repo: TaskRepository = Depends(get_task_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+) -> TaskGitService:
     """Get TaskGitService instance."""
-    return TaskGitService()
+    return TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
 
 
 def get_workspace_allocation_service(
@@ -122,7 +125,7 @@ def get_task_service(
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Get TaskService instance."""
     return TaskService(
@@ -130,7 +133,7 @@ def get_task_service(
         document_repo=document_repo,
         task_repo=task_repo,
         conversation_repo=conversation_repo,
-        task_git_service=task_git_service,
+        worktree_slot_repo=worktree_slot_repo,
     )
 
 

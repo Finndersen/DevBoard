@@ -2,6 +2,7 @@ import '@testing-library/jest-dom'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { setupServer } from 'msw/node'
 import { handlers } from './mocks/handlers'
+import React from 'react'
 
 // Setup MSW server for API mocking
 export const server = setupServer(...handlers)
@@ -49,4 +50,15 @@ globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
+}))
+
+// Mock react-syntax-highlighter to avoid ESM module issues
+vi.mock('react-syntax-highlighter', () => ({
+  Prism: ({ children }: { children: string }) => React.createElement('pre', null, children),
+  Light: ({ children }: { children: string }) => React.createElement('pre', null, children),
+}))
+
+vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
+  oneDark: {},
+  oneLight: {},
 }))

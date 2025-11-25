@@ -33,11 +33,14 @@ We are working to develop an application as described in @docs/INDEX.md
 - **Fixtures**: Use available fixtures in `backend/devboard/tests/conftest.py`
 - **Async Tests**: Use `@pytest.mark.asyncio` decorator
 - **API Testing**: Use TestClient with mocked dependencies
+- NEVER patch Service classes or methods doing testing, only lower level dependencies such as data-layer repositories or filesystem/git/external integrations
 
 ## Development Process
 - Run `make format` to automatically reformat code and remove unused imports instead of manually editing
 - Run `make lint` to check for linting errors after making changes
 
+## Patterns
+- Use logfire for logging instead of standard logging module
 
 # Frontend Development Guidelines
 

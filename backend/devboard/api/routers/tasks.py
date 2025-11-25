@@ -1,7 +1,6 @@
 """Task API endpoints."""
 
 import datetime
-import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -9,7 +8,6 @@ from fastapi.responses import StreamingResponse
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
-    get_codebase_repository,
     get_conversation_repository,
     get_document_repository,
     get_task_repository,
@@ -23,6 +21,7 @@ from devboard.api.dependencies.services import (
     get_workspace_allocation_service,
 )
 from devboard.api.schemas import (
+    CommitMetadata,
     DeleteResponse,
     DocumentResponse,
     FileDiff,
@@ -30,6 +29,7 @@ from devboard.api.schemas import (
     MergeBranchResponse,
     PromptActionRequest,
     ResourceResponse,
+    TaskBranchInfo,
     TaskDiffResponse,
     TaskGitStatusResponse,
     TaskResourceCreate,
@@ -40,13 +40,11 @@ from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import ParentEntityType
 from devboard.db.models.task import Task
 from devboard.db.repositories import (
-    CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
     TaskRepository,
     WorktreeSlotRepository,
 )
-from devboard.integrations.git import GitRepoIntegration
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
@@ -142,12 +140,23 @@ async def update_task(
 @router.delete("/{task_id}", response_model=DeleteResponse)
 async def delete_task(
     task_id: int,
+    delete_branch: bool = False,
     task: Task = Depends(get_verified_task),
     task_service: TaskService = Depends(get_task_service),
 ):
-    """Delete a task and all related data (conversations, messages, documents, associations)."""
+    """Delete a task and all related data (conversations, messages, documents, associations).
+
+    Args:
+        task_id: ID of the task to delete
+        delete_branch: If True, also delete the task's git branch (if it exists)
+        task: Verified task instance
+        task_service: Task service instance
+
+    Returns:
+        Deletion confirmation
+    """
     # Use the service layer for transactional deletion
-    task_service.delete_task(task)
+    await task_service.delete_task(task, delete_branch=delete_branch)
 
     return {"message": "Task deleted successfully", "success": True}
 
@@ -182,12 +191,9 @@ async def create_task_resource(
             resource_uri=resource.resource_uri,
             description=resource.description,
         )
-        resource_service.repository.db.commit()
-        resource_service.repository.db.refresh(created_resource)
         return created_resource
     except UnsupportedResourceUriError as e:
-        resource_service.repository.db.rollback()
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/{task_id}/resources/{resource_id}", response_model=DeleteResponse)
@@ -210,108 +216,52 @@ async def delete_task_resource(
 @router.get("/{task_id}/diff", response_model=TaskDiffResponse)
 async def get_task_diff(
     task_id: int,
+    view: str,
     task: Task = Depends(get_verified_task),
-    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
-    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> TaskDiffResponse:
-    """Get git diff of uncommitted changes in task's worktree workspace.
+    """Get git diff for a task.
 
-    Uses the most recently used worktree slot for the task, or falls back
-    to the main codebase if no worktree has been used.
+    Requires 'view' query parameter to specify what to show:
+    - view=all: Combined diff (all changes including uncommitted if worktree exists)
+    - view=uncommitted: Only uncommitted changes (empty if no worktree)
+    - view=<commit_hash>: Diff for a specific commit
+
+    The service automatically determines the appropriate repository path:
+    - For uncommitted changes: uses worktree slot if available
+    - For all changes: uses worktree if available, otherwise main codebase
+    - For commit diffs: always uses main codebase
 
     Args:
         task_id: ID of the task
+        view: Required view filter (all|uncommitted|<commit_hash>)
         task: Verified task instance
-        codebase_repo: Codebase repository
-        worktree_slot_repo: Worktree slot repository
+        task_git_service: Task git service
 
     Returns:
-        TaskDiffResponse with per-file diffs and statistics
+        TaskDiffResponse with file diffs
 
     Raises:
-        HTTPException: 404 if codebase not found, 500 if git operation fails
+        HTTPException: 400 if view not provided, 500 if git operation fails
     """
-    # Get codebase
-    codebase = task.codebase
+    # Get diff using service - returns StructuredDiff
+    diff = await task_git_service.get_task_diff_by_view(task, view)
 
-    # Get the most recently used worktree slot for this task
-    last_used_slot = worktree_slot_repo.get_last_used_slot_for_task(task.id)
-
-    # Use worktree path if available, otherwise use main codebase path
-    repo_path = last_used_slot.path if last_used_slot else codebase.local_path
-
-    git_integration = GitRepoIntegration(repo_path)
-    # Get git diff (all uncommitted changes)
-    try:
-        raw_diff = await git_integration.get_git_diff(commit1="HEAD")
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get git diff: {str(e)}",
-        ) from e
-
-    # Parse diff into per-file structures
-    files = _parse_git_diff(raw_diff)
-
-    # Calculate totals
-    total_additions = sum(f.additions for f in files)
-    total_deletions = sum(f.deletions for f in files)
-
+    # Convert StructuredDiff to TaskDiffResponse
     return TaskDiffResponse(
-        files=files,
-        total_additions=total_additions,
-        total_deletions=total_deletions,
+        files=[
+            FileDiff(
+                file_path=file.file_path,
+                diff_content=file.diff_content,
+                additions=file.additions,
+                deletions=file.deletions,
+            )
+            for file in diff.files
+        ],
+        additions=diff.additions,
+        deletions=diff.deletions,
         generated_at=datetime.datetime.now(datetime.UTC),
     )
-
-
-def _parse_git_diff(raw_diff: str) -> list[FileDiff]:
-    """Parse raw git diff output into structured per-file diffs.
-
-    Args:
-        raw_diff: Raw git diff output
-
-    Returns:
-        List of FileDiff objects, one per changed file
-    """
-    if not raw_diff.strip():
-        return []
-
-    files: list[FileDiff] = []
-
-    # Split by file headers (diff --git lines)
-    file_blocks = re.split(r"(?=^diff --git)", raw_diff, flags=re.MULTILINE)
-
-    for block in file_blocks:
-        block = block.strip()
-        if not block:
-            continue
-
-        # Extract file path from +++ b/path line
-        file_path_match = re.search(r"^\+\+\+ b/(.+)$", block, re.MULTILINE)
-        if not file_path_match:
-            # Try --- a/path for deletions
-            file_path_match = re.search(r"^--- a/(.+)$", block, re.MULTILINE)
-
-        if not file_path_match:
-            continue
-
-        file_path = file_path_match.group(1)
-
-        # Count additions and deletions (lines starting with + or -, but not +++ or ---)
-        additions = len(re.findall(r"^\+(?!\+\+)", block, re.MULTILINE))
-        deletions = len(re.findall(r"^-(?!--)", block, re.MULTILINE))
-
-        files.append(
-            FileDiff(
-                file_path=file_path,
-                diff_content=block,
-                additions=additions,
-                deletions=deletions,
-            )
-        )
-
-    return files
 
 
 @router.post("/{task_id}/workflow-action")
@@ -368,6 +318,53 @@ async def execute_workflow_action(
 # Git endpoints
 
 
+@router.get("/{task_id}/branch-info", response_model=TaskBranchInfo)
+async def get_task_branch_info(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+) -> TaskBranchInfo:
+    """Get branch information for a task.
+
+    Returns lightweight commit metadata and uncommitted changes flag.
+    Used to populate UI dropdowns for selecting what diff to view.
+
+    Returns:
+        TaskBranchInfo with commits list and has_uncommitted_changes flag
+
+    Raises:
+        HTTPException: 404 if task not found, 500 if git operation fails
+    """
+    # Get the most recently used worktree slot for this task
+    last_used_slot = worktree_slot_repo.get_last_used_slot_for_task(task.id)
+
+    # Get commit metadata from main codebase (not worktree)
+    commit_entries = await task_git_service.get_task_commit_metadata(task)
+
+    # Check for uncommitted changes only if there's a worktree slot
+    has_uncommitted = False
+    if last_used_slot:
+        has_uncommitted = await workspace_allocation_service.slot_has_uncommitted_changes(last_used_slot)
+
+    # Convert GitLogEntry to CommitMetadata schema
+    commits = [
+        CommitMetadata(
+            commit_hash=entry.hash,
+            author=entry.author,
+            date=entry.date,
+            message=entry.message,
+        )
+        for entry in commit_entries
+    ]
+
+    return TaskBranchInfo(
+        commits=commits,
+        has_uncommitted_changes=has_uncommitted,
+    )
+
+
 @router.get("/{task_id}/git-status", response_model=TaskGitStatusResponse)
 async def get_task_git_status(
     task_id: int,
@@ -381,6 +378,8 @@ async def get_task_git_status(
     - Commits ahead/behind base branch
     - Merge conflicts
     - Merge readiness
+
+    TODO: Merge with above get_task_branch_info() endpoint
 
     Raises:
         HTTPException: 404 if task not found, 400 if operation fails

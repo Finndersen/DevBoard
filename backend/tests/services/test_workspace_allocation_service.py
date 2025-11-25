@@ -19,6 +19,7 @@ def mock_repos():
     """Create mock repositories."""
     worktree_slot_repo = MagicMock()
     task_repo = MagicMock()
+    task_repo.db = MagicMock()  # Mock db for commit() calls
     return worktree_slot_repo, task_repo
 
 
@@ -26,10 +27,13 @@ def mock_repos():
 def service(mock_repos):
     """Create service instance with mocked repos."""
     worktree_slot_repo, task_repo = mock_repos
-    return WorkspaceAllocationService(
+    service = WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
         task_repo=task_repo,
     )
+    # Mock TaskGitService.ensure_task_branch to avoid git operations in tests
+    service.task_git_service.ensure_task_branch = AsyncMock(return_value="feature/test-branch")
+    return service
 
 
 @pytest.fixture
@@ -64,7 +68,7 @@ def sample_slot():
     slot.is_main_repo = True
     slot.locked_by_task_id = None
     slot.last_used_by_task_id = None
-    slot.get_current_branch = MagicMock(return_value="main")
+    slot.get_current_branch = AsyncMock(return_value="main")
     return slot
 
 
@@ -270,7 +274,7 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
     # Verify second event: WORKSPACE_BRANCH_CHECKOUT
     assert system_events[1].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
     assert system_events[1].data["task_id"] == sample_task.id
-    assert system_events[1].data["branch"] == sample_task.base_branch
+    assert system_events[1].data["branch"] == sample_task.branch_name
 
     # Verify slot was released
     worktree_slot_repo.unlock_slot.assert_called_once_with(sample_slot)
@@ -321,11 +325,11 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
         ):
             events.append(event)
 
-    # Verify: Should have yielded WORKSPACE_CREATE, WORKSPACE_ALLOCATE, and WORKSPACE_BRANCH_CHECKOUT
+    # Verify: Should have yielded WORKSPACE_CREATE (twice), WORKSPACE_ALLOCATE, and WORKSPACE_BRANCH_CHECKOUT
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    assert len(system_events) == 3
+    assert len(system_events) == 4
 
-    # Verify first event: WORKSPACE_CREATE
+    # Verify first event: WORKSPACE_CREATE (before creating slot)
     assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
     assert system_events[0].data["task_id"] == sample_task.id
 
@@ -334,13 +338,18 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
     assert system_events[1].data["task_id"] == sample_task.id
     assert system_events[1].data["slot_id"] == new_slot.id
 
-    # Verify third event: WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[2].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
+    # Verify third event: WORKSPACE_CREATE (worktree validation failed, recreating)
+    assert system_events[2].type == SystemEventType.WORKSPACE_CREATE
     assert system_events[2].data["task_id"] == sample_task.id
-    assert system_events[2].data["branch"] == sample_task.base_branch
+    assert system_events[2].data["slot_id"] == new_slot.id
 
-    # Verify worktree was created
-    mock_git.return_value.create_worktree.assert_called_once()
+    # Verify fourth event: WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[3].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[3].data["task_id"] == sample_task.id
+    assert system_events[3].data["branch"] == sample_task.branch_name
+
+    # Verify worktree was created twice (once during slot creation, once during validation/recreation)
+    assert mock_git.return_value.create_worktree.call_count == 2
 
     # Verify slot was released
     worktree_slot_repo.unlock_slot.assert_called_once_with(new_slot)

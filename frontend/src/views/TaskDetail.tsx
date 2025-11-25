@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
+import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
@@ -65,9 +65,13 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string>('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteBranch, setDeleteBranch] = useState(true)
+  const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
-  // State for diff data
+  // State for branch info and diff data
+  const [branchInfo, setBranchInfo] = useState<TaskBranchInfo | null>(null)
+  const [branchInfoLoading, setBranchInfoLoading] = useState(false)
   const [diffData, setDiffData] = useState<TaskDiffResponse | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   const [lastDiffUpdate, setLastDiffUpdate] = useState<string | null>(null)
@@ -120,7 +124,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     if (!task) return
 
     try {
-      await deleteTask(task.id)
+      await deleteTask(task.id, deleteBranch)
 
       // Update cache
       await deleteTaskFromStore(String(task.id))
@@ -146,7 +150,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     } finally {
       setShowDeleteConfirm(false)
     }
-  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, addNotification, navigate])
+  }, [task, project, deleteTask, deleteBranch, deleteTaskFromStore, fetchProjectTasks, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
@@ -154,14 +158,30 @@ function TaskDetail({ id }: TaskDetailProps) {
     updateTask({ id: id!, task: { codebase_id: codebaseId } as unknown as Task })
   }, [updateTask, id])
 
+  // Fetch task branch info (commits list and uncommitted status)
+  const fetchTaskBranchInfo = useCallback(async () => {
+    if (!task?.id) return
+
+    setBranchInfoLoading(true)
+
+    try {
+      const response = await apiClient.getTaskBranchInfo(task.id)
+      setBranchInfo(response)
+    } catch (error) {
+      console.error('Failed to fetch task branch info:', error)
+    } finally {
+      setBranchInfoLoading(false)
+    }
+  }, [task?.id])
+
   // Fetch task diff
-  const fetchTaskDiff = useCallback(async () => {
+  const fetchTaskDiff = useCallback(async (view: string) => {
     if (!task?.id) return
 
     setDiffLoading(true)
 
     try {
-      const response = await apiClient.getTaskDiff(task.id)
+      const response = await apiClient.getTaskDiff(task.id, view)
       setDiffData(response)
       setLastDiffUpdate(new Date().toISOString())
     } catch (error) {
@@ -171,12 +191,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }, [task?.id])
 
-  // Auto-fetch diff when Changes tab is first opened
+  // Auto-fetch branch info and initial diff when Changes tab is first opened
   useEffect(() => {
-    if (activeTab === 'changes' && !diffData && !diffLoading && task?.codebase_id) {
-      fetchTaskDiff()
+    if (activeTab === 'changes' && !branchInfo && !branchInfoLoading && task?.codebase_id) {
+      // First fetch branch info to populate dropdown
+      fetchTaskBranchInfo().then(() => {
+        // Then fetch 'all' view as default
+        fetchTaskDiff('all')
+      })
     }
-  }, [activeTab, diffData, diffLoading, task?.codebase_id, fetchTaskDiff])
+  }, [activeTab, branchInfo, branchInfoLoading, task?.codebase_id, fetchTaskBranchInfo, fetchTaskDiff])
 
   // Get selected codebase object
   const selectedCodebase = task && task.codebase_id && codebases
@@ -202,6 +226,18 @@ function TaskDetail({ id }: TaskDetailProps) {
       }
     }
   }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
+
+  // Fetch git status when delete dialog is shown
+  useEffect(() => {
+    if (showDeleteConfirm && task?.id) {
+      apiClient.getTaskGitStatus(task.id)
+        .then(status => setGitStatus(status))
+        .catch(error => {
+          console.error('Failed to fetch git status:', error)
+          setGitStatus(null)
+        })
+    }
+  }, [showDeleteConfirm, task?.id])
 
 
   // Memoize matchers and handlers to prevent re-registration on every render
@@ -678,8 +714,9 @@ function TaskDetail({ id }: TaskDetailProps) {
             {activeTab === 'changes' && (
               <div className="h-full overflow-hidden">
                 <AllFilesDiffViewer
+                  branchInfo={branchInfo}
                   diffResponse={diffData}
-                  loading={diffLoading}
+                  loading={diffLoading || branchInfoLoading}
                   onRefresh={fetchTaskDiff}
                   lastUpdated={lastDiffUpdate}
                 />
@@ -708,7 +745,34 @@ function TaskDetail({ id }: TaskDetailProps) {
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDeleteTask}
         title="Delete Task"
-        message={`Are you sure you want to delete "${task.title}"? This will permanently delete the task, its specification, implementation plan, conversations, and all associated data. This action cannot be undone.`}
+        message={
+          <div>
+            <p>Are you sure you want to delete "{task.title}"? This will permanently delete the task, its specification, implementation plan, conversations, and all associated data. This action cannot be undone.</p>
+            {gitStatus?.branch_exists && gitStatus.commits_ahead > 0 && (
+              <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                ⚠️ Branch has {gitStatus.commits_ahead} unmerged commit{gitStatus.commits_ahead !== 1 ? 's' : ''}
+              </div>
+            )}
+            {gitStatus?.branch_exists && (
+              <label style={{ display: 'flex', alignItems: 'center', marginTop: '16px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={deleteBranch}
+                  onChange={(e) => setDeleteBranch(e.target.checked)}
+                  style={{ marginRight: '8px' }}
+                />
+                <span>
+                  Also delete git branch {gitStatus?.branch_name && `"${gitStatus.branch_name}"`}
+                </span>
+              </label>
+            )}
+            {!gitStatus?.branch_exists && gitStatus?.branch_name && (
+              <div style={{ marginTop: '12px', fontSize: '0.9em', color: '#666', fontStyle: 'italic' }}>
+                Branch "{gitStatus.branch_name}" does not exist
+              </div>
+            )}
+          </div>
+        }
         confirmText="Delete Task"
         cancelText="Cancel"
         variant="danger"

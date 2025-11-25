@@ -3,6 +3,7 @@
 import datetime
 import json
 from collections.abc import Iterator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -15,7 +16,7 @@ from devboard.agents.roles.task_planning import TaskPlanningRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
-from devboard.db.models.task import TaskStatus
+from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     CodebaseRepository,
     ContextProviderResourceRepository,
@@ -343,6 +344,155 @@ class TestTasksRouter:
         plan_doc_after = document_repo.get_by_id(plan_doc_id)
         assert spec_doc_after is None, "Specification document should be deleted"
         assert plan_doc_after is None, "Implementation plan document should be deleted"
+
+    def test_delete_task_with_branch_deletion(self, client, db_session):
+        """Test deleting a task and its git branch."""
+        # Create project using repository
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name="Test Project", description="Test project description", specification=spec_doc
+        )
+
+        # Create codebase using repository
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(name="Test Codebase", description="Test codebase description", local_path="/test/path")
+        codebase = codebase_repo.create(codebase)
+
+        # Create task using repository
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            base_branch="main",
+            codebase_id=codebase.id,
+            branch_name="feature/test-branch",
+        )
+        db_session.commit()
+        task_id = task.id
+
+        # Mock GitRepoIntegration at the integration layer
+        mock_git = MagicMock()
+        mock_git.delete_branch = AsyncMock()
+
+        # Patch GitRepoIntegration to return our mock
+        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+            # Delete the task with delete_branch=true
+            response = client.delete(f"/api/tasks/{task_id}?delete_branch=true")
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert response.json()["message"] == "Task deleted successfully"
+
+        # Verify task is deleted from database
+        deleted_task = db_session.get(Task, task_id)
+        assert deleted_task is None
+
+        # Verify delete_branch was called with force=True
+        mock_git.delete_branch.assert_called_once()
+        call_args = mock_git.delete_branch.call_args
+        assert call_args[0][0] == "feature/test-branch"  # Branch name
+        assert call_args[1]["force"] is True  # force=True keyword arg
+
+    def test_delete_task_without_branch_deletion(self, client, db_session):
+        """Test deleting a task without deleting its git branch (default behavior)."""
+        # Create project using repository
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name="Test Project", description="Test project description", specification=spec_doc
+        )
+
+        # Create codebase using repository
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(name="Test Codebase", description="Test codebase description", local_path="/test/path")
+        codebase = codebase_repo.create(codebase)
+
+        # Create task using repository
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            base_branch="main",
+            codebase_id=codebase.id,
+            branch_name="feature/test-branch",
+        )
+        db_session.commit()
+        task_id = task.id
+
+        # Mock GitRepoIntegration at the integration layer
+        mock_git = MagicMock()
+        mock_git.delete_branch = AsyncMock()
+
+        # Patch GitRepoIntegration to return our mock
+        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+            # Delete the task without specifying delete_branch (defaults to False)
+            response = client.delete(f"/api/tasks/{task_id}")
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        # Verify task is deleted from database
+        deleted_task = db_session.get(Task, task_id)
+        assert deleted_task is None
+
+        # Verify delete_branch was NOT called (since delete_branch=False)
+        mock_git.delete_branch.assert_not_called()
+
+    def test_delete_task_with_branch_deletion_error_handling(self, client, db_session):
+        """Test that task deletion succeeds even if branch deletion fails."""
+        # Create project using repository
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name="Test Project", description="Test project description", specification=spec_doc
+        )
+
+        # Create codebase using repository
+        codebase_repo = CodebaseRepository(db_session)
+        codebase = Codebase(name="Test Codebase", description="Test codebase description", local_path="/test/path")
+        codebase = codebase_repo.create(codebase)
+
+        # Create task using repository
+        task_repo = TaskRepository(db_session)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Test Task",
+            status=TaskStatus.DEFINING,
+            specification=task_spec_doc,
+            base_branch="main",
+            codebase_id=codebase.id,
+            branch_name="feature/test-branch",
+        )
+        db_session.commit()
+        task_id = task.id
+
+        # Mock GitRepoIntegration to raise an error
+        mock_git = MagicMock()
+        mock_git.delete_branch = AsyncMock(side_effect=Exception("Git error"))
+
+        # Patch GitRepoIntegration to return our mock
+        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+            # Delete the task with delete_branch=true
+            response = client.delete(f"/api/tasks/{task_id}?delete_branch=true")
+
+        # Task deletion should still succeed despite branch deletion error
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        # Verify task is deleted from database
+        deleted_task = db_session.get(Task, task_id)
+        assert deleted_task is None
 
     def test_delete_task_not_found(self, client, test_codebase):
         """Test deleting a non-existent task."""
@@ -705,3 +855,104 @@ class TestWorkflowActions:
         )
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_task_diff(client, db_session):
+    """Test getting diff for a task with view parameter (new API)."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from devboard.db.models.document import DocumentType
+    from devboard.db.repositories import CodebaseRepository, DocumentRepository, ProjectRepository, TaskRepository
+    from devboard.integrations.types import FileDiff, StructuredDiff
+
+    # Create specification document for project
+    doc_repo = DocumentRepository(db_session)
+    spec_doc = doc_repo.create(DocumentType.PROJECT_SPECIFICATION, "Test project specification")
+    db_session.commit()
+
+    # Create project with specification
+    project_repo = ProjectRepository(db_session)
+    project = project_repo.create(
+        name="Test Project",
+        description="Test description",
+        specification=spec_doc,
+    )
+    db_session.commit()
+
+    codebase_repo = CodebaseRepository(db_session)
+    codebase = Codebase(
+        name="Test Codebase",
+        local_path="/tmp/test",
+        description="Test codebase",
+    )
+    codebase = codebase_repo.create(codebase)
+    db_session.commit()
+
+    # Create task with specification
+    task_spec_doc = doc_repo.create(DocumentType.TASK_SPECIFICATION, "Test task specification")
+    db_session.commit()
+
+    task_repo = TaskRepository(db_session)
+    task = task_repo.create(
+        title="Test Task",
+        project_id=project.id,
+        codebase_id=codebase.id,
+        base_branch="main",
+        specification=task_spec_doc,
+        branch_name="feature/test-123",
+    )
+    db_session.commit()
+
+    # Mock all changes diff (combines all commits + uncommitted)
+    all_changes_diff = """diff --git a/file1.py b/file1.py
+--- a/file1.py
++++ b/file1.py
+@@ -1,3 +1,5 @@
++new line 1
++new line 2
+ existing line
+"""
+
+    # Create mock structured diff to return
+    mock_structured_diff = StructuredDiff(
+        files=[
+            FileDiff(
+                file_path="file1.py",
+                diff_content=all_changes_diff,
+                additions=2,
+                deletions=0,
+            )
+        ],
+        additions=2,
+        deletions=0,
+    )
+
+    # Mock GitRepoIntegration at the integration layer
+    mock_git = MagicMock()
+    mock_git.get_merge_base = AsyncMock(return_value="abc123")
+    mock_git.get_structured_diff = AsyncMock(return_value=mock_structured_diff)
+
+    # Patch GitRepoIntegration - this will affect code running during the request
+    with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+        # Test with view='all' parameter (required)
+        response = client.get(f"/api/tasks/{task.id}/diff?view=all")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check new simplified structure
+        assert "files" in data
+        assert "additions" in data
+        assert "deletions" in data
+        assert "generated_at" in data
+
+        # Check files
+        assert len(data["files"]) == 1
+        assert data["files"][0]["file_path"] == "file1.py"
+        assert data["files"][0]["additions"] == 2
+        assert data["files"][0]["deletions"] == 0
+
+        # Check totals
+        assert data["additions"] == 2
+        assert data["deletions"] == 0
