@@ -164,6 +164,7 @@ export interface Codebase {
   description: string
   repository_url: string | null
   local_path: string
+  default_branch: string
 }
 
 // Git and Worktree Management

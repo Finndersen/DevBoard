@@ -19,6 +19,8 @@ interface ConversationChatProps {
   isTransitioning?: boolean
   transitionMessage?: string
   onStreamingStarted?: () => void
+  initialMessage?: string | null
+  onInitialMessageSent?: () => void
 }
 
 const ConversationChat = ({
@@ -27,7 +29,9 @@ const ConversationChat = ({
   emptyStateMessage = "Start a conversation!",
   isTransitioning = false,
   transitionMessage = '',
-  onStreamingStarted
+  onStreamingStarted,
+  initialMessage,
+  onInitialMessageSent
 }: ConversationChatProps) => {
   // Subscribe to streaming store state
   // IMPORTANT: Use stable references to avoid infinite loops
@@ -70,6 +74,7 @@ const ConversationChat = ({
   const removedPendingIdsRef = useRef<Set<string>>(new Set())
   const [renderCount, setRenderCount] = useState(0)
   const lastFetchedConversationIdRef = useRef<number | null>(null)
+  const initialMessageSentRef = useRef(false)
 
   const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
   const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
@@ -316,6 +321,36 @@ const ConversationChat = ({
     retryMessage(pendingKey, messageId)
     await handleSendMessage(pendingMsg.text_content)
   }, [pendingMessages, pendingKey, retryMessage, handleSendMessage])
+
+  // Auto-send initial message when provided (e.g., from task creation with description)
+  useEffect(() => {
+    // Only send if:
+    // 1. We have an initial message
+    // 2. Haven't sent it yet
+    // 3. Not currently streaming
+    // 4. No pending approvals
+    // 5. Conversation history has been fetched (lastFetchedConversationIdRef is set)
+    if (
+      initialMessage &&
+      !initialMessageSentRef.current &&
+      !isStreaming &&
+      pendingApprovals.length === 0 &&
+      !isTransitioning &&
+      lastFetchedConversationIdRef.current === conversationId
+    ) {
+      initialMessageSentRef.current = true
+      // Use setTimeout to ensure this runs after render cycle
+      setTimeout(() => {
+        handleSendMessage(initialMessage)
+        onInitialMessageSent?.()
+      }, 0)
+    }
+  }, [initialMessage, isStreaming, pendingApprovals.length, isTransitioning, conversationId, handleSendMessage, onInitialMessageSent])
+
+  // Reset initial message sent ref when conversation changes
+  useEffect(() => {
+    initialMessageSentRef.current = false
+  }, [conversationId])
 
   const isInputDisabled = useMemo(
     () => isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning,

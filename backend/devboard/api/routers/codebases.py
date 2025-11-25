@@ -57,9 +57,19 @@ async def create_codebase(
     git = GitRepoIntegration(codebase.local_path)
     repository_url = await git.detect_git_remote_url()
 
-    # Create the codebase with auto-detected repository URL
+    # Auto-detect default branch if not provided
+    default_branch = codebase.default_branch
+    if not default_branch:
+        try:
+            default_branch = await git.get_default_branch()
+        except Exception:
+            # Fall back to origin/main if auto-detection fails
+            default_branch = "origin/main"
+
+    # Create the codebase with auto-detected values
     codebase_data = codebase.model_dump()
     codebase_data["repository_url"] = repository_url
+    codebase_data["default_branch"] = default_branch
 
     db_codebase = Codebase(**codebase_data)
     created_codebase = codebase_repo.create(db_codebase)

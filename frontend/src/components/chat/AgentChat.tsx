@@ -24,6 +24,8 @@ interface AgentChatProps {
   isTransitioning?: boolean
   transitionMessage?: string
   onStreamingStarted?: () => void
+  initialMessage?: string | null
+  onInitialMessageSent?: () => void
 }
 
 const AgentChat = ({
@@ -34,7 +36,9 @@ const AgentChat = ({
   padding = "xs",
   isTransitioning = false,
   transitionMessage = '',
-  onStreamingStarted
+  onStreamingStarted,
+  initialMessage,
+  onInitialMessageSent
 }: AgentChatProps) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
@@ -141,6 +145,8 @@ const AgentChat = ({
               isTransitioning={isTransitioning}
               transitionMessage={transitionMessage}
               onStreamingStarted={onStreamingStarted}
+              initialMessage={initialMessage}
+              onInitialMessageSent={onInitialMessageSent}
             />
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">

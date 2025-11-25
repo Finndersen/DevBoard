@@ -1,5 +1,5 @@
 import { useEffect, useCallback, memo, useRef } from 'react'
-import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
 import type { Codebase } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -63,6 +63,11 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
     [updateCodebase, id]
   )
 
+  const saveDefaultBranchField = useCallback(
+    (value: string) => updateCodebase({ id: id!, codebase: { default_branch: value } }),
+    [updateCodebase, id]
+  )
+
   // Use editable field hooks
   const nameField = useEditableField(codebase?.name || '', saveNameField)
   const descriptionField = useEditableField(codebase?.description || '', saveDescriptionField)
@@ -70,6 +75,10 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   const repositoryUrlField = useEditableField(
     codebase?.repository_url || '',
     saveRepositoryUrlField
+  )
+  const defaultBranchField = useEditableField(
+    codebase?.default_branch || '',
+    saveDefaultBranchField
   )
 
   // Loading state
@@ -367,6 +376,71 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             {repositoryUrlField.error && <ErrorMessage message={repositoryUrlField.error} />}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Optional Git repository URL
+            </p>
+          </div>
+
+          {/* Default Branch */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <CodeBracketIcon className="h-4 w-4" />
+              Default Branch
+            </label>
+            {defaultBranchField.isEditing ? (
+              <div className="space-y-2">
+                <Input
+                  value={defaultBranchField.editedValue}
+                  onChange={(e) => defaultBranchField.setEditedValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') defaultBranchField.save()
+                    if (e.key === 'Escape') defaultBranchField.cancelEditing()
+                  }}
+                  placeholder="e.g., origin/main"
+                  className="font-mono text-sm"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={defaultBranchField.save}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400"
+                    loading={defaultBranchField.saving}
+                  >
+                    <CheckIcon className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    onClick={defaultBranchField.cancelEditing}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                  >
+                    <XMarkIcon className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-center gap-2">
+                  <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                    {codebase.default_branch}
+                  </code>
+                  <Button
+                    onClick={defaultBranchField.startEditing}
+                    variant="ghost"
+                    size="sm"
+                    className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit default branch"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {defaultBranchField.error && <ErrorMessage message={defaultBranchField.error} />}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Default base branch for new tasks (e.g., origin/main)
             </p>
           </div>
         </div>

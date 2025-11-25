@@ -23,6 +23,7 @@ class Codebase(Base):
     description: Mapped[str] = mapped_column(Text)
     repository_url: Mapped[str | None] = mapped_column(String(512))
     local_path: Mapped[str] = mapped_column(String(512))
+    default_branch: Mapped[str] = mapped_column(String(255), default="origin/main")
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")
     tasks: Mapped[list["Task"]] = relationship(back_populates="codebase")

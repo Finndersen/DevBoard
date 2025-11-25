@@ -10,6 +10,7 @@ class CodebaseBase(BaseModel):
     description: str
     repository_url: str | None = None
     local_path: str
+    default_branch: str
 
 
 class CodebaseCreate(BaseModel):
@@ -18,6 +19,7 @@ class CodebaseCreate(BaseModel):
     name: str
     description: str
     local_path: str
+    default_branch: str | None = None
 
 
 class CodebaseUpdate(BaseModel):
@@ -27,6 +29,7 @@ class CodebaseUpdate(BaseModel):
     description: str | None = None
     repository_url: str | None = None
     local_path: str | None = None
+    default_branch: str | None = None
 
 
 class CodebaseResponse(CodebaseBase):
