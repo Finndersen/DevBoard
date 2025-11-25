@@ -102,8 +102,7 @@ class WorkspaceAllocationService:
 
         Implements smart allocation with:
         1. Task stickiness - prefer last-used slot
-        2. Branch optimization - use slot already on base branch
-        3. LRU - pick least recently used available slot
+        2. LRU - pick least recently used available slot
 
         Raises:
             ValueError: If task has invalid configuration
@@ -116,7 +115,14 @@ class WorkspaceAllocationService:
         if not available_slots:
             raise AllSlotsLockedException("All worktree slots are currently in use")
 
-        # Always filter out slots with uncommitted changes
+        # Strategy 1: Task stickiness - prefer last-used slot
+        # Check this FIRST before uncommitted changes check, since task can reuse its own slot regardless
+        for slot in available_slots:
+            if slot.last_used_by_task_id == task.id:
+                logfire.info(f"Using sticky slot {slot.id} for task {task.id}")
+                return self.worktree_slot_repo.lock_slot(slot, task)
+
+        # Filter out slots with uncommitted changes
         clean_slots = []
         for slot in available_slots:
             has_changes = await self.slot_has_uncommitted_changes(slot)
@@ -124,28 +130,12 @@ class WorkspaceAllocationService:
                 clean_slots.append(slot)
 
         if not clean_slots:
-            # All unlocked slots are dirty
+            # All unlocked slots have uncommitted changes
             raise AllSlotsLockedException("All available slots have uncommitted changes")
 
         available_slots = clean_slots
 
-        # Strategy 1: Task stickiness - prefer last-used slot
-        slot: WorktreeSlot
-        for slot in available_slots:
-            if slot.last_used_by_task_id == task.id:
-                logfire.info(f"Using sticky slot {slot.id} for task {task.id}")
-                return self.worktree_slot_repo.lock_slot(slot, task)
-
-        # Strategy 2: Branch optimization - slot already on base branch
-        for slot in available_slots:
-            current_branch = await slot.get_current_branch()
-            if current_branch is not None and current_branch == task.base_branch:
-                logfire.info(
-                    f"Using optimized slot {slot.id} (already on branch {task.base_branch}) for task {task.id}"
-                )
-                return self.worktree_slot_repo.lock_slot(slot, task)
-
-        # Strategy 3: LRU - least recently used slot
+        # Strategy 2: LRU - least recently used slot
         lru_slot: WorktreeSlot = min(available_slots, key=lambda s: s.last_used_at)
         logfire.info(f"Using LRU slot {lru_slot.id} for task {task.id}")
         return self.worktree_slot_repo.lock_slot(lru_slot, task)

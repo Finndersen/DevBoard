@@ -191,6 +191,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }, [task?.id])
 
+  // Combined refresh handler that refetches both branch info and diff
+  const handleDiffRefresh = useCallback(async (view: string) => {
+    if (!task?.id) return
+
+    // First refetch branch info to find new commits
+    await fetchTaskBranchInfo()
+    // Then refetch the diff for the selected view
+    await fetchTaskDiff(view)
+  }, [task?.id, fetchTaskBranchInfo, fetchTaskDiff])
+
   // Auto-fetch branch info and initial diff when Changes tab is first opened
   useEffect(() => {
     if (activeTab === 'changes' && !branchInfo && !branchInfoLoading && task?.codebase_id) {
@@ -717,7 +727,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                   branchInfo={branchInfo}
                   diffResponse={diffData}
                   loading={diffLoading || branchInfoLoading}
-                  onRefresh={fetchTaskDiff}
+                  onRefresh={handleDiffRefresh}
                   lastUpdated={lastDiffUpdate}
                 />
               </div>
