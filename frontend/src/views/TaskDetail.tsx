@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { Task, Codebase, TaskDiffResponse } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
@@ -21,10 +21,32 @@ interface TaskDetailProps {
 
 function TaskDetail({ id }: TaskDetailProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: task, loading, error, refetch } = useTask(id)
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
+
+  // Handle initial message from navigation state (passed when creating task with description)
+  const [pendingInitialMessage, setPendingInitialMessage] = useState<string | null>(null)
+  const initialMessageProcessedRef = useRef(false)
+
+  // Check for initial message from navigation state on mount
+  useEffect(() => {
+    // Only process once per navigation and only if we have task data
+    if (!initialMessageProcessedRef.current && location.state?.initialMessage && task?.conversation_id) {
+      setPendingInitialMessage(location.state.initialMessage)
+      initialMessageProcessedRef.current = true
+      // Clear the navigation state to prevent re-sending on refresh
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state?.initialMessage, task?.conversation_id, navigate, location.pathname])
+
+  // Reset the ref when the task ID changes (navigating to different task)
+  useEffect(() => {
+    initialMessageProcessedRef.current = false
+    setPendingInitialMessage(null)
+  }, [id])
 
   // Get event handler registry for passing to stream processor
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
@@ -694,6 +716,8 @@ function TaskDetail({ id }: TaskDetailProps) {
             padding="xs"
             isTransitioning={isConversationStreaming}
             transitionMessage={transitionMessage}
+            initialMessage={pendingInitialMessage}
+            onInitialMessageSent={() => setPendingInitialMessage(null)}
           />
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
@@ -20,11 +20,17 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     title: '',
     codebase_id: null as number | null,
     remote_task_id: null as string | null,
-    specification_content: '',
-    base_branch: 'main',
-    use_default_base_branch: true
+    working_branch: '',
+    base_branch: '',
+    initial_message: ''
   })
   const [isCreating, setIsCreating] = useState(false)
+
+  // Get selected codebase for default_branch lookup
+  const selectedCodebase = useMemo(() => {
+    if (!newTask.codebase_id || !codebases) return null
+    return codebases.find(c => c.id === newTask.codebase_id) ?? null
+  }, [newTask.codebase_id, codebases])
 
   // Reset form when modal closes
   useEffect(() => {
@@ -33,9 +39,9 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         title: '',
         codebase_id: null,
         remote_task_id: null,
-        specification_content: '',
-        base_branch: 'main',
-        use_default_base_branch: true
+        working_branch: '',
+        base_branch: '',
+        initial_message: ''
       })
       setIsCreating(false)
     }
@@ -47,19 +53,28 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   }, [])
 
   const handleTaskCodebaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setNewTask(prev => ({ ...prev, codebase_id: e.target.value ? Number(e.target.value) : null }))
-  }, [])
+    const codebaseId = e.target.value ? Number(e.target.value) : null
+    // Auto-populate base_branch from selected codebase's default_branch
+    const selectedCodebase = codebaseId && codebases
+      ? codebases.find(c => c.id === codebaseId)
+      : null
+    setNewTask(prev => ({
+      ...prev,
+      codebase_id: codebaseId,
+      base_branch: selectedCodebase?.default_branch || ''
+    }))
+  }, [codebases])
 
-  const handleTaskSpecificationChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setNewTask(prev => ({ ...prev, specification_content: e.target.value }))
+  const handleWorkingBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewTask(prev => ({ ...prev, working_branch: e.target.value }))
   }, [])
 
   const handleBaseBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setNewTask(prev => ({ ...prev, base_branch: e.target.value }))
   }, [])
 
-  const handleUseDefaultBaseBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewTask(prev => ({ ...prev, use_default_base_branch: e.target.checked }))
+  const handleInitialMessageChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewTask(prev => ({ ...prev, initial_message: e.target.value }))
   }, [])
 
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
@@ -70,12 +85,17 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         title: newTask.title,
         codebase_id: newTask.codebase_id,
         remote_task_id: newTask.remote_task_id,
-        specification_content: newTask.specification_content
+        specification_content: null  // Always empty, initial message is sent via chat
       }
 
-      // Add git branch configuration if codebase is selected
-      if (newTask.codebase_id && !newTask.use_default_base_branch && newTask.base_branch) {
-        taskData.base_branch = newTask.base_branch
+      // Add working branch if provided (otherwise auto-generated)
+      if (newTask.working_branch.trim()) {
+        taskData.branch_name = newTask.working_branch.trim()
+      }
+
+      // Add base branch if provided
+      if (newTask.base_branch.trim()) {
+        taskData.base_branch = newTask.base_branch.trim()
       }
 
       const createdTask = await apiClient.createTask(projectId, taskData)
@@ -84,25 +104,30 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       setTask(createdTask)
       await fetchProjectTasks(projectId)
 
+      // Store initial message for navigation
+      const initialMessage = newTask.initial_message.trim() || null
+
       // Reset form
       setNewTask({
         title: '',
         codebase_id: null,
         remote_task_id: null,
-        specification_content: '',
-        base_branch: 'main',
-        use_default_base_branch: true
+        working_branch: '',
+        base_branch: '',
+        initial_message: ''
       })
 
       onClose()
-      // Navigate to the newly created task
-      navigate(`/tasks/${createdTask.id}`)
+      // Navigate to the newly created task, passing initial message in state
+      navigate(`/tasks/${createdTask.id}`, {
+        state: initialMessage ? { initialMessage } : undefined
+      })
     } catch (error) {
       console.error('Failed to create task:', error)
     } finally {
       setIsCreating(false)
     }
-  }, [newTask, projectId, navigate, onClose])
+  }, [newTask, projectId, navigate, onClose, setTask, fetchProjectTasks])
 
   return (
     <Modal
@@ -144,43 +169,49 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           </select>
         </div>
 
-        {/* Base Branch Configuration */}
+        {/* Working Branch Configuration */}
         {newTask.codebase_id && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Base branch (to create task working branch from)
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={newTask.use_default_base_branch}
-                  onChange={handleUseDefaultBaseBranchChange}
-                  className="text-blue-600 focus:ring-blue-500 rounded"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Use default</span>
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Working Branch (Optional)
               </label>
-
-              {!newTask.use_default_base_branch && (
-                <Input
-                  type="text"
-                  value={newTask.base_branch}
-                  onChange={handleBaseBranchChange}
-                  placeholder="main"
-                />
-              )}
+              <Input
+                type="text"
+                value={newTask.working_branch}
+                onChange={handleWorkingBranchChange}
+                placeholder="Leave empty to auto-generate"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Branch name is auto-generated from task title if not specified
+              </p>
             </div>
-          </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Base Branch
+              </label>
+              <Input
+                type="text"
+                value={newTask.base_branch}
+                onChange={handleBaseBranchChange}
+                placeholder="e.g., origin/main"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                The branch to create the working branch from (auto-populated from codebase default)
+              </p>
+            </div>
+          </>
         )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Task Specification (Optional)
+            Initial Description (Optional)
           </label>
           <Textarea
-            value={newTask.specification_content}
-            onChange={handleTaskSpecificationChange}
-            placeholder="Describe what needs to be done..."
+            value={newTask.initial_message}
+            onChange={handleInitialMessageChange}
+            placeholder="Describe what you want to do with this task, including as much detail and context as possible. This will be used to start the conversation with the AI assistant."
             rows={6}
           />
         </div>
