@@ -398,6 +398,23 @@ export class ApiClient {
     return this.request<void>(`/api/projects/${id}`, { method: 'DELETE' })
   }
 
+  // Project Codebases
+  async getProjectCodebases(projectId: number | string): Promise<Codebase[]> {
+    return this.request<Codebase[]>(`/api/projects/${projectId}/codebases`)
+  }
+
+  async linkCodebaseToProject(projectId: number | string, codebaseId: number | string): Promise<Codebase> {
+    return this.request<Codebase>(`/api/projects/${projectId}/codebases/${codebaseId}`, {
+      method: 'POST',
+    })
+  }
+
+  async unlinkCodebaseFromProject(projectId: number | string, codebaseId: number | string): Promise<{ message: string; success: boolean }> {
+    return this.request<{ message: string; success: boolean }>(`/api/projects/${projectId}/codebases/${codebaseId}`, {
+      method: 'DELETE',
+    })
+  }
+
   // Tasks
   async getProjectTasks(projectId: number | string): Promise<Task[]> {
     return this.request<Task[]>(`/api/projects/${projectId}/tasks`)

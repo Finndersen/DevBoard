@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
+import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { Button, Card, Textarea, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
-import type { Task } from '../lib/api'
-import { useModal, useEditableField, useProject, useProjectTasks } from '../hooks'
+import type { Task, Codebase } from '../lib/api'
+import { useModal, useEditableField, useProject, useProjectTasks, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject } from '../hooks'
+import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { useApprovals } from '../contexts/ApprovalsContext'
@@ -27,6 +29,16 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Fetch data using hooks
   const { data: project, loading: projectLoading, refetch: refetchProject, setData: setProject } = useProject(id!)
   const { data: tasks, loading: tasksLoading } = useProjectTasks(id!)
+
+  // Project codebases hooks
+  const { data: projectCodebases, loading: codebasesLoading, refetch: refetchProjectCodebases } = useProjectCodebases(id!)
+  const { data: allCodebases } = useCodebases()
+  const { mutate: linkCodebase, loading: linkingCodebase } = useLinkCodebaseToProject()
+  const { mutate: unlinkCodebase, loading: unlinkingCodebase } = useUnlinkCodebaseFromProject()
+
+  // State for codebase linking UI
+  const [selectedCodebaseToLink, setSelectedCodebaseToLink] = useState<string>('')
+  const createCodebaseModal = useModal()
 
   // Combined loading state
   const loading = projectLoading || tasksLoading
@@ -140,6 +152,45 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
     return groups
   }, [tasks])
+
+  // Compute unlinked codebases for dropdown
+  const unlinkedCodebases = useMemo(() => {
+    if (!allCodebases || !projectCodebases) return []
+    const linkedIds = new Set(projectCodebases.map(c => c.id))
+    return allCodebases.filter(c => !linkedIds.has(c.id))
+  }, [allCodebases, projectCodebases])
+
+  // Handle linking a codebase to the project
+  const handleLinkCodebase = useCallback(async () => {
+    if (!selectedCodebaseToLink) return
+    try {
+      await linkCodebase({ projectId: id!, codebaseId: selectedCodebaseToLink })
+      await refetchProjectCodebases()
+      setSelectedCodebaseToLink('')
+    } catch (error) {
+      console.error('Failed to link codebase:', error)
+    }
+  }, [selectedCodebaseToLink, id, linkCodebase, refetchProjectCodebases])
+
+  // Handle unlinking a codebase from the project
+  const handleUnlinkCodebase = useCallback(async (codebaseId: number) => {
+    try {
+      await unlinkCodebase({ projectId: id!, codebaseId })
+      await refetchProjectCodebases()
+    } catch (error) {
+      console.error('Failed to unlink codebase:', error)
+    }
+  }, [id, unlinkCodebase, refetchProjectCodebases])
+
+  // Handle new codebase created - link it to the project
+  const handleCodebaseCreated = useCallback(async (codebase: Codebase) => {
+    try {
+      await linkCodebase({ projectId: id!, codebaseId: codebase.id })
+      await refetchProjectCodebases()
+    } catch (error) {
+      console.error('Failed to link newly created codebase:', error)
+    }
+  }, [id, linkCodebase, refetchProjectCodebases])
 
   if (loading) {
     return (
@@ -319,10 +370,97 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       )}
 
       {activeTab === 'settings' && (
-        <Card padding="xs">
-          <h3 className={`text-lg font-medium ${textColors.primary} mb-4`}>Project Settings</h3>
-          <p className={textColors.secondary}>Project settings configuration will be implemented here.</p>
-        </Card>
+        <div className="space-y-6">
+          {/* Linked Codebases Section */}
+          <Card padding="xs">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CodeBracketIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>Linked Codebases</h3>
+              </div>
+            </div>
+
+            {/* Add Codebase Section */}
+            <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <select
+                  value={selectedCodebaseToLink}
+                  onChange={(e) => setSelectedCodebaseToLink(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  disabled={linkingCodebase}
+                >
+                  <option value="">Select a codebase to link...</option>
+                  {unlinkedCodebases.map((codebase) => (
+                    <option key={codebase.id} value={codebase.id}>
+                      {codebase.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  onClick={handleLinkCodebase}
+                  disabled={!selectedCodebaseToLink || linkingCodebase}
+                  size="sm"
+                  loading={linkingCodebase}
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  Link
+                </Button>
+                <Button
+                  onClick={createCodebaseModal.open}
+                  variant="secondary"
+                  size="sm"
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  Create New
+                </Button>
+              </div>
+            </div>
+
+            {/* Linked Codebases List */}
+            {codebasesLoading ? (
+              <div className="flex justify-center py-4">
+                <div className={loadingSpinner}></div>
+              </div>
+            ) : !projectCodebases || projectCodebases.length === 0 ? (
+              <div className="text-center py-8">
+                <CodeBracketIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                <p className={`${textColors.secondary} mb-2`}>No codebases linked to this project</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Link codebases to enable task creation with specific codebases.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {projectCodebases.map((codebase) => (
+                  <div
+                    key={codebase.id}
+                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        to={`/codebases/${codebase.id}`}
+                        className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                      >
+                        {codebase.name}
+                      </Link>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate font-mono">
+                        {codebase.local_path}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleUnlinkCodebase(codebase.id)}
+                      className="ml-3 p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      title="Unlink codebase"
+                      disabled={unlinkingCodebase}
+                    >
+                      <XMarkIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {/* Create Task Modal */}
@@ -330,6 +468,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         isOpen={createTaskModal.isOpen}
         onClose={createTaskModal.close}
         projectId={id!}
+      />
+
+      {/* Create Codebase Modal */}
+      <CreateCodebaseModal
+        isOpen={createCodebaseModal.isOpen}
+        onClose={createCodebaseModal.close}
+        onSuccess={handleCodebaseCreated}
       />
 
     </div>

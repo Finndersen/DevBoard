@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api'
-import type { Project } from '../lib/api'
+import type { Codebase, Project } from '../lib/api'
 import { useApi, useMutation, type UseApiOptions } from './useApi'
 
 export function useProjects() {
@@ -23,7 +23,24 @@ export function useUpdateProject() {
 }
 
 export function useDeleteProject() {
-  return useMutation((id: number | string) => 
+  return useMutation((id: number | string) =>
     apiClient.deleteProject(id)
+  )
+}
+
+// Project Codebases
+export function useProjectCodebases(projectId: number | string, options?: UseApiOptions) {
+  return useApi<Codebase[]>(() => apiClient.getProjectCodebases(projectId), options)
+}
+
+export function useLinkCodebaseToProject() {
+  return useMutation((data: { projectId: number | string; codebaseId: number | string }) =>
+    apiClient.linkCodebaseToProject(data.projectId, data.codebaseId)
+  )
+}
+
+export function useUnlinkCodebaseFromProject() {
+  return useMutation((data: { projectId: number | string; codebaseId: number | string }) =>
+    apiClient.unlinkCodebaseFromProject(data.projectId, data.codebaseId)
   )
 }

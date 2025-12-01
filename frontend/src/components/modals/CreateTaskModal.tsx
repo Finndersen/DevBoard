@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
-import { useCodebases } from '../../hooks'
+import { useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
 
 interface CreateTaskModalProps {
@@ -13,7 +13,7 @@ interface CreateTaskModalProps {
 
 export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTaskModalProps) {
   const navigate = useNavigate()
-  const { data: codebases } = useCodebases()
+  const { data: codebases, loading: codebasesLoading } = useProjectCodebases(projectId)
   const { setTask, fetchProjectTasks } = useDataStore()
 
   const [newTask, setNewTask] = useState({
@@ -154,19 +154,40 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Codebase
           </label>
-          <select
-            value={newTask.codebase_id ?? ''}
-            onChange={handleTaskCodebaseChange}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            required
-          >
-            <option value="">Select a codebase</option>
-            {codebases?.map((codebase) => (
-              <option key={codebase.id} value={codebase.id}>
-                {codebase.name}
-              </option>
-            ))}
-          </select>
+          {codebasesLoading ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading codebases...</div>
+          ) : !codebases || codebases.length === 0 ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+              <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+                No codebases are linked to this project.
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Please{' '}
+                <Link
+                  to={`/projects/${projectId}?tab=settings`}
+                  onClick={onClose}
+                  className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
+                >
+                  link a codebase in project settings
+                </Link>
+                {' '}before creating a task.
+              </p>
+            </div>
+          ) : (
+            <select
+              value={newTask.codebase_id ?? ''}
+              onChange={handleTaskCodebaseChange}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              required
+            >
+              <option value="">Select a codebase</option>
+              {codebases.map((codebase) => (
+                <option key={codebase.id} value={codebase.id}>
+                  {codebase.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Working Branch Configuration */}
@@ -229,7 +250,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             type="submit"
             variant="primary"
             loading={isCreating}
-            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating}
+            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating || !codebases || codebases.length === 0}
           >
             Create Task
           </Button>

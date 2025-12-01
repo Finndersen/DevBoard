@@ -3,9 +3,10 @@ import { PlusIcon, FolderIcon, CodeBracketIcon, TrashIcon } from '@heroicons/rea
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useProjects, useCreateProject } from '../hooks'
-import { useCodebases, useCreateCodebase, useDeleteCodebase } from '../hooks/useCodebases'
+import { useCodebases, useDeleteCodebase } from '../hooks/useCodebases'
 import type { Project, Codebase } from '../lib/api'
 import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
+import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { loadingSpinner } from '../styles/designSystem'
 
 export default function Home() {
@@ -31,14 +32,8 @@ export default function Home() {
 
   // Codebases
   const { data: codebases, loading: codebasesLoading, error: codebasesError, refetch: refetchCodebases } = useCodebases()
-  const { mutate: createCodebase, loading: creatingCodebase } = useCreateCodebase()
   const { mutate: deleteCodebase } = useDeleteCodebase()
   const [showCreateCodebaseModal, setShowCreateCodebaseModal] = useState(false)
-  const [newCodebase, setNewCodebase] = useState({
-    name: '',
-    description: '',
-    local_path: ''
-  })
 
   useEffect(() => {
     fetchProjects()
@@ -91,17 +86,9 @@ export default function Home() {
     }
   }
 
-  const handleCreateCodebase = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      await createCodebase(newCodebase)
-      await refetchCodebases()
-      await fetchCodebases()
-      setShowCreateCodebaseModal(false)
-      setNewCodebase({ name: '', description: '', local_path: '' })
-    } catch (error) {
-      console.error('Failed to create codebase:', error)
-    }
+  const handleCodebaseCreated = async () => {
+    await refetchCodebases()
+    await fetchCodebases()
   }
 
   const handleDeleteCodebase = async (codebaseId: number) => {
@@ -297,48 +284,11 @@ export default function Home() {
       </Modal>
 
       {/* Create Codebase Modal */}
-      <Modal
+      <CreateCodebaseModal
         isOpen={showCreateCodebaseModal}
         onClose={() => setShowCreateCodebaseModal(false)}
-        title="Add New Codebase"
-      >
-        <form onSubmit={handleCreateCodebase} className="space-y-4">
-          <Input
-            label="Name"
-            value={newCodebase.name}
-            onChange={(e) => setNewCodebase({ ...newCodebase, name: e.target.value })}
-            required
-            autoFocus
-          />
-          <Textarea
-            label="Description"
-            value={newCodebase.description}
-            onChange={(e) => setNewCodebase({ ...newCodebase, description: e.target.value })}
-            rows={3}
-          />
-          <Input
-            label="Local Path"
-            value={newCodebase.local_path}
-            onChange={(e) => setNewCodebase({ ...newCodebase, local_path: e.target.value })}
-            placeholder="/path/to/your/codebase"
-            required
-          />
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              onClick={() => setShowCreateCodebaseModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={creatingCodebase || !newCodebase.name || !newCodebase.local_path}
-            >
-              {creatingCodebase ? 'Adding...' : 'Add Codebase'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        onSuccess={handleCodebaseCreated}
+      />
     </div>
   )
 }

@@ -20,6 +20,7 @@ from devboard.api.dependencies.services import (
     get_task_service,
 )
 from devboard.api.schemas import (
+    CodebaseResponse,
     DeleteResponse,
     DocumentResponse,
     ProjectCreate,
@@ -400,3 +401,57 @@ async def validate_resource_uri(
             "description": None,
             "error": str(e),
         }
+
+
+# Project Codebase Endpoints
+@router.get("/{project_id}/codebases", response_model=list[CodebaseResponse])
+async def list_project_codebases(
+    project_id: int,
+    project: Project = Depends(get_verified_project),
+):
+    """List all codebases linked to a project."""
+    return project.codebases
+
+
+@router.post("/{project_id}/codebases/{codebase_id}", response_model=CodebaseResponse)
+async def link_codebase_to_project(
+    project_id: int,
+    codebase_id: int,
+    project: Project = Depends(get_verified_project),
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
+    """Link a codebase to a project."""
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    # Check if already linked
+    if codebase in project.codebases:
+        raise HTTPException(status_code=409, detail="Codebase is already linked to this project")
+
+    project.codebases.append(codebase)
+    codebase_repo.db.commit()
+    codebase_repo.db.refresh(codebase)
+
+    return codebase
+
+
+@router.delete("/{project_id}/codebases/{codebase_id}", response_model=DeleteResponse)
+async def unlink_codebase_from_project(
+    project_id: int,
+    codebase_id: int,
+    project: Project = Depends(get_verified_project),
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+):
+    """Unlink a codebase from a project."""
+    codebase = codebase_repo.get_by_id(codebase_id)
+    if not codebase:
+        raise HTTPException(status_code=404, detail="Codebase not found")
+
+    if codebase not in project.codebases:
+        raise HTTPException(status_code=404, detail="Codebase is not linked to this project")
+
+    project.codebases.remove(codebase)
+    codebase_repo.db.commit()
+
+    return {"message": "Codebase unlinked successfully", "success": True}
