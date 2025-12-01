@@ -21,11 +21,11 @@ from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
 
 
-class MockRole(Role):
+class MockAgentRole(AgentRole):
     """Mock role implementation for testing."""
 
     def __init__(self, tools: list[Tool] | None = None):
@@ -190,14 +190,14 @@ def mock_function_tool() -> Tool:
 @pytest.fixture
 def agent_with_virtual_tool(mock_model: LanguageModel, mock_virtual_tool: Tool) -> ClaudeCodeAgent:
     """Create an agent with a virtual tool."""
-    role = MockRole(tools=[mock_virtual_tool])
+    role = MockAgentRole(tools=[mock_virtual_tool])
     return ClaudeCodeAgent(role=role, model=mock_model)
 
 
 @pytest.fixture
 def agent_with_function_tool(mock_model: LanguageModel, mock_function_tool: Tool) -> ClaudeCodeAgent:
     """Create an agent with a function tool."""
-    role = MockRole(tools=[mock_function_tool])
+    role = MockAgentRole(tools=[mock_function_tool])
     return ClaudeCodeAgent(role=role, model=mock_model)
 
 
@@ -206,7 +206,7 @@ def agent_with_both_tools(
     mock_model: LanguageModel, mock_virtual_tool: Tool, mock_function_tool: Tool
 ) -> ClaudeCodeAgent:
     """Create an agent with both virtual and function tools."""
-    role = MockRole(tools=[mock_virtual_tool, mock_function_tool])
+    role = MockAgentRole(tools=[mock_virtual_tool, mock_function_tool])
     return ClaudeCodeAgent(role=role, model=mock_model)
 
 

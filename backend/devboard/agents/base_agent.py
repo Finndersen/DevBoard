@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 from devboard.agents.events import ConversationEvent
 from devboard.agents.language_models import LanguageModel
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 
 
@@ -18,7 +18,7 @@ class BaseAgent(ABC):
 
     def __init__(
         self,
-        role: Role,
+        role: AgentRole,
         model: LanguageModel | None,
     ):
         """Initialize base agent with role and model.

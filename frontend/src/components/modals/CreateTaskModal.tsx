@@ -25,6 +25,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     initial_message: ''
   })
   const [isCreating, setIsCreating] = useState(false)
+  const [autoGenerateBranch, setAutoGenerateBranch] = useState(true)
 
   // Get selected codebase for default_branch lookup
   const selectedCodebase = useMemo(() => {
@@ -44,6 +45,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         initial_message: ''
       })
       setIsCreating(false)
+      setAutoGenerateBranch(true)
     }
   }, [isOpen])
 
@@ -75,6 +77,14 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
 
   const handleInitialMessageChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNewTask(prev => ({ ...prev, initial_message: e.target.value }))
+  }, [])
+
+  const handleAutoGenerateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const isChecked = e.target.checked
+    setAutoGenerateBranch(isChecked)
+    if (isChecked) {
+      setNewTask(prev => ({ ...prev, working_branch: '' }))
+    }
   }, [])
 
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
@@ -120,7 +130,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       onClose()
       // Navigate to the newly created task, passing initial message in state
       navigate(`/tasks/${createdTask.id}`, {
-        state: initialMessage ? { initialMessage } : undefined
+        state: initialMessage ? { initialMessage, taskId: createdTask.id } : undefined
       })
     } catch (error) {
       console.error('Failed to create task:', error)
@@ -134,7 +144,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       isOpen={isOpen}
       onClose={onClose}
       title="Create New Task"
-      maxWidth="lg"
+      maxWidth="xl"
     >
       <form onSubmit={handleCreateTask} className="space-y-4">
         <div>
@@ -150,65 +160,50 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Codebase
-          </label>
-          {codebasesLoading ? (
-            <div className="text-sm text-gray-500 dark:text-gray-400">Loading codebases...</div>
-          ) : !codebases || codebases.length === 0 ? (
-            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
-              <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
-                No codebases are linked to this project.
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300">
-                Please{' '}
-                <Link
-                  to={`/projects/${projectId}?tab=settings`}
-                  onClick={onClose}
-                  className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
-                >
-                  link a codebase in project settings
-                </Link>
-                {' '}before creating a task.
-              </p>
-            </div>
-          ) : (
-            <select
-              value={newTask.codebase_id ?? ''}
-              onChange={handleTaskCodebaseChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              required
-            >
-              <option value="">Select a codebase</option>
-              {codebases.map((codebase) => (
-                <option key={codebase.id} value={codebase.id}>
-                  {codebase.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Working Branch Configuration */}
-        {newTask.codebase_id && (
-          <>
-            <div>
+        {/* Codebase and Base Branch */}
+        <div className="grid grid-cols-4 gap-4">
+          <div className="col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Working Branch (Optional)
+                Codebase
               </label>
-              <Input
-                type="text"
-                value={newTask.working_branch}
-                onChange={handleWorkingBranchChange}
-                placeholder="Leave empty to auto-generate"
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Branch name is auto-generated from task title if not specified
-              </p>
+              {codebasesLoading ? (
+                <div className="text-sm text-gray-500 dark:text-gray-400">Loading codebases...</div>
+              ) : !codebases || codebases.length === 0 ? (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                  <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+                    No codebases are linked to this project.
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Please{' '}
+                    <Link
+                      to={`/projects/${projectId}?tab=settings`}
+                      onClick={onClose}
+                      className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
+                    >
+                      link a codebase in project settings
+                    </Link>
+                    {' '}before creating a task.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  value={newTask.codebase_id ?? ''}
+                  onChange={handleTaskCodebaseChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  required
+                >
+                  <option value="">Select a codebase</option>
+                  {codebases.map((codebase) => (
+                    <option key={codebase.id} value={codebase.id}>
+                      {codebase.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            <div>
+          {newTask.codebase_id && (
+            <div className="col-span-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Base Branch
               </label>
@@ -216,13 +211,36 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                 type="text"
                 value={newTask.base_branch}
                 onChange={handleBaseBranchChange}
-                placeholder="e.g., origin/main"
+                placeholder="origin/main"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                The branch to create the working branch from (auto-populated from codebase default)
-              </p>
             </div>
-          </>
+          )}
+        </div>
+
+        {/* Working Branch Configuration */}
+        {newTask.codebase_id && (
+          <div>
+            <div className="flex items-center mb-2">
+              <input
+                type="checkbox"
+                id="auto-generate-branch"
+                checked={autoGenerateBranch}
+                onChange={handleAutoGenerateChange}
+                className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="auto-generate-branch" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Auto-generate working branch
+              </label>
+            </div>
+            {!autoGenerateBranch && (
+              <Input
+                type="text"
+                value={newTask.working_branch}
+                onChange={handleWorkingBranchChange}
+                placeholder="custom-branch-name"
+              />
+            )}
+          </div>
         )}
 
         <div>

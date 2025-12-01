@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 import logfire
 
 from devboard.agents.events import ConversationEvent
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
@@ -36,7 +36,7 @@ class BaseAgentConversationService(ABC):
     def __init__(
         self,
         conversation: Conversation,
-        role: Role,
+        role: AgentRole,
         conversation_repository: ConversationRepository,
     ):
         """Initialize the conversation service with a conversation instance.

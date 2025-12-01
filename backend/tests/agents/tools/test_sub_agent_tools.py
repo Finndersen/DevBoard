@@ -10,8 +10,11 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
     create_multi_codebase_investigation_tool,
+    create_task_codebase_investigation_tool,
 )
 from devboard.db.models.codebase import Codebase
+from devboard.db.models.project import Project
+from devboard.db.models.task import Task
 
 
 @pytest.fixture
@@ -136,3 +139,82 @@ class TestCreateCodebaseInvestigationTool:
         # Check parameter annotations
         assert params["query"].annotation is str
         assert params["codebase_name"].annotation is not str  # Should be Literal type
+
+
+class TestCreateTaskCodebaseInvestigationTool:
+    """Tests for create_task_codebase_investigation_tool."""
+
+    @pytest.fixture
+    def task_with_single_project_codebase(self, mock_codebases):
+        """Create a mock task with a project that has only the task's codebase."""
+        task_codebase = mock_codebases[0].codebase
+
+        project = Mock(spec=Project)
+        project.codebases = [task_codebase]
+
+        task = Mock(spec=Task)
+        task.codebase = task_codebase
+        task.codebase_id = task_codebase.id
+        task.project = project
+        task.get_current_workspace_dir.return_value = "/worktree/task-1"
+
+        return task
+
+    @pytest.fixture
+    def task_with_multiple_project_codebases(self, mock_codebases):
+        """Create a mock task with a project that has multiple codebases."""
+        task_codebase = mock_codebases[0].codebase
+        other_codebase = mock_codebases[1].codebase
+
+        project = Mock(spec=Project)
+        project.codebases = [task_codebase, other_codebase]
+
+        task = Mock(spec=Task)
+        task.codebase = task_codebase
+        task.codebase_id = task_codebase.id
+        task.project = project
+        task.get_current_workspace_dir.return_value = "/worktree/task-1"
+
+        return task
+
+    def test_tool_creation_with_single_project_codebase(
+        self, task_with_single_project_codebase, mock_agent_config_service
+    ):
+        """Test tool is created correctly when project has only task's codebase."""
+        tool = create_task_codebase_investigation_tool(
+            task_with_single_project_codebase,
+            mock_agent_config_service,
+        )
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "investigate_codebase"
+
+        # Should only have the task's codebase
+        codebase_name_type = tool.function.__annotations__["codebase_name"]
+        assert codebase_name_type.__args__ == ("backend",)
+
+    def test_tool_creation_with_multiple_project_codebases(
+        self, task_with_multiple_project_codebases, mock_agent_config_service
+    ):
+        """Test tool includes all project codebases."""
+        tool = create_task_codebase_investigation_tool(
+            task_with_multiple_project_codebases,
+            mock_agent_config_service,
+        )
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "investigate_codebase"
+
+        # Should have both codebases
+        codebase_name_type = tool.function.__annotations__["codebase_name"]
+        assert set(codebase_name_type.__args__) == {"backend", "frontend"}
+
+    def test_task_codebase_uses_worktree_directory(
+        self, task_with_multiple_project_codebases, mock_agent_config_service
+    ):
+        """Test that task's codebase uses worktree directory, not local_path."""
+        task = task_with_multiple_project_codebases
+
+        # Verify worktree is called during tool creation
+        create_task_codebase_investigation_tool(task, mock_agent_config_service)
+        task.get_current_workspace_dir.assert_called_once()

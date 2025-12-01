@@ -2,7 +2,7 @@ from fastapi import Depends
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.roles import Role
+from devboard.agents.roles import AgentRole
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.factories import create_agent_conversation_service, create_agent_role_for_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository, get_document_repository
@@ -15,7 +15,7 @@ def get_agent_role_for_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
     document_repo: DocumentRepository = Depends(get_document_repository),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
-) -> Role:
+) -> AgentRole:
     """Get agent role for a conversation.
 
     FastAPI dependency that creates the appropriate role based on the conversation's
@@ -38,7 +38,7 @@ def get_agent_role_for_conversation(
 def get_agent_conversation_service(
     conversation: Conversation = Depends(get_verified_conversation),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-    role: Role = Depends(get_agent_role_for_conversation),
+    role: AgentRole = Depends(get_agent_role_for_conversation),
 ) -> BaseAgentConversationService:
     """Get conversation service instance.
 

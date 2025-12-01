@@ -12,15 +12,12 @@ from pydantic_ai.messages import (
     ToolCallPart,
     UserPromptPart,
 )
-from pydantic_ai.tools import (
-    ToolFuncEither,
-)
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
-from devboard.agents.roles import AgentRoleType, Role
+from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.api.schemas.agent_conversation import (
     ToolApprovalDecision,
 )
@@ -28,13 +25,13 @@ from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories.conversation import ConversationRepository
 
 
-class MockRole(Role):
+class MockAgentRole(AgentRole):
     """Mock role for testing."""
 
     def get_system_prompt(self) -> str:
         return "Test system prompt"
 
-    def get_tools(self) -> list[Tool | ToolFuncEither]:
+    def get_tools(self) -> list[Tool]:
         return []
 
     async def get_context_content(self) -> str:
@@ -47,7 +44,7 @@ class TestPydanticAIConversationService:
     @pytest.fixture
     def mock_role(self):
         """Create mock role."""
-        return MockRole()
+        return MockAgentRole()
 
     @pytest.fixture
     def conversation(self, db_session: Session) -> Conversation:

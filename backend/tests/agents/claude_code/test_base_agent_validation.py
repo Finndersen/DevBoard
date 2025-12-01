@@ -13,7 +13,7 @@ from devboard.agents.engines.claude_code.agent import (
 )
 from devboard.agents.events import MessageRole, TextMessage, ToolCallRequest
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 
 
 def create_mock_result(text_content: str, session_id: str = "test-session") -> ResultMessage:
@@ -24,7 +24,7 @@ def create_mock_result(text_content: str, session_id: str = "test-session") -> R
     return mock_result_message
 
 
-class MockRole(Role):
+class MockAgentRole(AgentRole):
     """Mock role implementation for testing."""
 
     def __init__(self, tools=None):
@@ -60,7 +60,7 @@ def test_agent(mock_edit_tool):
         type=ModelType.REASONING,
         full_name="claude-sonnet-4-20250514",
     )
-    role = MockRole(tools=[mock_edit_tool])
+    role = MockAgentRole(tools=[mock_edit_tool])
     return ClaudeCodeAgent(role=role, model=model)
 
 

@@ -22,9 +22,8 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
     """
 
     KEY = "task.create_implementation_plan"
-    PROMPT_TEMPLATE = (
-        "The task specification is complete. Your goal is now to create a detailed technical implementation plan."
-    )
+
+    PROMPT = "Proceed with creating a detailed technical implementation plan for the task, following your behaviour guidelines"
 
     @property
     def key(self) -> str:
@@ -92,7 +91,7 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
 
         agent_event_stream = self.workspace_allocation_service.run_task_agent_in_workspace(
             task=self.task,
-            agent_stream=agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT_TEMPLATE),
+            agent_stream=agent_conversation_service.stream_events_for_message_or_approval(self.PROMPT),
         )
 
         # Stream agent prompt events

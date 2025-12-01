@@ -1,6 +1,6 @@
 from pydantic_ai import Tool
 
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
@@ -37,6 +37,7 @@ IMPORTANT:
 - Always provide clear reasoning for changes
 - Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
+- when creating commits, DO NOT add Claude Code attribution messages
 """
 
 
@@ -73,7 +74,7 @@ IMPLEMENTATION PLAN:
 """
 
 
-class TaskImplementationRole(Role):
+class TaskImplementationAgentRole(AgentRole):
     """Role for task implementation in a codebase."""
 
     def __init__(self, task: Task, document_repository: DocumentRepository):

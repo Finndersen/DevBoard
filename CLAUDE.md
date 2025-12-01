@@ -60,5 +60,5 @@ We are working to develop an application as described in @docs/INDEX.md
 ## Testing
 - **Framework**: Vitest + React Testing Library + MSW (API mocking)
 - **Structure**: Colocated tests in `__tests__/` directories
-- **Command**: Use `npm run test *`, NOT `timeout XXX npm run test *`
+- **Command**: Use `pnpm test *`, NOT `timeout XXX pnpm test *`
 - **Patterns**: User-centric queries, renderHook for custom hooks, MSW for API mocking

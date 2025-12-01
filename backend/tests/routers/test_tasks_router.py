@@ -12,7 +12,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.roles.task_planning import TaskPlanningRole
+from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -76,7 +76,7 @@ def mock_agent_conversation_service_for_workflow(mock_agent, db_session, mock_ag
 
     def _create_service(conversation, task, document_repo):
         # Create role for the service
-        role = TaskPlanningRole(
+        role = TaskPlanningAgentRole(
             task=task,
             document_repository=document_repo,
             agent_config_service=mock_agent_config_service,

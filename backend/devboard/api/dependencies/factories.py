@@ -5,11 +5,11 @@ from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.agent_conversation import ClaudeCodeConversationService
 from devboard.agents.engines.internal import PydanticAIConversationService
-from devboard.agents.roles import AgentRoleType, Role
-from devboard.agents.roles.project_qa import ProjectQARole
-from devboard.agents.roles.task_implementation import TaskImplementationRole
-from devboard.agents.roles.task_planning import TaskPlanningRole
-from devboard.agents.roles.task_specification import TaskSpecificationRole
+from devboard.agents.roles import AgentRole, AgentRoleType
+from devboard.agents.roles.project_qa import ProjectQAAgentRole
+from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
+from devboard.agents.roles.task_planning import TaskPlanningAgentRole
+from devboard.agents.roles.task_specification import TaskSpecificationAgentRole
 from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 
@@ -18,7 +18,7 @@ def create_agent_role_for_conversation(
     conversation: Conversation,
     document_repo: DocumentRepository,
     agent_config_service: AgentConfigService,
-) -> Role:
+) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
     Non-dependency helper that can be called directly from any context.
@@ -39,19 +39,19 @@ def create_agent_role_for_conversation(
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
         if conversation.agent_role == AgentRoleType.TASK_SPECIFICATION:
-            return TaskSpecificationRole(
+            return TaskSpecificationAgentRole(
                 task=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PLANNING:
-            return TaskPlanningRole(
+            return TaskPlanningAgentRole(
                 task=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
-            return TaskImplementationRole(task=parent_entity, document_repository=document_repo)
+            return TaskImplementationAgentRole(task=parent_entity, document_repository=document_repo)
         else:
             raise HTTPException(
                 status_code=400,
@@ -60,7 +60,7 @@ def create_agent_role_for_conversation(
     else:
         # Must be a project
         if conversation.agent_role == AgentRoleType.PROJECT:
-            return ProjectQARole(
+            return ProjectQAAgentRole(
                 project=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
@@ -74,7 +74,7 @@ def create_agent_role_for_conversation(
 
 def create_agent_conversation_service(
     conversation: Conversation,
-    role: Role,
+    role: AgentRole,
     conversation_repo: ConversationRepository,
 ) -> BaseAgentConversationService:
     """Create the appropriate service based on engine type.

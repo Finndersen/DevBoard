@@ -12,7 +12,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIConversationService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.roles.project_qa import ProjectQARole
+from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.api.dependencies.conversations import get_agent_conversation_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
@@ -30,7 +30,7 @@ def mock_agent_conversation_service(
     document_repo = DocumentRepository(db_session)
 
     # Create role for the service
-    role = ProjectQARole(
+    role = ProjectQAAgentRole(
         project=test_project,
         document_repository=document_repo,
         agent_config_service=mock_agent_config_service,

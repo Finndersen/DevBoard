@@ -13,7 +13,7 @@ Local development environment setup for DevBoard.
 - **Python 3.12+**: Backend development
 - **Node.js 18 LTS+**: Frontend development
 - **uv**: Python package installer (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- **npm**: Included with Node.js
+- **pnpm**: Install via `npm install -g pnpm` or `brew install pnpm`
 
 **Optional**:
 - **Git**: Version control (for cloning)
@@ -75,7 +75,7 @@ SLACK_BOT_TOKEN=your_token
 cd frontend
 
 # Install dependencies
-npm install
+pnpm install
 
 # Create .env file
 cp .env.example .env
@@ -98,7 +98,7 @@ API docs: `http://localhost:8000/docs`
 
 ```bash
 cd frontend
-npm run dev
+pnpm dev
 ```
 
 Frontend available at: `http://localhost:5173`
@@ -109,7 +109,7 @@ Frontend available at: `http://localhost:5173`
 2. **Check Frontend**: Visit `http://localhost:5173`
 3. **Run Tests**:
    - Backend: `cd backend && pytest`
-   - Frontend: `cd frontend && npm test`
+   - Frontend: `cd frontend && pnpm test`
 
 ## Development Workflow
 
@@ -118,7 +118,7 @@ Frontend available at: `http://localhost:5173`
 3. **Run Tests**: Run relevant tests before committing
 4. **Linting**:
    - Backend: `ruff check . && ruff format .`
-   - Frontend: `npm run lint`
+   - Frontend: `pnpm lint`
 
 ## Common Issues
 
@@ -129,7 +129,7 @@ Frontend available at: `http://localhost:5173`
 
 **Frontend won't start**:
 - Check Node version: `node --version` (must be 18+)
-- Delete `node_modules` and run `npm install` again
+- Delete `node_modules` and run `pnpm install` again
 - Check for port conflicts (default: 5173)
 
 **Database errors**:

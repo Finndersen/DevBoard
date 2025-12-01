@@ -37,7 +37,7 @@ git push origin feature/your-feature-name
 
 ### TypeScript/React (Frontend)
 
-**Linting**: ESLint (`npm run lint`)
+**Linting**: ESLint (`pnpm lint`)
 **Type Safety**: TypeScript strict mode with comprehensive definitions
 **Component Naming**: PascalCase
 **Hooks Best Practices**: Complete dependency arrays, custom hooks start with "use"
@@ -63,7 +63,7 @@ git push origin feature/your-feature-name
 **Testing Library**: React Testing Library with user-centric queries
 **Coverage**: 75%+ on new code
 **Naming**: Descriptive test descriptions
-**Run**: `npm test`
+**Run**: `pnpm test`
 
 ## Commit Guidelines
 
@@ -101,9 +101,9 @@ Fixes #123
 ### Before Creating PR
 
 1. Update from main: `git rebase master`
-2. Run tests: `pytest` (backend), `npm test` (frontend)
-3. Run linters: `ruff check .` (backend), `npm run lint` (frontend)
-4. Type check: `pyright` (backend), `npm run type-check` (frontend)
+2. Run tests: `pytest` (backend), `pnpm test` (frontend)
+3. Run linters: `ruff check .` (backend), `pnpm lint` (frontend)
+4. Type check: `pyright` (backend), `pnpm type-check` (frontend)
 
 ### Creating PR
 

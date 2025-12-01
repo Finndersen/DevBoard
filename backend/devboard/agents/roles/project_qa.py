@@ -3,7 +3,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.db.models import Project
@@ -65,7 +65,7 @@ PROJECT SPECIFICATION DOCUMENT:
     return context
 
 
-class ProjectQARole(Role):
+class ProjectQAAgentRole(AgentRole):
     """Role for project Q&A and specification management."""
 
     def __init__(

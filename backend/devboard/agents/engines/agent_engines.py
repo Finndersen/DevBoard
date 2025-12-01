@@ -34,8 +34,6 @@ class AgentEngineDefinition:
         description: Brief description of the engine's purpose
         available_provider: Single LLM provider this engine supports (None = all configured providers)
         requires_model_selection: Whether engine requires explicit model selection (False = can use engine default)
-        supports_tool_approval: Whether engine requires explicit tool approval
-        stores_messages_in_db: Whether messages are stored in database vs external
     """
 
     engine: AgentEngine

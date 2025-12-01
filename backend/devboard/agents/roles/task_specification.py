@@ -1,7 +1,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_document_edit_tool,
     create_set_document_content_tool,
@@ -89,7 +89,7 @@ RELEVANT CODEBASE:
     return context
 
 
-class TaskSpecificationRole(Role):
+class TaskSpecificationAgentRole(AgentRole):
     """Role for task specification creation and management."""
 
     def __init__(

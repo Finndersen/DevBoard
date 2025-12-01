@@ -17,6 +17,7 @@ from devboard.api.dependencies.services import (
     get_context_assembly_service,
     get_project_service,
     get_resource_service,
+    get_task_git_service,
     get_task_service,
 )
 from devboard.api.schemas import (
@@ -51,6 +52,7 @@ from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 router = APIRouter()
@@ -203,6 +205,7 @@ async def create_project_task(
     project_id: int,
     task: TaskCreateNested,
     task_service: TaskService = Depends(get_task_service),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
@@ -232,8 +235,8 @@ async def create_project_task(
     )
 
     # Create git branch immediately to ensure consistent codebase view during planning
-    # This uses TaskGitService which will auto-generate branch name if not provided
-    await task_service.task_git_service.ensure_task_branch(created_task)
+    # Branch name will be auto-generated if not provided
+    await task_git_service.ensure_task_branch(created_task)
 
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found

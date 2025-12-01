@@ -46,22 +46,22 @@ src/
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm or yarn package manager
+- Node.js 18+
+- pnpm package manager
 - DevBoard backend running on `http://localhost:8000`
 
 ### Installation
 
 Install dependencies:
 ```bash
-npm install
+pnpm install
 ```
 
 ### Running the Application
 
 Start the development server:
 ```bash
-npm run dev
+pnpm dev
 ```
 
 The application will be available at `http://localhost:5173` with hot reload enabled.
@@ -70,12 +70,12 @@ The application will be available at `http://localhost:5173` with hot reload ena
 
 Build the application:
 ```bash
-npm run build
+pnpm build
 ```
 
 Preview the production build:
 ```bash
-npm run preview
+pnpm preview
 ```
 
 ## Configuration
@@ -157,8 +157,8 @@ All components and API interactions are fully typed with TypeScript:
 
 ## Available Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
-- `npm run type-check` - Run TypeScript compiler check
+- `pnpm dev` - Start development server
+- `pnpm build` - Build for production
+- `pnpm preview` - Preview production build
+- `pnpm lint` - Run ESLint
+- `pnpm type-check` - Run TypeScript compiler check

@@ -6,10 +6,10 @@ from pydantic_ai.tools import ToolFuncEither
 
 from devboard.agents.engines.internal import InternalAgent
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 
 
-class MockRole(Role):
+class MockAgentRole(AgentRole):
     """Mock role for testing."""
 
     def get_system_prompt(self) -> str:
@@ -28,7 +28,7 @@ class TestInternalAgent:
     @pytest.fixture
     def mock_role(self):
         """Create mock role."""
-        return MockRole()
+        return MockAgentRole()
 
     @pytest.fixture
     def mock_model(self):

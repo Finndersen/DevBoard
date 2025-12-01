@@ -34,17 +34,24 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Check for initial message from navigation state on mount
   useEffect(() => {
     // Only process once per navigation and only if we have task data
-    if (!initialMessageProcessedRef.current && location.state?.initialMessage && task?.conversation_id) {
+    // Validate that the message is for THIS specific task (prevents bug where mounted components from other tabs consume the message)
+    if (
+      !initialMessageProcessedRef.current &&
+      location.state?.initialMessage &&
+      location.state?.taskId === parseInt(id) &&
+      task?.conversation_id
+    ) {
       setPendingInitialMessage(location.state.initialMessage)
       initialMessageProcessedRef.current = true
       // Clear the navigation state to prevent re-sending on refresh
       navigate(location.pathname, { replace: true, state: {} })
     }
-  }, [location.state?.initialMessage, task?.conversation_id, navigate, location.pathname])
+  }, [location.state?.initialMessage, location.state?.taskId, task?.conversation_id, navigate, location.pathname, id])
 
-  // Reset the ref when the task ID changes (navigating to different task)
+  // Clear pending initial message when the task ID changes (navigating to different task)
+  // Note: We don't reset initialMessageProcessedRef here to prevent mounted components
+  // from consuming initial messages meant for other tasks
   useEffect(() => {
-    initialMessageProcessedRef.current = false
     setPendingInitialMessage(null)
   }, [id])
 

@@ -39,7 +39,7 @@ from devboard.agents.events import (
     ToolResult,
 )
 from devboard.agents.language_models import LanguageModel
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
@@ -55,7 +55,7 @@ class InternalAgent(BaseAgent):
 
     def __init__(
         self,
-        role: Role,
+        role: AgentRole,
         model: LanguageModel,
         conversation_history: list[ModelMessage] | None = None,
     ):

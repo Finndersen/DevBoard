@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
+from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models.codebase import Codebase
 
 
@@ -44,7 +44,7 @@ class TestCodebaseInvestigationRole:
 
     def test_role_initialization(self, mock_codebase):
         """Test role initializes with correct parameters."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         assert role._codebase == mock_codebase
         assert role._codebase_integration is not None
@@ -52,7 +52,7 @@ class TestCodebaseInvestigationRole:
 
     def test_system_prompt(self, mock_codebase):
         """Test role has appropriate system prompt."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         prompt = role.get_system_prompt()
         assert "Codebase Investigation Specialist" in prompt
@@ -61,7 +61,7 @@ class TestCodebaseInvestigationRole:
 
     def test_get_tools(self, mock_codebase):
         """Test role provides codebase analysis tools."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         tools = role.get_tools()
 
@@ -77,7 +77,7 @@ class TestCodebaseInvestigationRole:
     @pytest.mark.asyncio
     async def test_context_content_includes_codebase_info(self, mock_codebase):
         """Test context content includes codebase information."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         content = await role.get_context_content()
 
@@ -88,7 +88,7 @@ class TestCodebaseInvestigationRole:
     @pytest.mark.asyncio
     async def test_context_includes_directory_tree(self, mock_codebase):
         """Test context content includes directory tree."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         content = await role.get_context_content()
 
@@ -97,7 +97,7 @@ class TestCodebaseInvestigationRole:
     @pytest.mark.asyncio
     async def test_context_includes_docs_index(self, mock_codebase):
         """Test context content includes docs/INDEX.md when it exists."""
-        role = CodebaseInvestigationRole(codebase=mock_codebase)
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
 
         content = await role.get_context_content()
 
@@ -116,7 +116,7 @@ class TestCodebaseInvestigationRole:
         codebase.description = "No docs"
         codebase.local_path = str(codebase_path)
 
-        role = CodebaseInvestigationRole(codebase=codebase)
+        role = CodebaseInvestigationAgentRole(codebase=codebase)
 
         # Should not raise an error even without docs/INDEX.md
         content = await role.get_context_content()

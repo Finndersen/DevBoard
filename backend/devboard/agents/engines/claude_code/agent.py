@@ -40,7 +40,7 @@ from devboard.agents.events import (
     ToolResult,
 )
 from devboard.agents.language_models import LanguageModel, LLMProvider
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
@@ -77,7 +77,7 @@ class ClaudeCodeAgent(BaseAgent):
 
     def __init__(
         self,
-        role: Role,
+        role: AgentRole,
         model: LanguageModel | None,
         session_id: str | None = None,
         working_dir: str | None = None,

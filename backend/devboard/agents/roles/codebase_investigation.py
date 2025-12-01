@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic_ai import Tool
 
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
@@ -65,7 +65,7 @@ RESPONSE STRUCTURE BY QUERY TYPE:
 """
 
 
-class CodebaseInvestigationRole(Role):
+class CodebaseInvestigationAgentRole(AgentRole):
     """Role for investigating codebases and answering implementation questions.
 
     This role is stateless and reusable - the investigation query is passed to agent.run()
@@ -77,6 +77,7 @@ class CodebaseInvestigationRole(Role):
 
         Args:
             codebase: Codebase model instance containing name, description, and local_path
+            worktree_dir: Optional worktree directory for codebase (defaults to codebase.local_path)
         """
         self._codebase = codebase
         self._working_dir = worktree_dir or codebase.local_path
@@ -111,9 +112,9 @@ class CodebaseInvestigationRole(Role):
 
         base_context = f"""
 CODEBASE INFORMATION:
-- Name: {self._codebase.name or "N/A"}
+- Name: {self._codebase.name}
 - Path: {self._working_dir}
-- Description: {self._codebase.description or "N/A"}
+- Description: {self._codebase.description}
 
 DIRECTORY STRUCTURE (depth=3):
 ```

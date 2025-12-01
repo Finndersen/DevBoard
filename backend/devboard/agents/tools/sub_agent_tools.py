@@ -7,7 +7,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.roles.codebase_investigation import CodebaseInvestigationRole
+from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 
@@ -90,8 +90,8 @@ def create_multi_codebase_investigation_tool(
 
         language_model = agent_config_service.llm_registry.get(config.model_id) if config.model_id else None
 
-        # Create investigation role with selected codebase (role is stateless and reusable)
-        investigation_role = CodebaseInvestigationRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
+        # Create investigation role with selected codebase
+        investigation_role = CodebaseInvestigationAgentRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
 
         # Create and run investigation agent
         if config.engine == AgentEngine.INTERNAL:
@@ -146,8 +146,30 @@ def create_task_codebase_investigation_tool(
     task: Task,
     agent_config_service: AgentConfigService,
 ) -> Tool:
-    """Create a codebase investigation tool for a specific task."""
-    return create_multi_codebase_investigation_tool(
-        [CodebaseInvestigationContext(codebase=task.codebase, working_dir=task.get_current_workspace_dir())],
-        agent_config_service,
+    """Create a codebase investigation tool for a task.
+
+    Includes all codebases from the task's project:
+    - Task's assigned codebase uses the task's worktree directory
+    - Other project codebases use their main local_path
+    """
+    codebase_contexts: list[CodebaseInvestigationContext] = []
+
+    # Task's own codebase uses worktree
+    codebase_contexts.append(
+        CodebaseInvestigationContext(
+            codebase=task.codebase,
+            working_dir=task.get_current_workspace_dir(),
+        )
     )
+
+    # Add other project codebases using their local_path
+    for codebase in task.project.codebases:
+        if codebase.id != task.codebase_id:
+            codebase_contexts.append(
+                CodebaseInvestigationContext(
+                    codebase=codebase,
+                    working_dir=codebase.local_path,
+                )
+            )
+
+    return create_multi_codebase_investigation_tool(codebase_contexts, agent_config_service)

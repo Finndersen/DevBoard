@@ -6,8 +6,8 @@ import pytest
 from pydantic_ai.exceptions import ModelRetry
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.task_planning import TaskPlanningRole
-from devboard.agents.roles.task_specification import TaskSpecificationRole
+from devboard.agents.roles.task_planning import TaskPlanningAgentRole
+from devboard.agents.roles.task_specification import TaskSpecificationAgentRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Document
@@ -46,7 +46,7 @@ class TestTaskSpecificationRole:
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service):
         """Create TaskSpecificationRole instance."""
-        return TaskSpecificationRole(
+        return TaskSpecificationAgentRole(
             task=mock_task,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
@@ -115,7 +115,7 @@ class TestTaskPlanningRole:
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service):
         """Create TaskPlanningRole instance."""
-        return TaskPlanningRole(
+        return TaskPlanningAgentRole(
             task=mock_task,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
@@ -409,7 +409,7 @@ class TestRoleToolSelection:
         self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service
     ):
         """Test TaskSpecificationRole provides set_content and investigation tool for empty documents."""
-        role = TaskSpecificationRole(
+        role = TaskSpecificationAgentRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
@@ -425,7 +425,7 @@ class TestRoleToolSelection:
         self, mock_task_with_content, mock_document_repo, mock_agent_config_service
     ):
         """Test TaskSpecificationRole provides document tools and investigation tool when document has content."""
-        role = TaskSpecificationRole(
+        role = TaskSpecificationAgentRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
@@ -442,7 +442,7 @@ class TestRoleToolSelection:
         self, mock_task_with_blank_spec, mock_document_repo
     ):
         """Test TaskPlanningRole provides set_content for plan, edit for specification, and investigation tool."""
-        role = TaskPlanningRole(
+        role = TaskPlanningAgentRole(
             task=mock_task_with_blank_spec,
             document_repository=mock_document_repo,
         )
@@ -458,7 +458,7 @@ class TestRoleToolSelection:
         self, mock_task_with_content, mock_document_repo
     ):
         """Test TaskPlanningRole provides all tools when documents have content."""
-        role = TaskPlanningRole(
+        role = TaskPlanningAgentRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
         )

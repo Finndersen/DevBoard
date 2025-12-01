@@ -55,16 +55,16 @@ pytest tests/test_repositories.py::test_create_project
 cd frontend
 
 # All tests
-npm test
+pnpm test
 
 # With coverage
-npm run test:coverage
+pnpm test:coverage
 
 # Watch mode
-npm run test:watch
+pnpm test:watch
 
 # UI mode
-npm run test:ui
+pnpm test:ui
 ```
 
 ### Test Categories

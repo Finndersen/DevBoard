@@ -9,7 +9,8 @@ import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers
  * State for an active conversation stream.
  */
 export interface StreamState {
-  conversationId: number
+  /** Mutable reference to conversation ID - allows closures to see updates after migration */
+  conversationIdRef: { current: number }
   messages: ConversationEvent[]
   isStreaming: boolean
   error: Error | null
@@ -200,6 +201,9 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Create abort controller for this stream
       const abortController = new AbortController()
 
+      // Create mutable ref for conversation ID - allows closures to see updates after migration
+      const conversationIdRef = { current: conversationId }
+
       // Store event handler registry in separate map (not in Zustand state)
       if (eventHandlerRegistry) {
         eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
@@ -208,7 +212,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Initialize stream state with any initial messages (e.g., user message)
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          conversationId,
+          conversationIdRef,
           messages: initialMessages ?? [],
           isStreaming: true,
           error: null,
@@ -220,20 +224,20 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
       try {
         // Process the provided stream events and collect tool requests
-        // Use registry from separate map so it can be updated during streaming
+        // Use conversationIdRef.current so closures see the current ID (may change during migration)
         const { toolRequests } = await processConversationStream({
           stream,
           onEvent: (event) => {
-            // Add event to store
-            get().addEvent(conversationId, event)
+            // Add event to store using ref.current (updated by migrateStream)
+            get().addEvent(conversationIdRef.current, event)
           },
-          eventHandlerRegistry: eventHandlerRegistries.get(conversationId)
+          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current)
         })
 
         // Store tool requests if any
         if (toolRequests.length > 0) {
           set((draft) => {
-            const streamState = draft.activeStreams.get(conversationId)
+            const streamState = draft.activeStreams.get(conversationIdRef.current)
             if (streamState) {
               streamState.pendingToolRequests = toolRequests
             }
@@ -241,12 +245,12 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         }
 
         // Stream completed successfully
-        get().completeStream(conversationId)
+        get().completeStream(conversationIdRef.current)
       } catch (error) {
         // Handle stream errors (ignore abort errors)
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Stream error:', error)
-          get().setError(conversationId, error)
+          get().setError(conversationIdRef.current, error)
         }
       }
     },
@@ -355,6 +359,9 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Get existing messages to preserve conversation history
       const existingMessages = existingStream?.messages ?? initialMessages ?? []
 
+      // Reuse existing ref if available, otherwise create new one
+      const conversationIdRef = existingStream?.conversationIdRef ?? { current: conversationId }
+
       // Store event handler registry in separate map (not in Zustand state)
       if (eventHandlerRegistry) {
         eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
@@ -366,7 +373,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Create or update stream state for the approval
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          conversationId,
+          conversationIdRef,
           messages: existingMessages,
           isStreaming: true,
           error: null,
@@ -379,25 +386,25 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       try {
         // Send approval to backend and start new stream with abort signal
         const approvalStream = apiClient.streamApproveConversationTools(
-          conversationId,
+          conversationIdRef.current,
           { approvals } as ToolApprovalRequest,
           abortController.signal
         )
 
         // Process stream events and collect any new tool requests
-        // Use registry from separate map so it can be updated during streaming
+        // Use conversationIdRef.current so closures see the current ID (may change during migration)
         const { toolRequests } = await processConversationStream({
           stream: approvalStream,
           onEvent: (event) => {
-            get().addEvent(conversationId, event)
+            get().addEvent(conversationIdRef.current, event)
           },
-          eventHandlerRegistry: eventHandlerRegistries.get(conversationId)
+          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current)
         })
 
         // Store new tool requests if any
         if (toolRequests.length > 0) {
           set((draft) => {
-            const streamState = draft.activeStreams.get(conversationId)
+            const streamState = draft.activeStreams.get(conversationIdRef.current)
             if (streamState) {
               streamState.pendingToolRequests = toolRequests
             }
@@ -405,11 +412,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         }
 
         // Stream completed
-        get().completeStream(conversationId)
+        get().completeStream(conversationIdRef.current)
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Approval stream error:', error)
-          get().setError(conversationId, error)
+          get().setError(conversationIdRef.current, error)
         }
       }
     },
@@ -457,13 +464,15 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       const stream = get().activeStreams.get(oldConversationId)
       if (stream) {
         set((draft) => {
-          // Remove from old conversation ID
-          draft.activeStreams.delete(oldConversationId)
-          // Add to new conversation ID with updated conversationId field
-          draft.activeStreams.set(newConversationId, {
-            ...stream,
-            conversationId: newConversationId
-          })
+          const draftStream = draft.activeStreams.get(oldConversationId)
+          if (draftStream) {
+            // Update the mutable ref inside the draft context
+            draftStream.conversationIdRef.current = newConversationId
+            // Remove from old conversation ID
+            draft.activeStreams.delete(oldConversationId)
+            // Add to new conversation ID
+            draft.activeStreams.set(newConversationId, draftStream)
+          }
         })
 
         // Migrate event handler registry as well

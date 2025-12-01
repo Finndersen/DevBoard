@@ -1,10 +1,6 @@
 """Pydantic schemas package."""
 
 from .codebase import (
-    ArchitectureDocumentResponse,
-    ArchitectureGenerationResponse,
-    ArchitectureUpdateRequest,
-    ArchitectureUpdateResponse,
     CodebaseBase,
     CodebaseCreate,
     CodebaseResponse,
@@ -64,10 +60,6 @@ from .worktree import (
 
 __all__ = [
     # Codebase
-    "ArchitectureDocumentResponse",
-    "ArchitectureGenerationResponse",
-    "ArchitectureUpdateRequest",
-    "ArchitectureUpdateResponse",
     "CodebaseBase",
     "CodebaseCreate",
     "CodebaseResponse",

@@ -20,7 +20,7 @@ from devboard.agents.engines.claude_code.session import (
 )
 from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
 from devboard.agents.language_models import llm_registry
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
@@ -43,7 +43,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
     def __init__(
         self,
         conversation: Conversation,
-        role: Role,
+        role: AgentRole,
         conversation_repository: ConversationRepository,
         codebase_path: str | None = None,
     ):

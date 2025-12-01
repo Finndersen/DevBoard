@@ -27,7 +27,7 @@ Development workflow, code standards, pull request process, and contribution gui
 - **Python 3.12+**: Backend development
 - **Node.js (LTS)**: Frontend development
 - **uv**: Python package installer
-- **npm**: Node.js package manager
+- **pnpm**: Node.js package manager
 
 ### Setup Commands
 
@@ -42,8 +42,8 @@ uv run uvicorn devboard.api.main:app --reload # Start server
 **Frontend**:
 ```bash
 cd frontend
-npm install               # Install dependencies
-npm run dev              # Start dev server
+pnpm install              # Install dependencies
+pnpm dev                  # Start dev server
 ```
 
 See [Getting Started](./getting-started.md) for detailed instructions.

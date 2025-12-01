@@ -90,10 +90,11 @@ class TaskGitService:
 
         Format: devboard/task-{id}-{slug}
         """
-        # Create slug from title (lowercase, alphanumeric + hyphens only, max 30 chars)
-        slug = re.sub(r"[^a-z0-9]+", "-", task.title.lower()).strip("-")[:30]
-        # TODO: Make this a configurable template
-        return f"devboard/task-{task.id}-{slug}"
+        # Create slug from title (lowercase, alphanumeric + hyphens only, max 40 chars)
+        slug = re.sub(r"[^a-z0-9]+", "-", task.title.lower()).strip("-")[:40]
+        # TODO: Make this a configurable template on a per-codebase basis?
+        # return f"devboard/task-{task.id}-{slug}"
+        return slug
 
     async def get_task_commit_metadata(self, task: Task) -> list[GitLogEntry]:
         """Get lightweight commit metadata for a task branch.

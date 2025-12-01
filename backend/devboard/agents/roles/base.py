@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from pydantic_ai import Tool
 
 
-class Role(ABC):
+class AgentRole(ABC):
     """Abstract base class defining agent behavior independent of execution engine.
 
     Roles encapsulate:

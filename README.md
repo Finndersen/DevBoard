@@ -95,8 +95,8 @@ DevBoard implements a **local client-server architecture** optimized for develop
 3. **Frontend Setup**:
    ```bash
    cd frontend
-   npm install       # Install dependencies
-   npm run dev       # Start development server
+   pnpm install      # Install dependencies
+   pnpm dev          # Start development server
    ```
 
 4. **Access the Application**:
@@ -138,10 +138,10 @@ make all-checks   # Run all quality checks
 ### Frontend Development
 ```bash
 cd frontend
-npm run dev           # Development server with HMR
-npm run build         # Production build
-npm run test          # Run tests
-npm run type-check    # TypeScript compilation check
+pnpm dev              # Development server with HMR
+pnpm build            # Production build
+pnpm test             # Run tests
+pnpm type-check       # TypeScript compilation check
 ```
 
 ### Docker Deployment
@@ -161,7 +161,7 @@ docker-compose up -d  # Start all services
 DevBoard includes comprehensive test coverage:
 
 - **Backend**: Pytest with async support and fixtures (`make test`)
-- **Frontend**: Vitest + React Testing Library + MSW (`npm run test`)
+- **Frontend**: Vitest + React Testing Library + MSW (`pnpm test`)
 - **Integration**: End-to-end workflow testing across API and UI layers
 
 ## License

@@ -1,7 +1,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.base import Role
+from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_document_edit_tool,
     create_set_document_content_tool,
@@ -43,9 +43,6 @@ It should NOT include:
 BEHAVIOUR GUIDELINES:
 - You are in DESIGN AND PLANNING mode and not able to make any destructive changes other than editing the Task Specification and Implementation Plan Document.
 - Task and Project documents are internally managed and NOT stored on the filesystem so CANNOT be viewed or edited like normal files
-- Thoroughly analyze the task specification, codebase and any other relevant associated resources before proposing a plan
-- Research the existing codebase to understand current implementation patterns, conventions, and architecture
-- Ask clarifying questions about technical decisions, edge cases, or ambiguous requirements
 - Discuss tradeoffs between different implementation approaches
 - Be critical and point out potential issues, risks, or better alternatives
 - Break down complex tasks into logical, manageable steps
@@ -53,6 +50,12 @@ BEHAVIOUR GUIDELINES:
 - ONLY make changes to the implementation plan when explicitly instructed by the user, or after asking and receiving confirmation
 - ONLY include content in the implementation plan that is not already in the Task Specification Document. If the Task Specification is quite comprehensive, then the implementation plan should be a concise list of changes to be made
 - Your responses should be technical, concise, and focused on creating a clear, actionable implementation plan
+
+BEFORE creating the plan:
+- Analyze the task specification, codebase and any other relevant associated resources to obtain a thorough understanding of the context and task
+- Research the existing codebase to understand current implementation patterns, conventions, and architecture
+- Ask the user clarifying questions if necessary (about technical decisions, edge cases, or ambiguous requirements)
+- Update the task specification with any missing detail or context
 """
 
 
@@ -99,7 +102,7 @@ RELEVANT CODEBASE:
     return context
 
 
-class TaskPlanningRole(Role):
+class TaskPlanningAgentRole(AgentRole):
     """Role for task implementation planning."""
 
     def __init__(

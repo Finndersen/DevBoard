@@ -7,10 +7,10 @@ Import patterns:
 - Role implementations: from devboard.agents.roles.<role_name> import <RoleClass>
 """
 
-from .base import Role
+from .base import AgentRole
 from .role_types import AgentRoleType
 
 __all__ = [
     "AgentRoleType",
-    "Role",
+    "AgentRole",
 ]
