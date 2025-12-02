@@ -151,11 +151,13 @@ class GitRepoIntegration:
     async def get_fork_point(self, base_branch: str, feature_branch: str) -> str | None:
         """Get the original fork point where feature branch diverged from base branch.
 
-        This is more reliable than merge-base after merges have occurred, as it
-        finds where the feature branch was originally created from the base branch.
+        This method reliably finds the fork point even after the feature branch has been
+        merged into the base branch multiple times.
 
-        Uses git merge-base --fork-point with fallback to finding the first commit
-        on the feature branch that's not reachable from base branch.
+        Strategy:
+        1. Check reflog for "branch: Created from" entry (most reliable)
+        2. Fall back to git merge-base --fork-point (uses reflog internally)
+        3. Fall back to simple merge-base (may be incorrect after merges)
 
         Args:
             base_branch: The base branch (e.g., 'main', 'master')
@@ -164,59 +166,47 @@ class GitRepoIntegration:
         Returns:
             Commit hash of the fork point, or None if it cannot be determined
         """
-        # First, check if branches have diverged at all
-        # If feature_branch is an ancestor of base_branch (already merged), we need special handling
+        # Strategy 1: Check reflog for branch creation entry
+        # This is the most reliable method as it shows where the branch was originally created
+        # Format: "commit_hash branch: Created from <source>"
+        reflog_output = await self._run_git_command(
+            ["reflog", "show", feature_branch, "--format=%H %gs"],
+            raise_on_error=False,
+        )
+
+        if reflog_output:
+            # Look for "branch: Created from" entry (the last/oldest entry typically)
+            for line in reversed(reflog_output.strip().split("\n")):
+                if "branch: Created from" in line:
+                    # Extract commit hash (first part of line)
+                    parts = line.split(" ", 1)
+                    if parts:
+                        commit_hash = parts[0].strip()
+                        # Verify this commit exists
+                        verified = await self._run_git_command(
+                            ["rev-parse", "--verify", commit_hash],
+                            raise_on_error=False,
+                        )
+                        if verified:
+                            return commit_hash
+
+        # Strategy 2: Try git merge-base --fork-point (uses reflog internally)
+        fork_point = await self._run_git_command(
+            ["merge-base", "--fork-point", base_branch, feature_branch],
+            raise_on_error=False,
+        )
+
+        if fork_point:
+            return fork_point
+
+        # Strategy 3: Fall back to simple merge-base
+        # Note: This may return incorrect results after multiple merges
         merge_base = await self._run_git_command(
             ["merge-base", base_branch, feature_branch],
             raise_on_error=False,
         )
 
-        if not merge_base:
-            return None
-
-        # Check if feature_branch tip equals merge_base (meaning no unique commits, or already fully merged)
-        feature_tip = await self._run_git_command(
-            ["rev-parse", feature_branch],
-            raise_on_error=False,
-        )
-
-        if feature_tip == merge_base:
-            # Feature branch has been merged into base, or has no unique commits
-            # Try to find commits unique to feature branch using reflog or ancestry
-            # Use: git log base_branch..feature_branch to find commits unique to feature
-            # If empty, the branch was fully merged - find the original divergence point
-
-            # Try --fork-point which uses reflog to find original fork
-            fork_point = await self._run_git_command(
-                ["merge-base", "--fork-point", base_branch, feature_branch],
-                raise_on_error=False,
-            )
-
-            if fork_point:
-                return fork_point
-
-            # Fallback: find the first parent of the merge commit on base branch
-            # that includes the feature branch
-            # This finds where feature branch commits start in the history
-            first_feature_commit = await self._run_git_command(
-                ["log", "--ancestry-path", f"{merge_base}..{base_branch}", "--pretty=format:%H", "--reverse", "-1"],
-                raise_on_error=False,
-            )
-
-            if first_feature_commit:
-                # Get the parent of this commit (the fork point)
-                parent = await self._run_git_command(
-                    ["rev-parse", f"{first_feature_commit}^"],
-                    raise_on_error=False,
-                )
-                if parent:
-                    return parent
-
-            # Last resort: return merge_base even though diff may be empty
-            return merge_base
-
-        # Normal case: branches haven't been merged yet
-        return merge_base
+        return merge_base if merge_base else None
 
     async def get_commits_in_range(self, base_commit: str, head_commit: str) -> list[GitLogEntry]:
         """Get commits in a range (base..head).
