@@ -4,7 +4,7 @@ import os
 from collections.abc import Generator
 
 import logfire
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # Database URL from environment or default to local SQLite
@@ -21,11 +21,18 @@ engine = create_engine(
     pool_pre_ping=True,
 )
 
+
+def _configure_sqlite_connection(dbapi_connection, connection_record):
+    """Configure SQLite connection settings on first connect."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
+
+
 # Enable WAL mode for SQLite to improve concurrent read performance
 if is_sqlite:
-    with engine.begin() as conn:
-        conn.execute(text("PRAGMA journal_mode=WAL"))
-        conn.execute(text("PRAGMA busy_timeout=5000"))
+    event.listen(engine, "connect", _configure_sqlite_connection)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)

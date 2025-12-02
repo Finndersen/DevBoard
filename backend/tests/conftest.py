@@ -15,7 +15,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.api.main import app
 from devboard.db.database import get_db
-from devboard.db.models import Base, Codebase, Document, Task
+from devboard.db.models import Base, Codebase, Document, Project, Task
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
@@ -362,5 +362,14 @@ def create_mock_task(
     codebase.local_path = codebase_path
     task.codebase = codebase
     task.codebase_id = codebase.id
+
+    # Mock project with codebases (needed for investigate_codebase tool)
+    project = Mock(spec=Project)
+    project.id = task_id * 1000
+    project.codebases = [codebase]
+    task.project = project
+
+    # Mock workspace directory method
+    task.get_current_workspace_dir = Mock(return_value=codebase_path)
 
     return task
