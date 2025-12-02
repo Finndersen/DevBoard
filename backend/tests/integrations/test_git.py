@@ -378,3 +378,108 @@ index abcdefg..0000000
         assert result.files[0].is_new_file is False
         assert result.files[0].is_deleted is True
         assert "deleted file mode" not in result.files[0].diff_content
+
+
+class TestGetForkPoint:
+    """Tests for get_fork_point method."""
+
+    @pytest.mark.asyncio
+    async def test_fork_point_normal_case(self, temp_git_repo):
+        """Test fork point returns merge-base when branches haven't been merged."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["merge-base", "main", "feature"]:
+                return "abc123"
+            elif args == ["rev-parse", "feature"]:
+                return "def456"  # Different from merge-base, so not merged
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_fork_point("main", "feature")
+
+        assert result == "abc123"
+
+    @pytest.mark.asyncio
+    async def test_fork_point_merged_branch_uses_fork_point_flag(self, temp_git_repo):
+        """Test fork point uses --fork-point when branch has been merged."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        call_log = []
+
+        async def mock_run_git_command(args, **kwargs):
+            call_log.append(args)
+            if args == ["merge-base", "main", "feature"]:
+                return "abc123"
+            elif args == ["rev-parse", "feature"]:
+                return "abc123"  # Same as merge-base, meaning merged
+            elif args == ["merge-base", "--fork-point", "main", "feature"]:
+                return "original_fork_123"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_fork_point("main", "feature")
+
+        assert result == "original_fork_123"
+        # Verify --fork-point was called
+        assert ["merge-base", "--fork-point", "main", "feature"] in call_log
+
+    @pytest.mark.asyncio
+    async def test_fork_point_fallback_to_ancestry_path(self, temp_git_repo):
+        """Test fork point fallback when --fork-point doesn't work."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["merge-base", "main", "feature"]:
+                return "abc123"
+            elif args == ["rev-parse", "feature"]:
+                return "abc123"  # Merged
+            elif args == ["merge-base", "--fork-point", "main", "feature"]:
+                return ""  # Fork point not available
+            elif args[0] == "log" and "--ancestry-path" in args:
+                return "first_commit_hash"
+            elif args == ["rev-parse", "first_commit_hash^"]:
+                return "parent_of_first_commit"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_fork_point("main", "feature")
+
+        assert result == "parent_of_first_commit"
+
+    @pytest.mark.asyncio
+    async def test_fork_point_returns_none_when_no_merge_base(self, temp_git_repo):
+        """Test fork point returns None when merge-base fails."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["merge-base", "main", "feature"]:
+                return ""  # No merge base
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_fork_point("main", "feature")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fork_point_last_resort_returns_merge_base(self, temp_git_repo):
+        """Test fork point returns merge-base as last resort when all methods fail."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["merge-base", "main", "feature"]:
+                return "abc123"
+            elif args == ["rev-parse", "feature"]:
+                return "abc123"  # Merged
+            elif args == ["merge-base", "--fork-point", "main", "feature"]:
+                return ""  # Failed
+            elif args[0] == "log":
+                return ""  # Failed
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_fork_point("main", "feature")
+
+        # Last resort: return merge_base
+        assert result == "abc123"

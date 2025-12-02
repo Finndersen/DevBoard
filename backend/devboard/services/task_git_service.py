@@ -116,11 +116,15 @@ class TaskGitService:
 
         git = GitRepoIntegration(task.codebase.local_path)
 
-        # Get merge base to find where task branch diverged from base
-        merge_base = await git.get_merge_base(task.base_branch, task.branch_name)
+        # Get fork point to find where task branch diverged from base
+        # This works correctly even after the branch has been merged
+        fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
 
-        # Get commits in the task branch since merge base
-        commits = await git.get_commits_in_range(merge_base, task.branch_name)
+        if not fork_point:
+            return []
+
+        # Get commits in the task branch since fork point
+        commits = await git.get_commits_in_range(fork_point, task.branch_name)
 
         return commits
 
@@ -280,10 +284,12 @@ class TaskGitService:
             git = GitRepoIntegration(last_used_slot.path)
             # Stage untracked files with intent-to-add so they appear in diff
             await git.stage_untracked_files_intent()
-            # Get merge base comparing base branch to HEAD (task branch in worktree)
-            merge_base = await git.get_merge_base(task.base_branch, "HEAD")
-            # Get all changes from merge base to working directory (includes uncommitted)
-            return await git.get_structured_diff(commit1=merge_base)
+            # Get fork point - works correctly even after branch has been merged
+            fork_point = await git.get_fork_point(task.base_branch, "HEAD")
+            if not fork_point:
+                return StructuredDiff(files=[], additions=0, deletions=0)
+            # Get all changes from fork point to working directory (includes uncommitted)
+            return await git.get_structured_diff(commit1=fork_point)
         else:
             # No worktree - use main codebase path, compare to task branch (committed changes only)
             if not task.branch_name:
@@ -291,10 +297,12 @@ class TaskGitService:
                 return StructuredDiff(files=[], additions=0, deletions=0)
 
             git = GitRepoIntegration(task.codebase.local_path)
-            # Get merge base comparing base branch to task branch
-            merge_base = await git.get_merge_base(task.base_branch, task.branch_name)
-            # Get changes from merge base to task branch (committed changes only)
-            return await git.get_structured_diff(commit1=merge_base, commit2=task.branch_name)
+            # Get fork point - works correctly even after branch has been merged
+            fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
+            if not fork_point:
+                return StructuredDiff(files=[], additions=0, deletions=0)
+            # Get changes from fork point to task branch (committed changes only)
+            return await git.get_structured_diff(commit1=fork_point, commit2=task.branch_name)
 
     async def get_task_uncommitted_changes(self, task: Task) -> StructuredDiff:
         """Get uncommitted changes for a task.
