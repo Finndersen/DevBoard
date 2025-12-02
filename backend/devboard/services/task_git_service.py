@@ -278,6 +278,8 @@ class TaskGitService:
         if last_used_slot:
             # Use worktree path - includes uncommitted changes
             git = GitRepoIntegration(last_used_slot.path)
+            # Stage untracked files with intent-to-add so they appear in diff
+            await git.stage_untracked_files_intent()
             # Get merge base comparing base branch to HEAD (task branch in worktree)
             merge_base = await git.get_merge_base(task.base_branch, "HEAD")
             # Get all changes from merge base to working directory (includes uncommitted)
@@ -315,6 +317,8 @@ class TaskGitService:
 
         # Get uncommitted changes from the worktree
         git = GitRepoIntegration(last_used_slot.path)
+        # Stage untracked files with intent-to-add so they appear in diff
+        await git.stage_untracked_files_intent()
         return await git.get_structured_diff(commit1="HEAD")
 
     async def get_task_commit_diff(self, task: Task, commit_hash: str) -> CommitDiff:

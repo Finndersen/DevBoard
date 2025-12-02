@@ -227,16 +227,34 @@ class GitRepoIntegration:
 
             file_path = file_path_match.group(1)
 
+            # Detect new file and deleted file status
+            is_new_file = bool(re.search(r"^new file mode", block, re.MULTILINE))
+            is_deleted = bool(re.search(r"^deleted file mode", block, re.MULTILINE))
+
+            # Filter out git metadata lines from diff content
+            # Remove: new file mode, deleted file mode, similarity index, rename from/to, etc.
+            filtered_lines = []
+            for line in block.split("\n"):
+                # Skip metadata lines we want to hide
+                if re.match(
+                    r"^(new file mode|deleted file mode|similarity index|rename from|rename to|old mode|new mode)", line
+                ):
+                    continue
+                filtered_lines.append(line)
+            filtered_block = "\n".join(filtered_lines)
+
             # Count additions and deletions (lines starting with + or -, but not +++ or ---)
-            additions = len(re.findall(r"^\+(?!\+\+)", block, re.MULTILINE))
-            deletions = len(re.findall(r"^-(?!--)", block, re.MULTILINE))
+            additions = len(re.findall(r"^\+(?!\+\+)", filtered_block, re.MULTILINE))
+            deletions = len(re.findall(r"^-(?!--)", filtered_block, re.MULTILINE))
 
             files.append(
                 FileDiff(
                     file_path=file_path,
-                    diff_content=block,
+                    diff_content=filtered_block,
                     additions=additions,
                     deletions=deletions,
+                    is_new_file=is_new_file,
+                    is_deleted=is_deleted,
                 )
             )
 
@@ -695,3 +713,52 @@ class GitRepoIntegration:
                 return output
 
         return None
+
+    async def stage_untracked_files_intent(self) -> list[str]:
+        """Stage untracked files with intent-to-add (git add -N).
+
+        This makes untracked files visible in `git diff` output without
+        staging their content. Respects .gitignore automatically.
+
+        Returns:
+            List of file paths that were staged with intent-to-add
+        """
+        # Get untracked files via git status --porcelain
+        output = await self._run_git_command(
+            ["status", "--porcelain"],
+            raise_on_error=False,
+        )
+
+        if not output:
+            return []
+
+        # Find untracked files (lines starting with ??)
+        untracked_files = []
+        for line in output.split("\n"):
+            if line.startswith("?? "):
+                # Extract file path (remove "?? " prefix)
+                file_path = line[3:].strip()
+                # Remove quotes if present (git quotes paths with special chars)
+                if file_path.startswith('"') and file_path.endswith('"'):
+                    file_path = file_path[1:-1]
+                untracked_files.append(file_path)
+
+        if not untracked_files:
+            return []
+
+        # Stage each untracked file with intent-to-add
+        staged_files = []
+        for file_path in untracked_files:
+            try:
+                await self._run_git_command(
+                    ["add", "-N", file_path],
+                    raise_on_error=False,
+                )
+                staged_files.append(file_path)
+            except Exception as e:
+                logfire.warning(f"Failed to stage untracked file with intent-to-add: {file_path}", error=str(e))
+
+        if staged_files:
+            logfire.info(f"Staged {len(staged_files)} untracked files with intent-to-add")
+
+        return staged_files

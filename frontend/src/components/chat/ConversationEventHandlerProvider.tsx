@@ -4,7 +4,8 @@ import type {
   ToolResultHandler,
   ToolResultMatcher,
   SystemEventHandler,
-  SystemEventMatcher
+  SystemEventMatcher,
+  StreamCompleteHandler
 } from '../../hooks/useConversationEventHandlers'
 
 interface ConversationEventHandlerProviderProps {
@@ -13,7 +14,7 @@ interface ConversationEventHandlerProviderProps {
 
 /**
  * Provider component for conversation event handlers.
- * Must wrap conversation components that use useToolResultHandler or useSystemEventHandler.
+ * Must wrap conversation components that use useToolResultHandler, useSystemEventHandler, or useStreamCompleteHandler.
  *
  * @example
  * <ConversationEventHandlerProvider>
@@ -23,7 +24,8 @@ interface ConversationEventHandlerProviderProps {
 export default function ConversationEventHandlerProvider({ children }: ConversationEventHandlerProviderProps) {
   const registry = useMemo(() => ({
     toolResultHandlers: new Map<ToolResultMatcher, Set<ToolResultHandler>>(),
-    systemEventHandlers: new Map<SystemEventMatcher, Set<SystemEventHandler>>()
+    systemEventHandlers: new Map<SystemEventMatcher, Set<SystemEventHandler>>(),
+    streamCompleteHandlers: new Set<StreamCompleteHandler>()
   }), [])
 
   return (

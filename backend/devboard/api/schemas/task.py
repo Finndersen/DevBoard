@@ -98,6 +98,8 @@ class FileDiff(BaseModel):
     diff_content: str
     additions: int
     deletions: int
+    is_new_file: bool = False
+    is_deleted: bool = False
 
 
 class TaskDiffResponse(BaseModel):

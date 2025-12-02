@@ -12,6 +12,8 @@ interface GitDiffViewerProps {
   }
   defaultExpanded?: boolean
   className?: string
+  isNewFile?: boolean
+  isDeleted?: boolean
 }
 
 interface DiffLine {
@@ -80,7 +82,7 @@ const getLanguageFromFilename = (filename?: string): string => {
   return languageMap[ext || ''] || 'text'
 }
 
-export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded = false, className = '' }: GitDiffViewerProps) {
+export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded = false, className = '', isNewFile, isDeleted }: GitDiffViewerProps) {
   // Collapse/expand state
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 
@@ -205,6 +207,16 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
         {fileName && (
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
             {fileName}
+          </span>
+        )}
+        {isNewFile && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 shrink-0">
+            New
+          </span>
+        )}
+        {isDeleted && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 shrink-0">
+            Deleted
           </span>
         )}
         {stats && (

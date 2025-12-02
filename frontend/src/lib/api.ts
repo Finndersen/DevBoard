@@ -125,6 +125,8 @@ export interface FileDiff {
   diff_content: string
   additions: number
   deletions: number
+  is_new_file?: boolean
+  is_deleted?: boolean
 }
 
 export interface TaskDiffResponse {

@@ -14,7 +14,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
+import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
@@ -386,6 +386,17 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Handle task updates from SystemEvents (emitted during workflow actions)
   useSystemEventHandler(systemEventMatcher, systemEventHandler)
+
+  // Handle stream completion - refresh diff view when agent finishes during implementation phase
+  const streamCompleteHandler = useCallback(() => {
+    // Only refresh diff when task is in implementing status
+    if (task?.status?.toLowerCase() === 'implementing' && task?.codebase_id) {
+      // Refresh the 'all' view to show latest changes
+      handleDiffRefresh('all')
+    }
+  }, [task?.status, task?.codebase_id, handleDiffRefresh])
+
+  useStreamCompleteHandler(streamCompleteHandler)
 
   // Close codebase selector when clicking outside
   useEffect(() => {

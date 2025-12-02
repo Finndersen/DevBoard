@@ -160,6 +160,8 @@ export default function AllFilesDiffViewer({
             diff={file.diff_content}
             fileName={file.file_path}
             stats={{ additions: file.additions, deletions: file.deletions }}
+            isNewFile={file.is_new_file}
+            isDeleted={file.is_deleted}
           />
         ))}
       </div>

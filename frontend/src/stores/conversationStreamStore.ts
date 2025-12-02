@@ -4,6 +4,7 @@ import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '..
 import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
+import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandlers'
 
 /**
  * State for an active conversation stream.
@@ -278,6 +279,14 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           stream.isStreaming = false
         }
       })
+
+      // Invoke stream complete handlers if registry exists
+      const registry = eventHandlerRegistries.get(conversationId)
+      if (registry) {
+        invokeStreamCompleteHandlers(registry).catch((error) => {
+          console.error('Failed to invoke stream complete handlers:', error)
+        })
+      }
 
       // Schedule cleanup after a delay (keep messages available for a bit)
       // But don't clean up if there are pending tool requests - they need to persist

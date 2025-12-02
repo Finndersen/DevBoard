@@ -25,9 +25,16 @@ export type SystemEventHandler = (event: SystemEvent) => void | Promise<void>
  */
 export type SystemEventMatcher = (event: SystemEvent) => boolean
 
+/**
+ * Handler function for stream completion.
+ * Called when a conversation stream finishes processing.
+ */
+export type StreamCompleteHandler = () => void | Promise<void>
+
 interface EventHandlerRegistry {
   toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandler>>
   systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
+  streamCompleteHandlers: Set<StreamCompleteHandler>
 }
 
 const EventHandlerContext = createContext<EventHandlerRegistry | null>(null)
@@ -201,6 +208,67 @@ export function useSystemEventHandler(matcher: SystemEventMatcher, handler: Syst
       }
     }
   }, [registry, matcher])
+}
+
+/**
+ * Register a handler for stream completion.
+ * The handler is called when a conversation stream finishes processing.
+ *
+ * @param handler - Function to call when stream completes
+ *
+ * @example
+ * Refresh diff view when stream completes:
+ * useStreamCompleteHandler(() => {
+ *   if (task?.status === 'implementing') {
+ *     refreshDiff()
+ *   }
+ * })
+ */
+export function useStreamCompleteHandler(handler: StreamCompleteHandler): void {
+  const registry = useEventHandlerRegistry()
+  const handlerRef = useRef(handler)
+
+  // Update ref when handler changes
+  useEffect(() => {
+    handlerRef.current = handler
+  }, [handler])
+
+  useEffect(() => {
+    // Create wrapper that uses current handler
+    const wrappedHandler: StreamCompleteHandler = () => handlerRef.current()
+
+    // Register handler
+    registry.streamCompleteHandlers.add(wrappedHandler)
+
+    // Cleanup: unregister handler
+    return () => {
+      registry.streamCompleteHandlers.delete(wrappedHandler)
+    }
+  }, [registry])
+}
+
+/**
+ * Invoke all registered stream complete handlers.
+ * Called by the stream store when a stream finishes.
+ *
+ * @internal
+ */
+export async function invokeStreamCompleteHandlers(
+  registry: EventHandlerRegistry
+): Promise<void> {
+  const handlers = Array.from(registry.streamCompleteHandlers)
+
+  if (handlers.length === 0) return
+
+  // Call all handlers (use allSettled to prevent one failure from stopping others)
+  const results = await Promise.allSettled(handlers.map(handler => handler()))
+
+  // Log any handler failures for debugging
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`Stream complete handler ${index} failed:`, result.reason)
+    }
+  })
 }
 
 /**
