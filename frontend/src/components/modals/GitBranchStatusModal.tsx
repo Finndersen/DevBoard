@@ -80,7 +80,7 @@ export default function GitBranchStatusModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Branch Status"
-      maxWidth="md"
+      maxWidth="xl"
     >
       <div className="space-y-4">
         {/* Branch Info */}
@@ -101,8 +101,8 @@ export default function GitBranchStatusModal({
 
           {gitStatus.worktree_slot_path && (
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Worktree</span>
-              <span className="font-mono text-xs text-gray-700 dark:text-gray-300 truncate max-w-[250px]" title={gitStatus.worktree_slot_path}>
+              <span className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">Worktree</span>
+              <span className="font-mono text-xs text-gray-700 dark:text-gray-300 ml-4 text-right break-all">
                 {gitStatus.worktree_slot_path}
               </span>
             </div>

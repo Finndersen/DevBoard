@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, CodeBracketSquareIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
+
+// Git branch icon (classic fork-style)
+const GitBranchIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="6" y1="3" x2="6" y2="15" />
+    <circle cx="18" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M18 9a9 9 0 0 1-9 9" />
+  </svg>
+)
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -626,7 +636,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 title="View branch status"
                 disabled={branchStatusLoading}
               >
-                <CodeBracketSquareIcon className="w-4 h-4" />
+                <GitBranchIcon className="w-4 h-4" />
                 {gitStatus.commits_behind > 0 && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                     {gitStatus.commits_behind} behind

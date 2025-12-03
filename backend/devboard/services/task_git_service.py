@@ -374,6 +374,9 @@ class TaskGitService:
         This brings the task branch up-to-date with the latest changes in the base branch.
         If conflicts are encountered, the rebase is aborted and an error is raised.
 
+        The rebase is performed from the worktree where the branch is checked out (if any),
+        otherwise from the main repository.
+
         Args:
             task: Task instance
 
@@ -387,10 +390,19 @@ class TaskGitService:
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch name configured")
 
-        git = GitRepoIntegration(task.codebase.local_path)
+        # Use the worktree slot path if available, otherwise main repo
+        # This is necessary because git can't rebase a branch that's checked out in another worktree
+        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
+
+        git = GitRepoIntegration(repo_path)
+
+        # Fetch latest from remote to ensure we have up-to-date base branch
+        await git.fetch()
 
         # Perform rebase - this will raise RebaseConflictError if there are conflicts
-        new_head = await git.rebase_branch(task.branch_name, task.base_branch)
+        # When running from the worktree where branch is checked out, we rebase HEAD onto base
+        new_head = await git.rebase_onto(task.base_branch)
         logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
 
         return new_head
