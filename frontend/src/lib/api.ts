@@ -177,6 +177,10 @@ export interface TaskGitStatus {
   can_merge: boolean
   has_conflicts: boolean
   worktree_slot: WorktreeSlotInfo | null
+  // New fields for branch status modal
+  worktree_slot_path: string | null
+  main_repo_is_clean: boolean
+  main_repo_current_branch: string | null
 }
 
 export interface WorktreeSlotInfo {
@@ -222,6 +226,17 @@ export interface MergeBranchRequest {
 export interface MergeBranchResponse {
   success: boolean
   merge_commit: string
+}
+
+export interface RebaseBranchResponse {
+  success: boolean
+  new_head: string
+  message: string
+}
+
+export interface CheckoutToMainResponse {
+  success: boolean
+  message: string
 }
 
 export interface WorkspaceAllocationResponse {
@@ -700,6 +715,18 @@ export class ApiClient {
 
   async releaseWorktreeSlot(slotId: number | string): Promise<void> {
     return this.request<void>(`/api/worktree-slots/${slotId}/release`, {
+      method: 'POST',
+    })
+  }
+
+  async rebaseTaskBranch(taskId: number | string): Promise<RebaseBranchResponse> {
+    return this.request<RebaseBranchResponse>(`/api/tasks/${taskId}/rebase`, {
+      method: 'POST',
+    })
+  }
+
+  async checkoutTaskToMain(taskId: number | string): Promise<CheckoutToMainResponse> {
+    return this.request<CheckoutToMainResponse>(`/api/tasks/${taskId}/checkout-to-main`, {
       method: 'POST',
     })
   }

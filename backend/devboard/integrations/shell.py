@@ -30,6 +30,12 @@ class ShellCommandExecutionError(ShellCommandError):
     pass
 
 
+class RebaseConflictError(Exception):
+    """Raised when a git rebase encounters conflicts."""
+
+    pass
+
+
 class ShellCommandResult:
     """Result of shell command execution."""
 

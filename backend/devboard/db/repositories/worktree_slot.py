@@ -222,3 +222,18 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
             .order_by(WorktreeSlot.last_used_at.desc())
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_main_slot_for_codebase(self, codebase_id: int) -> WorktreeSlot | None:
+        """Get the main repository slot for a codebase.
+
+        Args:
+            codebase_id: The codebase ID to search for
+
+        Returns:
+            WorktreeSlot instance for the main repo if found, None otherwise
+        """
+        stmt = select(WorktreeSlot).where(
+            WorktreeSlot.codebase_id == codebase_id,
+            WorktreeSlot.is_main_repo.is_(True),
+        )
+        return self.db.execute(stmt).scalar_one_or_none()

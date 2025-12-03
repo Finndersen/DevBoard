@@ -6,7 +6,7 @@ from pathlib import Path
 import logfire
 
 from .base import IntegrationConnectionResult
-from .shell import execute_shell_command
+from .shell import RebaseConflictError, ShellCommandExecutionError, execute_shell_command
 from .types import BranchComparison, CommitDiff, FileDiff, GitLogEntry, StructuredDiff, WorktreeInfo
 
 
@@ -576,6 +576,47 @@ class GitRepoIntegration:
             raise_on_error=False,
         )
         return bool(output)
+
+    async def switch_detach(self) -> None:
+        """Detach HEAD from the current branch.
+
+        This releases the branch so it can be checked out in another worktree.
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        await self._run_git_command(["switch", "--detach"])
+
+    async def rebase_branch(self, branch: str, onto: str) -> str:
+        """Rebase a branch onto another branch.
+
+        This performs `git rebase <onto> <branch>` which rebases <branch> onto <onto>.
+
+        Args:
+            branch: Branch to rebase
+            onto: Branch to rebase onto
+
+        Returns:
+            New HEAD commit hash after successful rebase
+
+        Raises:
+            RebaseConflictError: If rebase encounters conflicts (rebase is aborted)
+            ShellCommandExecutionError: If git command fails for other reasons
+        """
+        try:
+            await self._run_git_command(["rebase", onto, branch])
+        except ShellCommandExecutionError as e:
+            # Check if this is a conflict error
+            error_msg = str(e).lower()
+            if "conflict" in error_msg or "could not apply" in error_msg:
+                # Abort the rebase
+                await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
+                raise RebaseConflictError(f"Rebase of {branch} onto {onto} encountered conflicts") from e
+            # Re-raise other errors
+            raise
+
+        # Return new HEAD commit hash
+        return await self._run_git_command(["rev-parse", "HEAD"])
 
     async def detect_git_remote_url(self) -> str | None:
         """Detect git remote URL for this repository.

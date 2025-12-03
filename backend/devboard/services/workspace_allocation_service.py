@@ -101,8 +101,13 @@ class WorkspaceAllocationService:
         """Find an appropriate slot and lock it for a task.
 
         Implements smart allocation with:
-        1. Task stickiness - prefer last-used slot
+        1. Task stickiness - prefer last-used slot (with special handling for main repo)
         2. LRU - pick least recently used available slot
+
+        For main repo slots:
+        - Main repo slot is only reused for a task if the task's branch is still checked out there
+        - If main repo has a different branch checked out, the task is allocated a different slot
+        - This ensures main repo slot assignment only happens through explicit manual action
 
         Raises:
             ValueError: If task has invalid configuration
@@ -119,6 +124,16 @@ class WorkspaceAllocationService:
         # Check this FIRST before uncommitted changes check, since task can reuse its own slot regardless
         for slot in available_slots:
             if slot.last_used_by_task_id == task.id:
+                # Special handling for main repo slot:
+                # Only use it if the task's branch is still checked out there
+                if slot.is_main_repo:
+                    current_branch = await slot.get_current_branch()
+                    if current_branch != task.branch_name:
+                        logfire.info(
+                            f"Skipping main repo sticky slot {slot.id} for task {task.id}: "
+                            f"branch mismatch (current={current_branch}, task={task.branch_name})"
+                        )
+                        continue
                 logfire.info(f"Using sticky slot {slot.id} for task {task.id}")
                 return self.worktree_slot_repo.lock_slot(slot, task)
 

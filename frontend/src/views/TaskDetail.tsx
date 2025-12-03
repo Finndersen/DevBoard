@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, CodeBracketSquareIcon } from '@heroicons/react/24/outline'
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -12,6 +12,7 @@ import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
 import { useApprovals } from '../contexts/ApprovalsContext'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
+import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
 
@@ -96,6 +97,8 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
   const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
+  const [showBranchStatusModal, setShowBranchStatusModal] = useState(false)
+  const [branchStatusLoading, setBranchStatusLoading] = useState(false)
   const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
 
   // State for branch info and diff data
@@ -266,9 +269,9 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
 
-  // Fetch git status when delete dialog is shown
+  // Fetch git status on task load to show branch icon in header
   useEffect(() => {
-    if (showDeleteConfirm && task?.id) {
+    if (task?.id && task?.codebase_id) {
       apiClient.getTaskGitStatus(task.id)
         .then(status => setGitStatus(status))
         .catch(error => {
@@ -276,7 +279,37 @@ function TaskDetail({ id }: TaskDetailProps) {
           setGitStatus(null)
         })
     }
-  }, [showDeleteConfirm, task?.id])
+  }, [task?.id, task?.codebase_id])
+
+  // Handle opening branch status modal
+  const handleOpenBranchStatusModal = useCallback(async () => {
+    if (!task?.id) return
+
+    setBranchStatusLoading(true)
+    setShowBranchStatusModal(true)
+
+    try {
+      const status = await apiClient.getTaskGitStatus(task.id)
+      setGitStatus(status)
+    } catch (error) {
+      console.error('Failed to fetch git status:', error)
+      setGitStatus(null)
+    } finally {
+      setBranchStatusLoading(false)
+    }
+  }, [task?.id])
+
+  // Refresh git status (called after modal actions)
+  const refreshGitStatus = useCallback(async () => {
+    if (!task?.id) return
+
+    try {
+      const status = await apiClient.getTaskGitStatus(task.id)
+      setGitStatus(status)
+    } catch (error) {
+      console.error('Failed to refresh git status:', error)
+    }
+  }, [task?.id])
 
 
   // Memoize matchers and handlers to prevent re-registration on every render
@@ -584,6 +617,23 @@ function TaskDetail({ id }: TaskDetailProps) {
                 </>
               )}
             </div>
+
+            {/* Branch Status Icon - only shown when task has a branch_name */}
+            {gitStatus?.branch_name && (
+              <button
+                onClick={handleOpenBranchStatusModal}
+                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
+                title="View branch status"
+                disabled={branchStatusLoading}
+              >
+                <CodeBracketSquareIcon className="w-4 h-4" />
+                {gitStatus.commits_behind > 0 && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                    {gitStatus.commits_behind} behind
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
         
@@ -818,6 +868,15 @@ function TaskDetail({ id }: TaskDetailProps) {
         cancelText="Cancel"
         variant="danger"
         loading={deleteLoading}
+      />
+
+      {/* Branch Status Modal */}
+      <GitBranchStatusModal
+        isOpen={showBranchStatusModal}
+        onClose={() => setShowBranchStatusModal(false)}
+        taskId={task.id}
+        gitStatus={gitStatus}
+        onStatusUpdate={refreshGitStatus}
       />
     </div>
   )

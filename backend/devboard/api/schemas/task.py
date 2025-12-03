@@ -123,6 +123,10 @@ class TaskGitStatusResponse(BaseModel):
     commits_behind: int
     can_merge: bool
     has_conflicts: bool
+    # New fields for branch status modal
+    worktree_slot_path: str | None = None
+    main_repo_is_clean: bool = True
+    main_repo_current_branch: str | None = None
 
 
 class MergeBranchRequest(BaseModel):
@@ -137,4 +141,19 @@ class MergeBranchResponse(BaseModel):
 
     success: bool
     merge_commit: str
+    message: str
+
+
+class RebaseBranchResponse(BaseModel):
+    """Schema for rebase branch response."""
+
+    success: bool
+    new_head: str
+    message: str
+
+
+class CheckoutToMainResponse(BaseModel):
+    """Schema for checkout-to-main response."""
+
+    success: bool
     message: str

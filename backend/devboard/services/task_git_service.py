@@ -139,10 +139,22 @@ class TaskGitService:
             - commits_behind: int
             - can_merge: bool
             - has_conflicts: bool
+            - worktree_slot_path: str | None
+            - main_repo_is_clean: bool
+            - main_repo_current_branch: str | None
 
         Raises:
             ValueError: If task configuration is invalid
         """
+        # Get worktree slot info
+        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        worktree_slot_path = last_used_slot.path if last_used_slot else None
+
+        # Get main repo status
+        main_git = GitRepoIntegration(task.codebase.local_path)
+        main_repo_is_clean = not await main_git.has_uncommitted_changes()
+        main_repo_current_branch = await main_git.get_current_branch()
+
         if not task.branch_name:
             return {
                 "branch_name": None,
@@ -152,6 +164,9 @@ class TaskGitService:
                 "commits_behind": 0,
                 "can_merge": False,
                 "has_conflicts": False,
+                "worktree_slot_path": worktree_slot_path,
+                "main_repo_is_clean": main_repo_is_clean,
+                "main_repo_current_branch": main_repo_current_branch,
             }
 
         git = GitRepoIntegration(task.codebase.local_path)
@@ -168,6 +183,9 @@ class TaskGitService:
                 "commits_behind": 0,
                 "can_merge": False,
                 "has_conflicts": False,
+                "worktree_slot_path": worktree_slot_path,
+                "main_repo_is_clean": main_repo_is_clean,
+                "main_repo_current_branch": main_repo_current_branch,
             }
 
         # Get branch comparison
@@ -181,6 +199,9 @@ class TaskGitService:
             "commits_behind": comparison.behind,
             "can_merge": comparison.can_merge,
             "has_conflicts": comparison.has_conflicts,
+            "worktree_slot_path": worktree_slot_path,
+            "main_repo_is_clean": main_repo_is_clean,
+            "main_repo_current_branch": main_repo_current_branch,
         }
 
     async def merge_task_branch(
@@ -346,3 +367,76 @@ class TaskGitService:
                 additions=commit_diff.additions,
                 deletions=commit_diff.deletions,
             )
+
+    async def rebase_task_branch(self, task: Task) -> str:
+        """Rebase a task's branch onto its base branch.
+
+        This brings the task branch up-to-date with the latest changes in the base branch.
+        If conflicts are encountered, the rebase is aborted and an error is raised.
+
+        Args:
+            task: Task instance
+
+        Returns:
+            New HEAD commit hash after successful rebase
+
+        Raises:
+            ValueError: If task has no branch name configured
+            RebaseConflictError: If rebase encounters conflicts
+        """
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch name configured")
+
+        git = GitRepoIntegration(task.codebase.local_path)
+
+        # Perform rebase - this will raise RebaseConflictError if there are conflicts
+        new_head = await git.rebase_branch(task.branch_name, task.base_branch)
+        logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
+
+        return new_head
+
+    async def checkout_task_to_main_repo(self, task: Task) -> None:
+        """Checkout a task's branch to the main repository.
+
+        This flow:
+        1. Gets the last used worktree slot for the task
+        2. Detaches HEAD in that worktree (to release the branch)
+        3. Checks out the task's branch in the main repository
+        4. Updates the task's worktree slot assignment to the main repo slot
+
+        Args:
+            task: Task instance
+
+        Raises:
+            ValueError: If task has no branch name, main repo is dirty, or operation fails
+        """
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch name configured")
+
+        main_git = GitRepoIntegration(task.codebase.local_path)
+
+        # Check main repo is clean
+        if await main_git.has_uncommitted_changes():
+            raise ValueError("Main repository has uncommitted changes")
+
+        # Get last used slot for the task
+        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+
+        # If the branch is checked out in a worktree, detach HEAD there
+        if last_used_slot and not last_used_slot.is_main_repo:
+            slot_git = GitRepoIntegration(last_used_slot.path)
+            current_branch = await slot_git.get_current_branch()
+            # Only detach if the task's branch is actually checked out there
+            if current_branch == task.branch_name:
+                await slot_git.switch_detach()
+                logfire.info(f"Detached HEAD in worktree {last_used_slot.path} for task {task.id}")
+
+        # Checkout branch in main repository
+        await main_git.checkout_branch(task.branch_name)
+        logfire.info(f"Checked out branch {task.branch_name} in main repo for task {task.id}")
+
+        # Find the main repo slot and lock it for this task
+        main_slot = self.worktree_slot_repo.get_main_slot_for_codebase(task.codebase_id)
+        if main_slot:
+            self.worktree_slot_repo.lock_slot(main_slot, task)
+            logfire.info(f"Assigned main repo slot to task {task.id}")
