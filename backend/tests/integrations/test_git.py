@@ -384,39 +384,12 @@ class TestGetForkPoint:
     """Tests for get_fork_point method."""
 
     @pytest.mark.asyncio
-    async def test_fork_point_uses_reflog_branch_creation(self, temp_git_repo):
-        """Test fork point finds 'branch: Created from' entry in reflog."""
+    async def test_fork_point_returns_merge_base(self, temp_git_repo):
+        """Test fork point returns the merge-base between branches."""
         git = GitRepoIntegration(temp_git_repo)
 
-        reflog_output = """def456 commit: Some work on feature
-abc123 branch: Created from master"""
-
         async def mock_run_git_command(args, **kwargs):
-            if args == ["reflog", "show", "feature", "--format=%H %gs"]:
-                return reflog_output
-            elif args == ["rev-parse", "--verify", "abc123"]:
-                return "abc123"  # Commit exists
-            return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.get_fork_point("main", "feature")
-
-        assert result == "abc123"
-
-    @pytest.mark.asyncio
-    async def test_fork_point_reflog_with_multiple_merges(self, temp_git_repo):
-        """Test fork point correctly finds original creation point after multiple merges."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        # Simulates reflog after multiple merges - the oldest entry shows original creation
-        reflog_output = """ghi789 commit: More work after second merge
-def456 commit: Work after first merge
-abc123 branch: Created from master"""
-
-        async def mock_run_git_command(args, **kwargs):
-            if args == ["reflog", "show", "feature", "--format=%H %gs"]:
-                return reflog_output
-            elif args == ["rev-parse", "--verify", "abc123"]:
+            if args == ["merge-base", "main", "feature"]:
                 return "abc123"
             return ""
 
@@ -426,77 +399,16 @@ abc123 branch: Created from master"""
         assert result == "abc123"
 
     @pytest.mark.asyncio
-    async def test_fork_point_falls_back_to_merge_base_fork_point(self, temp_git_repo):
-        """Test fork point uses --fork-point flag when reflog has no creation entry."""
+    async def test_fork_point_returns_none_when_no_common_ancestor(self, temp_git_repo):
+        """Test fork point returns None when branches have no common ancestor."""
         git = GitRepoIntegration(temp_git_repo)
 
-        # Reflog without "branch: Created" entry (e.g., old or cloned repo)
-        reflog_output = """def456 commit: Some work
-abc123 commit: More work"""
-
         async def mock_run_git_command(args, **kwargs):
-            if args == ["reflog", "show", "feature", "--format=%H %gs"]:
-                return reflog_output
-            elif args == ["merge-base", "--fork-point", "main", "feature"]:
-                return "fork_point_123"
+            if args == ["merge-base", "main", "feature"]:
+                return ""  # No common ancestor
             return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.get_fork_point("main", "feature")
-
-        assert result == "fork_point_123"
-
-    @pytest.mark.asyncio
-    async def test_fork_point_falls_back_to_simple_merge_base(self, temp_git_repo):
-        """Test fork point uses simple merge-base when other methods fail."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        async def mock_run_git_command(args, **kwargs):
-            if args == ["reflog", "show", "feature", "--format=%H %gs"]:
-                return ""  # Empty reflog
-            elif args == ["merge-base", "--fork-point", "main", "feature"]:
-                return ""  # Fork point failed
-            elif args == ["merge-base", "main", "feature"]:
-                return "simple_merge_base_123"
-            return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.get_fork_point("main", "feature")
-
-        assert result == "simple_merge_base_123"
-
-    @pytest.mark.asyncio
-    async def test_fork_point_returns_none_when_all_methods_fail(self, temp_git_repo):
-        """Test fork point returns None when all methods fail."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        async def mock_run_git_command(args, **kwargs):
-            return ""  # All commands return empty
 
         with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
             result = await git.get_fork_point("main", "feature")
 
         assert result is None
-
-    @pytest.mark.asyncio
-    async def test_fork_point_verifies_commit_exists(self, temp_git_repo):
-        """Test fork point verifies the commit from reflog still exists."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        reflog_output = """def456 commit: Some work
-abc123 branch: Created from master"""
-
-        async def mock_run_git_command(args, **kwargs):
-            if args == ["reflog", "show", "feature", "--format=%H %gs"]:
-                return reflog_output
-            elif args == ["rev-parse", "--verify", "abc123"]:
-                return ""  # Commit no longer exists (e.g., after gc or rebase)
-            elif args == ["merge-base", "--fork-point", "main", "feature"]:
-                return "fallback_fork_point"
-            return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.get_fork_point("main", "feature")
-
-        # Should fall back since abc123 doesn't exist
-        assert result == "fallback_fork_point"
