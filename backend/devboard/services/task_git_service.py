@@ -36,19 +36,23 @@ class TaskDiffResult:
     total_deletions: int
 
 
+class MergeOutcome(StrEnum):
+    """Outcome of a merge operation."""
+
+    SUCCESS = "success"  # Merge completed successfully
+    CONFLICT = "conflict"  # Merge blocked due to conflicts
+    SKIPPED = "skipped"  # No merge performed (e.g., 'none' strategy)
+    ERROR = "error"  # Merge failed due to an error
+
+
 @dataclass
 class MergeResult:
     """Result of a task merge operation."""
 
-    success: bool
+    outcome: MergeOutcome
     strategy: MergeStrategy
     message: str
-    # For github_pr strategy
-    pr_url: str | None = None
-    # For other merge strategies
     merge_commit: str | None = None
-    # If merge failed due to conflicts
-    has_conflicts: bool = False
 
 
 class TaskGitService:
@@ -541,42 +545,38 @@ class TaskGitService:
         1. Validates strategy compatibility with codebase config
         2. Stashes uncommitted changes if present
         3. Executes strategy-specific merge
-        4. Cleans up feature branch (for non-github_pr strategies)
+        4. Cleans up feature branch
         5. Unstashes changes
 
         Args:
             task: Task instance with branch_name set
 
         Returns:
-            MergeResult with success status and relevant details
+            MergeResult with outcome and relevant details
 
         Raises:
-            ValueError: If task or codebase configuration is invalid
+            ValueError: If task has no branch, or if GITHUB_PR strategy is used
+                (GITHUB_PR should be handled via dedicated workflow action)
         """
         if not task.branch_name:
-            return MergeResult(
-                success=False,
-                strategy=MergeStrategy(task.codebase.merge_strategy),
-                message="Task has no branch name configured",
-            )
+            raise ValueError("Task has no branch name configured")
 
         strategy = MergeStrategy(task.codebase.merge_strategy)
         codebase = task.codebase
 
-        # For 'none' strategy, just return success without any git operations
-        if strategy == MergeStrategy.NONE:
-            return MergeResult(
-                success=True,
-                strategy=strategy,
-                message="Manual merge strategy - no git operations performed",
+        # GITHUB_PR strategy must be handled via dedicated workflow action
+        if strategy == MergeStrategy.GITHUB_PR:
+            raise ValueError(
+                "GitHub PR strategy should be handled via create_pull_request workflow action, "
+                "not complete_task_merge()"
             )
 
-        # For 'github_pr' strategy, indicate it should be handled via dedicated method
-        if strategy == MergeStrategy.GITHUB_PR:
+        # For 'none' strategy, just return skipped without any git operations
+        if strategy == MergeStrategy.NONE:
             return MergeResult(
-                success=False,
+                outcome=MergeOutcome.SKIPPED,
                 strategy=strategy,
-                message="GitHub PR strategy should be handled via create_pull_request workflow action",
+                message="Manual merge strategy - no git operations performed",
             )
 
         # Get git integration for main repo
@@ -586,10 +586,9 @@ class TaskGitService:
         comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
         if comparison.has_conflicts:
             return MergeResult(
-                success=False,
+                outcome=MergeOutcome.CONFLICT,
                 strategy=strategy,
                 message=f"Cannot merge: conflicts detected between {task.branch_name} and {task.base_branch}",
-                has_conflicts=True,
             )
 
         # Execute strategy-specific merge
@@ -602,14 +601,14 @@ class TaskGitService:
                 return await self._execute_merge_commit_merge(task, git)
             else:
                 return MergeResult(
-                    success=False,
+                    outcome=MergeOutcome.ERROR,
                     strategy=strategy,
                     message=f"Unknown merge strategy: {strategy}",
                 )
         except Exception as e:
             logfire.error(f"Merge failed for task {task.id}: {e}")
             return MergeResult(
-                success=False,
+                outcome=MergeOutcome.ERROR,
                 strategy=strategy,
                 message=f"Merge failed: {str(e)}",
             )
@@ -646,7 +645,7 @@ class TaskGitService:
                     logfire.warning(f"Could not delete remote branch: {e}")
 
             return MergeResult(
-                success=True,
+                outcome=MergeOutcome.SUCCESS,
                 strategy=strategy,
                 message=f"Successfully squash merged {task.branch_name} into {task.base_branch}",
                 merge_commit=merge_commit,
@@ -752,7 +751,7 @@ class TaskGitService:
                     logfire.warning(f"Could not delete remote branch: {e}")
 
             return MergeResult(
-                success=True,
+                outcome=MergeOutcome.SUCCESS,
                 strategy=strategy,
                 message=f"Successfully rebased and merged {task.branch_name} into {task.base_branch}",
                 merge_commit=merge_commit,
