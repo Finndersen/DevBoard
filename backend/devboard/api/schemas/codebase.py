@@ -1,18 +1,8 @@
 """Codebase Pydantic schemas."""
 
-from enum import StrEnum
-
 from pydantic import BaseModel
 
-
-class MergeStrategyEnum(StrEnum):
-    """API enum for merge strategy options."""
-
-    GITHUB_PR = "github_pr"
-    SQUASH = "squash"
-    REBASE = "rebase"
-    MERGE_COMMIT = "merge_commit"
-    NONE = "none"
+from devboard.db.models.codebase import MergeStrategy
 
 
 class CodebaseBase(BaseModel):
@@ -23,7 +13,7 @@ class CodebaseBase(BaseModel):
     repository_url: str | None = None
     local_path: str
     default_branch: str
-    merge_strategy: MergeStrategyEnum
+    merge_strategy: MergeStrategy
 
 
 class CodebaseCreate(BaseModel):
@@ -33,7 +23,7 @@ class CodebaseCreate(BaseModel):
     description: str
     local_path: str
     default_branch: str | None = None
-    merge_strategy: MergeStrategyEnum | None = None  # Auto-determined if not provided
+    merge_strategy: MergeStrategy | None = None  # Auto-determined if not provided
 
 
 class CodebaseUpdate(BaseModel):
@@ -44,7 +34,7 @@ class CodebaseUpdate(BaseModel):
     repository_url: str | None = None
     local_path: str | None = None
     default_branch: str | None = None
-    merge_strategy: MergeStrategyEnum | None = None
+    merge_strategy: MergeStrategy | None = None
 
 
 class CodebaseResponse(CodebaseBase):

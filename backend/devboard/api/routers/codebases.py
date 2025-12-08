@@ -12,8 +12,7 @@ from devboard.api.schemas import (
     CodebaseUpdate,
     DeleteResponse,
 )
-from devboard.api.schemas.codebase import MergeStrategyEnum
-from devboard.db.models import Codebase
+from devboard.db.models import Codebase, MergeStrategy
 from devboard.db.repositories import CodebaseRepository
 from devboard.integrations.git import GitRepoIntegration
 
@@ -63,10 +62,10 @@ async def create_codebase(
     merge_strategy = codebase.merge_strategy
     if merge_strategy is None:
         # Default to github_pr if remote URL exists, otherwise squash
-        merge_strategy = MergeStrategyEnum.GITHUB_PR if repository_url else MergeStrategyEnum.SQUASH
+        merge_strategy = MergeStrategy.GITHUB_PR if repository_url else MergeStrategy.SQUASH
 
     # Validate github_pr strategy requires a remote URL
-    if merge_strategy == MergeStrategyEnum.GITHUB_PR and not repository_url:
+    if merge_strategy == MergeStrategy.GITHUB_PR and not repository_url:
         raise HTTPException(
             status_code=400,
             detail="GitHub PR merge strategy requires a repository with a remote URL configured",

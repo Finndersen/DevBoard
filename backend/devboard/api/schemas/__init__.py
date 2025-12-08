@@ -5,7 +5,6 @@ from .codebase import (
     CodebaseCreate,
     CodebaseResponse,
     CodebaseUpdate,
-    MergeStrategyEnum,
 )
 from .common import DeleteResponse
 from .conversation import ConversationResponse
@@ -67,7 +66,6 @@ __all__ = [
     "CodebaseCreate",
     "CodebaseResponse",
     "CodebaseUpdate",
-    "MergeStrategyEnum",
     # Common
     "DeleteResponse",
     # Conversation
