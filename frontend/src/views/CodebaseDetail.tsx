@@ -1,11 +1,20 @@
-import { useEffect, useCallback, memo, useRef } from 'react'
-import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
-import type { Codebase } from '../lib/api'
+import { useEffect, useCallback, memo, useRef, useState } from 'react'
+import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import type { Codebase, MergeStrategy } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Card, Input, Textarea, ErrorMessage, Button } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
+
+// Merge strategy display labels
+const MERGE_STRATEGY_OPTIONS: { value: MergeStrategy; label: string; description: string }[] = [
+  { value: 'github_pr', label: 'GitHub PR', description: 'Create a GitHub PR for review and merge' },
+  { value: 'squash', label: 'Squash', description: 'Squash commits into a single commit' },
+  { value: 'rebase', label: 'Rebase', description: 'Rebase for linear history' },
+  { value: 'merge_commit', label: 'Merge Commit', description: 'Standard merge with merge commit' },
+  { value: 'none', label: 'Manual', description: 'No automatic git operations' },
+]
 
 interface CodebaseDetailProps {
   id: string
@@ -65,6 +74,27 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
 
   const saveDefaultBranchField = useCallback(
     (value: string) => updateCodebase({ id: id!, codebase: { default_branch: value } }),
+    [updateCodebase, id]
+  )
+
+  // Merge strategy state
+  const [mergeStrategyEditing, setMergeStrategyEditing] = useState(false)
+  const [mergeStrategySaving, setMergeStrategySaving] = useState(false)
+  const [mergeStrategyError, setMergeStrategyError] = useState<string | null>(null)
+
+  const saveMergeStrategy = useCallback(
+    async (value: MergeStrategy) => {
+      setMergeStrategySaving(true)
+      setMergeStrategyError(null)
+      try {
+        await updateCodebase({ id: id!, codebase: { merge_strategy: value } })
+        setMergeStrategyEditing(false)
+      } catch (err) {
+        setMergeStrategyError(err instanceof Error ? err.message : 'Failed to save')
+      } finally {
+        setMergeStrategySaving(false)
+      }
+    },
     [updateCodebase, id]
   )
 
@@ -441,6 +471,71 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             {defaultBranchField.error && <ErrorMessage message={defaultBranchField.error} />}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Default base branch for new tasks (e.g., origin/main)
+            </p>
+          </div>
+
+          {/* Merge Strategy */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <ArrowPathIcon className="h-4 w-4" />
+              Merge Strategy
+            </label>
+            {mergeStrategyEditing ? (
+              <div className="space-y-2">
+                <select
+                  value={codebase.merge_strategy}
+                  onChange={(e) => saveMergeStrategy(e.target.value as MergeStrategy)}
+                  disabled={mergeStrategySaving}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {MERGE_STRATEGY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} - {option.description}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setMergeStrategyEditing(false)}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                    disabled={mergeStrategySaving}
+                  >
+                    <XMarkIcon className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                    {MERGE_STRATEGY_OPTIONS.find((o) => o.value === codebase.merge_strategy)?.label || codebase.merge_strategy}
+                    <span className="text-gray-500 dark:text-gray-400 ml-2">
+                      ({MERGE_STRATEGY_OPTIONS.find((o) => o.value === codebase.merge_strategy)?.description})
+                    </span>
+                  </span>
+                  <Button
+                    onClick={() => setMergeStrategyEditing(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit merge strategy"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {mergeStrategyError && <ErrorMessage message={mergeStrategyError} />}
+            {codebase.merge_strategy === 'github_pr' && !codebase.repository_url && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                ⚠️ GitHub PR strategy requires a repository URL to be configured
+              </p>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              How feature branches are merged when completing tasks
             </p>
           </div>
         </div>

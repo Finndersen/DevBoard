@@ -791,3 +791,205 @@ class GitRepoIntegration:
             logfire.info(f"Staged {len(staged_files)} untracked files with intent-to-add")
 
         return staged_files
+
+    async def stash(self, message: str | None = None) -> str | None:
+        """Stash uncommitted changes.
+
+        Args:
+            message: Optional message for the stash entry
+
+        Returns:
+            Stash reference (e.g., 'stash@{0}') if changes were stashed, None if nothing to stash
+        """
+        # Check if there are changes to stash first
+        if not await self.has_uncommitted_changes():
+            return None
+
+        args = ["stash", "push"]
+        if message:
+            args.extend(["-m", message])
+
+        await self._run_git_command(args)
+
+        # Return the stash reference
+        return "stash@{0}"
+
+    async def stash_pop(self) -> bool:
+        """Restore stashed changes.
+
+        Returns:
+            True if stash was popped successfully, False if no stash to pop
+        """
+        # Check if there are any stashes
+        stash_list = await self._run_git_command(["stash", "list"], raise_on_error=False)
+        if not stash_list:
+            return False
+
+        await self._run_git_command(["stash", "pop"])
+        return True
+
+    async def merge_squash(
+        self,
+        source: str,
+        target: str,
+        title: str | None = None,
+    ) -> str:
+        """Perform a squash merge.
+
+        Merges all commits from source branch into target branch as a single commit.
+        Checks out target branch, performs squash merge, and commits with auto-generated
+        message from the squashed commits.
+
+        Args:
+            source: Source branch to squash merge from
+            target: Target branch to merge into
+            title: Optional title for the commit (prepended to auto-generated message)
+
+        Returns:
+            Commit hash of the new squashed commit
+
+        Raises:
+            ShellCommandExecutionError: If merge or commit fails
+        """
+        # Get commit messages from source branch for auto-generated message
+        merge_base = await self.get_merge_base(target, source)
+        commits = await self.get_commits_in_range(merge_base, source)
+
+        # Build commit message
+        if title:
+            message_lines = [title, ""]
+        else:
+            message_lines = [f"Squash merge branch '{source}' into {target}", ""]
+
+        # Add individual commit messages
+        if commits:
+            message_lines.append("Squashed commits:")
+            for commit in commits:
+                # Indent each commit message
+                message_lines.append(f"* {commit.message}")
+
+        message = "\n".join(message_lines)
+
+        # Checkout target branch
+        await self.checkout_branch(target)
+
+        # Perform the squash merge (stages changes but doesn't commit)
+        await self._run_git_command(["merge", "--squash", source])
+
+        # Commit the squashed changes
+        await self._run_git_command(["commit", "-m", message])
+
+        # Return the new commit hash
+        return await self._run_git_command(["rev-parse", "HEAD"])
+
+    async def rebase_branch(self, source: str, onto: str) -> None:
+        """Rebase a source branch onto a target branch.
+
+        Args:
+            source: Source branch to rebase
+            onto: Target branch to rebase onto
+
+        Raises:
+            ShellCommandExecutionError: If rebase fails (e.g., conflicts)
+        """
+        await self._run_git_command(["rebase", onto, source])
+
+    async def push_branch(self, branch: str, remote: str = "origin", set_upstream: bool = True) -> None:
+        """Push a branch to a remote.
+
+        Args:
+            branch: Branch name to push
+            remote: Remote name (default: origin)
+            set_upstream: Whether to set upstream tracking (default: True)
+
+        Raises:
+            ShellCommandExecutionError: If push fails
+        """
+        args = ["push"]
+        if set_upstream:
+            args.append("-u")
+        args.extend([remote, branch])
+        await self._run_git_command(args, timeout=60.0)
+
+    async def push_delete_branch(self, branch: str, remote: str = "origin") -> None:
+        """Delete a branch from a remote.
+
+        Args:
+            branch: Branch name to delete
+            remote: Remote name (default: origin)
+
+        Raises:
+            ShellCommandExecutionError: If deletion fails
+        """
+        await self._run_git_command(["push", remote, "--delete", branch], timeout=60.0)
+
+    async def get_checked_out_location(self, branch: str) -> str | None:
+        """Get the path where a branch is currently checked out.
+
+        Checks the main repository and all worktrees to find where the branch
+        is currently checked out.
+
+        Args:
+            branch: Branch name to look for
+
+        Returns:
+            Path where the branch is checked out, or None if not checked out anywhere
+        """
+        worktrees = await self.list_worktrees()
+        for worktree in worktrees:
+            if worktree.branch == branch:
+                return worktree.path
+        return None
+
+    async def is_branch_pushed(self, branch: str, remote: str = "origin") -> bool:
+        """Check if a local branch has been pushed to a remote.
+
+        Args:
+            branch: Local branch name
+            remote: Remote name (default: origin)
+
+        Returns:
+            True if the branch exists on the remote, False otherwise
+        """
+        output = await self._run_git_command(
+            ["ls-remote", "--heads", remote, branch],
+            raise_on_error=False,
+            timeout=30.0,
+        )
+        return bool(output)
+
+    async def fast_forward_merge(self, source: str, target: str) -> str:
+        """Perform a fast-forward merge.
+
+        Checks out the target branch and fast-forwards it to the source branch.
+        Fast-forward is only possible when target is an ancestor of source
+        (i.e., target hasn't diverged).
+
+        Args:
+            source: Source branch to fast-forward to
+            target: Target branch to update
+
+        Returns:
+            Commit hash after fast-forward
+
+        Raises:
+            ShellCommandExecutionError: If fast-forward is not possible
+        """
+        await self.checkout_branch(target)
+        await self._run_git_command(["merge", "--ff-only", source])
+        return await self._run_git_command(["rev-parse", "HEAD"])
+
+    async def commit(self, message: str) -> str:
+        """Create a commit with staged changes.
+
+        Args:
+            message: Commit message
+
+        Returns:
+            Hash of the new commit
+
+        Raises:
+            ShellCommandExecutionError: If commit fails
+        """
+        await self._run_git_command(["commit", "-m", message])
+        return await self._run_git_command(["rev-parse", "HEAD"])

@@ -160,6 +160,8 @@ export interface LLMProvider {
   config: Record<string, unknown>
 }
 
+export type MergeStrategy = 'github_pr' | 'squash' | 'rebase' | 'merge_commit' | 'none'
+
 export interface Codebase {
   id: number
   name: string
@@ -167,6 +169,7 @@ export interface Codebase {
   repository_url: string | null
   local_path: string
   default_branch: string
+  merge_strategy: MergeStrategy
 }
 
 // Git and Worktree Management

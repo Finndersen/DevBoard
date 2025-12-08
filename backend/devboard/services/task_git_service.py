@@ -10,6 +10,7 @@ from enum import StrEnum
 
 import logfire
 
+from devboard.db.models.codebase import MergeStrategy
 from devboard.db.models.task import Task
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
@@ -33,6 +34,21 @@ class TaskDiffResult:
     uncommitted_changes: StructuredDiff | None
     total_additions: int
     total_deletions: int
+
+
+@dataclass
+class MergeResult:
+    """Result of a task merge operation."""
+
+    success: bool
+    strategy: MergeStrategy
+    message: str
+    # For github_pr strategy
+    pr_url: str | None = None
+    # For other merge strategies
+    merge_commit: str | None = None
+    # If merge failed due to conflicts
+    has_conflicts: bool = False
 
 
 class TaskGitService:
@@ -517,3 +533,289 @@ class TaskGitService:
         if main_slot:
             self.worktree_slot_repo.lock_slot(main_slot, task)
             logfire.info(f"Assigned main repo slot to task {task.id}")
+
+    async def complete_task_merge(self, task: Task) -> MergeResult:
+        """Complete a task by merging its feature branch based on codebase merge strategy.
+
+        This method handles the complete merge workflow:
+        1. Validates strategy compatibility with codebase config
+        2. Stashes uncommitted changes if present
+        3. Executes strategy-specific merge
+        4. Cleans up feature branch (for non-github_pr strategies)
+        5. Unstashes changes
+
+        Args:
+            task: Task instance with branch_name set
+
+        Returns:
+            MergeResult with success status and relevant details
+
+        Raises:
+            ValueError: If task or codebase configuration is invalid
+        """
+        if not task.branch_name:
+            return MergeResult(
+                success=False,
+                strategy=MergeStrategy(task.codebase.merge_strategy),
+                message="Task has no branch name configured",
+            )
+
+        strategy = MergeStrategy(task.codebase.merge_strategy)
+        codebase = task.codebase
+
+        # For 'none' strategy, just return success without any git operations
+        if strategy == MergeStrategy.NONE:
+            return MergeResult(
+                success=True,
+                strategy=strategy,
+                message="Manual merge strategy - no git operations performed",
+            )
+
+        # For 'github_pr' strategy, indicate it should be handled via dedicated method
+        if strategy == MergeStrategy.GITHUB_PR:
+            return MergeResult(
+                success=False,
+                strategy=strategy,
+                message="GitHub PR strategy should be handled via create_pull_request workflow action",
+            )
+
+        # Get git integration for main repo
+        git = GitRepoIntegration(codebase.local_path)
+
+        # Check for conflicts before attempting merge
+        comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
+        if comparison.has_conflicts:
+            return MergeResult(
+                success=False,
+                strategy=strategy,
+                message=f"Cannot merge: conflicts detected between {task.branch_name} and {task.base_branch}",
+                has_conflicts=True,
+            )
+
+        # Execute strategy-specific merge
+        try:
+            if strategy == MergeStrategy.SQUASH:
+                return await self._execute_squash_merge(task, git)
+            elif strategy == MergeStrategy.REBASE:
+                return await self._execute_rebase_merge(task, git)
+            elif strategy == MergeStrategy.MERGE_COMMIT:
+                return await self._execute_merge_commit_merge(task, git)
+            else:
+                return MergeResult(
+                    success=False,
+                    strategy=strategy,
+                    message=f"Unknown merge strategy: {strategy}",
+                )
+        except Exception as e:
+            logfire.error(f"Merge failed for task {task.id}: {e}")
+            return MergeResult(
+                success=False,
+                strategy=strategy,
+                message=f"Merge failed: {str(e)}",
+            )
+
+    async def _execute_squash_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
+        """Execute squash merge strategy.
+
+        Squashes all commits into one and merges into base branch.
+        """
+        strategy = MergeStrategy.SQUASH
+        is_remote_base = task.base_branch.startswith("origin/")
+
+        # Stash any uncommitted changes
+        stash_ref = await git.stash(f"DevBoard: pre-merge stash for task {task.id}")
+
+        try:
+            if is_remote_base:
+                # Remote base: squash merge locally then push
+                merge_commit = await self._squash_merge_to_remote_base(task, git)
+            else:
+                # Local base: find worktree with base branch, squash merge there
+                merge_commit = await self._squash_merge_to_local_base(task, git)
+
+            # Delete the feature branch (local)
+            await git.delete_branch(task.branch_name, force=True)
+            logfire.info(f"Deleted local branch {task.branch_name}")
+
+            # If branch was pushed, delete from remote
+            if await git.is_branch_pushed(task.branch_name):
+                try:
+                    await git.push_delete_branch(task.branch_name)
+                    logfire.info(f"Deleted remote branch {task.branch_name}")
+                except Exception as e:
+                    logfire.warning(f"Could not delete remote branch: {e}")
+
+            return MergeResult(
+                success=True,
+                strategy=strategy,
+                message=f"Successfully squash merged {task.branch_name} into {task.base_branch}",
+                merge_commit=merge_commit,
+            )
+        finally:
+            # Always restore stashed changes
+            if stash_ref:
+                await git.stash_pop()
+
+    async def _squash_merge_to_local_base(self, task: Task, git: GitRepoIntegration) -> str:
+        """Squash merge into a local base branch."""
+        base_branch = task.base_branch
+
+        # Check if base branch is checked out somewhere
+        checkout_path = await git.get_checked_out_location(base_branch)
+
+        if checkout_path:
+            # Use the worktree where base branch is checked out
+            worktree_git = GitRepoIntegration(checkout_path)
+            # Stash if dirty
+            worktree_stash = await worktree_git.stash("DevBoard: temp stash for merge")
+            try:
+                merge_commit = await worktree_git.merge_squash(
+                    source=task.branch_name,
+                    target=base_branch,
+                    title=task.title,
+                )
+                return merge_commit
+            finally:
+                if worktree_stash:
+                    await worktree_git.stash_pop()
+        else:
+            # merge_squash handles checkout internally now
+            merge_commit = await git.merge_squash(
+                source=task.branch_name,
+                target=base_branch,
+                title=task.title,
+            )
+            return merge_commit
+
+    async def _squash_merge_to_remote_base(self, task: Task, git: GitRepoIntegration) -> str:
+        """Squash merge into a remote base branch."""
+        # Extract local branch name from remote (e.g., 'origin/main' -> 'main')
+        local_base = task.base_branch.replace("origin/", "")
+
+        # Fetch latest from remote
+        await git._run_git_command(["fetch", "origin", local_base])
+
+        # merge_squash handles checkout internally
+        merge_commit = await git.merge_squash(
+            source=task.branch_name,
+            target=local_base,
+            title=task.title,
+        )
+        # Push to remote
+        await git.push_branch(local_base, set_upstream=False)
+        return merge_commit
+
+    async def _execute_rebase_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
+        """Execute rebase merge strategy.
+
+        Rebases feature branch onto base, then fast-forward merges.
+        """
+        strategy = MergeStrategy.REBASE
+        is_remote_base = task.base_branch.startswith("origin/")
+
+        # Stash any uncommitted changes
+        stash_ref = await git.stash(f"DevBoard: pre-merge stash for task {task.id}")
+
+        try:
+            # Rebase feature branch onto base
+            await git.rebase_branch(task.branch_name, task.base_branch)
+            logfire.info(f"Rebased {task.branch_name} onto {task.base_branch}")
+
+            if is_remote_base:
+                # Remote base: push the rebased branch directly
+                local_base = task.base_branch.replace("origin/", "")
+                # Force push rebased feature branch as the new base
+                await git._run_git_command(["push", "origin", f"{task.branch_name}:{local_base}"])
+                merge_commit = await git._run_git_command(["rev-parse", task.branch_name])
+            else:
+                # Local base: fast-forward merge
+                checkout_path = await git.get_checked_out_location(task.base_branch)
+                if checkout_path:
+                    worktree_git = GitRepoIntegration(checkout_path)
+                    merge_commit = await worktree_git.fast_forward_merge(
+                        source=task.branch_name,
+                        target=task.base_branch,
+                    )
+                else:
+                    # fast_forward_merge handles checkout internally
+                    merge_commit = await git.fast_forward_merge(
+                        source=task.branch_name,
+                        target=task.base_branch,
+                    )
+
+            # Delete the feature branch
+            await git.delete_branch(task.branch_name, force=True)
+            if await git.is_branch_pushed(task.branch_name):
+                try:
+                    await git.push_delete_branch(task.branch_name)
+                except Exception as e:
+                    logfire.warning(f"Could not delete remote branch: {e}")
+
+            return MergeResult(
+                success=True,
+                strategy=strategy,
+                message=f"Successfully rebased and merged {task.branch_name} into {task.base_branch}",
+                merge_commit=merge_commit,
+            )
+        finally:
+            if stash_ref:
+                await git.stash_pop()
+
+    async def _execute_merge_commit_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
+        """Execute merge commit strategy.
+
+        Creates a merge commit preserving full history.
+        """
+        strategy = MergeStrategy.MERGE_COMMIT
+        is_remote_base = task.base_branch.startswith("origin/")
+
+        # Stash any uncommitted changes
+        stash_ref = await git.stash(f"DevBoard: pre-merge stash for task {task.id}")
+
+        try:
+            if is_remote_base:
+                local_base = task.base_branch.replace("origin/", "")
+                await git._run_git_command(["fetch", "origin", local_base])
+                current_branch = await git.get_current_branch()
+                await git.checkout_branch(local_base)
+                try:
+                    merge_commit = await git.merge_branch(task.branch_name, local_base, no_ff=True)
+                    await git.push_branch(local_base, set_upstream=False)
+                finally:
+                    await git.checkout_branch(current_branch)
+            else:
+                # Local base
+                checkout_path = await git.get_checked_out_location(task.base_branch)
+                if checkout_path:
+                    worktree_git = GitRepoIntegration(checkout_path)
+                    worktree_stash = await worktree_git.stash("DevBoard: temp stash")
+                    try:
+                        merge_commit = await worktree_git.merge_branch(task.branch_name, task.base_branch, no_ff=True)
+                    finally:
+                        if worktree_stash:
+                            await worktree_git.stash_pop()
+                else:
+                    current_branch = await git.get_current_branch()
+                    await git.checkout_branch(task.base_branch)
+                    try:
+                        merge_commit = await git.merge_branch(task.branch_name, task.base_branch, no_ff=True)
+                    finally:
+                        await git.checkout_branch(current_branch)
+
+            # Delete the feature branch
+            await git.delete_branch(task.branch_name, force=True)
+            if await git.is_branch_pushed(task.branch_name):
+                try:
+                    await git.push_delete_branch(task.branch_name)
+                except Exception as e:
+                    logfire.warning(f"Could not delete remote branch: {e}")
+
+            return MergeResult(
+                outcome=MergeOutcome.SUCCESS,
+                strategy=strategy,
+                message=f"Successfully merged {task.branch_name} into {task.base_branch} with merge commit",
+                merge_commit=merge_commit,
+            )
+        finally:
+            if stash_ref:
+                await git.stash_pop()

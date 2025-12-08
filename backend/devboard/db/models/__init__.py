@@ -1,7 +1,7 @@
 """Database models package."""
 
 from .base import Base
-from .codebase import Codebase
+from .codebase import Codebase, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation, ParentEntityType
 from .document import Document, DocumentType
@@ -19,6 +19,7 @@ __all__ = [
     "ConversationMessage",
     "Document",
     "DocumentType",
+    "MergeStrategy",
     "MessageType",
     "ParentEntityType",
     "Project",
