@@ -1,6 +1,6 @@
 .idea/
 /backend/.venv/
-*.db
+*.db*
 __pycache__/
 *.pyc
 

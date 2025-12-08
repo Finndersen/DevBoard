@@ -128,7 +128,6 @@ export const useDataStore = create<DataStore>()(
     },
 
     deleteProject: async (projectId) => {
-      await apiClient.deleteProject(projectId)
       set((draft) => {
         draft.projects.delete(projectId)
       })
@@ -190,7 +189,6 @@ export const useDataStore = create<DataStore>()(
     },
 
     deleteTask: async (taskId) => {
-      await apiClient.deleteTask(taskId)
       set((draft) => {
         draft.tasks.delete(taskId)
       })
@@ -252,7 +250,6 @@ export const useDataStore = create<DataStore>()(
     },
 
     deleteCodebase: async (codebaseId) => {
-      await apiClient.deleteCodebase(codebaseId)
       set((draft) => {
         draft.codebases.delete(codebaseId)
       })

@@ -296,22 +296,10 @@ class TaskGitService:
         Returns:
             StructuredDiff with all changes from merge base to current state
         """
-        logfire.debug(
-            "get_task_all_changes called",
-            task_id=task.id,
-            task_branch_name=task.branch_name,
-            task_base_branch=task.base_branch,
-        )
-
         # Get the most recently used worktree slot for this task
         last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
 
         if last_used_slot:
-            logfire.debug(
-                "Using worktree slot for diff",
-                slot_path=last_used_slot.path,
-                task_id=task.id,
-            )
             # Use worktree path - includes uncommitted changes
             git = GitRepoIntegration(last_used_slot.path)
             # Stage untracked files with intent-to-add so they appear in diff
@@ -319,63 +307,20 @@ class TaskGitService:
             # Get fork point - use task.branch_name for reflog lookup, not "HEAD"
             # The reflog "branch: Created from" entry is on the branch, not on HEAD
             feature_branch = task.branch_name if task.branch_name else "HEAD"
-            logfire.debug(
-                "Getting fork point for worktree diff",
-                base_branch=task.base_branch,
-                feature_branch=feature_branch,
-            )
             fork_point = await git.get_fork_point(task.base_branch, feature_branch)
-            logfire.debug(
-                "Fork point result for worktree diff",
-                fork_point=fork_point,
-                task_id=task.id,
-            )
             if not fork_point:
-                logfire.warning("No fork point found, returning empty diff", task_id=task.id)
                 return StructuredDiff(files=[], additions=0, deletions=0)
             # Get all changes from fork point to working directory (includes uncommitted)
-            diff = await git.get_structured_diff(commit1=fork_point)
-            logfire.debug(
-                "Worktree diff result",
-                num_files=len(diff.files),
-                additions=diff.additions,
-                deletions=diff.deletions,
-                task_id=task.id,
-            )
-            return diff
+            return await git.get_structured_diff(commit1=fork_point)
         else:
-            # No worktree - use main codebase path, compare to task branch (committed changes only)
-            if not task.branch_name:
-                # No branch yet, return empty diff
-                logfire.debug("No branch name, returning empty diff", task_id=task.id)
-                return StructuredDiff(files=[], additions=0, deletions=0)
-
-            logfire.debug(
-                "Using main codebase path for diff (no worktree)",
-                codebase_path=task.codebase.local_path,
-                task_id=task.id,
-            )
+            assert task.branch_name is not None
             git = GitRepoIntegration(task.codebase.local_path)
             # Get fork point - works correctly even after branch has been merged
             fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
-            logfire.debug(
-                "Fork point result for codebase diff",
-                fork_point=fork_point,
-                task_id=task.id,
-            )
             if not fork_point:
-                logfire.warning("No fork point found, returning empty diff", task_id=task.id)
                 return StructuredDiff(files=[], additions=0, deletions=0)
             # Get changes from fork point to task branch (committed changes only)
-            diff = await git.get_structured_diff(commit1=fork_point, commit2=task.branch_name)
-            logfire.debug(
-                "Codebase diff result",
-                num_files=len(diff.files),
-                additions=diff.additions,
-                deletions=diff.deletions,
-                task_id=task.id,
-            )
-            return diff
+            return await git.get_structured_diff(commit1=fork_point, commit2=task.branch_name)
 
     async def get_task_uncommitted_changes(self, task: Task) -> StructuredDiff:
         """Get uncommitted changes for a task.

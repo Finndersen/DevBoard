@@ -103,7 +103,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
-  const [transitionMessage, setTransitionMessage] = useState<string>('')
+  const [streamingMessage, setStreamingMessage] = useState<string>('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
   const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
@@ -124,10 +124,10 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Clear transition message when streaming starts
   useEffect(() => {
-    if (isConversationStreaming && transitionMessage) {
-      setTransitionMessage('')
+    if (isConversationStreaming && streamingMessage) {
+      setStreamingMessage('')
     }
-  }, [isConversationStreaming, transitionMessage])
+  }, [isConversationStreaming, streamingMessage])
 
   // Memoize the updateCache function to prevent infinite re-creation
   const updateCache = useCallback(() => {
@@ -368,16 +368,31 @@ function TaskDetail({ id }: TaskDetailProps) {
     const oldConversationId = task?.conversation_id
     const newConversationId = event.data?.updated_fields?.conversation_id
 
+    console.log('[TaskDetail] SystemEvent received:', {
+      taskId: task?.id,
+      eventType: event.type,
+      oldConversationId,
+      newConversationId,
+      currentTaskConversationId: task?.conversation_id
+    })
+
     try {
       // Migrate stream FIRST (before refetch updates conversation_id in state)
       // This prevents race condition where component re-renders with new conversation_id
       // but stream is still registered under old conversation_id
       if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
+        console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
         migrateStream(oldConversationId, newConversationId)
+        // Clear streaming message immediately after migration
+        // The isConversationStreaming check in the effect won't work during migration
+        // because task.conversation_id hasn't updated yet
+        setStreamingMessage('')
       }
 
+      console.log('[TaskDetail] Before refetch')
       // THEN refetch task to get updated status and conversation_id
       await refetch()
+      console.log('[TaskDetail] After refetch completed')
     } catch (error) {
       console.error('Failed to refetch task after update event:', error)
       // Don't throw - allow other handlers and stream to continue
@@ -416,10 +431,17 @@ function TaskDetail({ id }: TaskDetailProps) {
   const executeWorkflowAction = async (actionKey: string, message: string) => {
     if (!task?.id || !task?.conversation_id) return
 
-    setTransitionMessage(message)
+    console.log('[TaskDetail] executeWorkflowAction:', {
+      actionKey,
+      taskId: task.id,
+      conversationId: task.conversation_id
+    })
+
+    setStreamingMessage(message)
     try {
       // Fetch existing conversation messages to preserve history
       const existingMessages = await apiClient.getConversationMessages(task.conversation_id)
+      console.log('[TaskDetail] Fetched existing messages:', existingMessages.length)
 
       // Create workflow action stream
       const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
@@ -429,12 +451,13 @@ function TaskDetail({ id }: TaskDetailProps) {
       // This immediately sets isStreaming=true in the store, which disables buttons
       // Event handlers are already registered via hooks at component level
       // Pass eventHandlerRegistry so tool results and system events are processed
-      // Note: Transition message will be cleared by the effect watching isConversationStreaming
+      console.log('[TaskDetail] Starting stream with conversation_id:', task.conversation_id)
       await startStream(task.conversation_id, stream, eventHandlerRegistry, existingMessages)
+      console.log('[TaskDetail] Stream completed')
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
       // Clear transition message on error
-      setTransitionMessage('')
+      setStreamingMessage('')
     }
   }
 
@@ -843,8 +866,8 @@ function TaskDetail({ id }: TaskDetailProps) {
             emptyStateMessage="Welcome to the Task Agent!"
             className="h-full flex flex-col overflow-hidden"
             padding="xs"
-            isTransitioning={isConversationStreaming}
-            transitionMessage={transitionMessage}
+            isRunningAction={isConversationStreaming}
+            actionMessage={streamingMessage}
             initialMessage={pendingInitialMessage}
             onInitialMessageSent={() => setPendingInitialMessage(null)}
           />

@@ -16,8 +16,8 @@ interface ConversationChatProps {
   conversationId: number
   placeholder?: string
   emptyStateMessage?: string
-  isTransitioning?: boolean
-  transitionMessage?: string
+  isRunningAction?: boolean
+  actionMessage?: string
   onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
@@ -27,8 +27,8 @@ const ConversationChat = ({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
-  isTransitioning = false,
-  transitionMessage = '',
+  isRunningAction = false,
+  actionMessage = '',
   onStreamingStarted,
   initialMessage,
   onInitialMessageSent
@@ -66,6 +66,17 @@ const ConversationChat = ({
     }
   }, [conversationId, streamState, eventHandlerRegistry, updateEventHandlerRegistry])
 
+  // Debug: Log subscription state changes
+  useEffect(() => {
+    console.log('[ConversationChat] Subscription state changed:', {
+      conversationId,
+      hasStreamState: !!streamState,
+      isStreaming,
+      messageCount: streamMessages?.length ?? 0,
+      pendingToolRequestCount: pendingToolRequests?.length ?? 0
+    })
+  }, [conversationId, streamState, isStreaming, streamMessages, pendingToolRequests])
+
   // Local state for non-streaming concerns
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [approvalError, setApprovalError] = useState<string | null>(null)
@@ -101,10 +112,15 @@ const ConversationChat = ({
 
   // Update messages from stream store
   useEffect(() => {
+    console.log('[ConversationChat] streamMessages effect:', {
+      conversationId,
+      hasStreamMessages: !!streamMessages,
+      messageCount: streamMessages?.length ?? 0
+    })
     if (streamMessages) {
       setMessages(streamMessages)
     }
-  }, [streamMessages])
+  }, [streamMessages, conversationId])
 
   // Convert tool requests from store to approval objects
   // Track if we've set approvals to avoid clearing them incorrectly
@@ -148,14 +164,14 @@ const ConversationChat = ({
   }, [getActiveTab, setTabActivityStatus])
 
   useEffect(() => {
-    if (isStreaming || isTransitioning) {
+    if (isStreaming || isRunningAction) {
       updateCurrentTabStatus({ type: 'agent_working' })
     } else if (pendingApprovals.length > 0) {
       updateCurrentTabStatus({ type: 'action_required' })
     } else {
       updateCurrentTabStatus({ type: 'idle' })
     }
-  }, [isStreaming, isTransitioning, pendingApprovals.length, updateCurrentTabStatus])
+  }, [isStreaming, isRunningAction, pendingApprovals.length, updateCurrentTabStatus])
 
   const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
@@ -167,7 +183,7 @@ const ConversationChat = ({
     requestAnimationFrame(() => {
       scrollToBottom()
     })
-  }, [messages, pendingMessage, isTransitioning, scrollToBottom])
+  }, [messages, pendingMessage, isRunningAction, scrollToBottom])
 
   // Fetch history when conversation changes (but not if there's an active stream)
   useEffect(() => {
@@ -255,7 +271,7 @@ const ConversationChat = ({
   }, [pendingMessages])
 
   const handleSendMessage = useCallback(async (messageText: string) => {
-    if (isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning) return
+    if (isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction) return
 
     // Add message to pending state
     const pendingMessageId = addPendingMessage(pendingKey, {
@@ -302,7 +318,7 @@ const ConversationChat = ({
     isStreaming,
     pendingApprovals.length,
     pendingMessage,
-    isTransitioning,
+    isRunningAction,
     pendingKey,
     conversationId,
     addPendingMessage,
@@ -335,7 +351,7 @@ const ConversationChat = ({
       !initialMessageSentRef.current &&
       !isStreaming &&
       pendingApprovals.length === 0 &&
-      !isTransitioning &&
+      !isRunningAction &&
       lastFetchedConversationIdRef.current === conversationId
     ) {
       initialMessageSentRef.current = true
@@ -345,7 +361,7 @@ const ConversationChat = ({
         onInitialMessageSent?.()
       }, 0)
     }
-  }, [initialMessage, isStreaming, pendingApprovals.length, isTransitioning, conversationId, handleSendMessage, onInitialMessageSent])
+  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, handleSendMessage, onInitialMessageSent])
 
   // Reset initial message sent ref when conversation changes
   useEffect(() => {
@@ -353,8 +369,8 @@ const ConversationChat = ({
   }, [conversationId])
 
   const isInputDisabled = useMemo(
-    () => isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isTransitioning,
-    [isStreaming, pendingApprovals.length, pendingMessage, isTransitioning]
+    () => isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction,
+    [isStreaming, pendingApprovals.length, pendingMessage, isRunningAction]
   )
 
   const handleToolApproval = async (approvalRequest: ToolApprovalRequest) => {
@@ -447,7 +463,7 @@ const ConversationChat = ({
           </div>
         )}
 
-        {isTransitioning && transitionMessage && (
+        {isRunningAction && actionMessage && (
           <div className="flex justify-start">
             <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-3 py-2">
               <div className="flex items-center space-x-3">
@@ -456,7 +472,7 @@ const ConversationChat = ({
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
-                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">{transitionMessage}</span>
+                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">{actionMessage}</span>
               </div>
             </div>
           </div>
@@ -482,7 +498,7 @@ const ConversationChat = ({
             Waiting for agent response...
           </p>
         )}
-        {isTransitioning && (
+        {isRunningAction && (
           <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
             Running action...
           </p>

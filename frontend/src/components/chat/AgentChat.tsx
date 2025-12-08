@@ -8,7 +8,7 @@ import ClearChatHistoryModal from '../modals/ClearChatHistoryModal'
 import SessionIdModal from '../modals/SessionIdModal'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
-import type { ConversationResponse, ConversationEvent } from '../../lib/api'
+import type { ConversationResponse } from '../../lib/api'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { useApprovals } from '../../contexts/ApprovalsContext'
 import { createConversationPendingKey, createConversationApprovalKey } from '../../utils/approvalKeys'
@@ -21,8 +21,8 @@ interface AgentChatProps {
   emptyStateMessage?: string
   className?: string
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
-  isTransitioning?: boolean
-  transitionMessage?: string
+  isRunningAction?: boolean
+  actionMessage?: string
   onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
@@ -34,8 +34,8 @@ const AgentChat = ({
   emptyStateMessage = "Start a conversation!",
   className = "flex flex-col overflow-hidden",
   padding = "xs",
-  isTransitioning = false,
-  transitionMessage = '',
+  isRunningAction = false,
+  actionMessage = '',
   onStreamingStarted,
   initialMessage,
   onInitialMessageSent
@@ -142,8 +142,8 @@ const AgentChat = ({
               conversationId={conversationId}
               placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
-              isTransitioning={isTransitioning}
-              transitionMessage={transitionMessage}
+              isRunningAction={isRunningAction}
+              actionMessage={actionMessage}
               onStreamingStarted={onStreamingStarted}
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}

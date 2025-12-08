@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 
@@ -6,7 +7,7 @@ interface ConfirmDialogProps {
   onClose: () => void
   onConfirm: () => void
   title: string
-  message: string
+  message: ReactNode
   confirmText?: string
   cancelText?: string
   variant?: 'danger' | 'warning' | 'info'
@@ -118,12 +119,12 @@ export default function ConfirmDialog({
             >
               {title}
             </h3>
-            <p
+            <div
               id="confirm-dialog-description"
               className="mt-2 text-sm text-gray-600 dark:text-gray-400"
             >
               {message}
-            </p>
+            </div>
           </div>
         </div>
 

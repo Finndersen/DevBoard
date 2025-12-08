@@ -58,6 +58,12 @@ export async function processConversationStream(
   for await (const event of stream) {
     eventCount++
 
+    console.log('[StreamProcessor] Event received:', {
+      eventType: event.event_type,
+      eventCount,
+      timestamp: new Date().toISOString()
+    })
+
     // Invoke first event callback once
     if (!firstEventProcessed && onFirstEvent) {
       await onFirstEvent()

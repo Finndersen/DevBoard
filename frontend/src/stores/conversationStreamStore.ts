@@ -223,6 +223,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         })
       })
 
+      console.log('[StreamStore] Stream started:', {
+        conversationId,
+        initialMessageCount: initialMessages?.length ?? 0
+      })
+
       try {
         // Process the provided stream events and collect tool requests
         // Use conversationIdRef.current so closures see the current ID (may change during migration)
@@ -273,10 +278,16 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     },
 
     completeStream: (conversationId) => {
+      const stream = get().activeStreams.get(conversationId)
+      console.log('[StreamStore] Stream completed:', {
+        conversationId,
+        messageCount: stream?.messages.length ?? 0
+      })
+
       set((draft) => {
-        const stream = draft.activeStreams.get(conversationId)
-        if (stream) {
-          stream.isStreaming = false
+        const draftStream = draft.activeStreams.get(conversationId)
+        if (draftStream) {
+          draftStream.isStreaming = false
         }
       })
 
@@ -304,6 +315,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     },
 
     addEvent: (conversationId, event) => {
+      console.log('[StreamStore] addEvent called:', {
+        conversationId,
+        eventType: event.event_type
+      })
+
       set((draft) => {
         const stream = draft.activeStreams.get(conversationId)
         if (stream) {
@@ -471,12 +487,25 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     migrateStream: (oldConversationId, newConversationId) => {
       const stream = get().activeStreams.get(oldConversationId)
+
+      console.log('[StreamStore] migrateStream called:', {
+        from: oldConversationId,
+        to: newConversationId,
+        streamFound: !!stream,
+        messageCount: stream?.messages.length ?? 0,
+        isStreaming: stream?.isStreaming ?? false
+      })
+
       if (stream) {
+        // IMPORTANT: Update the mutable ref BEFORE the Immer draft operation
+        // This ensures the closure in processConversationStream sees the new ID immediately
+        // Updating inside Immer's set() doesn't work because Immer proxies the object
+        stream.conversationIdRef.current = newConversationId
+        console.log('[StreamStore] Updated conversationIdRef.current to:', newConversationId)
+
         set((draft) => {
           const draftStream = draft.activeStreams.get(oldConversationId)
           if (draftStream) {
-            // Update the mutable ref inside the draft context
-            draftStream.conversationIdRef.current = newConversationId
             // Remove from old conversation ID
             draft.activeStreams.delete(oldConversationId)
             // Add to new conversation ID
@@ -490,6 +519,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           eventHandlerRegistries.delete(oldConversationId)
           eventHandlerRegistries.set(newConversationId, registry)
         }
+
+        console.log('[StreamStore] Stream migrated successfully')
+      } else {
+        console.warn('[StreamStore] No stream found to migrate')
       }
     }
   }))
