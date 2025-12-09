@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
 
-// Git branch icon (classic fork-style)
+// Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="6" y1="3" x2="6" y2="15" />
-    <circle cx="18" cy="6" r="3" />
-    <circle cx="6" cy="18" r="3" />
-    <path d="M18 9a9 9 0 0 1-9 9" />
+    <circle cx="12" cy="20" r="2" />
+    <circle cx="12" cy="4" r="2" />
+    <circle cx="18" cy="6" r="2" />
+    <path d="M12 18 L12 6" />
+    <path d="M12 18 Q16 14 18 8" />
   </svg>
 )
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
@@ -666,8 +667,12 @@ function TaskDetail({ id }: TaskDetailProps) {
             {gitStatus?.branch_name && (
               <button
                 onClick={handleOpenBranchStatusModal}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
-                title="View branch status"
+                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${
+                  gitStatus.worktree_slot_path
+                    ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                    : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ' + textColors.secondary
+                }`}
+                title={gitStatus.branch_name}
                 disabled={branchStatusLoading}
               >
                 <GitBranchIcon className="w-4 h-4" />
