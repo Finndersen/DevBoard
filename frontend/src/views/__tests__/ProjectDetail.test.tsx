@@ -5,7 +5,6 @@ import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
-import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import { DarkModeProvider } from '../../contexts/DarkModeContext'
 import ProjectDetail from '../ProjectDetail'
@@ -14,13 +13,11 @@ import ProjectDetail from '../ProjectDetail'
 const renderProjectDetail = (projectId: string = '1') => {
   return rtlRender(
     <DarkModeProvider>
-      <ApprovalsProvider>
-        <PendingMessagesProvider>
-          <BrowserRouter>
-            <ProjectDetail id={projectId} />
-          </BrowserRouter>
-        </PendingMessagesProvider>
-      </ApprovalsProvider>
+      <PendingMessagesProvider>
+        <BrowserRouter>
+          <ProjectDetail id={projectId} />
+        </BrowserRouter>
+      </PendingMessagesProvider>
     </DarkModeProvider>
   )
 }
@@ -43,13 +40,22 @@ describe('ProjectDetail', () => {
     
     // Setup default API responses
     server.use(
-      http.get('*/api/projects/1', () => {
+      http.get('*/api/projects/:id', ({ params }) => {
+        if (params.id === '999') {
+          return new HttpResponse(null, { status: 404 })
+        }
         return HttpResponse.json(mockProject)
       }),
-      http.get('*/api/projects/1/tasks', () => {
+      http.get('*/api/projects/:id/tasks', () => {
         return HttpResponse.json(mockTasks)
       }),
-      http.get('*/api/projects/1/qa/history', () => {
+      http.get('*/api/projects/:id/qa/history', () => {
+        return HttpResponse.json([])
+      }),
+      http.get('*/api/projects/:id/codebases', () => {
+        return HttpResponse.json([])
+      }),
+      http.get('*/api/conversations/*/messages', () => {
         return HttpResponse.json([])
       }),
       http.get('*/api/agents/project/configuration', () => {

@@ -1,7 +1,6 @@
 import React, { type ReactElement } from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
-import { ApprovalsProvider } from '../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../contexts/PendingMessagesContext'
 import { DarkModeProvider } from '../contexts/DarkModeContext'
 
@@ -11,11 +10,9 @@ const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
   return (
     <BrowserRouter>
       <DarkModeProvider>
-        <ApprovalsProvider>
-          <PendingMessagesProvider>
-            {children}
-          </PendingMessagesProvider>
-        </ApprovalsProvider>
+        <PendingMessagesProvider>
+          {children}
+        </PendingMessagesProvider>
       </DarkModeProvider>
     </BrowserRouter>
   )

@@ -12,7 +12,7 @@ import { useModal, useEditableField, useProject, useProjectTasks, useProjectCode
 import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
-import { useApprovals } from '../contexts/ApprovalsContext'
+import { useApprovalActions } from '../stores/approvalsStore'
 
 interface ProjectDetailProps {
   id: string
@@ -55,7 +55,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
   })
 
-  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
+  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovalActions()
 
   // Use new custom hooks
   const createTaskModal = useModal()

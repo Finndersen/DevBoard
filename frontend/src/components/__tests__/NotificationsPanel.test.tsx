@@ -2,18 +2,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 import NotificationsPanel from '../notifications/NotificationsPanel'
-import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
+import * as approvalsStore from '../../stores/approvalsStore'
 import type { PendingApproval } from '../../lib/api'
 
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-}
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
-})
+// Mock the approvalsStore module
+vi.mock('../../stores/approvalsStore', () => ({
+  useAllApprovals: vi.fn(),
+  useApprovalActions: vi.fn()
+}))
 
 const mockApproval: PendingApproval = {
   tool_call_id: 'test-123',
@@ -27,9 +23,7 @@ const mockApproval: PendingApproval = {
 const renderWithProviders = (component: React.ReactElement) => {
   return render(
     <BrowserRouter>
-      <ApprovalsProvider>
-        {component}
-      </ApprovalsProvider>
+      {component}
     </BrowserRouter>
   )
 }
@@ -37,7 +31,18 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('NotificationsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    localStorageMock.getItem.mockReturnValue(null)
+    // Default mock returns empty approvals
+    vi.mocked(approvalsStore.useAllApprovals).mockReturnValue({})
+    vi.mocked(approvalsStore.useApprovalActions).mockReturnValue({
+      setApprovals: vi.fn(),
+      addApproval: vi.fn(),
+      removeApproval: vi.fn(),
+      clearApprovals: vi.fn(),
+      processApprovalDecision: vi.fn(),
+      registerRefreshHandler: vi.fn(),
+      unregisterRefreshHandlers: vi.fn(),
+      executeRefreshHandlers: vi.fn()
+    })
   })
 
   it('renders bell icon with no badge when there are no approvals', () => {
@@ -49,10 +54,9 @@ describe('NotificationsPanel', () => {
   })
 
   it('shows notification count badge when there are pending approvals', () => {
-    const approvalsData = {
+    vi.mocked(approvalsStore.useAllApprovals).mockReturnValue({
       'project-1': [mockApproval]
-    }
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(approvalsData))
+    })
 
     renderWithProviders(<NotificationsPanel />)
 
@@ -93,11 +97,10 @@ describe('NotificationsPanel', () => {
       }
     }
 
-    const approvalsData = {
+    vi.mocked(approvalsStore.useAllApprovals).mockReturnValue({
       'project-1': [mockApproval],
       'task-5': [implementationPlanApproval]
-    }
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(approvalsData))
+    })
 
     renderWithProviders(<NotificationsPanel />)
 
@@ -111,11 +114,10 @@ describe('NotificationsPanel', () => {
   })
 
   it('shows correct total count with multiple approvals', () => {
-    const approvalsData = {
+    vi.mocked(approvalsStore.useAllApprovals).mockReturnValue({
       'project-1': [mockApproval, { ...mockApproval, tool_call_id: 'test-789' }],
       'task-5': [{ ...mockApproval, tool_call_id: 'test-456' }]
-    }
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(approvalsData))
+    })
 
     renderWithProviders(<NotificationsPanel />)
 
@@ -123,10 +125,9 @@ describe('NotificationsPanel', () => {
   })
 
   it('displays document type and reasoning for each approval', () => {
-    const approvalsData = {
+    vi.mocked(approvalsStore.useAllApprovals).mockReturnValue({
       'project-1': [mockApproval]
-    }
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(approvalsData))
+    })
 
     renderWithProviders(<NotificationsPanel />)
 

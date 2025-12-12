@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import Layout from '../layout/Layout'
 
@@ -9,13 +8,11 @@ import Layout from '../layout/Layout'
 const renderWithRouter = (initialEntries: string[] = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <ApprovalsProvider>
-        <PendingMessagesProvider>
-          <Layout>
-            <div>Test Content</div>
-          </Layout>
-        </PendingMessagesProvider>
-      </ApprovalsProvider>
+      <PendingMessagesProvider>
+        <Layout>
+          <div>Test Content</div>
+        </Layout>
+      </PendingMessagesProvider>
     </MemoryRouter>
   )
 }
@@ -36,13 +33,11 @@ describe('Layout', () => {
   it('renders children content in main area', () => {
     render(
       <MemoryRouter>
-        <ApprovalsProvider>
-          <PendingMessagesProvider>
-            <Layout>
-              <div data-testid="child-content">Test Content</div>
-            </Layout>
-          </PendingMessagesProvider>
-        </ApprovalsProvider>
+        <PendingMessagesProvider>
+          <Layout>
+            <div data-testid="child-content">Test Content</div>
+          </Layout>
+        </PendingMessagesProvider>
       </MemoryRouter>
     )
 

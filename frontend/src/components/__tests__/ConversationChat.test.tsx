@@ -7,6 +7,7 @@ import { render } from '../../test/utils'
 import ConversationChat from '../chat/ConversationChat'
 import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
+import { useApprovalsStore } from '../../stores/approvalsStore'
 
 describe('ConversationChat', () => {
   const mockConversationId = 1
@@ -44,6 +45,9 @@ describe('ConversationChat', () => {
     // Clear the conversationStreamStore between tests to prevent state pollution
     // Replace the Map entirely to ensure complete cleanup
     useConversationStreamStore.setState({ activeStreams: new Map() })
+
+    // Clear the approvalsStore between tests
+    useApprovalsStore.setState({ approvals: {} })
 
     // Mock scrollIntoView which is not available in jsdom
     Element.prototype.scrollIntoView = vi.fn()

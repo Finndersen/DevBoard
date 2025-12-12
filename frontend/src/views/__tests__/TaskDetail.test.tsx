@@ -5,7 +5,6 @@ import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask } from '../../test/utils'
-import { ApprovalsProvider } from '../../contexts/ApprovalsContext'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import TaskDetail from '../TaskDetail'
@@ -21,15 +20,13 @@ const createStreamingResponse = (events: any[]) => {
 // Helper function to render TaskDetail with providers
 const renderTaskDetail = (taskId: string = '1') => {
   return render(
-    <ApprovalsProvider>
-      <PendingMessagesProvider>
-        <ConversationEventHandlerProvider>
-          <BrowserRouter>
-            <TaskDetail id={taskId} />
-          </BrowserRouter>
-        </ConversationEventHandlerProvider>
-      </PendingMessagesProvider>
-    </ApprovalsProvider>
+    <PendingMessagesProvider>
+      <ConversationEventHandlerProvider>
+        <BrowserRouter>
+          <TaskDetail id={taskId} />
+        </BrowserRouter>
+      </ConversationEventHandlerProvider>
+    </PendingMessagesProvider>
   )
 }
 
@@ -53,17 +50,38 @@ describe('TaskDetail', () => {
     
     // Setup default API responses
     server.use(
-      http.get('*/api/tasks/1', () => {
+      http.get('*/api/tasks/:id', ({ params }) => {
+        if (params.id === '999') {
+          return new HttpResponse(null, { status: 404 })
+        }
         return HttpResponse.json(mockTask)
       }),
-      http.get('*/api/projects/1', () => {
+      http.get('*/api/projects/:id', () => {
         return HttpResponse.json(mockProject)
       }),
-      http.get('*/api/tasks/1/qa/history', () => {
+      http.get('*/api/tasks/:id/qa/history', () => {
         return HttpResponse.json([])
       }),
       http.get('*/api/conversations/*/messages', () => {
         return HttpResponse.json([])
+      }),
+      http.get('*/api/tasks/:id/git-status', () => {
+        return HttpResponse.json({
+          branch_name: null,
+          branch_exists: false,
+          base_branch: 'main',
+          commits_ahead: 0,
+          commits_behind: 0,
+          can_merge: false,
+          has_conflicts: false,
+          worktree_slot: null,
+        })
+      }),
+      http.get('*/api/codebases', () => {
+        return HttpResponse.json([])
+      }),
+      http.post('*/api/tasks/:id/workflow-action', () => {
+        return HttpResponse.json({ success: true })
       })
     )
   })

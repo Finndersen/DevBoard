@@ -10,7 +10,7 @@ import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ConversationResponse } from '../../lib/api'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
-import { useApprovals } from '../../contexts/ApprovalsContext'
+import { useApprovalActions } from '../../stores/approvalsStore'
 import { createConversationPendingKey, createConversationApprovalKey } from '../../utils/approvalKeys'
 import { useModal, useAsyncOperation } from '../../hooks'
 import { formatAgentRoleDisplayName } from '../../utils/agentRoles'
@@ -47,7 +47,7 @@ const AgentChat = ({
   const clearChatModal = useModal()
   const sessionIdModal = useModal()
   const { clearConversationMessages } = usePendingMessages()
-  const { clearApprovals } = useApprovals()
+  const { clearApprovals } = useApprovalActions()
 
   // Fetch conversation details to get agent role
   useEffect(() => {

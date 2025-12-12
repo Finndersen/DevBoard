@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { BellIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { useApprovals } from '../../contexts/ApprovalsContext'
+import { useAllApprovals, useApprovalActions } from '../../stores/approvalsStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import DocumentDiffModal from '../documents/DocumentDiffModal'
 import { getDocumentTypeFromToolName, getReasoningFromToolArgs } from '../../utils/toolTypeUtils'
@@ -11,7 +11,8 @@ export default function NotificationsPanel() {
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null)
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const { state, processApprovalDecision } = useApprovals()
+  const approvals = useAllApprovals()
+  const { processApprovalDecision } = useApprovalActions()
   const {
     notifications,
     filter,
@@ -23,8 +24,8 @@ export default function NotificationsPanel() {
   } = useNotificationStore()
 
   const getTotalCount = () => {
-    const approvalCount = Object.keys(state.approvals).reduce((total, key) => {
-      return total + (state.approvals[key]?.length || 0)
+    const approvalCount = Object.keys(approvals).reduce((total, key) => {
+      return total + (approvals[key]?.length || 0)
     }, 0)
     const notificationCount = getUnreadCount()
     return approvalCount + notificationCount
@@ -101,8 +102,8 @@ export default function NotificationsPanel() {
   }
 
   const totalCount = getTotalCount()
-  const pendingKeys = Object.keys(state.approvals).filter(
-    key => state.approvals[key] && state.approvals[key].length > 0
+  const pendingKeys = Object.keys(approvals).filter(
+    key => approvals[key] && approvals[key].length > 0
   )
 
   const getNotificationIcon = (type: string) => {
@@ -177,8 +178,8 @@ export default function NotificationsPanel() {
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
                   {/* Pending Approvals (High Priority) */}
                   {pendingKeys.map(key => {
-                    const approvals = state.approvals[key] || []
-                    return approvals.map((approval) => (
+                    const keyApprovals = approvals[key] || []
+                    return keyApprovals.map((approval) => (
                       <button
                         key={`${key}-${approval.tool_call_id}`}
                         onClick={() => handleApprovalClick(key, approval)}

@@ -40,13 +40,6 @@ describe('ToolCallDisplay', () => {
       // Should show tool name
       expect(screen.getByText('search_codebase')).toBeInTheDocument()
 
-      // Should show timestamp in header
-      const formattedTime = new Date('2024-01-01T10:00:00Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-      expect(screen.getByText(formattedTime)).toBeInTheDocument()
-
       // Should NOT show arguments when collapsed
       expect(screen.queryByText('Arguments:')).not.toBeInTheDocument()
       expect(screen.queryByText(/"query": "test search"/)).not.toBeInTheDocument()
@@ -408,7 +401,7 @@ describe('ToolCallDisplay', () => {
       expect(errorContent).toHaveClass('text-red-800', 'dark:text-red-300')
 
       // Check for error border styling on the result container with theme-aware classes
-      const resultContainer = errorContent.closest('.px-4')
+      const resultContainer = errorContent.closest('.px-3')
       expect(resultContainer).toHaveClass('border-red-300', 'dark:border-red-800', 'bg-red-100', 'dark:bg-red-900/10')
     })
 
@@ -455,74 +448,15 @@ describe('ToolCallDisplay', () => {
     })
   })
 
-  describe('Expanded State - Timestamps', () => {
-    it('shows timestamp for tool call in header', () => {
-      render(<ToolCallDisplay toolCall={mockToolCall} />)
-
-      // formatTimestamp should format as HH:MM - shown in header (no need to expand)
-      const formattedTime = new Date('2024-01-01T10:00:00Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
-      expect(screen.getByText(formattedTime)).toBeInTheDocument()
-    })
-
-    it('shows timestamp for tool result when expanded', async () => {
-      const user = userEvent.setup()
-      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
-
-      await user.click(screen.getByRole('button'))
-
-      // Should show both tool call timestamp (in header) and result timestamp (in expanded section)
-      const toolCallTime = new Date('2024-01-01T10:00:00Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-      const resultTime = new Date('2024-01-01T10:00:05Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
-      expect(screen.getByText(toolCallTime)).toBeInTheDocument()
-
-      // Result timestamp is shown with "Returned: " prefix and duration
-      expect(screen.getByText(`Returned: ${resultTime} (5.0s)`)).toBeInTheDocument()
-    })
-
-    it('shows proper visual hierarchy with timestamps when expanded', async () => {
-      const user = userEvent.setup()
-      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
-
-      await user.click(screen.getByRole('button'))
-
-      const toolCallTime = new Date('2024-01-01T10:00:00Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
-      // Check the call timestamp styling with theme-aware classes
-      const callTimestamp = screen.getByText(toolCallTime)
-      expect(callTimestamp).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
-
-      // Check result timestamp styling with theme-aware classes (includes "Returned: " prefix and duration)
-      const resultTimestamp = screen.getByText(/Returned:/)
-      expect(resultTimestamp).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
-    })
-
+  describe('Expanded State - Duration', () => {
     it('displays duration when tool result is present', async () => {
       const user = userEvent.setup()
       render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
 
       await user.click(screen.getByRole('button'))
 
-      const resultTime = new Date('2024-01-01T10:00:05Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
       // Duration between 10:00:00 and 10:00:05 should be 5.0s
-      expect(screen.getByText(`Returned: ${resultTime} (5.0s)`)).toBeInTheDocument()
+      expect(screen.getByText('5.0s')).toBeInTheDocument()
     })
 
     it('displays duration in milliseconds for sub-second durations', async () => {
@@ -539,32 +473,37 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      const resultTime = new Date('2024-01-01T10:00:00.234Z').toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-
       // Duration should be 234ms
-      expect(screen.getByText(`Returned: ${resultTime} (234ms)`)).toBeInTheDocument()
+      expect(screen.getByText('234ms')).toBeInTheDocument()
+    })
+
+    it('shows duration with correct styling', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      // Check duration styling with theme-aware classes
+      const duration = screen.getByText('5.0s')
+      expect(duration).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
     })
   })
 
   describe('Layout and Styling', () => {
-    it('limits width to 80% of container', () => {
+    it('renders with full width container', () => {
       const { container } = render(<ToolCallDisplay toolCall={mockToolCall} />)
 
-      const wrapper = container.querySelector('.max-w-\\[80\\%\\]')
-      expect(wrapper).toBeInTheDocument()
+      // Component uses flex w-full min-w-0 layout
+      const wrapper = container.querySelector('.flex.w-full')
+      expect(wrapper).toBeTruthy()
     })
 
-    it('aligns tool call to the left', () => {
+    it('has minimum width constraint', () => {
       const { container } = render(<ToolCallDisplay toolCall={mockToolCall} />)
 
-      const outerContainer = container.querySelector('.justify-start')
-      expect(outerContainer).toBeInTheDocument()
-
-      const innerContainer = container.querySelector('.items-start')
-      expect(innerContainer).toBeInTheDocument()
+      // Button has min-w-[300px] class
+      const button = container.querySelector('.min-w-\\[300px\\]')
+      expect(button).toBeTruthy()
     })
 
     it('handles very long tool names gracefully', () => {

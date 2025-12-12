@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 import type { ConversationEvent } from '../lib/api'
-import type { PendingApprovalWithContext } from '../contexts/ApprovalsContext'
 
 export interface ConversationState {
   id: number
@@ -10,7 +9,6 @@ export interface ConversationState {
   draftMessage: string
   scrollPosition: number
   isTyping: boolean
-  pendingToolApprovals: PendingApprovalWithContext[]
   lastActivity: Date
 }
 
@@ -40,11 +38,6 @@ interface ConversationsActions {
   // Typing indicator
   setIsTyping: (conversationId: number, isTyping: boolean) => void
 
-  // Tool approvals
-  setPendingApprovals: (conversationId: number, approvals: PendingApprovalWithContext[]) => void
-  clearPendingApprovals: (conversationId: number) => void
-  getPendingApprovals: (conversationId: number) => PendingApprovalWithContext[]
-
   // Activity
   updateLastActivity: (conversationId: number) => void
 
@@ -73,7 +66,6 @@ export const useConversationStore = create<ConversationStore>()(
               draftMessage: '',
               scrollPosition: 0,
               isTyping: false,
-              pendingToolApprovals: [],
               lastActivity: new Date()
             })
           }
@@ -161,31 +153,6 @@ export const useConversationStore = create<ConversationStore>()(
         })
       },
 
-      // Tool approvals
-      setPendingApprovals: (conversationId, approvals) => {
-        set((draft) => {
-          const conversation = draft.conversations.get(conversationId)
-          if (conversation) {
-            conversation.pendingToolApprovals = approvals
-            conversation.lastActivity = new Date()
-          }
-        })
-      },
-
-      clearPendingApprovals: (conversationId) => {
-        set((draft) => {
-          const conversation = draft.conversations.get(conversationId)
-          if (conversation) {
-            conversation.pendingToolApprovals = []
-          }
-        })
-      },
-
-      getPendingApprovals: (conversationId) => {
-        const conversation = get().conversations.get(conversationId)
-        return conversation?.pendingToolApprovals || []
-      },
-
       // Activity
       updateLastActivity: (conversationId) => {
         set((draft) => {
@@ -215,9 +182,8 @@ export const useConversationStore = create<ConversationStore>()(
           messages: conv.messages,
           draftMessage: conv.draftMessage,
           scrollPosition: conv.scrollPosition,
-          // Don't persist typing state and pending approvals
+          // Don't persist typing state
           isTyping: false,
-          pendingToolApprovals: [],
           lastActivity: conv.lastActivity
         }))
       }),

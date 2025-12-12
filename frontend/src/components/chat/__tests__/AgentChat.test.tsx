@@ -5,16 +5,12 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../../test/setup'
 import { render } from '../../../test/utils'
 import AgentChat from '../AgentChat'
-import { useApprovals } from '../../../contexts/ApprovalsContext'
+import * as approvalsStore from '../../../stores/approvalsStore'
 
-// Mock the approvals context to verify clearApprovals is called
-vi.mock('../../../contexts/ApprovalsContext', async () => {
-  const actual = await vi.importActual('../../../contexts/ApprovalsContext')
-  return {
-    ...actual,
-    useApprovals: vi.fn()
-  }
-})
+// Mock the approvals store to verify clearApprovals is called
+vi.mock('../../../stores/approvalsStore', () => ({
+  useApprovalActions: vi.fn()
+}))
 
 describe('AgentChat', () => {
   const mockConversationId = 1
@@ -37,9 +33,8 @@ describe('AgentChat', () => {
     // Reset server handlers
     server.resetHandlers()
 
-    // Mock useApprovals hook
-    vi.mocked(useApprovals).mockReturnValue({
-      state: { approvals: {} },
+    // Mock useApprovalActions hook
+    vi.mocked(approvalsStore.useApprovalActions).mockReturnValue({
       setApprovals: vi.fn(),
       addApproval: vi.fn(),
       removeApproval: vi.fn(),
@@ -108,20 +103,8 @@ describe('AgentChat', () => {
   it('clears pending tool approvals when clearing chat history', async () => {
     const user = userEvent.setup()
 
-    // Mock approval state
-    vi.mocked(useApprovals).mockReturnValue({
-      state: {
-        approvals: {
-          'conversation-1': [
-            {
-              tool_call_id: 'edit_123',
-              tool_name: 'edit_project_specification',
-              tool_args: { edits: [] },
-              conversationId: 1
-            }
-          ]
-        }
-      },
+    // Mock approval state with clearApprovals
+    vi.mocked(approvalsStore.useApprovalActions).mockReturnValue({
       setApprovals: vi.fn(),
       addApproval: vi.fn(),
       removeApproval: vi.fn(),

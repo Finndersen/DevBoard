@@ -21,7 +21,7 @@ import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
-import { useApprovals } from '../contexts/ApprovalsContext'
+import { useApprovalActions } from '../stores/approvalsStore'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
@@ -110,7 +110,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
   const [showBranchStatusModal, setShowBranchStatusModal] = useState(false)
   const [branchStatusLoading, setBranchStatusLoading] = useState(false)
-  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovals()
+  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovalActions()
 
   // State for branch info and diff data
   const [branchInfo, setBranchInfo] = useState<TaskBranchInfo | null>(null)

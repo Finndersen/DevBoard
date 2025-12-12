@@ -5,7 +5,7 @@ import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '..
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useEventHandlerRegistryForStream } from '../../hooks/useConversationEventHandlers'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
-import { useApprovals, type PendingApprovalWithContext } from '../../contexts/ApprovalsContext'
+import { useApprovals, useApprovalActions, type PendingApprovalWithContext } from '../../stores/approvalsStore'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
@@ -87,9 +87,9 @@ const ConversationChat = ({
   const lastFetchedConversationIdRef = useRef<number | null>(null)
   const initialMessageSentRef = useRef(false)
 
-  const { getApprovals, setApprovals, clearApprovals, executeRefreshHandlers } = useApprovals()
   const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
-  const pendingApprovals = useMemo(() => getApprovals(approvalKey), [getApprovals, approvalKey])
+  const pendingApprovals = useApprovals(approvalKey)
+  const { setApprovals, clearApprovals, executeRefreshHandlers } = useApprovalActions()
 
   const { setTabActivityStatus, getActiveTab } = useUIStore()
 
