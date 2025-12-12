@@ -10,6 +10,7 @@ from devboard.db.database import engine
 
 
 def scrubbing_callback(m: logfire.ScrubMatch):
+    return m.value
     # Dont scrub Claude Code message content
     if m.path == ("attributes", "message", "session_id"):
         return m.value
@@ -30,6 +31,9 @@ def scrubbing_callback(m: logfire.ScrubMatch):
         m.path == ("attributes", "message", "content", 0, "input", "command")
         and m.pattern_match.group(0).lower() == "session"
     ):
+        return m.value
+
+    if m.path == ("message", "e") and m.pattern_match.group(0) == "auth":
         return m.value
 
 

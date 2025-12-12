@@ -8,7 +8,7 @@ from pydantic import Field
 
 from devboard.config.base import BaseConfig
 from devboard.db.models import Configuration
-from devboard.services.config_service import ConfigService
+from devboard.services.config_service import ConfigService, ConfigurationNotFoundError
 
 
 # Test configuration schemas - avoid Test prefix to prevent pytest warnings
@@ -201,6 +201,20 @@ class TestConfigService:
         assert saved_data["api_token"] == "new_override"
         assert saved_data["webhook_url"] == "https://example.com/webhook"
         assert saved_data["max_retries"] == 5
+
+    def test_update_configuration_schema_not_found(self, mock_config_repository, mock_registry):
+        """Test update_configuration raises ConfigurationNotFoundError for unknown key."""
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=mock_registry,
+            env_vars={},
+        )
+
+        with pytest.raises(ConfigurationNotFoundError) as exc_info:
+            service.update_configuration("nonexistent.key", {"field": "value"})
+
+        assert exc_info.value.key == "nonexistent.key"
+        assert "No schema registered for key: nonexistent.key" in str(exc_info.value)
 
     def test_delete_config_success(self, mock_config_repository, mock_registry):
         """Test successful configuration deletion."""

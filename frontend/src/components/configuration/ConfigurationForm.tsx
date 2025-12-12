@@ -81,11 +81,17 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       setSaving(true)
       setError(null)
 
-      // Send only fields where override is enabled or override state has changed
+      // Send only fields where override is enabled, override state has changed,
+      // or fields without overridable values that have been edited
       const updatableFields: Record<string, ConfigValue> = {}
       config.fields.forEach(field => {
         const isOverrideEnabled = overrideStates[field.name]
         const wasOverridden = field.is_overridden
+
+        // Determine if this field has overridable values (same logic as ConfigurationField)
+        const hasDefaultValue = field.default_value !== null && field.default_value !== undefined
+        const hasEnvValue = field.env_value !== null && field.env_value !== undefined
+        const hasOverridableValue = hasDefaultValue || hasEnvValue
 
         if (isOverrideEnabled) {
           // Override is enabled - send the current value
@@ -95,6 +101,15 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
         } else if (wasOverridden && !isOverrideEnabled) {
           // Override was disabled - send null to clear the database override
           updatableFields[field.name] = null
+        } else if (!hasOverridableValue) {
+          // Field has no overridable values (no default, no env) - always send if value changed
+          const newValue = values[field.name]
+          const originalValue = toConfigValue(field.effective_value)
+          const processedValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
+          const processedOriginal = (typeof originalValue === 'string' && originalValue.trim() === '') ? null : originalValue
+          if (processedValue !== processedOriginal) {
+            updatableFields[field.name] = processedValue
+          }
         }
       })
 
@@ -188,6 +203,11 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       const isOverrideEnabled = overrideStates[field.name]
       const wasOverridden = field.is_overridden
 
+      // Determine if this field has overridable values (same logic as ConfigurationField)
+      const hasDefaultValue = field.default_value !== null && field.default_value !== undefined
+      const hasEnvValue = field.env_value !== null && field.env_value !== undefined
+      const hasOverridableValue = hasDefaultValue || hasEnvValue
+
       // Check if override state changed
       if (isOverrideEnabled !== wasOverridden) {
         // Only consider it a change if:
@@ -196,16 +216,18 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
         return isOverrideEnabled || (wasOverridden && field.db_value !== null && field.db_value !== undefined)
       }
 
-      // Check if value changed for overridden fields
-      if (isOverrideEnabled) {
+      // Check if value changed:
+      // - For fields WITH overridable values: only when override is enabled
+      // - For fields WITHOUT overridable values: always check (input is always editable)
+      if (isOverrideEnabled || !hasOverridableValue) {
         const newValue = values[field.name]
-        const dbValue = toConfigValue(field.db_value)
+        const originalValue = toConfigValue(field.effective_value)
 
         // Convert empty strings to null for comparison
         const processedNewValue = (typeof newValue === 'string' && newValue.trim() === '') ? null : newValue
-        const processedDbValue = (typeof dbValue === 'string' && dbValue.trim() === '') ? null : dbValue
+        const processedOriginalValue = (typeof originalValue === 'string' && originalValue.trim() === '') ? null : originalValue
 
-        return processedNewValue !== processedDbValue
+        return processedNewValue !== processedOriginalValue
       }
 
       return false

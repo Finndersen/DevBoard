@@ -6,7 +6,12 @@ import pytest
 
 from devboard.api.dependencies.services import get_config_service
 from devboard.api.main import app
-from devboard.services.config_service import ConfigService, ConfigurationDetail, ConfigurationFieldInfo
+from devboard.services.config_service import (
+    ConfigService,
+    ConfigurationDetail,
+    ConfigurationFieldInfo,
+    ConfigurationNotFoundError,
+)
 
 
 @pytest.fixture
@@ -294,7 +299,7 @@ class TestConfigurationsRouter:
             ],
         )
 
-        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main", json=update_data)
+        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main/fields", json=update_data)
         assert response.status_code == 200
 
         config_data = response.json()
@@ -343,7 +348,7 @@ class TestConfigurationsRouter:
             ],
         )
 
-        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main", json=update_data)
+        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main/fields", json=update_data)
         assert response.status_code == 200
 
         config_data = response.json()
@@ -392,7 +397,7 @@ class TestConfigurationsRouter:
             ],
         )
 
-        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main", json=update_data)
+        response = client_with_mock_config_service.patch("/api/configurations/llm.openai.main/fields", json=update_data)
         assert response.status_code == 200
 
         config_data = response.json()
@@ -404,32 +409,17 @@ class TestConfigurationsRouter:
 
     def test_update_configuration_schema_not_found(self, client_with_mock_config_service, mock_config_service):
         """Test updating configuration with non-existent schema."""
-        # Setup mock to raise ValueError for non-existent schema
-        mock_config_service.update_configuration.side_effect = ValueError("No schema registered for key: invalid.key")
+        # Setup mock to raise ConfigurationNotFoundError for non-existent schema
+        mock_config_service.update_configuration.side_effect = ConfigurationNotFoundError("invalid.key")
 
-        response = client_with_mock_config_service.patch("/api/configurations/invalid.key", json={"field": "value"})
+        response = client_with_mock_config_service.patch(
+            "/api/configurations/invalid.key/fields", json={"field": "value"}
+        )
         assert response.status_code == 404
         assert "No schema registered" in response.json()["detail"]
 
         # Verify service was called correctly
         mock_config_service.update_configuration.assert_called_once_with("invalid.key", {"field": "value"})
-
-    def test_update_configuration_invalid_data(
-        self, client_with_mock_config_service, mock_config_service, invalid_config_data
-    ):
-        """Test updating configuration with invalid field data."""
-        # Setup mock to raise ValueError for validation error
-        mock_config_service.update_configuration.side_effect = ValueError("Invalid field: invalid_field")
-
-        response = client_with_mock_config_service.patch(
-            "/api/configurations/llm.openai.main", json=invalid_config_data
-        )
-        assert response.status_code == 400
-        error_detail = response.json()["detail"]
-        assert "Invalid field" in error_detail
-
-        # Verify service was called correctly
-        mock_config_service.update_configuration.assert_called_once_with("llm.openai.main", invalid_config_data)
 
     def test_delete_configuration_success(self, client_with_mock_config_service, mock_config_service):
         """Test deleting a configuration."""
@@ -550,7 +540,7 @@ class TestConfigurationsRouter:
 
         # 2. Update with valid configuration
         config_data = {"api_key": "test-anthropic-key"}
-        response = client_with_mock_config_service.patch(f"/api/configurations/{config_key}", json=config_data)
+        response = client_with_mock_config_service.patch(f"/api/configurations/{config_key}/fields", json=config_data)
         assert response.status_code == 200
         assert response.json()["is_valid"] is True
 
@@ -571,7 +561,7 @@ class TestConfigurationsRouter:
 
         # 5. Update it
         updated_data = {"api_key": "updated-anthropic-key", "base_url": "https://custom.anthropic.com"}
-        response = client_with_mock_config_service.patch(f"/api/configurations/{config_key}", json=updated_data)
+        response = client_with_mock_config_service.patch(f"/api/configurations/{config_key}/fields", json=updated_data)
         assert response.status_code == 200
 
         # 6. Verify the update

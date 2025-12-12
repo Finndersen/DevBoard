@@ -47,6 +47,7 @@ class JiraIntegration(BaseIntegration):
                 message=f"Successfully connected to Jira as {user_info['displayName']} ({user_info['emailAddress']})",
             )
         except JIRAError as e:
+            logfire.error(f"Jira error in test_connection: {e}")
             if e.status_code == 401:
                 return IntegrationConnectionResult(
                     success=False, message="Jira authentication failed: Invalid credentials"

@@ -8,7 +8,7 @@ from devboard.api.dependencies.services import get_config_service
 from devboard.api.schemas import (
     DeleteResponse,
 )
-from devboard.services.config_service import ConfigService, ConfigurationDetail
+from devboard.services.config_service import ConfigService, ConfigurationDetail, ConfigurationNotFoundError
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ async def get_configuration_detail(config_key: str, config_service: ConfigServic
     return result
 
 
-@router.patch("/{config_key}", response_model=ConfigurationDetail)
+@router.patch("/{config_key}/fields", response_model=ConfigurationDetail)
 async def update_configuration(
     config_key: str,
     config_data: dict[str, Any],
@@ -52,11 +52,8 @@ async def update_configuration(
     try:
         result = config_service.update_configuration(config_key, config_data)
         return result
-    except ValueError as e:
-        if "No schema registered" in str(e):
-            raise HTTPException(status_code=404, detail=str(e)) from e
-        else:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConfigurationNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.delete("/{config_key}", response_model=DeleteResponse)

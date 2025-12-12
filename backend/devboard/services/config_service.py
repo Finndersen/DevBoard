@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, TypeVar, Union, get_args, get_origin
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, computed_field
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
@@ -15,6 +15,14 @@ from devboard.db.models import Configuration
 from devboard.db.repositories.configuration import ConfigurationRepository
 
 T = TypeVar("T", bound="BaseConfig")
+
+
+class ConfigurationNotFoundError(Exception):
+    """Raised when a configuration key has no registered schema."""
+
+    def __init__(self, key: str):
+        self.key = key
+        super().__init__(f"No schema registered for key: {key}")
 
 
 class ConfigurationFieldInfo(BaseModel):
@@ -30,11 +38,13 @@ class ConfigurationFieldInfo(BaseModel):
     is_secret: bool = False
     env_var_name: str | None = None
 
+    @computed_field
     @property
     def is_overridden(self) -> bool:
         """True if there is a database override value."""
         return self.db_value is not None
 
+    @computed_field
     @property
     def effective_value(self) -> Any:
         """The effective value using priority hierarchy: db_value > env_value > default_value."""
@@ -120,11 +130,15 @@ class ConfigService:
             return ConfigValidationResult[T](False, errors=errors)
 
     def update_configuration(self, key: str, config_data: dict[str, Any]) -> ConfigurationDetail:
-        """Update configuration with complete structure. None values clear DB overrides."""
+        """Update configuration with complete structure. None values clear DB overrides.
+
+        Raises:
+            ConfigurationNotFoundError: If no schema is registered for the given key.
+        """
         # Get the schema class
         schema_class = self.config_registry.get(key)
         if not schema_class:
-            raise ValueError(f"No schema registered for key: {key}")
+            raise ConfigurationNotFoundError(key)
 
         # Process the complete configuration structure
         # Only store non-None values as database overrides
