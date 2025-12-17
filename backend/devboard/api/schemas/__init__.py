@@ -22,6 +22,14 @@ from .integration import (
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
 )
+from .oauth import (
+    MCPServerConfigCreate,
+    MCPServerConfigResponse,
+    MCPServerConfigUpdate,
+    OAuthCallbackError,
+    OAuthCallbackQueryParams,
+    OAuthCallbackResponse,
+)
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .prompt_action import PromptActionRequest
 from .resource import (
@@ -118,6 +126,13 @@ __all__ = [
     "TaskGitStatusResponse",
     "TaskResponse",
     "TaskUpdate",
+    # OAuth
+    "MCPServerConfigCreate",
+    "MCPServerConfigResponse",
+    "MCPServerConfigUpdate",
+    "OAuthCallbackError",
+    "OAuthCallbackQueryParams",
+    "OAuthCallbackResponse",
     # Worktree
     "CreateWorktreeSlotRequest",
     "ReconcileWorktreePoolResponse",

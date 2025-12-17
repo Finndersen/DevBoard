@@ -14,6 +14,7 @@ from devboard.api.routers import (
     codebases,
     configurations,
     conversations,
+    oauth,
     projects,
     settings,
     tasks,
@@ -132,6 +133,7 @@ app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])
 app.include_router(tool_approvals.router, prefix="/api")
+app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
 
 # Mount MCP server as ASGI application
 # The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)

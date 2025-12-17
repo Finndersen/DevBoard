@@ -10,6 +10,7 @@ from devboard.api.dependencies.repositories import (
     get_context_provider_resource_repository,
     get_conversation_repository,
     get_document_repository,
+    get_oauth_repository,
     get_project_repository,
     get_task_repository,
     get_worktree_slot_repository,
@@ -20,6 +21,7 @@ from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ConversationRepository,
     DocumentRepository,
+    OAuthRepository,
     ProjectRepository,
     TaskRepository,
     WorktreeSlotRepository,
@@ -29,6 +31,7 @@ from devboard.services.config_service import ConfigService
 from devboard.services.context_assembly import ContextAssemblyService
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
+from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
 from devboard.services.resource_service import ResourceService
 from devboard.services.task_git_service import TaskGitService
@@ -148,3 +151,10 @@ def get_project_service(
         document_repo=document_repo,
         project_repo=project_repo,
     )
+
+
+def get_oauth_service(
+    oauth_repo: OAuthRepository = Depends(get_oauth_repository),
+) -> OAuthService:
+    """Get OAuthService instance."""
+    return OAuthService(oauth_repo=oauth_repo)

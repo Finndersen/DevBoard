@@ -10,6 +10,8 @@ from devboard.db.repositories import (
     ContextProviderResourceRepository,
     ConversationRepository,
     DocumentRepository,
+    MCPServerRepository,
+    OAuthRepository,
     ProjectRepository,
     TaskRepository,
     WorktreeSlotRepository,
@@ -58,3 +60,13 @@ def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRe
 def get_worktree_slot_repository(db: Session = Depends(get_db)) -> WorktreeSlotRepository:
     """Get WorktreeSlotRepository instance."""
     return WorktreeSlotRepository(db)
+
+
+def get_oauth_repository(db: Session = Depends(get_db)) -> OAuthRepository:
+    """Get OAuthRepository instance."""
+    return OAuthRepository(db)
+
+
+def get_mcp_server_repository(db: Session = Depends(get_db)) -> MCPServerRepository:
+    """Get MCPServerRepository instance."""
+    return MCPServerRepository(db)

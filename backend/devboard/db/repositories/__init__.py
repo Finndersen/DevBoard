@@ -6,6 +6,8 @@ from .configuration import ConfigurationRepository
 from .context_provider_resource import ContextProviderResourceRepository
 from .conversation import ConversationRepository
 from .document import DocumentRepository
+from .mcp_server import MCPServerRepository
+from .oauth import OAuthRepository
 from .project import ProjectRepository
 from .task import TaskRepository
 from .worktree_slot import WorktreeSlotRepository
@@ -17,6 +19,8 @@ __all__ = [
     "ContextProviderResourceRepository",
     "ConversationRepository",
     "DocumentRepository",
+    "MCPServerRepository",
+    "OAuthRepository",
     "ProjectRepository",
     "TaskRepository",
     "WorktreeSlotRepository",
