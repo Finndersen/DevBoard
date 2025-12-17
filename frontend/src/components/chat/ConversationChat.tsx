@@ -21,6 +21,7 @@ interface ConversationChatProps {
   onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
+  codebaseLocalPath?: string
 }
 
 const ConversationChat = ({
@@ -31,7 +32,8 @@ const ConversationChat = ({
   actionMessage = '',
   onStreamingStarted,
   initialMessage,
-  onInitialMessageSent
+  onInitialMessageSent,
+  codebaseLocalPath
 }: ConversationChatProps) => {
   // Track conversationId changes for debugging
   const prevConversationIdRef = useRef(conversationId)
@@ -446,6 +448,7 @@ const ConversationChat = ({
           onRetryMessage={handleRetryMessage}
           emptyStateMessage={emptyStateMessage}
           showEmptyState={messages.length === 0 && !pendingMessage}
+          codebaseLocalPath={codebaseLocalPath}
         />
 
         {approvalError && pendingApprovals.length > 0 && (

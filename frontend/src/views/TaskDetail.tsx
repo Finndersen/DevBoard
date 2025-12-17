@@ -920,6 +920,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             actionMessage={streamingMessage}
             initialMessage={pendingInitialMessage}
             onInitialMessageSent={() => setPendingInitialMessage(null)}
+            codebaseLocalPath={selectedCodebase?.local_path}
           />
         </div>
       </div>

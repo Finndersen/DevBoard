@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ConversationEvent, ToolResult, SystemEventType } from '../../lib/api'
 import {
   getMessageBubbleClasses
 } from '../../styles/messageStyles'
 import { Markdown } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
+import { getToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
 function getSystemEventLabel(type: SystemEventType): string | null {
   switch (type) {
@@ -21,11 +22,13 @@ interface ConversationMessageProps {
   toolResult?: ToolResult
   // Whether this is the latest message (should not be collapsible)
   isLatest?: boolean
+  // Optional codebase local path for relativizing file paths in tool display labels
+  codebaseLocalPath?: string
 }
 
 const MAX_COLLAPSED_HEIGHT = 240 // ~10 lines at typical line height
 
-export default function ConversationMessageComponent({ message, toolResult, isLatest = false }: ConversationMessageProps) {
+export default function ConversationMessageComponent({ message, toolResult, isLatest = false, codebaseLocalPath }: ConversationMessageProps) {
   // Handle different event types
   if (message.event_type === 'message') {
     const isUser = message.role === 'user'
@@ -94,7 +97,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   }
 
   if (message.event_type === 'tool_call') {
-    return <ToolCallDisplay toolCall={message} toolResult={toolResult} />
+    return <ToolCallDisplay toolCall={message} toolResult={toolResult} codebaseLocalPath={codebaseLocalPath} />
   }
 
   // Tool results are rendered as part of their corresponding tool call
@@ -104,6 +107,10 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // Tool call requests (pending approval) - render similarly to tool calls but with different styling
   if (message.event_type === 'tool_call_request') {
+    // Compute display label for the tool request (tool_args can be string | object | null)
+    const toolArgs = typeof message.tool_args === 'object' ? message.tool_args : null
+    const displayLabel = getToolDisplayLabel(message.tool_name, toolArgs, codebaseLocalPath)
+
     return (
       <div className="flex w-full min-w-0">
         <div className="rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px]">
@@ -121,7 +128,12 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
               />
             </svg>
-            <span className="font-medium text-sm text-yellow-200 truncate">Awaiting Approval: {message.tool_name}</span>
+            <span
+              className="font-medium text-sm text-yellow-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
+              title={`Awaiting Approval: ${displayLabel}`}
+            >
+              Awaiting Approval: {displayLabel}
+            </span>
           </div>
           {message.tool_args && typeof message.tool_args === 'object' && Object.keys(message.tool_args).length > 0 && (
             <div className="px-3 py-2">

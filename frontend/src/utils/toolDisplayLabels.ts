@@ -1,0 +1,168 @@
+/**
+ * Utility functions for generating display labels for tool calls.
+ * These labels provide more informative context in the UI by including
+ * relevant arguments like file paths, search patterns, and descriptions.
+ */
+
+/**
+ * Strip MCP prefixes from tool names for cleaner display.
+ * - Removes `mcp__builtin_tools__` prefix completely
+ * - Removes only `mcp__` prefix for other MCP servers (keeps server name for context)
+ */
+export function cleanToolName(toolName: string): string {
+  // Remove mcp__builtin_tools__ prefix completely (these are standard tools)
+  if (toolName.startsWith('mcp__builtin_tools__')) {
+    return toolName.replace('mcp__builtin_tools__', '')
+  }
+
+  // For other MCP servers, only remove the `mcp__` prefix but keep the server name
+  // e.g., mcp__github__get_repo -> github__get_repo
+  if (toolName.startsWith('mcp__')) {
+    return toolName.replace('mcp__', '')
+  }
+
+  return toolName
+}
+
+/**
+ * Convert absolute paths to relative paths based on codebase local path.
+ * Handles both main repo paths and worktree variant paths.
+ *
+ * @param absolutePath - The absolute file path
+ * @param codebaseLocalPath - The codebase's local_path (e.g., /Users/dev/projects/myrepo)
+ * @returns Relative path or original path if no match
+ */
+export function relativizePath(absolutePath: string, codebaseLocalPath?: string): string {
+  if (!codebaseLocalPath || !absolutePath) {
+    return absolutePath
+  }
+
+  // Try main repo path first: <local_path>/
+  const mainRepoPrefix = codebaseLocalPath + '/'
+  if (absolutePath.startsWith(mainRepoPrefix)) {
+    return absolutePath.slice(mainRepoPrefix.length)
+  }
+
+  // Try worktree variant: <local_path>.worktree-\d+/
+  // e.g., /Users/dev/projects/myrepo.worktree-2/src/file.ts
+  const worktreePattern = new RegExp(`^${escapeRegExp(codebaseLocalPath)}\\.worktree-\\d+/`)
+  const worktreeMatch = absolutePath.match(worktreePattern)
+  if (worktreeMatch) {
+    return absolutePath.slice(worktreeMatch[0].length)
+  }
+
+  return absolutePath
+}
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Generate a display label for a tool call based on tool name and arguments.
+ *
+ * @param toolName - The raw tool name (may include MCP prefixes)
+ * @param toolArgs - The tool arguments object (or null)
+ * @param codebaseLocalPath - Optional codebase path for relativizing file paths
+ * @returns A formatted display label string
+ */
+export function getToolDisplayLabel(
+  toolName: string,
+  toolArgs: Record<string, unknown> | null,
+  codebaseLocalPath?: string
+): string {
+  const cleanedName = cleanToolName(toolName)
+  const args = toolArgs || {}
+
+  switch (cleanedName) {
+    case 'Read': {
+      const filePath = args.file_path as string | undefined
+      if (filePath) {
+        return `Read: ${relativizePath(filePath, codebaseLocalPath)}`
+      }
+      return cleanedName
+    }
+
+    case 'Edit': {
+      const filePath = args.file_path as string | undefined
+      if (filePath) {
+        return `Edit: ${relativizePath(filePath, codebaseLocalPath)}`
+      }
+      return cleanedName
+    }
+
+    case 'Write': {
+      const filePath = args.file_path as string | undefined
+      if (filePath) {
+        return `Write: ${relativizePath(filePath, codebaseLocalPath)}`
+      }
+      return cleanedName
+    }
+
+    case 'Bash': {
+      const description = args.description as string | undefined
+      if (description) {
+        return `Bash: ${description}`
+      }
+      return cleanedName
+    }
+
+    case 'Grep': {
+      const pattern = args.pattern as string | undefined
+      const path = args.path as string | undefined
+      if (pattern && path) {
+        return `Grep: ${pattern} in ${relativizePath(path, codebaseLocalPath)}`
+      }
+      if (pattern) {
+        return `Grep: ${pattern}`
+      }
+      return cleanedName
+    }
+
+    case 'Glob': {
+      const pattern = args.pattern as string | undefined
+      if (pattern) {
+        return `Glob: ${pattern}`
+      }
+      return cleanedName
+    }
+
+    case 'WebFetch': {
+      const url = args.url as string | undefined
+      if (url) {
+        return `WebFetch: ${url}`
+      }
+      return cleanedName
+    }
+
+    case 'WebSearch': {
+      const query = args.query as string | undefined
+      if (query) {
+        return `WebSearch: ${query}`
+      }
+      return cleanedName
+    }
+
+    case 'Task': {
+      const description = args.description as string | undefined
+      if (description) {
+        return `Task: ${description}`
+      }
+      return cleanedName
+    }
+
+    case 'investigate_codebase': {
+      const query = args.query as string | undefined
+      if (query) {
+        return `investigate_codebase: ${query}`
+      }
+      return cleanedName
+    }
+
+    default:
+      return cleanedName
+  }
+}

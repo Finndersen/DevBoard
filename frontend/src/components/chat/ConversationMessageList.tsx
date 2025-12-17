@@ -10,6 +10,7 @@ interface ConversationMessageListProps {
   onRetryMessage: (messageId: string) => void
   emptyStateMessage: string
   showEmptyState: boolean
+  codebaseLocalPath?: string
 }
 
 // Memoized message component to prevent unnecessary re-renders
@@ -23,7 +24,8 @@ function ConversationMessageList({
   pendingMessage,
   onRetryMessage,
   emptyStateMessage,
-  showEmptyState
+  showEmptyState,
+  codebaseLocalPath
 }: ConversationMessageListProps) {
   // Compute tool result mappings using useMemo
   // This creates a Map of cache keys to ToolResults, recomputed only when messages change
@@ -98,6 +100,7 @@ function ConversationMessageList({
             message={message}
             toolResult={toolResult}
             isLatest={isLatest}
+            codebaseLocalPath={codebaseLocalPath}
           />
         )
       })}

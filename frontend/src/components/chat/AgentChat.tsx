@@ -26,6 +26,7 @@ interface AgentChatProps {
   onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
+  codebaseLocalPath?: string
 }
 
 const AgentChat = ({
@@ -38,7 +39,8 @@ const AgentChat = ({
   actionMessage = '',
   onStreamingStarted,
   initialMessage,
-  onInitialMessageSent
+  onInitialMessageSent,
+  codebaseLocalPath
 }: AgentChatProps) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
@@ -147,6 +149,7 @@ const AgentChat = ({
               onStreamingStarted={onStreamingStarted}
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}
+              codebaseLocalPath={codebaseLocalPath}
             />
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">

@@ -1,17 +1,28 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ToolCall, ToolResult } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
+import { getToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
   toolResult?: ToolResult
+  codebaseLocalPath?: string
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDisplayProps) {
+export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const hasResult = toolResult !== undefined
   const isError = toolResult?.is_error || false
   const hasArguments = toolCall.tool_args && Object.keys(toolCall.tool_args).length > 0
+
+  // Compute display label with relevant context from tool arguments
+  const displayLabel = useMemo(() => {
+    return getToolDisplayLabel(
+      toolCall.tool_name,
+      toolCall.tool_args as Record<string, unknown> | null,
+      codebaseLocalPath
+    )
+  }, [toolCall.tool_name, toolCall.tool_args, codebaseLocalPath])
 
   // Determine status
   const status = isError ? 'error' : hasResult ? 'complete' : 'running'
@@ -71,7 +82,12 @@ export default function ToolCallDisplay({ toolCall, toolResult }: ToolCallDispla
               />
             </svg>
             {/* Tool Name */}
-            <span className="font-medium text-sm text-gray-900 dark:text-gray-200 truncate">{toolCall.tool_name}</span>
+            <span
+              className="font-medium text-sm text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
+              title={displayLabel}
+            >
+              {displayLabel}
+            </span>
             {/* Status Icon */}
             {getStatusIcon()}
             {status === 'running' && (
