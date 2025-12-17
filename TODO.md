@@ -36,6 +36,7 @@
 - Update Codebase detail view to show details of worktrees
 - issue: File changes tab not automatically displayed when beginning implementation phase
 - Advanced tool use capabilities like tool search & programmatic execution: https://www.anthropic.com/engineering/advanced-tool-use
+- Change layout to task list on sidebar like https://www.terragonlabs.com/
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

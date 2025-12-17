@@ -61,7 +61,23 @@ export async function processConversationStream(
     console.log('[StreamProcessor] Event received:', {
       eventType: event.event_type,
       eventCount,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...(event.event_type === 'message' && {
+        role: event.role,
+        contentPreview: event.text_content?.slice(0, 100)
+      }),
+      ...(event.event_type === 'tool_call' && {
+        toolName: event.tool_name,
+        toolCallId: event.tool_call_id
+      }),
+      ...(event.event_type === 'tool_result' && {
+        toolCallId: event.tool_call_id,
+        isError: event.is_error
+      }),
+      ...(event.event_type === 'system' && {
+        systemType: event.type,
+        data: event.data
+      })
     })
 
     // Invoke first event callback once

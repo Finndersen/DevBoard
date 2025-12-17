@@ -93,8 +93,6 @@ class WorkspaceAllocationService:
         """Check if a worktree slot has uncommitted git changes."""
         git = GitRepoIntegration(slot.path)
         has_changes = await git.has_uncommitted_changes()
-        if has_changes:
-            logfire.info(f"Slot {slot.id} at {slot.path} has uncommitted changes")
         return has_changes
 
     async def allocate_for_task(self, task: Task, use_main_slot: bool = False) -> WorktreeSlot:
@@ -113,6 +111,9 @@ class WorkspaceAllocationService:
             ValueError: If task has invalid configuration
             AllSlotsLockedException: If no suitable slots are available
         """
+        # Clean up any stale locks before attempting allocation
+        await self.cleanup_stale_locks(codebase_id=task.codebase.id)
+
         # Get all available (unlocked) slots for this codebase
         all_slots = self.worktree_slot_repo.get_by_codebase(task.codebase.id, include_main=use_main_slot)
         available_slots: list[WorktreeSlot] = [s for s in all_slots if not s.locked]
@@ -143,6 +144,8 @@ class WorkspaceAllocationService:
             has_changes = await self.slot_has_uncommitted_changes(slot)
             if not has_changes:
                 clean_slots.append(slot)
+            else:
+                logfire.info(f"Slot {slot.id} at {slot.path} has uncommitted changes")
 
         if not clean_slots:
             # All unlocked slots have uncommitted changes
@@ -155,12 +158,15 @@ class WorkspaceAllocationService:
         logfire.info(f"Using LRU slot {lru_slot.id} for task {task.id}")
         return self.worktree_slot_repo.lock_slot(lru_slot, task)
 
-    async def checkout_branch_in_slot(self, slot: WorktreeSlot, branch_name: str) -> None:
+    async def checkout_branch_in_slot(self, slot: WorktreeSlot, branch_name: str) -> bool:
         """Checkout a branch in a slot if it's not already on that branch.
 
         Args:
             slot: WorktreeSlot to checkout branch in
             branch_name: Name of branch to checkout
+
+        Returns:
+            True if checkout was performed, False if already on the branch
 
         Raises:
             ValueError: If git operations fail
@@ -173,8 +179,10 @@ class WorkspaceAllocationService:
             logfire.info(f"Checking out branch {branch_name} in slot {slot.id}")
             git = GitRepoIntegration(slot.path)
             await git.checkout_branch(branch_name)
-        else:
-            logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
+            return True
+
+        logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
+        return False
 
     def codebase_slot_count(self, codebase_id: int) -> int:
         slots = self.worktree_slot_repo.get_by_codebase(codebase_id)
@@ -239,13 +247,13 @@ class WorkspaceAllocationService:
         Returns:
             Number of locks released
         """
-        locked_slots = self.worktree_slot_repo.get_all_locked_for_codebase(codebase_id=codebase_id)
+        locked_slots = self.worktree_slot_repo.get_all_locked(codebase_id=codebase_id)
         released_count = 0
 
         for slot in locked_slots:
-            # Check age-based failsafe (24 hours based on last_used_at)
+            # Check age-based failsafe based on last_used_at
             age = datetime.datetime.now(datetime.UTC) - slot.last_used_at
-            if age > datetime.timedelta(hours=2):
+            if age > datetime.timedelta(hours=1):
                 logfire.warn(
                     f"Releasing very old lock on slot {slot.id} (task {slot.last_used_by_task_id}, "
                     f"last used {age.total_seconds() / 3600:.1f}h ago)"
@@ -469,14 +477,15 @@ class WorkspaceAllocationService:
                 await self._create_worktree_for_slot(slot, task)
 
             # Checkout task branch in the allocated slot
-            await self.checkout_branch_in_slot(slot, task.branch_name)
+            checkout_performed = await self.checkout_branch_in_slot(slot, task.branch_name)
 
-            # Emit SystemEvent for workspace branch checkout
-            yield SystemEvent(
-                type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
-                data={"task_id": task.id, "branch": task.branch_name},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
+            # Emit SystemEvent for workspace branch checkout only if checkout was performed
+            if checkout_performed:
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
+                    data={"task_id": task.id, "branch": task.branch_name},
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
 
             # Yield the workspace path for use
             logfire.info(f"Allocated workspace {slot.path} for task {task.id}")

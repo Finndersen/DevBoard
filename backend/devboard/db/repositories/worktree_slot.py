@@ -119,17 +119,19 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
             .where(WorktreeSlot.codebase_id == codebase_id, WorktreeSlot.locked.is_(False))
             .options(joinedload(WorktreeSlot.last_used_by_task))
             .order_by(WorktreeSlot.last_used_at.asc())
+            .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_all_locked_for_codebase(self, codebase_id: int) -> list[WorktreeSlot]:
-        """Get all locked worktree slots for a codebase."""
+    def get_all_locked(self, codebase_id: int | None = None) -> list[WorktreeSlot]:
+        """Get all locked worktree slots, optionally filtered by codebase."""
         stmt = (
             select(WorktreeSlot)
             .where(WorktreeSlot.locked.is_(True))
-            .where(WorktreeSlot.codebase_id == codebase_id)
             .options(joinedload(WorktreeSlot.last_used_by_task))
         )
+        if codebase_id is not None:
+            stmt = stmt.where(WorktreeSlot.codebase_id == codebase_id)
 
         return list(self.db.execute(stmt).scalars().all())
 
@@ -220,6 +222,7 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
             select(WorktreeSlot)
             .where(WorktreeSlot.last_used_by_task_id == task_id)
             .order_by(WorktreeSlot.last_used_at.desc())
+            .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 

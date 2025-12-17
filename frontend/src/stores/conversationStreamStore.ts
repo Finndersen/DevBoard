@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '../lib/api'
+import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, SystemEvent } from '../lib/api'
 import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
@@ -210,6 +210,17 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
       }
 
+      // Log before setting state to detect if we're overwriting an existing stream
+      const existingStream = get().activeStreams.get(conversationId)
+      console.log('[StreamStore] startStream called:', {
+        conversationId,
+        hasExistingStream: !!existingStream,
+        existingStreamIsStreaming: existingStream?.isStreaming,
+        existingStreamMessageCount: existingStream?.messages?.length ?? 0,
+        initialMessageCount: initialMessages?.length ?? 0,
+        allActiveStreams: Array.from(get().activeStreams.keys())
+      })
+
       // Initialize stream state with any initial messages (e.g., user message)
       set((draft) => {
         draft.activeStreams.set(conversationId, {
@@ -299,25 +310,35 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         })
       }
 
-      // Schedule cleanup after a delay (keep messages available for a bit)
-      // But don't clean up if there are pending tool requests - they need to persist
-      setTimeout(() => {
-        const stream = get().activeStreams.get(conversationId)
-        // Only delete if no pending tool requests
-        if (!stream?.pendingToolRequests || stream.pendingToolRequests.length === 0) {
-          set((draft) => {
-            draft.activeStreams.delete(conversationId)
-          })
-          // Also clean up event handler registry
-          eventHandlerRegistries.delete(conversationId)
-        }
-      }, 60000) // Clean up after 1 minute
+      // Clean up immediately if no pending tool requests
+      // Messages are already copied to component local state, so we don't need to keep them here
+      // Use a short delay to ensure React has completed its render cycle
+      if (!stream?.pendingToolRequests || stream.pendingToolRequests.length === 0) {
+        setTimeout(() => {
+          // Re-check in case a new stream started on same conversation ID
+          const currentStream = get().activeStreams.get(conversationId)
+          if (currentStream && !currentStream.isStreaming) {
+            set((draft) => {
+              draft.activeStreams.delete(conversationId)
+            })
+            eventHandlerRegistries.delete(conversationId)
+          }
+        }, 100) // Short delay for React render cycle
+      }
+      // If there are pending tool requests, cleanup happens in clearPendingToolRequests
     },
 
     addEvent: (conversationId, event) => {
-      console.log('[StreamStore] addEvent called:', {
+      // Check stream existence before set() to get accurate state for logging
+      const streamBefore = get().activeStreams.get(conversationId)
+      console.log('[StreamStore] addEvent:', {
         conversationId,
-        eventType: event.event_type
+        eventType: event.event_type,
+        streamFound: !!streamBefore,
+        currentMessageCount: streamBefore?.messages?.length ?? 0,
+        allActiveStreams: Array.from(get().activeStreams.keys()),
+        ...(event.event_type === 'tool_call' && { toolName: (event as ToolCall).tool_name }),
+        ...(event.event_type === 'system' && { systemType: (event as SystemEvent).type })
       })
 
       set((draft) => {
@@ -455,16 +476,16 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       // Schedule cleanup if stream is completed (not actively streaming)
+      // Use short delay consistent with completeStream
       setTimeout(() => {
         const stream = get().activeStreams.get(conversationId)
         if (stream && !stream.isStreaming && (!stream.pendingToolRequests || stream.pendingToolRequests.length === 0)) {
           set((draft) => {
             draft.activeStreams.delete(conversationId)
           })
-          // Also clean up event handler registry
           eventHandlerRegistries.delete(conversationId)
         }
-      }, 5000) // Clean up after 5 seconds
+      }, 100) // Short delay for React render cycle
     },
 
     clearMessages: (conversationId) => {
@@ -493,7 +514,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         to: newConversationId,
         streamFound: !!stream,
         messageCount: stream?.messages.length ?? 0,
-        isStreaming: stream?.isStreaming ?? false
+        isStreaming: stream?.isStreaming ?? false,
+        allActiveStreams: Array.from(get().activeStreams.keys())
       })
 
       if (stream) {
@@ -520,7 +542,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           eventHandlerRegistries.set(newConversationId, registry)
         }
 
-        console.log('[StreamStore] Stream migrated successfully')
+        console.log('[StreamStore] Stream migrated successfully, allActiveStreams:', Array.from(get().activeStreams.keys()))
       } else {
         console.warn('[StreamStore] No stream found to migrate')
       }

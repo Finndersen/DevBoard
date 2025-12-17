@@ -33,6 +33,18 @@ const ConversationChat = ({
   initialMessage,
   onInitialMessageSent
 }: ConversationChatProps) => {
+  // Track conversationId changes for debugging
+  const prevConversationIdRef = useRef(conversationId)
+  useEffect(() => {
+    if (prevConversationIdRef.current !== conversationId) {
+      console.log('[ConversationChat] conversationId CHANGED:', {
+        from: prevConversationIdRef.current,
+        to: conversationId
+      })
+      prevConversationIdRef.current = conversationId
+    }
+  }, [conversationId])
+
   // Subscribe to streaming store state
   // IMPORTANT: Use stable references to avoid infinite loops
   const streamMessages = useConversationStreamStore(
@@ -73,7 +85,8 @@ const ConversationChat = ({
       hasStreamState: !!streamState,
       isStreaming,
       messageCount: streamMessages?.length ?? 0,
-      pendingToolRequestCount: pendingToolRequests?.length ?? 0
+      pendingToolRequestCount: pendingToolRequests?.length ?? 0,
+      allActiveStreams: Array.from(useConversationStreamStore.getState().activeStreams.keys())
     })
   }, [conversationId, streamState, isStreaming, streamMessages, pendingToolRequests])
 

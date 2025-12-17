@@ -118,7 +118,8 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [diffData, setDiffData] = useState<TaskDiffResponse | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   const [lastDiffUpdate, setLastDiffUpdate] = useState<string | null>(null)
-  
+  const diffRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Use ref to store refetch function to avoid dependency issues
   const refetchRef = useRef(refetch)
   refetchRef.current = refetch
@@ -360,6 +361,28 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Handle implementation plan document updates from MCP tools
   useToolResultHandler(implementationPlanMatcher, implementationPlanHandler)
 
+  // Handle file modification tool results to refresh diff view
+  const fileModificationMatcher = useCallback(
+    (toolName: string) => toolName === 'Edit' || toolName === 'Write',
+    []
+  )
+
+  const fileModificationHandler = useCallback(() => {
+    if (task?.status?.toLowerCase() !== 'implementing' || !task?.codebase_id) {
+      return
+    }
+
+    if (diffRefreshTimeoutRef.current) {
+      clearTimeout(diffRefreshTimeoutRef.current)
+    }
+
+    diffRefreshTimeoutRef.current = setTimeout(() => {
+      handleDiffRefresh('all')
+    }, 500)
+  }, [task?.status, task?.codebase_id, handleDiffRefresh])
+
+  useToolResultHandler(fileModificationMatcher, fileModificationHandler)
+
   const systemEventMatcher = useCallback((event: any) => {
     return event.type === 'task_updated' && event.data?.task_id === task?.id
   }, [task?.id])
@@ -374,7 +397,9 @@ function TaskDetail({ id }: TaskDetailProps) {
       eventType: event.type,
       oldConversationId,
       newConversationId,
-      currentTaskConversationId: task?.conversation_id
+      currentTaskConversationId: task?.conversation_id,
+      eventData: event.data,
+      timestamp: new Date().toISOString()
     })
 
     try {
@@ -390,10 +415,21 @@ function TaskDetail({ id }: TaskDetailProps) {
         setStreamingMessage('')
       }
 
-      console.log('[TaskDetail] Before refetch')
+      const refetchStartTime = Date.now()
+      console.log('[TaskDetail] STARTING refetch:', {
+        taskId: task?.id,
+        currentConversationId: task?.conversation_id,
+        timestamp: new Date().toISOString()
+      })
       // THEN refetch task to get updated status and conversation_id
-      await refetch()
-      console.log('[TaskDetail] After refetch completed')
+      const updatedTaskResult = await refetch()
+      console.log('[TaskDetail] COMPLETED refetch:', {
+        durationMs: Date.now() - refetchStartTime,
+        oldConversationId: task?.conversation_id,
+        newConversationId: updatedTaskResult?.conversation_id,
+        conversationIdChanged: task?.conversation_id !== updatedTaskResult?.conversation_id,
+        timestamp: new Date().toISOString()
+      })
     } catch (error) {
       console.error('Failed to refetch task after update event:', error)
       // Don't throw - allow other handlers and stream to continue
@@ -413,6 +449,15 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [task?.status, task?.codebase_id, handleDiffRefresh])
 
   useStreamCompleteHandler(streamCompleteHandler)
+
+  // Cleanup diff refresh timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (diffRefreshTimeoutRef.current) {
+        clearTimeout(diffRefreshTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Close codebase selector when clicking outside
   useEffect(() => {
