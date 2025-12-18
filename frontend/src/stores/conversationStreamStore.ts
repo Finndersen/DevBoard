@@ -10,8 +10,6 @@ import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandl
  * State for an active conversation stream.
  */
 export interface StreamState {
-  /** Mutable reference to conversation ID - allows closures to see updates after migration */
-  conversationIdRef: { current: number }
   messages: ConversationEvent[]
   isStreaming: boolean
   error: Error | null
@@ -28,6 +26,14 @@ export interface StreamState {
  * 3. It doesn't need to be reactive state
  */
 const eventHandlerRegistries = new Map<number, EventHandlerRegistry>()
+
+/**
+ * Separate map for conversation ID refs (not in Zustand state).
+ * Kept outside the store because refs need to be mutable for closures
+ * in processConversationStream to see updates after migration.
+ * Immer freezes objects in state, making refs read-only.
+ */
+const conversationIdRefs = new Map<number, { current: number }>()
 
 /**
  * Store state containing all active conversation streams.
@@ -202,8 +208,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Create abort controller for this stream
       const abortController = new AbortController()
 
-      // Create mutable ref for conversation ID - allows closures to see updates after migration
+      // Create mutable ref for conversation ID in external map (not in Zustand state)
+      // Allows closures to see updates after migration (Immer freezes objects in state)
       const conversationIdRef = { current: conversationId }
+      conversationIdRefs.set(conversationId, conversationIdRef)
 
       // Store event handler registry in separate map (not in Zustand state)
       if (eventHandlerRegistry) {
@@ -224,7 +232,6 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Initialize stream state with any initial messages (e.g., user message)
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          conversationIdRef,
           messages: initialMessages ?? [],
           isStreaming: true,
           error: null,
@@ -322,6 +329,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
               draft.activeStreams.delete(conversationId)
             })
             eventHandlerRegistries.delete(conversationId)
+            conversationIdRefs.delete(conversationId)
           }
         }, 100) // Short delay for React render cycle
       }
@@ -405,8 +413,12 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Get existing messages to preserve conversation history
       const existingMessages = existingStream?.messages ?? initialMessages ?? []
 
-      // Reuse existing ref if available, otherwise create new one
-      const conversationIdRef = existingStream?.conversationIdRef ?? { current: conversationId }
+      // Reuse existing ref if available, otherwise create new one in external map
+      let conversationIdRef = conversationIdRefs.get(conversationId)
+      if (!conversationIdRef) {
+        conversationIdRef = { current: conversationId }
+        conversationIdRefs.set(conversationId, conversationIdRef)
+      }
 
       // Store event handler registry in separate map (not in Zustand state)
       if (eventHandlerRegistry) {
@@ -419,7 +431,6 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Create or update stream state for the approval
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          conversationIdRef,
           messages: existingMessages,
           isStreaming: true,
           error: null,
@@ -484,6 +495,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
             draft.activeStreams.delete(conversationId)
           })
           eventHandlerRegistries.delete(conversationId)
+          conversationIdRefs.delete(conversationId)
         }
       }, 100) // Short delay for React render cycle
     },
@@ -508,22 +520,27 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     migrateStream: (oldConversationId, newConversationId) => {
       const stream = get().activeStreams.get(oldConversationId)
+      const conversationIdRef = conversationIdRefs.get(oldConversationId)
 
       console.log('[StreamStore] migrateStream called:', {
         from: oldConversationId,
         to: newConversationId,
         streamFound: !!stream,
+        refFound: !!conversationIdRef,
         messageCount: stream?.messages.length ?? 0,
         isStreaming: stream?.isStreaming ?? false,
         allActiveStreams: Array.from(get().activeStreams.keys())
       })
 
-      if (stream) {
-        // IMPORTANT: Update the mutable ref BEFORE the Immer draft operation
+      if (stream && conversationIdRef) {
+        // Update the mutable ref - now works because ref is in external map (not frozen by Immer)
         // This ensures the closure in processConversationStream sees the new ID immediately
-        // Updating inside Immer's set() doesn't work because Immer proxies the object
-        stream.conversationIdRef.current = newConversationId
+        conversationIdRef.current = newConversationId
         console.log('[StreamStore] Updated conversationIdRef.current to:', newConversationId)
+
+        // Migrate ref to new conversation ID in external map
+        conversationIdRefs.delete(oldConversationId)
+        conversationIdRefs.set(newConversationId, conversationIdRef)
 
         set((draft) => {
           const draftStream = draft.activeStreams.get(oldConversationId)
