@@ -135,7 +135,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               <span className="font-normal">Awaiting Approval: </span>
               <span className="font-semibold">{displayLabel.toolName}</span>
               {displayLabel.details && (
-                <span className="font-normal text-yellow-300/80">: {displayLabel.details}</span>
+                <span className="font-normal italic text-yellow-300/80">: {displayLabel.details}</span>
               )}
             </span>
           </div>

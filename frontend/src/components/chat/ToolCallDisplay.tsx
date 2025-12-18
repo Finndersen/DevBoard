@@ -88,7 +88,7 @@ export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPat
             >
               <span className="font-semibold">{displayLabel.toolName}</span>
               {displayLabel.details && (
-                <span className="font-normal text-gray-600 dark:text-gray-400">: {displayLabel.details}</span>
+                <span className="font-normal italic text-gray-600 dark:text-gray-400">: {displayLabel.details}</span>
               )}
             </span>
             {/* Status Icon */}
