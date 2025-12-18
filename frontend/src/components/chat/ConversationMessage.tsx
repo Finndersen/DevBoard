@@ -5,7 +5,7 @@ import {
 } from '../../styles/messageStyles'
 import { Markdown } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
-import { getToolDisplayLabel } from '../../utils/toolDisplayLabels'
+import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
 function getSystemEventLabel(type: SystemEventType): string | null {
   switch (type) {
@@ -129,10 +129,14 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               />
             </svg>
             <span
-              className="font-medium text-sm text-yellow-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
-              title={`Awaiting Approval: ${displayLabel}`}
+              className="text-sm text-yellow-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
+              title={`Awaiting Approval: ${formatToolDisplayLabel(displayLabel)}`}
             >
-              Awaiting Approval: {displayLabel}
+              <span className="font-normal">Awaiting Approval: </span>
+              <span className="font-semibold">{displayLabel.toolName}</span>
+              {displayLabel.details && (
+                <span className="font-normal text-yellow-300/80">: {displayLabel.details}</span>
+              )}
             </span>
           </div>
           {message.tool_args && typeof message.tool_args === 'object' && Object.keys(message.tool_args).length > 0 && (

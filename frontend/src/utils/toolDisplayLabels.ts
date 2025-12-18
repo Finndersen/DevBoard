@@ -4,6 +4,11 @@
  * relevant arguments like file paths, search patterns, and descriptions.
  */
 
+export interface ToolDisplayLabel {
+  toolName: string
+  details?: string
+}
+
 /**
  * Strip MCP prefixes from tool names for cleaner display.
  * - Removes `mcp__builtin_tools__` prefix completely
@@ -67,13 +72,13 @@ function escapeRegExp(str: string): string {
  * @param toolName - The raw tool name (may include MCP prefixes)
  * @param toolArgs - The tool arguments object (or null)
  * @param codebaseLocalPath - Optional codebase path for relativizing file paths
- * @returns A formatted display label string
+ * @returns An object with toolName and optional details for separate styling
  */
 export function getToolDisplayLabel(
   toolName: string,
   toolArgs: Record<string, unknown> | null,
   codebaseLocalPath?: string
-): string {
+): ToolDisplayLabel {
   const cleanedName = cleanToolName(toolName)
   const args = toolArgs || {}
 
@@ -81,88 +86,95 @@ export function getToolDisplayLabel(
     case 'Read': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return `Read: ${relativizePath(filePath, codebaseLocalPath)}`
+        return { toolName: 'Read', details: relativizePath(filePath, codebaseLocalPath) }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Edit': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return `Edit: ${relativizePath(filePath, codebaseLocalPath)}`
+        return { toolName: 'Edit', details: relativizePath(filePath, codebaseLocalPath) }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Write': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return `Write: ${relativizePath(filePath, codebaseLocalPath)}`
+        return { toolName: 'Write', details: relativizePath(filePath, codebaseLocalPath) }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Bash': {
       const description = args.description as string | undefined
       if (description) {
-        return `Bash: ${description}`
+        return { toolName: 'Bash', details: description }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Grep': {
       const pattern = args.pattern as string | undefined
       const path = args.path as string | undefined
       if (pattern && path) {
-        return `Grep: ${pattern} in ${relativizePath(path, codebaseLocalPath)}`
+        return { toolName: 'Grep', details: `"${pattern}" in ${relativizePath(path, codebaseLocalPath)}` }
       }
       if (pattern) {
-        return `Grep: ${pattern}`
+        return { toolName: 'Grep', details: `"${pattern}"` }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Glob': {
       const pattern = args.pattern as string | undefined
       if (pattern) {
-        return `Glob: ${pattern}`
+        return { toolName: 'Glob', details: pattern }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'WebFetch': {
       const url = args.url as string | undefined
       if (url) {
-        return `WebFetch: ${url}`
+        return { toolName: 'WebFetch', details: url }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'WebSearch': {
       const query = args.query as string | undefined
       if (query) {
-        return `WebSearch: ${query}`
+        return { toolName: 'WebSearch', details: query }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'Task': {
       const description = args.description as string | undefined
       if (description) {
-        return `Task: ${description}`
+        return { toolName: 'Task', details: description }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     case 'investigate_codebase': {
       const query = args.query as string | undefined
       if (query) {
-        return `investigate_codebase: ${query}`
+        return { toolName: 'investigate_codebase', details: query }
       }
-      return cleanedName
+      return { toolName: cleanedName }
     }
 
     default:
-      return cleanedName
+      return { toolName: cleanedName }
   }
+}
+
+/**
+ * Format a ToolDisplayLabel as a single string (for tooltips, etc.)
+ */
+export function formatToolDisplayLabel(label: ToolDisplayLabel): string {
+  return label.details ? `${label.toolName}: ${label.details}` : label.toolName
 }
