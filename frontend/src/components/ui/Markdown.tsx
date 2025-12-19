@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface MarkdownProps {
   children: string
@@ -41,7 +42,10 @@ export default function Markdown({
       // Reduce blockquote and code block spacing
       '[&>blockquote]:my-2',
       '[&>pre]:my-2',
-      
+
+      // Table styling
+      '[&>table]:my-2',
+
       // Tighter line height for better compactness
       'leading-snug'
     ].join(' ')
@@ -58,7 +62,7 @@ export default function Markdown({
   
   return (
     <div className={combinedClassName}>
-      <ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {children}
       </ReactMarkdown>
     </div>
