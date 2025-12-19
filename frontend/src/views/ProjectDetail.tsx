@@ -11,8 +11,8 @@ import type { Task, Codebase } from '../lib/api'
 import { useModal, useEditableField, useProject, useProjectTasks, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
+import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
-import { useApprovalActions } from '../stores/approvalsStore'
 
 interface ProjectDetailProps {
   id: string
@@ -55,8 +55,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
   })
 
-  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovalActions()
-
   // Use new custom hooks
   const createTaskModal = useModal()
   const specificationField = useEditableField(
@@ -93,26 +91,17 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [project, setStoreProject])
 
-  // Register refresh handlers for project document updates
-  useEffect(() => {
-    if (project?.default_conversation_id) {
-      const conversationId = project.default_conversation_id
-      
-      console.log('ProjectDetail: Registering refresh handlers for conversation:', conversationId)
-      
-      // Register refresh handler for project-related approvals
-      registerRefreshHandler(conversationId, 'refresh_project', async () => {
-        console.log('ProjectDetail: Executing project refresh handler')
-        await refetchProject() // Refresh project data to get updated specification
-      })
+  // Handle project specification updates from MCP tools during stream processing
+  const projectSpecificationMatcher = useCallback(
+    (toolName: string) => toolName.includes('edit_project_specification') || toolName.includes('set_project_specification_content'),
+    []
+  )
 
-      // Cleanup on unmount or conversation change
-      return () => {
-        console.log('ProjectDetail: Unregistering refresh handlers for conversation:', conversationId)
-        unregisterRefreshHandlers(conversationId)
-      }
-    }
-  }, [project?.default_conversation_id, refetchProject, registerRefreshHandler, unregisterRefreshHandlers])
+  const projectSpecificationHandler = useCallback(async () => {
+    await refetchProject()
+  }, [refetchProject])
+
+  useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -192,7 +181,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [id, linkCodebase, refetchProjectCodebases])
 
-  if (loading) {
+  // Only show loading spinner on initial load (when project data doesn't exist yet)
+  // Don't show during refetches to avoid UI flash
+  if (loading && !project) {
     return (
       <div className={`${layouts.flexCenter} h-64`}>
         <div className={loadingSpinner}></div>

@@ -38,10 +38,9 @@ describe('NotificationsPanel', () => {
       addApproval: vi.fn(),
       removeApproval: vi.fn(),
       clearApprovals: vi.fn(),
-      processApprovalDecision: vi.fn(),
-      registerRefreshHandler: vi.fn(),
-      unregisterRefreshHandlers: vi.fn(),
-      executeRefreshHandlers: vi.fn()
+      getApprovals: vi.fn().mockReturnValue([]),
+      hasApprovals: vi.fn().mockReturnValue(false),
+      processApprovalDecision: vi.fn()
     })
   })
 

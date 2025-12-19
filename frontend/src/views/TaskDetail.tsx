@@ -21,7 +21,6 @@ import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
-import { useApprovalActions } from '../stores/approvalsStore'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
@@ -110,7 +109,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
   const [showBranchStatusModal, setShowBranchStatusModal] = useState(false)
   const [branchStatusLoading, setBranchStatusLoading] = useState(false)
-  const { registerRefreshHandler, unregisterRefreshHandlers } = useApprovalActions()
 
   // State for branch info and diff data
   const [branchInfo, setBranchInfo] = useState<TaskBranchInfo | null>(null)
@@ -260,26 +258,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   const selectedCodebase = task && task.codebase_id && codebases
     ? codebases.find((c: Codebase) => c.id === task.codebase_id)
     : null
-
-  // Memoize the refresh handler to prevent infinite loops
-  const refreshHandler = useCallback(async () => {
-    await refetchRef.current() // Refresh task data to get updated specification and implementation plan
-  }, [])
-
-  // Register refresh handlers for task document updates
-  useEffect(() => {
-    if (task?.conversation_id) {
-      const conversationId = task.conversation_id
-
-      // Register refresh handler for task-related approvals
-      registerRefreshHandler(conversationId, 'refresh_task', refreshHandler)
-
-      // Cleanup on unmount or conversation change
-      return () => {
-        unregisterRefreshHandlers(conversationId)
-      }
-    }
-  }, [task?.conversation_id, registerRefreshHandler, unregisterRefreshHandlers, refreshHandler])
 
   // Fetch git status on task load to show branch icon in header
   useEffect(() => {
@@ -558,7 +536,9 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }
 
-  if (loading) {
+  // Only show loading spinner on initial load (when task data doesn't exist yet)
+  // Don't show during refetches to avoid UI flash
+  if (loading && !task) {
     return (
       <div className={`${layouts.flexCenter} h-64`}>
         <div className={loadingSpinner}></div>

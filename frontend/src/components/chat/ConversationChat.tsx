@@ -104,7 +104,7 @@ const ConversationChat = ({
 
   const approvalKey = useMemo(() => createConversationApprovalKey(conversationId), [conversationId])
   const pendingApprovals = useApprovals(approvalKey)
-  const { setApprovals, clearApprovals, executeRefreshHandlers } = useApprovalActions()
+  const { setApprovals, clearApprovals } = useApprovalActions()
 
   const { setTabActivityStatus, getActiveTab } = useUIStore()
 
@@ -393,18 +393,6 @@ const ConversationChat = ({
 
     setApprovalError(null)
 
-    // Extract approved tool names for refresh handlers
-    const approvedToolNames: string[] = []
-    Object.keys(approvalRequest.approvals).forEach(toolCallId => {
-      const decision = approvalRequest.approvals[toolCallId]
-      if (decision.approved) {
-        const approval = pendingApprovals.find(a => a.tool_call_id === toolCallId)
-        if (approval) {
-          approvedToolNames.push(approval.tool_name)
-        }
-      }
-    })
-
     try {
       // Clear approvals from context first (before starting new stream)
       clearApprovals(approvalKey)
@@ -414,13 +402,9 @@ const ConversationChat = ({
 
       // Use store to approve tools and continue streaming
       // Pass existing messages so they're preserved if we need to create a new stream
+      // Note: Tool result handlers (useToolResultHandler) in detail views handle refreshes
+      // during stream processing, so no post-stream refresh is needed here
       await approveTools(conversationId, approvalRequest.approvals, eventHandlerRegistry, messages)
-
-      // Execute refresh handlers for approved tools
-      if (approvedToolNames.length > 0) {
-        console.log('ConversationChat: Executing refresh handlers for approved tools:', approvedToolNames)
-        await executeRefreshHandlers(conversationId, approvedToolNames)
-      }
     } catch (error) {
       console.error('Failed to process tool approval:', error)
       const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred'

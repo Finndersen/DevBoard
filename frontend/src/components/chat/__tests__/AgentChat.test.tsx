@@ -9,7 +9,8 @@ import * as approvalsStore from '../../../stores/approvalsStore'
 
 // Mock the approvals store to verify clearApprovals is called
 vi.mock('../../../stores/approvalsStore', () => ({
-  useApprovalActions: vi.fn()
+  useApprovalActions: vi.fn(),
+  useApprovals: vi.fn(() => [])
 }))
 
 describe('AgentChat', () => {
@@ -41,10 +42,7 @@ describe('AgentChat', () => {
       clearApprovals: mockClearApprovals,
       getApprovals: vi.fn(() => []),
       hasApprovals: vi.fn(() => false),
-      processApprovalDecision: vi.fn(),
-      registerRefreshHandler: vi.fn(),
-      unregisterRefreshHandlers: vi.fn(),
-      executeRefreshHandlers: vi.fn()
+      processApprovalDecision: vi.fn()
     })
 
     // Setup default API responses
@@ -118,10 +116,7 @@ describe('AgentChat', () => {
         }
       ]),
       hasApprovals: vi.fn(() => true),
-      processApprovalDecision: vi.fn(),
-      registerRefreshHandler: vi.fn(),
-      unregisterRefreshHandlers: vi.fn(),
-      executeRefreshHandlers: vi.fn()
+      processApprovalDecision: vi.fn()
     })
 
     render(<AgentChat conversationId={mockConversationId} />)
