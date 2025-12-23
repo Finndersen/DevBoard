@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { PlusIcon, FolderIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
@@ -10,6 +11,7 @@ import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { loadingSpinner } from '../styles/designSystem'
 
 export default function Home() {
+  const navigate = useNavigate()
   const { openTab } = useUIStore()
   const { fetchProjects, fetchCodebases } = useDataStore()
 
@@ -65,7 +67,7 @@ export default function Home() {
         specification: newProject.specification,
         default_conversation_id: null
       }
-      await createProject(projectData)
+      const createdProject = await createProject(projectData)
       await refetchProjects()
       await fetchProjects()
       setShowCreateProjectModal(false)
@@ -81,6 +83,8 @@ export default function Home() {
           updated_at: ''
         }
       })
+      // Navigate to project settings to link codebases
+      navigate(`/projects/${createdProject.id}?tab=settings`)
     } catch (error) {
       console.error('Failed to create project:', error)
     }

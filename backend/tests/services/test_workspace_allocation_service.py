@@ -142,60 +142,44 @@ async def test_allocate_for_task_all_slots_locked(service, mock_repos, sample_ta
 
 @pytest.mark.asyncio
 async def test_cleanup_stale_locks(service, mock_repos, sample_codebase):
-    """Test cleanup of stale locks for tasks with no active conversations."""
+    """Test cleanup of stale locks based on last_used_at age."""
     worktree_slot_repo, task_repo = mock_repos
 
-    # Setup: Locked slot from 2 hours ago
+    # Setup: Locked slot from 2 hours ago (older than 1h threshold)
     locked_slot = MagicMock(spec=WorktreeSlot)
     locked_slot.id = 1
-    locked_slot.locked_by_task_id = 1
-    locked_slot.locked_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=2)
+    locked_slot.last_used_by_task_id = 1
     locked_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=2)
 
-    worktree_slot_repo.get_all_locked_for_codebase.return_value = [locked_slot]
-
-    # Mock task with no active conversations
-    task = MagicMock()
-    task.id = 1
-    task_repo.get.return_value = task
-    task_repo.get_tasks_with_active_conversations.return_value = []  # No active conversations
+    worktree_slot_repo.get_all_locked.return_value = [locked_slot]
 
     # Execute
     released_count = await service.cleanup_stale_locks(sample_codebase.id)
 
-    # Verify: Lock was released
+    # Verify: Lock was released (>1h age threshold)
     assert released_count == 1
     worktree_slot_repo.unlock_slot.assert_called_once_with(locked_slot)
 
 
 @pytest.mark.asyncio
-async def test_cleanup_stale_locks_old_locks(service, mock_repos, sample_codebase):
-    """Test cleanup of locks older than 24 hours (failsafe)."""
+async def test_cleanup_stale_locks_does_not_release_recent(service, mock_repos, sample_codebase):
+    """Test that locks within the 1h threshold are not released."""
     worktree_slot_repo, task_repo = mock_repos
 
-    # Setup: Very old locked slot (25 hours ago)
-    old_locked_slot = MagicMock(spec=WorktreeSlot)
-    old_locked_slot.id = 1
-    old_locked_slot.locked_by_task_id = 1
-    old_locked_slot.locked_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=25)
-    old_locked_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=25)
+    # Setup: Recently locked slot (30 minutes ago, within 1h threshold)
+    recent_slot = MagicMock(spec=WorktreeSlot)
+    recent_slot.id = 1
+    recent_slot.last_used_by_task_id = 1
+    recent_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(minutes=30)
 
-    worktree_slot_repo.get_all_locked_for_codebase.return_value = [old_locked_slot]
-
-    # Even if task has active conversations, old lock should be released
-    task = MagicMock()
-    task.id = 1
-    task_repo.get.return_value = task
-    active_task = MagicMock()
-    active_task.id = 1
-    task_repo.get_tasks_with_active_conversations.return_value = [active_task]
+    worktree_slot_repo.get_all_locked.return_value = [recent_slot]
 
     # Execute
     released_count = await service.cleanup_stale_locks(sample_codebase.id)
 
-    # Verify: Old lock was released despite active conversation (24h failsafe)
-    assert released_count == 1
-    worktree_slot_repo.unlock_slot.assert_called_once_with(old_locked_slot)
+    # Verify: Lock was NOT released (within 1h threshold)
+    assert released_count == 0
+    worktree_slot_repo.unlock_slot.assert_not_called()
 
 
 def test_bootstrap_main_repo_slot(service, mock_repos, sample_codebase):
@@ -248,8 +232,10 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
     # Mock git operations and worktree validation
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git, \
-         patch.object(service, "_check_worktree_valid", return_value=True):
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+    ):
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
 
@@ -356,3 +342,214 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
 
     # Verify slot was released
     worktree_slot_repo.unlock_slot.assert_called_once_with(new_slot)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Test that allocate_for_task bootstraps main repo slot when max_worktrees=0."""
+    worktree_slot_repo, task_repo = mock_repos
+
+    # Setup: max_worktrees=0 (main repo only mode)
+    sample_codebase.max_worktrees = 0
+    sample_task.codebase = sample_codebase
+
+    # Setup: No existing slots initially
+    worktree_slot_repo.get_by_path.return_value = None
+
+    # Setup: Mock bootstrap to create main repo slot
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 1
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    main_slot.locked = False
+    main_slot.last_used_by_task_id = None
+    main_slot.last_used_at = datetime.datetime.now(datetime.UTC)
+    main_slot.get_current_branch = AsyncMock(return_value="main")
+    worktree_slot_repo.create.return_value = main_slot
+
+    # After bootstrap, get_by_codebase returns the main slot
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
+    worktree_slot_repo.lock_slot.return_value = main_slot
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        # Execute
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: bootstrap_main_repo_slot was called (via create)
+    worktree_slot_repo.create.assert_called_once()
+    call_kwargs = worktree_slot_repo.create.call_args[1]
+    assert call_kwargs["is_main_repo"] is True
+    assert call_kwargs["path"] == sample_codebase.local_path
+
+    # Verify: Main slot was locked
+    worktree_slot_repo.lock_slot.assert_called_once_with(main_slot, sample_task)
+    assert result.id == main_slot.id
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_yields_stream_error_when_all_slots_locked(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Test that run_task_agent_in_workspace yields STREAM_ERROR when max slots reached."""
+    worktree_slot_repo, task_repo = mock_repos
+
+    # Setup: max_worktrees=0 (main repo only mode)
+    sample_codebase.max_worktrees = 0
+    sample_task.codebase = sample_codebase
+
+    # Setup: Main repo slot exists but is locked
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 1
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    main_slot.locked = True  # Already locked by another task
+    main_slot.last_used_by_task_id = 999  # Different task
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
+    worktree_slot_repo.get_by_path.return_value = main_slot  # bootstrap finds existing
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        # Mock agent stream (should never be reached)
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        # Execute and collect events
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Should have yielded STREAM_ERROR event
+    assert len(events) == 1
+    error_event = events[0]
+    assert isinstance(error_event, SystemEvent)
+    assert error_event.type == SystemEventType.STREAM_ERROR
+    assert error_event.data["error_code"] == "SLOTS_EXHAUSTED"
+    assert "workspace slots available" in error_event.data["message"]
+
+    # Verify: Slot was NOT released (never allocated)
+    worktree_slot_repo.unlock_slot.assert_not_called()
+
+
+# --- TaskGitService tests ---
+
+
+@pytest.fixture
+def task_git_service(mock_repos):
+    """Create TaskGitService instance with mocked repos."""
+    from devboard.services.task_git_service import TaskGitService
+
+    worktree_slot_repo, task_repo = mock_repos
+    return TaskGitService(
+        task_repo=task_repo,
+        worktree_slot_repo=worktree_slot_repo,
+    )
+
+
+@pytest.mark.asyncio
+async def test_checkout_task_to_main_repo_stashes_uncommitted_changes(
+    task_git_service, mock_repos, sample_task, sample_slot
+):
+    """Test that uncommitted changes in worktree are stashed and applied to main repo."""
+    worktree_slot_repo, _ = mock_repos
+
+    # Setup: Task has a worktree slot with uncommitted changes
+    sample_slot.is_main_repo = False
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    # Setup: Main slot exists
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.is_main_repo = True
+    worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        # Track which git instances are created
+        main_git = AsyncMock()
+        worktree_git = AsyncMock()
+
+        def create_git(path):
+            if path == sample_task.codebase.local_path:
+                return main_git
+            return worktree_git
+
+        mock_git_class.side_effect = create_git
+
+        # Main repo is clean
+        main_git.has_uncommitted_changes.return_value = False
+
+        # Worktree has uncommitted changes
+        worktree_git.get_current_branch.return_value = sample_task.branch_name
+        worktree_git.stash_create.return_value = "abc123stashsha"
+
+        # Execute
+        await task_git_service.checkout_task_to_main_repo(sample_task)
+
+        # Verify: Stash created in worktree with untracked files
+        worktree_git.stash_create.assert_called_once_with(include_untracked=True)
+
+        # Verify: Working tree reset in worktree
+        worktree_git.reset_working_tree.assert_called_once_with(include_untracked=True)
+
+        # Verify: HEAD detached in worktree
+        worktree_git.switch_detach.assert_called_once()
+
+        # Verify: Branch checked out in main repo
+        main_git.checkout_branch.assert_called_once_with(sample_task.branch_name)
+
+        # Verify: Stash applied in main repo
+        main_git.stash_apply.assert_called_once_with("abc123stashsha")
+
+
+@pytest.mark.asyncio
+async def test_checkout_task_to_main_repo_no_stash_when_no_changes(
+    task_git_service, mock_repos, sample_task, sample_slot
+):
+    """Test that no stash is created when worktree has no uncommitted changes."""
+    worktree_slot_repo, _ = mock_repos
+
+    # Setup: Task has a worktree slot
+    sample_slot.is_main_repo = False
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    # Setup: Main slot exists
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.is_main_repo = True
+    worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        main_git = AsyncMock()
+        worktree_git = AsyncMock()
+
+        def create_git(path):
+            if path == sample_task.codebase.local_path:
+                return main_git
+            return worktree_git
+
+        mock_git_class.side_effect = create_git
+
+        # Main repo is clean
+        main_git.has_uncommitted_changes.return_value = False
+
+        # Worktree has no uncommitted changes
+        worktree_git.get_current_branch.return_value = sample_task.branch_name
+        worktree_git.stash_create.return_value = None  # No changes to stash
+
+        # Execute
+        await task_git_service.checkout_task_to_main_repo(sample_task)
+
+        # Verify: No reset or stash apply
+        worktree_git.reset_working_tree.assert_not_called()
+        main_git.stash_apply.assert_not_called()
+
+        # Verify: Still detached and checked out
+        worktree_git.switch_detach.assert_called_once()
+        main_git.checkout_branch.assert_called_once_with(sample_task.branch_name)

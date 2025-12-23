@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.api.dependencies.entities import get_verified_codebase
-from devboard.api.dependencies.repositories import get_codebase_repository
+from devboard.api.dependencies.repositories import get_codebase_repository, get_worktree_slot_repository
 from devboard.api.schemas import (
     CodebaseCreate,
     CodebaseResponse,
@@ -14,6 +14,7 @@ from devboard.api.schemas import (
 )
 from devboard.db.models import Codebase, MergeStrategy
 from devboard.db.repositories import CodebaseRepository
+from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 
 router = APIRouter()
@@ -32,6 +33,7 @@ async def list_codebases(
 async def create_codebase(
     codebase: CodebaseCreate,
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Create a new codebase."""
     # Validate that the local path exists and is a directory
@@ -49,14 +51,17 @@ async def create_codebase(
     git = GitRepoIntegration(codebase.local_path)
     repository_url = await git.detect_git_remote_url()
 
+    # Validate repository has at least one commit
+    if not await git.has_commits():
+        raise HTTPException(
+            status_code=400,
+            detail="Repository has no commits. Please make at least one commit before adding as a codebase.",
+        )
+
     # Auto-detect default branch if not provided
     default_branch = codebase.default_branch
     if not default_branch:
-        try:
-            default_branch = await git.get_default_branch()
-        except Exception:
-            # Fall back to origin/main if auto-detection fails
-            default_branch = "origin/main"
+        default_branch = await git.get_default_branch()
 
     # Determine merge strategy: use provided value, or auto-detect based on remote URL
     merge_strategy = codebase.merge_strategy
@@ -81,6 +86,14 @@ async def create_codebase(
     created_codebase = codebase_repo.create(db_codebase)
     codebase_repo.db.commit()
     codebase_repo.db.refresh(created_codebase)
+
+    # Bootstrap main repo slot for this codebase
+    worktree_slot_repo.create(
+        codebase_id=created_codebase.id,
+        path=created_codebase.local_path,
+        is_main_repo=True,
+    )
+
     return created_codebase
 
 

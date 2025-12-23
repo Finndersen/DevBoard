@@ -65,6 +65,7 @@ const ConversationChat = ({
   // Store actions
   const startStream = useConversationStreamStore(state => state.startStream)
   const stopStream = useConversationStreamStore(state => state.stopStream)
+  const addEvent = useConversationStreamStore(state => state.addEvent)
   const approveTools = useConversationStreamStore(state => state.approveTools)
   const clearPendingToolRequests = useConversationStreamStore(state => state.clearPendingToolRequests)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
@@ -300,15 +301,7 @@ const ConversationChat = ({
       // Notify streaming started
       onStreamingStarted?.()
 
-      // Remove pending message
-      removedPendingIdsRef.current.add(pendingMessageId)
-      removeMessage(pendingKey, pendingMessageId)
-
-      flushSync(() => {
-        setRenderCount(prev => prev + 1)
-      })
-
-      // Create user message
+      // Create user message (will be added on first event)
       const userMessage: ConversationEvent = {
         event_type: 'message',
         role: 'user',
@@ -322,11 +315,32 @@ const ConversationChat = ({
         { message: messageText }
       )
 
-      // Start streaming via store - include user message in initial state
-      await startStream(conversationId, stream, eventHandlerRegistry, [...messages, userMessage])
+      // Start streaming via store
+      // User message is added when first event is received (via onFirstEvent)
+      // This prevents duplicate display of pending message + user message
+      await startStream(
+        conversationId,
+        stream,
+        eventHandlerRegistry,
+        messages,
+        () => {
+          // First event received - add user message and remove pending
+          addEvent(conversationId, userMessage)
+          removedPendingIdsRef.current.add(pendingMessageId)
+          removeMessage(pendingKey, pendingMessageId)
+          flushSync(() => {
+            setRenderCount(prev => prev + 1)
+          })
+        }
+      )
     } catch (error) {
       console.error('Failed to send message:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      let errorMessage = 'Failed to send message'
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        errorMessage = 'Unable to connect to server. Please check if the backend is running.'
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
       updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
     }
   }, [
@@ -341,6 +355,7 @@ const ConversationChat = ({
     removeMessage,
     onStreamingStarted,
     startStream,
+    addEvent,
     eventHandlerRegistry,
     messages
   ])

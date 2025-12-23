@@ -54,12 +54,14 @@ interface ConversationStreamActions {
    * @param stream - The event stream to process
    * @param eventHandlerRegistry - Optional registry for invoking event handlers
    * @param initialMessages - Optional initial messages to include (e.g., user message)
+   * @param onFirstEvent - Optional callback invoked once when first event is received
    */
   startStream: (
     conversationId: number,
     stream: AsyncGenerator<ConversationEvent>,
     eventHandlerRegistry?: EventHandlerRegistry,
-    initialMessages?: ConversationEvent[]
+    initialMessages?: ConversationEvent[],
+    onFirstEvent?: () => void | Promise<void>
   ) => Promise<void>
 
   /**
@@ -204,7 +206,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     activeStreams: new Map(),
 
     // Actions
-    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages) => {
+    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages, onFirstEvent) => {
       // Create abort controller for this stream
       const abortController = new AbortController()
 
@@ -251,6 +253,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Use conversationIdRef.current so closures see the current ID (may change during migration)
         const { toolRequests } = await processConversationStream({
           stream,
+          onFirstEvent,
           onEvent: (event) => {
             // Add event to store using ref.current (updated by migrateStream)
             get().addEvent(conversationIdRef.current, event)
@@ -275,6 +278,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Stream error:', error)
           get().setError(conversationIdRef.current, error)
+          // Re-throw so caller can handle (e.g., mark pending message as failed)
+          throw error
         }
       }
     },

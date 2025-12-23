@@ -442,9 +442,11 @@ class TaskGitService:
 
         This flow:
         1. Gets the last used worktree slot for the task
-        2. Detaches HEAD in that worktree (to release the branch)
-        3. Checks out the task's branch in the main repository
-        4. Updates the task's worktree slot assignment to the main repo slot
+        2. Stashes uncommitted changes in the worktree (if any)
+        3. Detaches HEAD in that worktree (to release the branch)
+        4. Checks out the task's branch in the main repository
+        5. Applies the stashed changes to the main repository
+        6. Updates the task's worktree slot assignment to the main repo slot
 
         Args:
             task: Task instance
@@ -464,18 +466,32 @@ class TaskGitService:
         # Get last used slot for the task
         last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
 
-        # If the branch is checked out in a worktree, detach HEAD there
+        stash_sha: str | None = None
+
+        # If the branch is checked out in a worktree, stash changes and detach HEAD
         if last_used_slot and not last_used_slot.is_main_repo:
             slot_git = GitRepoIntegration(last_used_slot.path)
             current_branch = await slot_git.get_current_branch()
-            # Only detach if the task's branch is actually checked out there
+
+            # Only process if the task's branch is actually checked out there
             if current_branch == task.branch_name:
+                # Stash uncommitted changes (including untracked files)
+                stash_sha = await slot_git.stash_create(include_untracked=True)
+                if stash_sha:
+                    await slot_git.reset_working_tree(include_untracked=True)
+                    logfire.info(f"Stashed uncommitted changes in worktree {last_used_slot.path} for task {task.id}")
+
                 await slot_git.switch_detach()
                 logfire.info(f"Detached HEAD in worktree {last_used_slot.path} for task {task.id}")
 
         # Checkout branch in main repository
         await main_git.checkout_branch(task.branch_name)
         logfire.info(f"Checked out branch {task.branch_name} in main repo for task {task.id}")
+
+        # Apply stashed changes to main repository
+        if stash_sha:
+            await main_git.stash_apply(stash_sha)
+            logfire.info(f"Applied stashed changes to main repo for task {task.id}")
 
         # Find the main repo slot and lock it for this task
         main_slot = self.worktree_slot_repo.get_main_slot_for_codebase(task.codebase_id)

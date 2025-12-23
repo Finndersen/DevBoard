@@ -28,6 +28,7 @@ class SystemEventType(StrEnum):
     WORKSPACE_ALLOCATE = "workspace_allocate"
     WORKSPACE_BRANCH_CHECKOUT = "workspace_branch_checkout"
     WORKSPACE_CREATE = "workspace_create"
+    STREAM_ERROR = "stream_error"
 
 
 class TextMessage(BaseModel):

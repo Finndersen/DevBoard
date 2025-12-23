@@ -252,8 +252,9 @@ describe('ConversationMessage', () => {
       expect(cardElement).toHaveClass('border-yellow-600')
       expect(cardElement).toHaveClass('bg-yellow-900/10')
 
-      // Check for warning icon (SVG)
-      const svg = awaitingText.parentElement?.querySelector('svg')
+      // Check for warning icon (SVG) - it's a sibling of the text, in the header div
+      const headerDiv = awaitingText.closest('.bg-yellow-800\\/20')
+      const svg = headerDiv?.querySelector('svg')
       expect(svg).toBeInTheDocument()
       expect(svg).toHaveClass('text-yellow-400')
     })
@@ -269,7 +270,11 @@ describe('ConversationMessage', () => {
 
       render(<ConversationMessageComponent message={toolCallRequest} />)
 
-      expect(screen.getByText('Awaiting Approval: create_new_task')).toBeInTheDocument()
+      // Text is split across elements, so use title attribute which contains full text
+      expect(screen.getByTitle('Awaiting Approval: create_new_task')).toBeInTheDocument()
+      // Also verify the individual parts are rendered
+      expect(screen.getByText(/Awaiting Approval/i)).toBeInTheDocument()
+      expect(screen.getByText('create_new_task')).toBeInTheDocument()
     })
 
     it('displays tool arguments for tool_call_request when provided as object', () => {

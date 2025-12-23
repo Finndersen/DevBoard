@@ -380,6 +380,128 @@ index abcdefg..0000000
         assert "deleted file mode" not in result.files[0].diff_content
 
 
+class TestGetDefaultBranch:
+    """Tests for get_default_branch method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_remote_head_when_available(self, temp_git_repo):
+        """Test that remote HEAD is returned when available (repo with remote)."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
+                return "origin/main"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_default_branch()
+
+        assert result == "origin/main"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_main_when_no_remote(self, temp_git_repo):
+        """Test that 'main' branch is returned when remote HEAD is not available."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
+                return ""  # No remote HEAD
+            if args == ["rev-parse", "--verify", "refs/heads/main"]:
+                return "abc123"  # main branch exists
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_default_branch()
+
+        assert result == "main"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_master_when_no_main(self, temp_git_repo):
+        """Test that 'master' branch is returned when 'main' doesn't exist."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
+                return ""  # No remote HEAD
+            if args == ["rev-parse", "--verify", "refs/heads/main"]:
+                return ""  # main doesn't exist
+            if args == ["rev-parse", "--verify", "refs/heads/master"]:
+                return "def456"  # master exists
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_default_branch()
+
+        assert result == "master"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_local_head_as_last_resort(self, temp_git_repo):
+        """Test that local HEAD is used as last resort when no common branches exist."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
+                return ""  # No remote HEAD
+            if args == ["rev-parse", "--verify", "refs/heads/main"]:
+                return ""  # main doesn't exist
+            if args == ["rev-parse", "--verify", "refs/heads/master"]:
+                return ""  # master doesn't exist
+            if args == ["symbolic-ref", "--short", "HEAD"]:
+                return "develop"  # Current branch is develop
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_default_branch()
+
+        assert result == "develop"
+
+    @pytest.mark.asyncio
+    async def test_raises_exception_when_no_branch_detected(self, temp_git_repo):
+        """Test that exception is raised when no default branch can be determined."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            return ""  # All detection methods fail
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            with pytest.raises(Exception) as exc_info:
+                await git.get_default_branch()
+
+        assert "Unable to determine repository default branch" in str(exc_info.value)
+
+
+class TestHasCommits:
+    """Tests for has_commits method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_repo_has_commits(self, temp_git_repo):
+        """Test that has_commits returns True when repo has at least one commit."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["rev-parse", "HEAD"]:
+                return "abc123def456"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.has_commits()
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_repo_has_no_commits(self, temp_git_repo):
+        """Test that has_commits returns False when repo has no commits."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            return ""  # rev-parse HEAD returns empty for unborn branch
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.has_commits()
+
+        assert result is False
+
+
 class TestGetForkPoint:
     """Tests for get_fork_point method."""
 
@@ -412,3 +534,114 @@ class TestGetForkPoint:
             result = await git.get_fork_point("main", "feature")
 
         assert result is None
+
+
+class TestStashCreate:
+    """Tests for stash_create method."""
+
+    @pytest.mark.asyncio
+    async def test_stash_create_returns_sha_when_changes_exist(self, temp_git_repo):
+        """Test stash_create returns commit SHA when there are uncommitted changes."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["status", "--porcelain"]:
+                return " M file.txt"  # Has changes
+            if args == ["stash", "create"]:
+                return "abc123def456"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.stash_create()
+
+        assert result == "abc123def456"
+
+    @pytest.mark.asyncio
+    async def test_stash_create_returns_none_when_no_changes(self, temp_git_repo):
+        """Test stash_create returns None when there are no uncommitted changes."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["status", "--porcelain"]:
+                return ""  # No changes
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.stash_create()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_stash_create_with_untracked_includes_u_flag(self, temp_git_repo):
+        """Test stash_create with include_untracked=True adds -u flag."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            if args == ["status", "--porcelain"]:
+                return "?? newfile.txt"  # Has untracked files
+            if args == ["stash", "create", "-u"]:
+                return "abc123"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.stash_create(include_untracked=True)
+
+        assert result == "abc123"
+        assert ["stash", "create", "-u"] in calls
+
+
+class TestStashApply:
+    """Tests for stash_apply method."""
+
+    @pytest.mark.asyncio
+    async def test_stash_apply_calls_git_with_sha(self, temp_git_repo):
+        """Test stash_apply calls git stash apply with the commit SHA."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            await git.stash_apply("abc123def456")
+
+        assert ["stash", "apply", "abc123def456"] in calls
+
+
+class TestResetWorkingTree:
+    """Tests for reset_working_tree method."""
+
+    @pytest.mark.asyncio
+    async def test_reset_working_tree_with_untracked(self, temp_git_repo):
+        """Test reset_working_tree runs checkout and clean commands."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            await git.reset_working_tree(include_untracked=True)
+
+        assert ["checkout", "."] in calls
+        assert ["clean", "-fd"] in calls
+
+    @pytest.mark.asyncio
+    async def test_reset_working_tree_without_untracked(self, temp_git_repo):
+        """Test reset_working_tree only runs checkout when include_untracked=False."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            await git.reset_working_tree(include_untracked=False)
+
+        assert ["checkout", "."] in calls
+        assert ["clean", "-fd"] not in calls

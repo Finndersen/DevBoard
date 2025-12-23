@@ -8,6 +8,7 @@ import pytest
 
 from devboard.db.models import Codebase
 from devboard.db.repositories import CodebaseRepository
+from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 
 
 @pytest.fixture
@@ -89,16 +90,10 @@ class TestCodebasesRouter:
         assert codebases[0]["id"] == created_codebase.id
 
     def test_create_codebase_non_git(self, client, test_codebase_data):
-        """Test creating a new codebase from a non-git directory."""
+        """Test creating a new codebase from a non-git directory fails."""
         response = client.post("/api/codebases/", json=test_codebase_data)
-        assert response.status_code == 200
-
-        codebase_data = response.json()
-        assert codebase_data["name"] == test_codebase_data["name"]
-        assert codebase_data["local_path"] == test_codebase_data["local_path"]
-        assert codebase_data["description"] == test_codebase_data["description"]
-        assert codebase_data["repository_url"] is None  # No git repo detected
-        assert "id" in codebase_data
+        assert response.status_code == 400
+        assert "no commits" in response.json()["detail"]
 
     def test_create_codebase_with_git(self, client, temp_git_dir):
         """Test creating a new codebase from a git directory."""
@@ -117,6 +112,30 @@ class TestCodebasesRouter:
         assert result["description"] == codebase_data["description"]
         assert result["repository_url"] == "https://github.com/test/repo.git"  # Auto-detected
         assert "id" in result
+
+    def test_create_codebase_creates_main_repo_slot(self, client, db_session, temp_git_dir):
+        """Test that creating a codebase also creates a main repo worktree slot."""
+        codebase_data = {
+            "name": "Git Test Codebase",
+            "local_path": temp_git_dir,
+            "description": "A test codebase with git repository",
+        }
+
+        response = client.post("/api/codebases/", json=codebase_data)
+        assert response.status_code == 200
+
+        result = response.json()
+        codebase_id = result["id"]
+
+        # Verify main repo slot was created
+        worktree_slot_repo = WorktreeSlotRepository(db_session)
+        slots = worktree_slot_repo.get_by_codebase(codebase_id, include_main=True)
+
+        assert len(slots) == 1
+        main_slot = slots[0]
+        assert main_slot.is_main_repo is True
+        assert main_slot.path == temp_git_dir
+        assert main_slot.codebase_id == codebase_id
 
     def test_create_codebase_invalid_path(self, client):
         """Test creating a codebase with an invalid local path."""

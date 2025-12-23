@@ -3,10 +3,10 @@ We are working to develop an application as described in @docs/INDEX.md
 
 # Global Guidelines
 - After making changes to the design or implementation details, ALWAYS:
-
   - Consider whether corresponding changes need to be made in the Frontend application
   - Add or update any relevant tests to cover the changes
   - Run tests to ensure everything works as expected
+  - Update documentation in docs/ accordingly
 
 
 # Backend Development Guidelines

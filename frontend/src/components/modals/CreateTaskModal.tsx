@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
@@ -13,7 +13,7 @@ interface CreateTaskModalProps {
 
 export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTaskModalProps) {
   const navigate = useNavigate()
-  const { data: codebases, loading: codebasesLoading } = useProjectCodebases(projectId)
+  const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(projectId)
   const { setTask, fetchProjectTasks } = useDataStore()
 
   const [newTask, setNewTask] = useState({
@@ -27,11 +27,12 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   const [isCreating, setIsCreating] = useState(false)
   const [autoGenerateBranch, setAutoGenerateBranch] = useState(true)
 
-  // Get selected codebase for default_branch lookup
-  const selectedCodebase = useMemo(() => {
-    if (!newTask.codebase_id || !codebases) return null
-    return codebases.find(c => c.id === newTask.codebase_id) ?? null
-  }, [newTask.codebase_id, codebases])
+  // Refetch codebases when modal opens (in case new ones were linked)
+  useEffect(() => {
+    if (isOpen) {
+      refetchCodebases()
+    }
+  }, [isOpen, refetchCodebases])
 
   // Reset form when modal closes
   useEffect(() => {

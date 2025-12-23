@@ -112,6 +112,13 @@ export async function processConversationStream(
     // Process all events (including system events for temporary display during streaming)
     // System events won't persist since the backend doesn't include them in message history
     await onEvent(event)
+
+    // Throw on stream error events to trigger catch block in caller
+    // This allows graceful error handling with pending message updates
+    if (event.event_type === 'system' && event.type === 'stream_error') {
+      const errorMessage = (event.data?.message as string) || 'An error occurred'
+      throw new Error(errorMessage)
+    }
   }
 
   return { toolRequests, eventCount }

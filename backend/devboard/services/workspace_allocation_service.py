@@ -121,6 +121,10 @@ class WorkspaceAllocationService:
         # Otherwise (None or >0), exclude main repo from automatic allocation
         include_main_in_pool = task.codebase.max_worktrees == 0
 
+        # Bootstrap main repo slot if using main-only mode (fallback for existing codebases)
+        if include_main_in_pool:
+            self.bootstrap_main_repo_slot(task.codebase)
+
         # Get all slots for this codebase (including main repo for stickiness check)
         all_slots = self.worktree_slot_repo.get_by_codebase(task.codebase.id, include_main=True)
 
@@ -468,7 +472,16 @@ class WorkspaceAllocationService:
                     worktree_count = total_slots - 1 if total_slots > 0 else 0  # subtract main repo slot
                     if max_worktrees == 0 or worktree_count >= max_worktrees:
                         logfire.warn(f"Max worktrees ({max_worktrees}) reached for codebase {task.codebase.id}")
-                        raise
+                        # Yield error event instead of raising to allow graceful error handling
+                        yield SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "SLOTS_EXHAUSTED",
+                                "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
+                            },
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        )
+                        return
 
                 # Create a new slot
                 logfire.info(f"All slots locked, creating new worktree for task {task.id}")

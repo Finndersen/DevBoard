@@ -502,31 +502,51 @@ class GitRepoIntegration:
         return await self._run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
 
     async def get_default_branch(self) -> str:
-        """Get the repository's default remote-tracking branch.
+        """Get the repository's default branch.
 
-        Returns the remote HEAD reference (e.g., 'origin/main' or 'origin/master').
-        This remote-tracking branch can be used directly as a base for creating new branches.
+        Detection strategy:
+        1. Try remote HEAD reference (origin/main, origin/master, etc.)
+        2. Fall back to local HEAD (current branch for repos without remotes)
+        3. Check for common branch names (main, master) as last resort
 
         Returns:
-            Remote-tracking branch reference (e.g., 'origin/main')
+            Branch reference (e.g., 'origin/main' for repos with remotes,
+            'main' for local-only repos)
 
         Raises:
             Exception: If unable to determine default branch
         """
+        # 1. Try remote HEAD first (best for repos with remotes)
         output = await self._run_git_command(
             ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
             raise_on_error=False,
             timeout=10.0,
         )
-
         if output:
             return output
 
-        # If not set up, raise an error with helpful message
-        logfire.error("origin/HEAD not set up - run 'git remote set-head origin --auto' to configure")
+        # 2. Check for common default branch names
+        for branch_name in ["main", "master"]:
+            exists = await self._run_git_command(
+                ["rev-parse", "--verify", f"refs/heads/{branch_name}"],
+                raise_on_error=False,
+                timeout=10.0,
+            )
+            if exists:
+                return branch_name
+
+        # 3. Last resort: local HEAD (may not be the default branch)
+        output = await self._run_git_command(
+            ["symbolic-ref", "--short", "HEAD"],
+            raise_on_error=False,
+            timeout=10.0,
+        )
+        if output:
+            return output
+
         raise Exception(
             "Unable to determine repository default branch. "
-            "Run 'git remote set-head origin --auto' in the repository to set it up."
+            "Ensure the repository has at least one commit and a valid HEAD."
         )
 
     async def branch_exists(self, name: str) -> bool:
@@ -541,6 +561,19 @@ class GitRepoIntegration:
         output = await self._run_git_command(
             ["rev-parse", "--verify", f"refs/heads/{name}"],
             raise_on_error=False,
+        )
+        return bool(output)
+
+    async def has_commits(self) -> bool:
+        """Check if the repository has any commits.
+
+        Returns:
+            True if repository has at least one commit, False otherwise
+        """
+        output = await self._run_git_command(
+            ["rev-parse", "HEAD"],
+            raise_on_error=False,
+            timeout=10.0,
         )
         return bool(output)
 
@@ -828,6 +861,52 @@ class GitRepoIntegration:
         await self._run_git_command(["stash", "pop"])
         return True
 
+    async def stash_create(self, include_untracked: bool = False) -> str | None:
+        """Create a stash commit without adding to the stash list.
+
+        This is useful for transferring uncommitted changes between worktrees,
+        as the commit SHA is accessible from any worktree sharing the same git objects.
+
+        Args:
+            include_untracked: If True, include untracked (new) files in stash
+
+        Returns:
+            Commit SHA if changes were stashed, None if nothing to stash
+        """
+        if not await self.has_uncommitted_changes():
+            return None
+
+        args = ["stash", "create"]
+        if include_untracked:
+            args.append("-u")
+
+        output = await self._run_git_command(args)
+        return output.strip() if output else None
+
+    async def stash_apply(self, commit_sha: str) -> None:
+        """Apply a stash commit by SHA.
+
+        Args:
+            commit_sha: The SHA of the stash commit to apply
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        await self._run_git_command(["stash", "apply", commit_sha])
+
+    async def reset_working_tree(self, include_untracked: bool = True) -> None:
+        """Reset all uncommitted changes in the working tree.
+
+        Args:
+            include_untracked: If True, also remove untracked files
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        await self._run_git_command(["checkout", "."])
+        if include_untracked:
+            await self._run_git_command(["clean", "-fd"])
+
     async def merge_squash(
         self,
         source: str,
@@ -881,18 +960,6 @@ class GitRepoIntegration:
 
         # Return the new commit hash
         return await self._run_git_command(["rev-parse", "HEAD"])
-
-    async def rebase_branch(self, source: str, onto: str) -> None:
-        """Rebase a source branch onto a target branch.
-
-        Args:
-            source: Source branch to rebase
-            onto: Target branch to rebase onto
-
-        Raises:
-            ShellCommandExecutionError: If rebase fails (e.g., conflicts)
-        """
-        await self._run_git_command(["rebase", onto, source])
 
     async def push_branch(self, branch: str, remote: str = "origin", set_upstream: bool = True) -> None:
         """Push a branch to a remote.
