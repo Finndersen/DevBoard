@@ -270,6 +270,53 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
 
 
 @pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
+    service, mock_repos, sample_task, sample_slot
+):
+    """Test that WORKSPACE_ALLOCATE is NOT emitted when task reuses its sticky slot."""
+    worktree_slot_repo, task_repo = mock_repos
+
+    # Setup: Slot is task's sticky slot (last_used_by_task_id matches task.id)
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = sample_task.id
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+    # Mock that this task previously used this slot
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    # Mock git operations and worktree validation
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
+    ):
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+        mock_checkout.return_value = True  # Checkout was performed
+
+        # Mock agent stream that yields one message
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        # Execute and collect events
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Should NOT have yielded WORKSPACE_ALLOCATE (sticky slot reuse)
+    # Only WORKSPACE_BRANCH_CHECKOUT should be emitted
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    assert len(system_events) == 1
+
+    # Verify only event: WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[0].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[0].data["task_id"] == sample_task.id
+    assert system_events[0].data["branch"] == sample_task.branch_name
+
+
+@pytest.mark.asyncio
 async def test_run_task_agent_in_workspace_yields_workspace_create_event(
     service, mock_repos, sample_task, sample_codebase
 ):
@@ -314,28 +361,24 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
         ):
             events.append(event)
 
-    # Verify: Should have yielded WORKSPACE_CREATE (twice), WORKSPACE_ALLOCATE, and WORKSPACE_BRANCH_CHECKOUT
+    # Verify: Should have yielded WORKSPACE_CREATE (twice) and WORKSPACE_BRANCH_CHECKOUT
+    # Note: WORKSPACE_ALLOCATE is not emitted after WORKSPACE_CREATE (creation implies allocation)
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    assert len(system_events) == 4
+    assert len(system_events) == 3
 
     # Verify first event: WORKSPACE_CREATE (before creating slot)
     assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
     assert system_events[0].data["task_id"] == sample_task.id
 
-    # Verify second event: WORKSPACE_ALLOCATE
-    assert system_events[1].type == SystemEventType.WORKSPACE_ALLOCATE
+    # Verify second event: WORKSPACE_CREATE (worktree validation failed, recreating)
+    assert system_events[1].type == SystemEventType.WORKSPACE_CREATE
     assert system_events[1].data["task_id"] == sample_task.id
     assert system_events[1].data["slot_id"] == new_slot.id
 
-    # Verify third event: WORKSPACE_CREATE (worktree validation failed, recreating)
-    assert system_events[2].type == SystemEventType.WORKSPACE_CREATE
+    # Verify third event: WORKSPACE_BRANCH_CHECKOUT
+    assert system_events[2].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
     assert system_events[2].data["task_id"] == sample_task.id
-    assert system_events[2].data["slot_id"] == new_slot.id
-
-    # Verify fourth event: WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[3].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[3].data["task_id"] == sample_task.id
-    assert system_events[3].data["branch"] == sample_task.branch_name
+    assert system_events[2].data["branch"] == sample_task.branch_name
 
     # Verify worktree was created twice (once during slot creation, once during validation/recreation)
     assert mock_git.return_value.create_worktree.call_count == 2
@@ -553,3 +596,145 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(
         # Verify: Still detached and checked out
         worktree_git.switch_detach.assert_called_once()
         main_git.checkout_branch.assert_called_once_with(sample_task.branch_name)
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
+    """Test rebase_task_branch stashes changes, rebases, and restores stash."""
+    from devboard.services.task_git_service import RebaseResult
+
+    worktree_slot_repo, _ = mock_repos
+
+    # Setup: Task has a worktree slot
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        mock_git = AsyncMock()
+        mock_git_class.return_value = mock_git
+
+        # Has uncommitted changes
+        mock_git.has_uncommitted_changes.return_value = True
+        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.rebase_onto.return_value = "newhead456"
+
+        # Execute
+        result = await task_git_service.rebase_task_branch(sample_task)
+
+        # Verify result
+        assert isinstance(result, RebaseResult)
+        assert result.new_head == "newhead456"
+        assert result.slot_path == sample_slot.path
+        assert result.had_uncommitted_changes is True
+        assert result.uncommitted_changes_restored is True
+        assert result.has_stash_conflicts is False
+
+        # Verify stash flow (stash_push cleans working tree automatically)
+        mock_git.has_uncommitted_changes.assert_called_once()
+        mock_git.stash_push.assert_called_once_with(include_untracked=True)
+        mock_git.fetch.assert_called_once()
+        mock_git.rebase_onto.assert_called_once_with(sample_task.base_branch)
+        mock_git.stash_apply.assert_called_once_with("stash@{0}")
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
+    """Test rebase_task_branch without uncommitted changes skips stash operations."""
+    from devboard.services.task_git_service import RebaseResult
+
+    worktree_slot_repo, _ = mock_repos
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        mock_git = AsyncMock()
+        mock_git_class.return_value = mock_git
+
+        # No uncommitted changes
+        mock_git.has_uncommitted_changes.return_value = False
+        mock_git.rebase_onto.return_value = "newhead789"
+
+        # Execute
+        result = await task_git_service.rebase_task_branch(sample_task)
+
+        # Verify result
+        assert isinstance(result, RebaseResult)
+        assert result.new_head == "newhead789"
+        assert result.had_uncommitted_changes is False
+        assert result.uncommitted_changes_restored is False
+        assert result.has_stash_conflicts is False
+
+        # Verify no stash operations when nothing to stash
+        mock_git.stash_push.assert_not_called()
+        mock_git.stash_apply.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_conflict_restores_stash(task_git_service, mock_repos, sample_task, sample_slot):
+    """Test rebase_task_branch restores stash before raising RebaseConflictError."""
+    from devboard.integrations.shell import RebaseConflictError
+
+    worktree_slot_repo, _ = mock_repos
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        mock_git = AsyncMock()
+        mock_git_class.return_value = mock_git
+
+        # Has uncommitted changes
+        mock_git.has_uncommitted_changes.return_value = True
+        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.rebase_onto.side_effect = RebaseConflictError("Rebase conflict on file.txt")
+
+        # Execute and verify exception is raised
+        with pytest.raises(RebaseConflictError):
+            await task_git_service.rebase_task_branch(sample_task)
+
+        # Verify stash was created before rebase
+        mock_git.stash_push.assert_called_once_with(include_untracked=True)
+
+        # Verify stash was restored after conflict
+        mock_git.stash_apply.assert_called_once_with("stash@{0}")
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_repos, sample_task, sample_slot):
+    """Test rebase_task_branch handles stash apply conflicts by storing pending stash."""
+    from devboard.integrations.shell import ShellCommandExecutionError
+    from devboard.services.task_git_service import RebaseResult
+
+    worktree_slot_repo, _ = mock_repos
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        mock_git = AsyncMock()
+        mock_git_class.return_value = mock_git
+
+        # Has uncommitted changes
+        mock_git.has_uncommitted_changes.return_value = True
+        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.rebase_onto.return_value = "newhead456"
+        # Stash apply fails with conflict
+        mock_git.stash_apply.side_effect = ShellCommandExecutionError("error: could not apply stash")
+
+        # Execute
+        result = await task_git_service.rebase_task_branch(sample_task)
+
+        # Verify result has stash conflicts flag
+        assert isinstance(result, RebaseResult)
+        assert result.new_head == "newhead456"
+        assert result.had_uncommitted_changes is True
+        assert result.uncommitted_changes_restored is False
+        assert result.has_stash_conflicts is True
+
+        # Verify stash_push was called (cleans working tree automatically)
+        mock_git.stash_push.assert_called_once_with(include_untracked=True)
+        # Stash store is no longer called - files left in conflicted state
+        mock_git.stash_store.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_no_branch_name_raises_error(task_git_service, mock_repos, sample_task):
+    """Test rebase_task_branch raises ValueError when task has no branch name."""
+    sample_task.branch_name = None
+
+    with pytest.raises(ValueError, match="has no branch name configured"):
+        await task_git_service.rebase_task_branch(sample_task)

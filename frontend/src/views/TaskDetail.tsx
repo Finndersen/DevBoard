@@ -367,57 +367,52 @@ function TaskDetail({ id }: TaskDetailProps) {
   useToolResultHandler(fileModificationMatcher, fileModificationHandler)
 
   const systemEventMatcher = useCallback((event: any) => {
-    return event.type === 'task_updated' && event.data?.task_id === task?.id
+    return (
+      (event.type === 'task_updated' || event.type === 'branch_rebased') &&
+      event.data?.task_id === task?.id
+    )
   }, [task?.id])
 
   const systemEventHandler = useCallback(async (event: any) => {
-    // Check if conversation_id is changing
-    const oldConversationId = task?.conversation_id
-    const newConversationId = event.data?.updated_fields?.conversation_id
-
     console.log('[TaskDetail] SystemEvent received:', {
       taskId: task?.id,
       eventType: event.type,
-      oldConversationId,
-      newConversationId,
-      currentTaskConversationId: task?.conversation_id,
       eventData: event.data,
       timestamp: new Date().toISOString()
     })
 
     try {
-      // Migrate stream FIRST (before refetch updates conversation_id in state)
-      // This prevents race condition where component re-renders with new conversation_id
-      // but stream is still registered under old conversation_id
-      if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
-        console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
-        migrateStream(oldConversationId, newConversationId)
-        // Clear streaming message immediately after migration
-        // The isConversationStreaming check in the effect won't work during migration
-        // because task.conversation_id hasn't updated yet
-        setStreamingMessage('')
+      // Handle task_updated events
+      if (event.type === 'task_updated') {
+        // Check if conversation_id is changing
+        const oldConversationId = task?.conversation_id
+        const newConversationId = event.data?.updated_fields?.conversation_id
+
+        // Migrate stream FIRST (before refetch updates conversation_id in state)
+        // This prevents race condition where component re-renders with new conversation_id
+        // but stream is still registered under old conversation_id
+        if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
+          console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
+          migrateStream(oldConversationId, newConversationId)
+          // Clear streaming message immediately after migration
+          // The isConversationStreaming check in the effect won't work during migration
+          // because task.conversation_id hasn't updated yet
+          setStreamingMessage('')
+        }
+
+        // THEN refetch task to get updated status and conversation_id
+        await refetch()
       }
 
-      const refetchStartTime = Date.now()
-      console.log('[TaskDetail] STARTING refetch:', {
-        taskId: task?.id,
-        currentConversationId: task?.conversation_id,
-        timestamp: new Date().toISOString()
-      })
-      // THEN refetch task to get updated status and conversation_id
-      const updatedTaskResult = await refetch()
-      console.log('[TaskDetail] COMPLETED refetch:', {
-        durationMs: Date.now() - refetchStartTime,
-        oldConversationId: task?.conversation_id,
-        newConversationId: updatedTaskResult?.conversation_id,
-        conversationIdChanged: task?.conversation_id !== updatedTaskResult?.conversation_id,
-        timestamp: new Date().toISOString()
-      })
+      // Handle branch_rebased events - refresh git status
+      if (event.type === 'branch_rebased') {
+        await refreshGitStatus()
+      }
     } catch (error) {
-      console.error('Failed to refetch task after update event:', error)
+      console.error('Failed to handle system event:', error)
       // Don't throw - allow other handlers and stream to continue
     }
-  }, [task?.id, task?.status, task?.conversation_id, migrateStream, refetch])
+  }, [task?.id, task?.conversation_id, migrateStream, refetch, refreshGitStatus])
 
   // Handle task updates from SystemEvents (emitted during workflow actions)
   useSystemEventHandler(systemEventMatcher, systemEventHandler)
@@ -490,6 +485,9 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }
 
+  const handleTriggerRebase = useCallback(() => {
+    executeWorkflowAction('task.rebase_branch', 'Rebasing branch...')
+  }, [task?.id, task?.conversation_id])
 
   const getNextStateButton = () => {
     if (!task) return null
@@ -962,6 +960,8 @@ function TaskDetail({ id }: TaskDetailProps) {
         taskId={task.id}
         gitStatus={gitStatus}
         onStatusUpdate={refreshGitStatus}
+        onTriggerRebase={handleTriggerRebase}
+        isStreaming={isConversationStreaming}
       />
     </div>
   )

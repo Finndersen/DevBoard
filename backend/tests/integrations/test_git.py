@@ -536,60 +536,40 @@ class TestGetForkPoint:
         assert result is None
 
 
-class TestStashCreate:
-    """Tests for stash_create method."""
+class TestStashPush:
+    """Tests for stash_push method."""
 
     @pytest.mark.asyncio
-    async def test_stash_create_returns_sha_when_changes_exist(self, temp_git_repo):
-        """Test stash_create returns commit SHA when there are uncommitted changes."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        async def mock_run_git_command(args, **kwargs):
-            if args == ["status", "--porcelain"]:
-                return " M file.txt"  # Has changes
-            if args == ["stash", "create"]:
-                return "abc123def456"
-            return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.stash_create()
-
-        assert result == "abc123def456"
-
-    @pytest.mark.asyncio
-    async def test_stash_create_returns_none_when_no_changes(self, temp_git_repo):
-        """Test stash_create returns None when there are no uncommitted changes."""
-        git = GitRepoIntegration(temp_git_repo)
-
-        async def mock_run_git_command(args, **kwargs):
-            if args == ["status", "--porcelain"]:
-                return ""  # No changes
-            return ""
-
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.stash_create()
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_stash_create_with_untracked_includes_u_flag(self, temp_git_repo):
-        """Test stash_create with include_untracked=True adds -u flag."""
+    async def test_stash_push_returns_stash_ref(self, temp_git_repo):
+        """Test stash_push returns stash@{0} reference."""
         git = GitRepoIntegration(temp_git_repo)
         calls = []
 
         async def mock_run_git_command(args, **kwargs):
             calls.append(args)
-            if args == ["status", "--porcelain"]:
-                return "?? newfile.txt"  # Has untracked files
-            if args == ["stash", "create", "-u"]:
-                return "abc123"
             return ""
 
         with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
-            result = await git.stash_create(include_untracked=True)
+            result = await git.stash_push()
 
-        assert result == "abc123"
-        assert ["stash", "create", "-u"] in calls
+        assert result == "stash@{0}"
+        assert ["stash", "push"] in calls
+
+    @pytest.mark.asyncio
+    async def test_stash_push_with_untracked_includes_u_flag(self, temp_git_repo):
+        """Test stash_push with include_untracked=True adds -u flag."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.stash_push(include_untracked=True)
+
+        assert result == "stash@{0}"
+        assert ["stash", "push", "-u"] in calls
 
 
 class TestStashApply:
@@ -609,6 +589,40 @@ class TestStashApply:
             await git.stash_apply("abc123def456")
 
         assert ["stash", "apply", "abc123def456"] in calls
+
+
+class TestStashStore:
+    """Tests for stash_store method."""
+
+    @pytest.mark.asyncio
+    async def test_stash_store_calls_git_with_sha(self, temp_git_repo):
+        """Test stash_store calls git stash store with the commit SHA."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            await git.stash_store("abc123def456")
+
+        assert ["stash", "store", "abc123def456"] in calls
+
+    @pytest.mark.asyncio
+    async def test_stash_store_with_message(self, temp_git_repo):
+        """Test stash_store includes message when provided."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_run_git_command(args, **kwargs):
+            calls.append(args)
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            await git.stash_store("abc123def456", message="My stash message")
+
+        assert ["stash", "store", "abc123def456", "-m", "My stash message"] in calls
 
 
 class TestResetWorkingTree:
@@ -645,3 +659,37 @@ class TestResetWorkingTree:
 
         assert ["checkout", "."] in calls
         assert ["clean", "-fd"] not in calls
+
+
+class TestGetConflictedFiles:
+    """Tests for get_conflicted_files method."""
+
+    @pytest.mark.asyncio
+    async def test_get_conflicted_files_returns_list(self, temp_git_repo):
+        """Test get_conflicted_files returns list of conflicted files."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["diff", "--name-only", "--diff-filter=U"]:
+                return "file1.py\nfile2.py\n"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_conflicted_files()
+
+        assert result == ["file1.py", "file2.py"]
+
+    @pytest.mark.asyncio
+    async def test_get_conflicted_files_empty_when_no_conflicts(self, temp_git_repo):
+        """Test get_conflicted_files returns empty list when no conflicts."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["diff", "--name-only", "--diff-filter=U"]:
+                return ""
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_conflicted_files()
+
+        assert result == []

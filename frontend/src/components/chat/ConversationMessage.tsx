@@ -7,10 +7,24 @@ import { Markdown } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
-function getSystemEventLabel(type: SystemEventType): string | null {
+function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknown> | null): string | null {
   switch (type) {
     case 'workspace_create':
       return 'Creating workspace'
+    case 'workspace_allocate':
+      return 'Allocating workspace'
+    case 'workspace_branch_checkout':
+      return 'Checking out branch'
+    case 'branch_rebased':
+      return data?.message as string ?? 'Branch rebased'
+    case 'stash_apply_conflict':
+      return 'Stash apply conflict - agent resolving'
+    case 'task_updated':
+      return null // Don't show task_updated events (handled separately)
+    case 'conversation_updated':
+      return null // Don't show conversation_updated events
+    case 'stream_error':
+      return `Error: ${(data?.message as string) ?? 'Unknown error'}`
     default:
       return null
   }
@@ -156,18 +170,27 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // System events - render as inline badges (only for specific event types)
   if (message.event_type === 'system') {
-    const label = getSystemEventLabel(message.type)
+    const label = getSystemEventLabel(message.type, message.data)
 
     // Only render badge if we have a label for this event type
     if (!label) {
       return null
     }
 
+    const isError = message.type === 'stream_error'
+    const colorClasses = isError
+      ? 'bg-red-500/10 border-red-500/20 text-red-400'
+      : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+
     return (
       <div className="flex w-full justify-center my-1">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${colorClasses}`}>
           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            {isError ? (
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            ) : (
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            )}
           </svg>
           <span>{label}</span>
         </div>

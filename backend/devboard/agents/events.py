@@ -29,6 +29,8 @@ class SystemEventType(StrEnum):
     WORKSPACE_BRANCH_CHECKOUT = "workspace_branch_checkout"
     WORKSPACE_CREATE = "workspace_create"
     STREAM_ERROR = "stream_error"
+    BRANCH_REBASED = "branch_rebased"
+    STASH_APPLY_CONFLICT = "stash_apply_conflict"
 
 
 class TextMessage(BaseModel):

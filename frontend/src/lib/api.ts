@@ -45,7 +45,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
 
-export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'stream_error'
+export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'stream_error' | 'branch_rebased' | 'stash_apply_conflict'
 
 export interface ConversationMessage {
   event_type: 'message'
@@ -232,12 +232,6 @@ export interface MergeBranchRequest {
 export interface MergeBranchResponse {
   success: boolean
   merge_commit: string
-}
-
-export interface RebaseBranchResponse {
-  success: boolean
-  new_head: string
-  message: string
 }
 
 export interface CheckoutToMainResponse {
@@ -725,12 +719,6 @@ export class ApiClient {
 
   async releaseWorktreeSlot(slotId: number | string): Promise<void> {
     return this.request<void>(`/api/worktree-slots/${slotId}/release`, {
-      method: 'POST',
-    })
-  }
-
-  async rebaseTaskBranch(taskId: number | string): Promise<RebaseBranchResponse> {
-    return this.request<RebaseBranchResponse>(`/api/tasks/${taskId}/rebase`, {
       method: 'POST',
     })
   }

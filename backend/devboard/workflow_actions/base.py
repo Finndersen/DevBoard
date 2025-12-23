@@ -18,6 +18,7 @@ from devboard.api.dependencies.factories import (
 from devboard.db.models import Conversation, ParentEntityType, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
@@ -35,6 +36,7 @@ class TaskWorkflowAction(ABC):
         self,
         task: Task,
         task_service: TaskService,
+        task_git_service: TaskGitService,
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
         document_repository: DocumentRepository,
@@ -45,6 +47,7 @@ class TaskWorkflowAction(ABC):
         Args:
             task: Task instance this workflow action operates on
             task_service: Service for task operations
+            task_git_service: Service for task git operations
             conversation_repo: Repository for conversation database operations
             agent_config_service: Service for agent configuration
             document_repository: Repository for document database operations
@@ -52,6 +55,7 @@ class TaskWorkflowAction(ABC):
         """
         self.task = task
         self.task_service = task_service
+        self.task_git_service = task_git_service
         self.conversation_repo = conversation_repo
         self.agent_config_service = agent_config_service
         self.document_repository = document_repository
@@ -73,6 +77,8 @@ class TaskWorkflowAction(ABC):
         Returns:
             BaseAgentConversationService instance configured with the correct role
         """
+        # TODO: Maybe move this into here:
+        # conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
 
         # Create role using the conversation's parent entity
         role = create_agent_role_for_conversation(
@@ -140,9 +146,11 @@ class PromptTemplateAction(TaskWorkflowAction):
         self,
         task: Task,
         task_service: TaskService,
+        task_git_service: TaskGitService,
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
         document_repository: DocumentRepository,
+        workspace_allocation_service: WorkspaceAllocationService,
         prompt_config: PromptTemplateActionConfig,
     ):
         """Initialize the action with required services and configuration.
@@ -150,17 +158,21 @@ class PromptTemplateAction(TaskWorkflowAction):
         Args:
             task: Task instance this workflow action operates on
             task_service: Service for task operations
+            task_git_service: Service for task git operations
             conversation_repo: Repository for conversation database operations
             agent_config_service: Service for agent configuration
             document_repository: Repository for document database operations
+            workspace_allocation_service: Service for workspace allocation
             prompt_config: Configuration defining the action's key, description, and prompt
         """
         super().__init__(
             task=task,
             task_service=task_service,
+            task_git_service=task_git_service,
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
             document_repository=document_repository,
+            workspace_allocation_service=workspace_allocation_service,
         )
         self.prompt_config = prompt_config
 

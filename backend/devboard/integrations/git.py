@@ -657,6 +657,15 @@ class GitRepoIntegration:
         )
         return bool(output)
 
+    async def get_conflicted_files(self) -> list[str]:
+        """Get list of files with unmerged conflicts.
+
+        Returns:
+            List of file paths that have unmerged conflicts
+        """
+        output = await self._run_git_command(["diff", "--name-only", "--diff-filter=U"])
+        return [f for f in output.strip().split("\n") if f]
+
     async def switch_detach(self) -> None:
         """Detach HEAD from the current branch.
 
@@ -861,38 +870,57 @@ class GitRepoIntegration:
         await self._run_git_command(["stash", "pop"])
         return True
 
-    async def stash_create(self, include_untracked: bool = False) -> str | None:
-        """Create a stash commit without adding to the stash list.
+    async def stash_push(self, include_untracked: bool = False) -> str:
+        """Stash changes and return the stash reference.
 
-        This is useful for transferring uncommitted changes between worktrees,
-        as the commit SHA is accessible from any worktree sharing the same git objects.
+        Note: Caller should check has_uncommitted_changes() first if needed.
+        If called with no changes, git stash push will succeed but create no stash.
 
         Args:
             include_untracked: If True, include untracked (new) files in stash
 
         Returns:
-            Commit SHA if changes were stashed, None if nothing to stash
+            Stash reference (stash@{0}) for the created stash
         """
-        if not await self.has_uncommitted_changes():
-            return None
+        # Stage all changes first to sync index with working tree
+        # This prevents "not uptodate" errors when files have partial staging
+        await self._run_git_command(["add", "-A"])
 
-        args = ["stash", "create"]
+        args = ["stash", "push"]
         if include_untracked:
             args.append("-u")
 
-        output = await self._run_git_command(args)
-        return output.strip() if output else None
+        await self._run_git_command(args)
+        # Return stash reference - the stash we just created is at stash@{0}
+        return "stash@{0}"
 
-    async def stash_apply(self, commit_sha: str) -> None:
-        """Apply a stash commit by SHA.
+    async def stash_apply(self, stash_ref: str) -> None:
+        """Apply a stash by reference or SHA.
 
         Args:
-            commit_sha: The SHA of the stash commit to apply
+            stash_ref: The stash reference (e.g., 'stash@{0}') or commit SHA
 
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["stash", "apply", commit_sha])
+        await self._run_git_command(["stash", "apply", stash_ref])
+
+    async def stash_store(self, commit_sha: str, message: str | None = None) -> None:
+        """Store a stash commit to the stash list.
+
+        This makes the stash accessible via 'git stash list' and 'git stash apply stash@{0}'.
+
+        Args:
+            commit_sha: The SHA of the stash commit to store
+            message: Optional message for the stash entry
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        args = ["stash", "store", commit_sha]
+        if message:
+            args.extend(["-m", message])
+        await self._run_git_command(args)
 
     async def reset_working_tree(self, include_untracked: bool = True) -> None:
         """Reset all uncommitted changes in the working tree.

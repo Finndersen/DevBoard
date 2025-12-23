@@ -28,7 +28,6 @@ from devboard.api.schemas import (
     MergeBranchRequest,
     MergeBranchResponse,
     PromptActionRequest,
-    RebaseBranchResponse,
     ResourceResponse,
     TaskBranchInfo,
     TaskDiffResponse,
@@ -46,7 +45,6 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
-from devboard.integrations.shell import RebaseConflictError
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
@@ -270,6 +268,7 @@ async def execute_workflow_action(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_service: TaskService = Depends(get_task_service),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
@@ -296,6 +295,7 @@ async def execute_workflow_action(
     action = action_class(
         task=task,
         task_service=task_service,
+        task_git_service=task_git_service,
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
         document_repository=document_repo,
@@ -456,42 +456,6 @@ async def delete_task_branch(
             success=True,
             message=f"Successfully deleted branch {task.branch_name}",
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@router.post("/{task_id}/rebase", response_model=RebaseBranchResponse)
-async def rebase_task_branch(
-    task_id: int,
-    task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
-) -> RebaseBranchResponse:
-    """Rebase a task's branch onto its base branch.
-
-    This brings the task branch up-to-date with the latest changes in the base branch.
-    If conflicts are encountered, the rebase is aborted and an error is returned.
-
-    Args:
-        task_id: ID of the task
-
-    Returns:
-        Rebase result with new HEAD commit hash
-
-    Raises:
-        HTTPException: 400 if task has no branch or rebase encounters conflicts
-    """
-    if not task.branch_name:
-        raise HTTPException(status_code=400, detail="Task has no branch configured")
-
-    try:
-        new_head = await task_git_service.rebase_task_branch(task)
-        return RebaseBranchResponse(
-            success=True,
-            new_head=new_head,
-            message=f"Successfully rebased {task.branch_name} onto {task.base_branch}",
-        )
-    except RebaseConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

@@ -15,6 +15,7 @@ from devboard.db.models.task import Task
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.shell import RebaseConflictError, ShellCommandExecutionError
 from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
 
 
@@ -53,6 +54,17 @@ class MergeResult:
     strategy: MergeStrategy
     message: str
     merge_commit: str | None = None
+
+
+@dataclass
+class RebaseResult:
+    """Result of a rebase operation."""
+
+    new_head: str
+    slot_path: str
+    had_uncommitted_changes: bool
+    uncommitted_changes_restored: bool
+    has_stash_conflicts: bool = False
 
 
 class TaskGitService:
@@ -398,11 +410,11 @@ class TaskGitService:
                 deletions=commit_diff.deletions,
             )
 
-    async def rebase_task_branch(self, task: Task) -> str:
+    async def rebase_task_branch(self, task: Task) -> RebaseResult:
         """Rebase a task's branch onto its base branch.
 
         This brings the task branch up-to-date with the latest changes in the base branch.
-        If conflicts are encountered, the rebase is aborted and an error is raised.
+        Uncommitted changes are stashed before rebase and restored after.
 
         The rebase is performed from the worktree where the branch is checked out (if any),
         otherwise from the main repository.
@@ -411,31 +423,65 @@ class TaskGitService:
             task: Task instance
 
         Returns:
-            New HEAD commit hash after successful rebase
+            RebaseResult with new HEAD, stash status, and pending stash ref if conflicts
 
         Raises:
             ValueError: If task has no branch name configured
-            RebaseConflictError: If rebase encounters conflicts
+            RebaseConflictError: If rebase encounters conflicts (stash is restored first)
         """
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch name configured")
 
         # Use the worktree slot path if available, otherwise main repo
-        # This is necessary because git can't rebase a branch that's checked out in another worktree
         last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
 
         git = GitRepoIntegration(repo_path)
 
-        # Fetch latest from remote to ensure we have up-to-date base branch
-        await git.fetch()
+        # Stash uncommitted changes (including untracked files)
+        # stash_push automatically cleans the working tree
+        had_uncommitted = await git.has_uncommitted_changes()
+        stash_ref: str | None = None
+        if had_uncommitted:
+            stash_ref = await git.stash_push(include_untracked=True)
+            logfire.info(f"Stashed uncommitted changes for task {task.id}")
 
-        # Perform rebase - this will raise RebaseConflictError if there are conflicts
-        # When running from the worktree where branch is checked out, we rebase HEAD onto base
-        new_head = await git.rebase_onto(task.base_branch)
-        logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
+        uncommitted_restored = False
+        has_stash_conflicts = False
 
-        return new_head
+        try:
+            # Fetch latest from remote to ensure we have up-to-date base branch
+            await git.fetch()
+
+            # Perform rebase - this will raise RebaseConflictError if there are conflicts
+            new_head = await git.rebase_onto(task.base_branch)
+            logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
+        except RebaseConflictError:
+            # Restore stashed changes before re-raising
+            if stash_ref:
+                await git.stash_apply(stash_ref)
+                logfire.info(f"Restored stashed changes after rebase conflict for task {task.id}")
+            raise
+
+        # Apply stash after successful rebase
+        if stash_ref:
+            try:
+                await git.stash_apply(stash_ref)
+                uncommitted_restored = True
+                logfire.info(f"Restored stashed changes after rebase for task {task.id}")
+            except ShellCommandExecutionError:
+                # Stash apply had conflicts - leave files in conflicted state
+                # Agent will resolve conflicts from the partially-applied files
+                has_stash_conflicts = True
+                logfire.warning(f"Stash apply had conflicts for task {task.id}")
+
+        return RebaseResult(
+            new_head=new_head,
+            slot_path=repo_path,
+            had_uncommitted_changes=had_uncommitted,
+            uncommitted_changes_restored=uncommitted_restored,
+            has_stash_conflicts=has_stash_conflicts,
+        )
 
     async def checkout_task_to_main_repo(self, task: Task) -> None:
         """Checkout a task's branch to the main repository.

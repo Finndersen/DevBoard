@@ -391,7 +391,7 @@ describe('ConversationMessage', () => {
       expect(svg).toBeInTheDocument()
     })
 
-    it('does not render workspace_allocate event (hidden)', () => {
+    it('renders workspace_allocate event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
         type: 'workspace_allocate',
@@ -399,13 +399,14 @@ describe('ConversationMessage', () => {
         timestamp: '2024-01-01T10:00:00Z',
       }
 
-      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+      render(<ConversationMessageComponent message={systemEvent} />)
 
-      // Should render nothing
-      expect(container.firstChild).toBeNull()
+      expect(screen.getByText('Allocating workspace')).toBeInTheDocument()
+      const badge = screen.getByText('Allocating workspace').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
     })
 
-    it('does not render workspace_branch_checkout event (hidden)', () => {
+    it('renders workspace_branch_checkout event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
         type: 'workspace_branch_checkout',
@@ -413,10 +414,11 @@ describe('ConversationMessage', () => {
         timestamp: '2024-01-01T10:00:00Z',
       }
 
-      const { container } = render(<ConversationMessageComponent message={systemEvent} />)
+      render(<ConversationMessageComponent message={systemEvent} />)
 
-      // Should render nothing
-      expect(container.firstChild).toBeNull()
+      expect(screen.getByText('Checking out branch')).toBeInTheDocument()
+      const badge = screen.getByText('Checking out branch').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
     })
 
     it('does not render task_updated event (hidden)', () => {
@@ -445,6 +447,36 @@ describe('ConversationMessage', () => {
 
       // Should render nothing
       expect(container.firstChild).toBeNull()
+    })
+
+    it('renders branch_rebased event with message from data', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'branch_rebased',
+        data: { task_id: 123, message: 'Rebased onto main', new_head: 'abc123' },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={systemEvent} />)
+
+      expect(screen.getByText('Rebased onto main')).toBeInTheDocument()
+      const badge = screen.getByText('Rebased onto main').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
+    })
+
+    it('renders stash_apply_conflict event as system badge', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'stash_apply_conflict',
+        data: { task_id: 123, message: 'Stash apply had conflicts', conflicted_files: ['file.ts'] },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={systemEvent} />)
+
+      expect(screen.getByText('Stash apply conflict - agent resolving')).toBeInTheDocument()
+      const badge = screen.getByText('Stash apply conflict - agent resolving').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
     })
 
     it('does not render unknown system event types', () => {

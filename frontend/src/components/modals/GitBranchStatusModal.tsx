@@ -10,6 +10,8 @@ interface GitBranchStatusModalProps {
   taskId: number
   gitStatus: TaskGitStatus | null
   onStatusUpdate?: () => void
+  onTriggerRebase?: () => void
+  isStreaming?: boolean
 }
 
 export default function GitBranchStatusModal({
@@ -17,37 +19,17 @@ export default function GitBranchStatusModal({
   onClose,
   taskId,
   gitStatus,
-  onStatusUpdate
+  onStatusUpdate,
+  onTriggerRebase,
+  isStreaming = false
 }: GitBranchStatusModalProps) {
-  const [rebaseLoading, setRebaseLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleRebase = useCallback(async () => {
-    if (!gitStatus?.branch_name) return
-
-    setRebaseLoading(true)
-    setError(null)
-
-    try {
-      await apiClient.rebaseTaskBranch(taskId)
-      onStatusUpdate?.()
-      onClose()
-    } catch (err) {
-      if (err instanceof Error) {
-        // Check for conflict error (409 status)
-        if (err.message.includes('409')) {
-          setError('Rebase encountered conflicts and was aborted. Please resolve conflicts manually.')
-        } else {
-          setError(err.message)
-        }
-      } else {
-        setError('Failed to rebase branch')
-      }
-    } finally {
-      setRebaseLoading(false)
-    }
-  }, [taskId, gitStatus, onStatusUpdate, onClose])
+  const handleRebase = useCallback(() => {
+    onTriggerRebase?.()
+    onClose()
+  }, [onTriggerRebase, onClose])
 
   const handleCheckoutToMain = useCallback(async () => {
     if (!gitStatus?.branch_name) return
@@ -162,9 +144,8 @@ export default function GitBranchStatusModal({
                 variant="secondary"
                 size="sm"
                 onClick={handleRebase}
-                loading={rebaseLoading}
-                disabled={!canRebase || checkoutLoading}
-                title={gitStatus.has_conflicts ? 'Predicted merge conflicts' : undefined}
+                disabled={!canRebase || checkoutLoading || isStreaming}
+                title={isStreaming ? 'Agent is currently running' : gitStatus.has_conflicts ? 'Predicted merge conflicts' : undefined}
               >
                 Rebase
               </Button>
@@ -184,7 +165,7 @@ export default function GitBranchStatusModal({
               size="sm"
               onClick={handleCheckoutToMain}
               loading={checkoutLoading}
-              disabled={!canCheckoutToMain || rebaseLoading}
+              disabled={!canCheckoutToMain || isStreaming}
               title={!gitStatus.main_repo_is_clean ? 'Main repo has uncommitted changes' : undefined}
             >
               Checkout
@@ -197,7 +178,7 @@ export default function GitBranchStatusModal({
           <Button
             variant="ghost"
             onClick={onClose}
-            disabled={rebaseLoading || checkoutLoading}
+            disabled={checkoutLoading}
           >
             Close
           </Button>

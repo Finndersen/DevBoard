@@ -16,7 +16,6 @@ import logfire
 
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
-from devboard.db.models.task import NoWorktreeAllocatedException
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
@@ -427,6 +426,27 @@ class WorkspaceAllocationService:
             stats=stats,
         )
 
+    def _check_can_create_worktree(self, codebase: Codebase) -> bool:
+        """Check if a new worktree can be created for the codebase.
+
+        Returns:
+            True if a new worktree can be created, False if limit reached
+        """
+        max_worktrees = codebase.max_worktrees
+
+        # Unlimited worktrees when max_worktrees is None
+        if max_worktrees is None:
+            return True
+
+        # For max_worktrees=0, we can never create new slots (main repo only)
+        if max_worktrees == 0:
+            return False
+
+        # For max_worktrees>0, check against the limit (counting worktrees only, not main)
+        total_slots = self.codebase_slot_count(codebase.id)
+        worktree_count = total_slots - 1 if total_slots > 0 else 0  # subtract main repo slot
+        return worktree_count < max_worktrees
+
     async def run_task_agent_in_workspace(
         self,
         task: Task,
@@ -440,7 +460,6 @@ class WorkspaceAllocationService:
         - N (>0): Up to N worktree slots, main repo excluded from automatic allocation
         """
         slot: WorktreeSlot | None = None
-        max_worktrees = task.codebase.max_worktrees
         try:
             # Ensure task has a branch (create if needed, generate name if null)
             # TODO: Make sure task branch already exists by this point so this can be removed
@@ -448,40 +467,37 @@ class WorkspaceAllocationService:
             # Commit to persist branch_name if it was just generated
             self.task_repo.db.commit()
 
+            # Track previous slot to determine if allocation changed
+            previous_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+
             # Try to allocate an existing slot
             try:
                 slot = await self.allocate_for_task(task)
                 self.worktree_slot_repo.commit()
 
-                # Emit SystemEvent for workspace allocation
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_ALLOCATE,
-                    data={"task_id": task.id, "slot_id": slot.id},
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
+                # Only emit allocation event if slot changed (not sticky reuse)
+                if previous_slot is None or slot.id != previous_slot.id:
+                    yield SystemEvent(
+                        type=SystemEventType.WORKSPACE_ALLOCATE,
+                        data={"task_id": task.id, "slot_id": slot.id},
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    )
 
             except AllSlotsLockedException:
-                # Check if we've reached the max worktree limit (or if worktrees are disabled)
-                # When max_worktrees=0, we should never create new worktrees
-                if max_worktrees is not None:
-                    # For max_worktrees=0, slot count includes main repo (1 slot)
-                    # For max_worktrees>0, slot count excludes main repo
-                    total_slots = self.codebase_slot_count(task.codebase.id)
-                    # For max_worktrees=0, we can never create new slots (main repo only)
-                    # For max_worktrees>0, we check against the limit (counting worktrees only, not main)
-                    worktree_count = total_slots - 1 if total_slots > 0 else 0  # subtract main repo slot
-                    if max_worktrees == 0 or worktree_count >= max_worktrees:
-                        logfire.warn(f"Max worktrees ({max_worktrees}) reached for codebase {task.codebase.id}")
-                        # Yield error event instead of raising to allow graceful error handling
-                        yield SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={
-                                "error_code": "SLOTS_EXHAUSTED",
-                                "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
-                            },
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        )
-                        return
+                # Check if we can create a new worktree
+                if not self._check_can_create_worktree(task.codebase):
+                    logfire.warn(
+                        f"Max worktrees ({task.codebase.max_worktrees}) reached for codebase {task.codebase.id}"
+                    )
+                    yield SystemEvent(
+                        type=SystemEventType.STREAM_ERROR,
+                        data={
+                            "error_code": "SLOTS_EXHAUSTED",
+                            "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
+                        },
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    )
+                    return
 
                 # Create a new slot
                 logfire.info(f"All slots locked, creating new worktree for task {task.id}")
@@ -495,13 +511,6 @@ class WorkspaceAllocationService:
 
                 slot = await self.create_and_lock_slot(task)
                 self.worktree_slot_repo.commit()
-
-                # Emit SystemEvent for workspace allocation (creation is a special case of allocation)
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_ALLOCATE,
-                    data={"task_id": task.id, "slot_id": slot.id},
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
 
             # Verify worktree exists and is valid before checkout (recreate if missing for worktree slots)
             if not self._check_worktree_valid(slot):
@@ -537,11 +546,3 @@ class WorkspaceAllocationService:
             if slot:
                 self.release_slot(slot)
                 logfire.info(f"Released workspace {slot.path} for task {task.id}")
-
-
-def get_task_workspace_dir(task: Task) -> str:
-    """Get the workspace directory for a task, and raise exception if workspace is not allocated"""
-    allocated_workspace = task.current_worktree_slot
-    if not allocated_workspace:
-        raise NoWorktreeAllocatedException("Workspace not allocated for task #{task.id}")
-    return allocated_workspace.path
