@@ -540,20 +540,24 @@ class TestStashPush:
     """Tests for stash_push method."""
 
     @pytest.mark.asyncio
-    async def test_stash_push_returns_stash_ref(self, temp_git_repo):
-        """Test stash_push returns stash@{0} reference."""
+    async def test_stash_push_returns_sha(self, temp_git_repo):
+        """Test stash_push returns the stash commit SHA."""
         git = GitRepoIntegration(temp_git_repo)
         calls = []
 
         async def mock_run_git_command(args, **kwargs):
             calls.append(args)
+            if args == ["rev-parse", "stash@{0}"]:
+                return "abc123def456"
             return ""
 
         with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
             result = await git.stash_push()
 
-        assert result == "stash@{0}"
+        assert result == "abc123def456"
+        assert ["add", "-A"] in calls
         assert ["stash", "push"] in calls
+        assert ["rev-parse", "stash@{0}"] in calls
 
     @pytest.mark.asyncio
     async def test_stash_push_with_untracked_includes_u_flag(self, temp_git_repo):
@@ -563,12 +567,15 @@ class TestStashPush:
 
         async def mock_run_git_command(args, **kwargs):
             calls.append(args)
+            if args == ["rev-parse", "stash@{0}"]:
+                return "abc123"
             return ""
 
         with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
             result = await git.stash_push(include_untracked=True)
 
-        assert result == "stash@{0}"
+        assert result == "abc123"
+        assert ["add", "-A"] in calls
         assert ["stash", "push", "-u"] in calls
 
 

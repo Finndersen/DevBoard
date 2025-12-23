@@ -522,9 +522,9 @@ class TaskGitService:
             # Only process if the task's branch is actually checked out there
             if current_branch == task.branch_name:
                 # Stash uncommitted changes (including untracked files)
-                stash_sha = await slot_git.stash_create(include_untracked=True)
-                if stash_sha:
-                    await slot_git.reset_working_tree(include_untracked=True)
+                # stash_push clears the working tree and returns stable SHA
+                if await slot_git.has_uncommitted_changes():
+                    stash_sha = await slot_git.stash_push(include_untracked=True)
                     logfire.info(f"Stashed uncommitted changes in worktree {last_used_slot.path} for task {task.id}")
 
                 await slot_git.switch_detach()

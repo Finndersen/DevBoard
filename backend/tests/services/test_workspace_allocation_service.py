@@ -531,16 +531,14 @@ async def test_checkout_task_to_main_repo_stashes_uncommitted_changes(
 
         # Worktree has uncommitted changes
         worktree_git.get_current_branch.return_value = sample_task.branch_name
-        worktree_git.stash_create.return_value = "abc123stashsha"
+        worktree_git.has_uncommitted_changes.return_value = True
+        worktree_git.stash_push.return_value = "abc123stashsha"
 
         # Execute
         await task_git_service.checkout_task_to_main_repo(sample_task)
 
-        # Verify: Stash created in worktree with untracked files
-        worktree_git.stash_create.assert_called_once_with(include_untracked=True)
-
-        # Verify: Working tree reset in worktree
-        worktree_git.reset_working_tree.assert_called_once_with(include_untracked=True)
+        # Verify: Stash pushed in worktree (clears working tree automatically)
+        worktree_git.stash_push.assert_called_once_with(include_untracked=True)
 
         # Verify: HEAD detached in worktree
         worktree_git.switch_detach.assert_called_once()
@@ -584,13 +582,13 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(
 
         # Worktree has no uncommitted changes
         worktree_git.get_current_branch.return_value = sample_task.branch_name
-        worktree_git.stash_create.return_value = None  # No changes to stash
+        worktree_git.has_uncommitted_changes.return_value = False
 
         # Execute
         await task_git_service.checkout_task_to_main_repo(sample_task)
 
-        # Verify: No reset or stash apply
-        worktree_git.reset_working_tree.assert_not_called()
+        # Verify: No stash operations
+        worktree_git.stash_push.assert_not_called()
         main_git.stash_apply.assert_not_called()
 
         # Verify: Still detached and checked out
@@ -614,7 +612,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
 
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.stash_push.return_value = "abc123stashsha"
         mock_git.rebase_onto.return_value = "newhead456"
 
         # Execute
@@ -633,7 +631,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         mock_git.stash_push.assert_called_once_with(include_untracked=True)
         mock_git.fetch.assert_called_once()
         mock_git.rebase_onto.assert_called_once_with(sample_task.base_branch)
-        mock_git.stash_apply.assert_called_once_with("stash@{0}")
+        mock_git.stash_apply.assert_called_once_with("abc123stashsha")
 
 
 @pytest.mark.asyncio
@@ -681,7 +679,7 @@ async def test_rebase_task_branch_conflict_restores_stash(task_git_service, mock
 
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.stash_push.return_value = "abc123stashsha"
         mock_git.rebase_onto.side_effect = RebaseConflictError("Rebase conflict on file.txt")
 
         # Execute and verify exception is raised
@@ -692,7 +690,7 @@ async def test_rebase_task_branch_conflict_restores_stash(task_git_service, mock
         mock_git.stash_push.assert_called_once_with(include_untracked=True)
 
         # Verify stash was restored after conflict
-        mock_git.stash_apply.assert_called_once_with("stash@{0}")
+        mock_git.stash_apply.assert_called_once_with("abc123stashsha")
 
 
 @pytest.mark.asyncio
@@ -710,7 +708,7 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
 
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "stash@{0}"
+        mock_git.stash_push.return_value = "abc123stashsha"
         mock_git.rebase_onto.return_value = "newhead456"
         # Stash apply fails with conflict
         mock_git.stash_apply.side_effect = ShellCommandExecutionError("error: could not apply stash")

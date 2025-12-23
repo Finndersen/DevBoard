@@ -871,7 +871,7 @@ class GitRepoIntegration:
         return True
 
     async def stash_push(self, include_untracked: bool = False) -> str:
-        """Stash changes and return the stash reference.
+        """Stash changes, clear working tree, and return the stash SHA.
 
         Note: Caller should check has_uncommitted_changes() first if needed.
         If called with no changes, git stash push will succeed but create no stash.
@@ -880,7 +880,7 @@ class GitRepoIntegration:
             include_untracked: If True, include untracked (new) files in stash
 
         Returns:
-            Stash reference (stash@{0}) for the created stash
+            SHA of the stash commit (stable identifier that works across worktrees)
         """
         # Stage all changes first to sync index with working tree
         # This prevents "not uptodate" errors when files have partial staging
@@ -891,8 +891,9 @@ class GitRepoIntegration:
             args.append("-u")
 
         await self._run_git_command(args)
-        # Return stash reference - the stash we just created is at stash@{0}
-        return "stash@{0}"
+        # Return SHA instead of "stash@{0}" for stability across worktrees
+        sha = await self._run_git_command(["rev-parse", "stash@{0}"])
+        return sha.strip()
 
     async def stash_apply(self, stash_ref: str) -> None:
         """Apply a stash by reference or SHA.
