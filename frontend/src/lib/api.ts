@@ -3,7 +3,7 @@ import { StreamParser } from './streaming'
 export interface Project {
   id: number
   name: string
-  specification: DocumentResponse
+  specification_document_id: number
   description: string
   default_conversation_id: number | null
   created_at: string
@@ -18,8 +18,8 @@ export interface Task {
   remote_task_id: string | null
   conversation_id: number
   created_at: string
-  specification: DocumentResponse
-  implementation_plan: DocumentResponse | null
+  specification_document_id: number
+  implementation_plan_document_id: number | null
 }
 
 export interface TaskCreate {
@@ -464,6 +464,10 @@ export class ApiClient {
     return this.request<void>(`/api/tasks/${id}${queryParams}`, { method: 'DELETE' })
   }
 
+  // Documents
+  async getDocument(id: number | string): Promise<DocumentResponse> {
+    return this.request<DocumentResponse>(`/api/documents/${id}`)
+  }
 
   async transitionTaskState(taskId: number | string, request: StateTransitionRequest): Promise<Task> {
     return this.request<Task>(`/api/tasks/${taskId}/state-transition`, {

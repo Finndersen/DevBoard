@@ -9,8 +9,8 @@ const mockApproval: PendingApproval = {
   tool_args: {
     edits: [
       {
-        find: 'old text',
-        replace: 'new text'
+        old_string: 'old text',
+        new_string: 'new text'
       }
     ],
     diff_preview: '- old text\n+ new text',
@@ -118,9 +118,9 @@ describe('DocumentEditApproval', () => {
       ...mockApproval,
       tool_args: {
         edits: [
-          { find: 'text1', replace: 'new1' },
-          { find: 'text2', replace: 'new2' },
-          { find: 'text3', replace: 'new3' }
+          { old_string: 'text1', new_string: 'new1' },
+          { old_string: 'text2', new_string: 'new2' },
+          { old_string: 'text3', new_string: 'new3' }
         ],
         reasoning: 'Multiple changes'
       }

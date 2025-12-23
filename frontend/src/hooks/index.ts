@@ -1,6 +1,7 @@
 export * from './useApi'
 export * from './useProjects'
 export * from './useTasks'
+export * from './useDocuments'
 export * from './useCodebases'
 export * from './useModal'
 export * from './useAsyncOperation'

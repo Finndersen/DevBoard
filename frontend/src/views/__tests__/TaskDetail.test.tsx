@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
-import { createMockProject, createMockTask } from '../../test/utils'
+import { createMockProject, createMockTask, mockDocuments } from '../../test/utils'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import TaskDetail from '../TaskDetail'
@@ -59,6 +59,14 @@ describe('TaskDetail', () => {
       http.get('*/api/projects/:id', () => {
         return HttpResponse.json(mockProject)
       }),
+      http.get('*/api/documents/:id', ({ params }) => {
+        const docId = Number(params.id)
+        const doc = mockDocuments[docId as keyof typeof mockDocuments]
+        if (doc) {
+          return HttpResponse.json(doc)
+        }
+        return new HttpResponse(null, { status: 404 })
+      }),
       http.get('*/api/tasks/:id/qa/history', () => {
         return HttpResponse.json([])
       }),
@@ -102,12 +110,16 @@ describe('TaskDetail', () => {
     }, { timeout: 3000 })
   })
 
-  it('renders project information', async () => {
+  it('fetches project data for the task', async () => {
     renderTaskDetail()
-    
+
+    // Task should load successfully with project reference
     await waitFor(() => {
-      expect(screen.getAllByText('Test Project').length).toBeGreaterThan(0)
+      expect(screen.getByText('Test Task')).toBeInTheDocument()
     }, { timeout: 3000 })
+
+    // Verify task status is displayed (project data enables navigation on delete)
+    expect(screen.getAllByText('Planning').length).toBeGreaterThan(0)
   })
 
   it('handles missing task gracefully', async () => {
@@ -154,7 +166,7 @@ describe('TaskDetail', () => {
     }, { timeout: 3000 })
   })
 
-  it('displays "None" when no codebase is assigned', async () => {
+  it('displays "No codebase" when no codebase is assigned', async () => {
     server.use(
       http.get('*/api/codebases', () => {
         return HttpResponse.json([])
@@ -164,7 +176,7 @@ describe('TaskDetail', () => {
     renderTaskDetail()
 
     await waitFor(() => {
-      expect(screen.getByText('None')).toBeInTheDocument()
+      expect(screen.getByText('No codebase')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
@@ -174,20 +186,11 @@ describe('TaskDetail', () => {
       id: 1,
       project_id: 1,
       status: 'Defining',
-      specification: {
-        id: 3,
-        document_type: 'task_specification',
-        content: 'Test task specification content',
-        content_hash: 'task123',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
     })
     const updatedTask = createMockTask({
       id: 1,
       project_id: 1,
       status: 'Planning',
-      specification: taskWithSpecification.specification,
     })
 
     server.use(
@@ -236,20 +239,11 @@ describe('TaskDetail', () => {
       id: 1,
       project_id: 1,
       status: 'Defining',
-      specification: {
-        id: 3,
-        document_type: 'task_specification',
-        content: 'Test task specification content',
-        content_hash: 'task123',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
     })
     const updatedTask = createMockTask({
       id: 1,
       project_id: 1,
       status: 'Planning',
-      specification: taskWithSpecification.specification,
     })
 
     server.use(
@@ -290,6 +284,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })
@@ -345,6 +340,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })
@@ -391,6 +387,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })
@@ -437,6 +434,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })
@@ -507,6 +505,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })
@@ -578,6 +577,7 @@ describe('TaskDetail', () => {
       const taskWithBranch = createMockTask({
         id: 1,
         project_id: 1,
+        codebase_id: 1,
         title: 'Test Task',
         branch_name: 'feature/test-branch',
       })

@@ -1,19 +1,64 @@
 import { http, HttpResponse } from 'msw'
-import type { Project, Task, ConfigurationDetailResponse, IntegrationTestResponse } from '../../lib/api'
+import type { Project, Task, ConfigurationDetailResponse, IntegrationTestResponse, DocumentResponse } from '../../lib/api'
+
+// Mock documents data for separate document API calls
+const mockDocuments: Record<number, DocumentResponse> = {
+  1: {
+    id: 1,
+    document_type: 'project_specification',
+    content: 'Test project specification content',
+    content_hash: 'proj123',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+  2: {
+    id: 2,
+    document_type: 'project_specification',
+    content: 'Another test project',
+    content_hash: 'def456',
+    created_at: '2024-01-02T00:00:00Z',
+    updated_at: '2024-01-02T00:00:00Z',
+  },
+  3: {
+    id: 3,
+    document_type: 'task_specification',
+    content: 'Test task specification content',
+    content_hash: 'task123',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+  4: {
+    id: 4,
+    document_type: 'task_implementation_plan',
+    content: 'Test implementation plan content',
+    content_hash: 'plan123',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+  5: {
+    id: 5,
+    document_type: 'task_specification',
+    content: 'Another task specification',
+    content_hash: 'task456',
+    created_at: '2024-01-02T00:00:00Z',
+    updated_at: '2024-01-02T00:00:00Z',
+  },
+  6: {
+    id: 6,
+    document_type: 'task_implementation_plan',
+    content: 'Implementation details here',
+    content_hash: 'plan456',
+    created_at: '2024-01-02T00:00:00Z',
+    updated_at: '2024-01-02T00:00:00Z',
+  },
+}
 
 // Mock data
 const mockProjects: Project[] = [
   {
     id: 1,
     name: 'Test Project',
-    specification: {
-      id: 1,
-      document_type: 'project_specification',
-      content: 'This is a test project for development',
-      content_hash: 'abc123',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
+    specification_document_id: 1,
     description: 'A comprehensive testing platform for automated QA workflows and continuous integration pipelines',
     default_conversation_id: 1,
     created_at: '2024-01-01T00:00:00Z',
@@ -21,14 +66,7 @@ const mockProjects: Project[] = [
   {
     id: 2,
     name: 'Another Project',
-    specification: {
-      id: 2,
-      document_type: 'project_specification',
-      content: 'Another test project',
-      content_hash: 'def456',
-      created_at: '2024-01-02T00:00:00Z',
-      updated_at: '2024-01-02T00:00:00Z',
-    },
+    specification_document_id: 2,
     description: 'Enterprise dashboard for real-time analytics and business intelligence reporting',
     default_conversation_id: 2,
     created_at: '2024-01-02T00:00:00Z',
@@ -44,15 +82,8 @@ const mockTasks: Task[] = [
     codebase_id: null,
     remote_task_id: null,
     conversation_id: 3,
-    specification: {
-      id: 3,
-      document_type: 'task_specification',
-      content: 'Test task specification',
-      content_hash: 'task123',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
-    implementation_plan: null, // No implementation plan for early-stage task
+    specification_document_id: 3,
+    implementation_plan_document_id: null, // No implementation plan for early-stage task
     created_at: '2024-01-01T00:00:00Z',
   },
   {
@@ -63,22 +94,8 @@ const mockTasks: Task[] = [
     codebase_id: null,
     remote_task_id: 'PROJ-123',
     conversation_id: 4,
-    specification: {
-      id: 5,
-      document_type: 'task_specification',
-      content: 'Another task specification',
-      content_hash: 'task456',
-      created_at: '2024-01-02T00:00:00Z',
-      updated_at: '2024-01-02T00:00:00Z',
-    },
-    implementation_plan: {
-      id: 6,
-      document_type: 'implementation_plan',
-      content: 'Implementation details here',
-      content_hash: 'plan456',
-      created_at: '2024-01-02T00:00:00Z',
-      updated_at: '2024-01-02T00:00:00Z',
-    },
+    specification_document_id: 5,
+    implementation_plan_document_id: 6,
     created_at: '2024-01-02T00:00:00Z',
   },
 ]
@@ -130,18 +147,21 @@ export const handlers = [
       id: Date.now(),
       name: newProject.name,
       description: newProject.description,
-      specification: {
-        id: Date.now() + 1,
-        document_type: 'project_specification',
-        content: '',
-        content_hash: '',
-        created_at: now,
-        updated_at: now,
-      },
+      specification_document_id: Date.now() + 1,
       default_conversation_id: null,
       created_at: now,
     }
     return HttpResponse.json(project)
+  }),
+
+  // Documents endpoint
+  http.get('*/api/documents/:id', ({ params }) => {
+    const docId = Number(params.id)
+    const doc = mockDocuments[docId]
+    if (doc) {
+      return HttpResponse.json(doc)
+    }
+    return new HttpResponse(null, { status: 404 })
   }),
 
   http.get('*/api/projects/:id', ({ params }) => {

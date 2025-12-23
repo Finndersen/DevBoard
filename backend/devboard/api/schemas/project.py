@@ -4,8 +4,6 @@ import datetime
 
 from pydantic import BaseModel
 
-from .document import DocumentResponse
-
 
 class ProjectBase(BaseModel):
     """Base project schema."""
@@ -36,7 +34,7 @@ class ProjectResponse(ProjectBase):
     created_at: datetime.datetime
     default_conversation_id: int | None = None
 
-    # Document relationship - automatically loaded
-    specification: DocumentResponse
+    # Document ID - content fetched separately via /api/documents/{id}
+    specification_document_id: int
 
     model_config = {"from_attributes": True}

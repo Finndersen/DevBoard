@@ -24,7 +24,6 @@ from devboard.api.schemas import (
     CheckoutToMainResponse,
     CommitMetadata,
     DeleteResponse,
-    DocumentResponse,
     FileDiff,
     MergeBranchRequest,
     MergeBranchResponse,
@@ -79,10 +78,8 @@ async def get_task(
         remote_task_id=task.remote_task_id,
         conversation_id=conversation.id,
         created_at=task.created_at,
-        specification=DocumentResponse.model_validate(task.specification),
-        implementation_plan=(
-            DocumentResponse.model_validate(task.implementation_plan) if task.implementation_plan else None
-        ),
+        specification_document_id=task.specification.id,
+        implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
     )
 
 
@@ -131,11 +128,9 @@ async def update_task(
         remote_task_id=updated_task.remote_task_id,
         conversation_id=conversation.id,
         created_at=updated_task.created_at,
-        specification=DocumentResponse.model_validate(updated_task.specification),
-        implementation_plan=(
-            DocumentResponse.model_validate(updated_task.implementation_plan)
-            if updated_task.implementation_plan
-            else None
+        specification_document_id=updated_task.specification.id,
+        implementation_plan_document_id=(
+            updated_task.implementation_plan.id if updated_task.implementation_plan else None
         ),
     )
 

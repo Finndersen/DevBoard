@@ -13,7 +13,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
-import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject } from '../hooks'
+import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
@@ -34,6 +34,11 @@ function TaskDetail({ id }: TaskDetailProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { data: task, loading, error, refetch } = useTask(id)
+
+  // Fetch documents separately - only when task is loaded with valid document IDs
+  const { data: specificationDoc, refetch: refetchSpecification } = useDocument(task?.specification_document_id ?? null)
+  const { data: implementationPlanDoc, refetch: refetchImplementationPlan } = useDocument(task?.implementation_plan_document_id ?? null)
+
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
@@ -155,8 +160,8 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Use useEditableField hooks to eliminate boilerplate
   const titleField = useEditableField(task?.title || '', saveTitleField)
-  const specificationField = useEditableField(task?.specification.content || '', saveSpecificationField)
-  const planField = useEditableField(task?.implementation_plan?.content || '', savePlanField)
+  const specificationField = useEditableField(specificationDoc?.content || '', saveSpecificationField)
+  const planField = useEditableField(implementationPlanDoc?.content || '', savePlanField)
 
   // Delete task mutation
   const { mutate: deleteTask, loading: deleteLoading, error: deleteError } = useDeleteTask()
@@ -310,13 +315,13 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const specificationHandler = useCallback(async (result: any) => {
     try {
-      await refetch()
+      await refetchSpecification()
       // Switch to specification tab to show the updated content
       setActiveTab('specification')
     } catch (error) {
-      console.error('Failed to refetch task after specification update:', error)
+      console.error('Failed to refetch specification document:', error)
     }
-  }, [task?.specification?.content?.length, refetch, setActiveTab])
+  }, [refetchSpecification, setActiveTab])
 
   // Handle specification document updates from MCP tools
   useToolResultHandler(specificationMatcher, specificationHandler)
@@ -328,13 +333,13 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const implementationPlanHandler = useCallback(async (result: any) => {
     try {
-      await refetch()
+      await refetchImplementationPlan()
       // Switch to plan tab to show the updated content
       setActiveTab('plan')
     } catch (error) {
-      console.error('Failed to refetch task after implementation plan update:', error)
+      console.error('Failed to refetch implementation plan document:', error)
     }
-  }, [task?.implementation_plan?.content?.length, refetch, setActiveTab])
+  }, [refetchImplementationPlan, setActiveTab])
 
   // Handle implementation plan document updates from MCP tools
   useToolResultHandler(implementationPlanMatcher, implementationPlanHandler)
@@ -496,7 +501,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           <Button
             onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
             variant="primary"
-            disabled={!task.specification?.content || task.specification.content.trim() === '' || isConversationStreaming}
+            disabled={!specificationDoc?.content || specificationDoc.content.trim() === '' || isConversationStreaming}
           >
             Begin Planning
           </Button>
@@ -701,6 +706,11 @@ function TaskDetail({ id }: TaskDetailProps) {
                 disabled={branchStatusLoading}
               >
                 <GitBranchIcon className="w-4 h-4" />
+                {gitStatus.commits_ahead > 0 && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    {gitStatus.commits_ahead} ahead
+                  </span>
+                )}
                 {gitStatus.commits_behind > 0 && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                     {gitStatus.commits_behind} behind
@@ -742,7 +752,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 <nav className="flex space-x-6">
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
-                    ...(task.implementation_plan ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
+                    ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
                     ...(task.codebase_id && ['implementing', 'reviewing', 'complete'].includes(task.status.toLowerCase()) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
                   ].map((tab) => (
                     <button
@@ -843,8 +853,8 @@ function TaskDetail({ id }: TaskDetailProps) {
                   />
                 ) : (
                   <div className="h-full overflow-y-auto">
-                    {task.specification.content ? (
-                      <Markdown>{task.specification.content}</Markdown>
+                    {specificationDoc?.content ? (
+                      <Markdown>{specificationDoc.content}</Markdown>
                     ) : (
                       <p className={`${textColors.secondary} italic`}>No task specification provided. Click Edit to add specification.</p>
                     )}
@@ -864,8 +874,8 @@ function TaskDetail({ id }: TaskDetailProps) {
                   />
                 ) : (
                   <div className="h-full overflow-y-auto">
-                    {task.implementation_plan?.content ? (
-                      <Markdown>{task.implementation_plan.content}</Markdown>
+                    {implementationPlanDoc?.content ? (
+                      <Markdown>{implementationPlanDoc.content}</Markdown>
                     ) : (
                       <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
                     )}

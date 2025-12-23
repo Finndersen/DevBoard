@@ -8,7 +8,7 @@ import { Button, Card, Textarea, Markdown } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Task, Codebase } from '../lib/api'
-import { useModal, useEditableField, useProject, useProjectTasks, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject } from '../hooks'
+import { useModal, useEditableField, useProject, useProjectTasks, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
@@ -28,6 +28,10 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   // Fetch data using hooks
   const { data: project, loading: projectLoading, refetch: refetchProject, setData: setProject } = useProject(id!)
+
+  // Fetch specification document separately - only when project is loaded with valid document ID
+  const { data: specificationDoc, refetch: refetchSpecification } = useDocument(project?.specification_document_id ?? null)
+
   const { data: tasks, loading: tasksLoading } = useProjectTasks(id!)
 
   // Project codebases hooks
@@ -58,13 +62,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Use new custom hooks
   const createTaskModal = useModal()
   const specificationField = useEditableField(
-    project?.specification?.content || '',
+    specificationDoc?.content || '',
     async (value) => {
-      const updatedProject = await apiClient.updateProject(id!, {
+      await apiClient.updateProject(id!, {
         specification: value
       })
-      // Update the local project data with the response from the API
-      setProject(updatedProject)
+      // Refetch the specification document to get updated content
+      await refetchSpecification()
     }
   )
 
@@ -98,8 +102,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   )
 
   const projectSpecificationHandler = useCallback(async () => {
-    await refetchProject()
-  }, [refetchProject])
+    await refetchSpecification()
+  }, [refetchSpecification])
 
   useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
 
@@ -271,11 +275,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                     <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
                       {task.title}
                     </h4>
-                    {task.specification?.content && (
-                      <p className="text-gray-600 dark:text-gray-400 text-xs mb-2 line-clamp-2">
-                        {task.specification.content}
-                      </p>
-                    )}
                     <div className="flex items-center justify-between">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
                         {task.status}
@@ -339,8 +338,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                   />
                 ) : (
                   <div className="h-full overflow-y-auto">
-                    {project.specification?.content ? (
-                      <Markdown>{project.specification.content}</Markdown>
+                    {specificationDoc?.content ? (
+                      <Markdown>{specificationDoc.content}</Markdown>
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400 italic">No project specification provided. Click Edit to add specification.</p>
                     )}

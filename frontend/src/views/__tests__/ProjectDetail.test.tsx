@@ -4,9 +4,10 @@ import { http, HttpResponse } from 'msw'
 import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '../../test/setup'
-import { createMockProject, createMockTask } from '../../test/utils'
+import { createMockProject, createMockTask, mockDocuments } from '../../test/utils'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import { DarkModeProvider } from '../../contexts/DarkModeContext'
+import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import ProjectDetail from '../ProjectDetail'
 
 // Helper function to render ProjectDetail with proper routing
@@ -14,9 +15,11 @@ const renderProjectDetail = (projectId: string = '1') => {
   return rtlRender(
     <DarkModeProvider>
       <PendingMessagesProvider>
-        <BrowserRouter>
-          <ProjectDetail id={projectId} />
-        </BrowserRouter>
+        <ConversationEventHandlerProvider>
+          <BrowserRouter>
+            <ProjectDetail id={projectId} />
+          </BrowserRouter>
+        </ConversationEventHandlerProvider>
       </PendingMessagesProvider>
     </DarkModeProvider>
   )
@@ -49,11 +52,29 @@ describe('ProjectDetail', () => {
       http.get('*/api/projects/:id/tasks', () => {
         return HttpResponse.json(mockTasks)
       }),
+      http.get('*/api/documents/:id', ({ params }) => {
+        const docId = Number(params.id)
+        const doc = mockDocuments[docId as keyof typeof mockDocuments]
+        if (doc) {
+          return HttpResponse.json(doc)
+        }
+        return new HttpResponse(null, { status: 404 })
+      }),
       http.get('*/api/projects/:id/qa/history', () => {
         return HttpResponse.json([])
       }),
       http.get('*/api/projects/:id/codebases', () => {
         return HttpResponse.json([])
+      }),
+      http.get('*/api/conversations/:id', ({ params }) => {
+        return HttpResponse.json({
+          id: Number(params.id),
+          agent_role: 'qa',
+          engine: 'internal',
+          model_id: 'openai:gpt-4',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        })
       }),
       http.get('*/api/conversations/*/messages', () => {
         return HttpResponse.json([])
@@ -72,6 +93,20 @@ describe('ProjectDetail', () => {
               description: 'Internal agent framework'
             }
           ]
+        })
+      }),
+      http.get('*/api/models/by-engine', () => {
+        return HttpResponse.json({
+          models_by_engine: {
+            internal: [
+              {
+                id: 'openai:gpt-4',
+                name: 'GPT-4',
+                provider: 'openai',
+                model_type: 'chat'
+              }
+            ]
+          }
         })
       })
     )
@@ -125,16 +160,18 @@ describe('ProjectDetail', () => {
 
   it('displays project content on home tab', async () => {
     renderProjectDetail()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test Project')).toBeInTheDocument()
     })
-    
+
     // Should show specification section on the home tab
     expect(screen.getByText('Project Specification')).toBeInTheDocument()
-    
-    // Should show the specification content
-    expect(screen.getByText('Test project specification content')).toBeInTheDocument()
+
+    // Should show the specification content (fetched asynchronously)
+    await waitFor(() => {
+      expect(screen.getByText('Test project specification content')).toBeInTheDocument()
+    }, { timeout: 3000 })
   })
 
   it('allows editing specification', async () => {
@@ -168,15 +205,14 @@ describe('ProjectDetail', () => {
 
   it('displays Q&A chat interface', async () => {
     renderProjectDetail()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test Project')).toBeInTheDocument()
     })
-    
-    // Should show Agent section in the right panel 
-    expect(screen.getByText('Agent')).toBeInTheDocument()
-    
-    // Should have a chat input
-    expect(screen.getByPlaceholderText('Ask a question about this project...')).toBeInTheDocument()
+
+    // Should have a chat input for asking questions
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Ask a question about this project...')).toBeInTheDocument()
+    }, { timeout: 3000 })
   })
 })

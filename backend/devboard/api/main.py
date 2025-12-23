@@ -14,6 +14,7 @@ from devboard.api.routers import (
     codebases,
     configurations,
     conversations,
+    documents,
     oauth,
     projects,
     settings,
@@ -127,6 +128,7 @@ app.add_middleware(
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
+app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])

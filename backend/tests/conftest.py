@@ -212,6 +212,15 @@ def test_task(db_session, test_codebase):
         codebase_id=test_codebase.id,
     )
 
+    # Create conversation for project
+    conversation_repo.create(
+        parent_entity_type=ParentEntityType.PROJECT,
+        parent_entity_id=project.id,
+        agent_role=AgentRoleType.PROJECT,
+        engine=AgentEngine.INTERNAL,
+        model_id="openai:gpt-4",
+    )
+
     # Create conversation for task
     conversation_repo.create(
         parent_entity_type=ParentEntityType.TASK,

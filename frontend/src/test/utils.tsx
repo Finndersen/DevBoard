@@ -31,10 +31,11 @@ export * from '@testing-library/react'
 export { customRender as render }
 
 // Test data factories
-export const createMockProject = (overrides = {}) => ({
-  id: 1,
-  name: 'Test Project',
-  specification: {
+
+// Mock documents for separate document API calls
+export const mockDocuments = {
+  // Project specification document
+  1: {
     id: 1,
     document_type: 'project_specification',
     content: 'Test project specification content',
@@ -42,6 +43,40 @@ export const createMockProject = (overrides = {}) => ({
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
+  // Task specification document
+  3: {
+    id: 3,
+    document_type: 'task_specification',
+    content: 'Test task specification content',
+    content_hash: 'task123',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+  // Task implementation plan document
+  4: {
+    id: 4,
+    document_type: 'task_implementation_plan',
+    content: 'Test implementation plan content',
+    content_hash: 'plan123',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+}
+
+export const createMockDocument = (overrides = {}) => ({
+  id: 1,
+  document_type: 'project_specification',
+  content: 'Test document content',
+  content_hash: 'hash123',
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+  ...overrides,
+})
+
+export const createMockProject = (overrides = {}) => ({
+  id: 1,
+  name: 'Test Project',
+  specification_document_id: 1,
   description: 'A mock project for testing frontend components and API integrations',
   default_conversation_id: 1,
   created_at: '2024-01-01T00:00:00Z',
@@ -56,22 +91,8 @@ export const createMockTask = (overrides = {}) => ({
   codebase_id: null,
   remote_task_id: null,
   conversation_id: 3,
-  specification: {
-    id: 3,
-    document_type: 'task_specification',
-    content: 'Test task specification content',
-    content_hash: 'task123',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  implementation_plan: {
-    id: 4,
-    document_type: 'implementation_plan',
-    content: 'Test implementation plan content',
-    content_hash: 'plan123',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
+  specification_document_id: 3,
+  implementation_plan_document_id: 4,
   created_at: '2024-01-01T00:00:00Z',
   ...overrides,
 })

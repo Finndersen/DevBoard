@@ -6,8 +6,6 @@ from pydantic import BaseModel
 
 from devboard.db.models.task import TaskStatus
 
-from .document import DocumentResponse
-
 
 class TaskBase(BaseModel):
     """Base task schema."""
@@ -59,9 +57,9 @@ class TaskResponse(TaskBase):
     conversation_id: int
     created_at: datetime.datetime
 
-    # Document relationships - automatically loaded
-    specification: DocumentResponse
-    implementation_plan: DocumentResponse | None = None
+    # Document IDs - content fetched separately via /api/documents/{id}
+    specification_document_id: int
+    implementation_plan_document_id: int | None = None
 
     model_config = {"from_attributes": True}
 
