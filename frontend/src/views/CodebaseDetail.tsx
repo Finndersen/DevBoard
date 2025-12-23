@@ -1,5 +1,5 @@
 import { useEffect, useCallback, memo, useRef, useState } from 'react'
-import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon } from '@heroicons/react/24/outline'
 import type { Codebase, MergeStrategy } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -81,6 +81,48 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   const [mergeStrategyEditing, setMergeStrategyEditing] = useState(false)
   const [mergeStrategySaving, setMergeStrategySaving] = useState(false)
   const [mergeStrategyError, setMergeStrategyError] = useState<string | null>(null)
+
+  // Max worktrees state
+  const [maxWorktreesEditing, setMaxWorktreesEditing] = useState(false)
+  const [maxWorktreesSaving, setMaxWorktreesSaving] = useState(false)
+  const [maxWorktreesError, setMaxWorktreesError] = useState<string | null>(null)
+  const [maxWorktreesValue, setMaxWorktreesValue] = useState<string>('')
+
+  // Initialize max worktrees value when codebase loads
+  useEffect(() => {
+    if (codebase) {
+      setMaxWorktreesValue(codebase.max_worktrees === null ? '' : String(codebase.max_worktrees))
+    }
+  }, [codebase?.max_worktrees])
+
+  const getMaxWorktreesDisplayValue = (value: number | null): string => {
+    if (value === null) return 'Unlimited (default)'
+    if (value === 0) return 'Main repository only'
+    return `Maximum ${value} worktree${value === 1 ? '' : 's'}`
+  }
+
+  const saveMaxWorktrees = useCallback(
+    async (value: string) => {
+      setMaxWorktreesSaving(true)
+      setMaxWorktreesError(null)
+      try {
+        // Convert string to number or null
+        const numValue = value === '' ? null : parseInt(value, 10)
+        if (value !== '' && (isNaN(numValue!) || numValue! < 0)) {
+          setMaxWorktreesError('Please enter a valid non-negative number or leave empty')
+          setMaxWorktreesSaving(false)
+          return
+        }
+        await updateCodebase({ id: id!, codebase: { max_worktrees: numValue } })
+        setMaxWorktreesEditing(false)
+      } catch (err) {
+        setMaxWorktreesError(err instanceof Error ? err.message : 'Failed to save')
+      } finally {
+        setMaxWorktreesSaving(false)
+      }
+    },
+    [updateCodebase, id]
+  )
 
   const saveMergeStrategy = useCallback(
     async (value: MergeStrategy) => {
@@ -536,6 +578,98 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             )}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               How feature branches are merged when completing tasks
+            </p>
+          </div>
+
+          {/* Max Worktrees */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <Square3Stack3DIcon className="h-4 w-4" />
+              Max Worktrees
+            </label>
+            {maxWorktreesEditing ? (
+              <div className="space-y-2">
+                <Input
+                  type="number"
+                  min="0"
+                  value={maxWorktreesValue}
+                  onChange={(e) => setMaxWorktreesValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveMaxWorktrees(maxWorktreesValue)
+                    if (e.key === 'Escape') {
+                      setMaxWorktreesEditing(false)
+                      setMaxWorktreesError(null)
+                    }
+                  }}
+                  placeholder="Leave empty for unlimited"
+                  className="font-mono text-sm"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => saveMaxWorktrees(maxWorktreesValue)}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400"
+                    loading={maxWorktreesSaving}
+                  >
+                    <CheckIcon className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setMaxWorktreesEditing(false)
+                      setMaxWorktreesError(null)
+                    }}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                    disabled={maxWorktreesSaving}
+                  >
+                    <XMarkIcon className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                    {codebase.max_worktrees === null ? (
+                      <>
+                        <span className="font-medium">Unlimited</span>
+                        <span className="text-gray-500 dark:text-gray-400 ml-2">(default)</span>
+                      </>
+                    ) : codebase.max_worktrees === 0 ? (
+                      <>
+                        <span className="font-medium">0</span>
+                        <span className="text-gray-500 dark:text-gray-400 ml-2">(use main repository only)</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium">{codebase.max_worktrees}</span>
+                        <span className="text-gray-500 dark:text-gray-400 ml-2">(maximum worktree directories)</span>
+                      </>
+                    )}
+                  </span>
+                  <Button
+                    onClick={() => {
+                      setMaxWorktreesValue(codebase.max_worktrees?.toString() ?? '')
+                      setMaxWorktreesEditing(true)
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit max worktrees"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {maxWorktreesError && <ErrorMessage message={maxWorktreesError} />}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Controls worktree slot allocation: empty = unlimited, 0 = main repo only, N = max N worktrees
             </p>
           </div>
         </div>

@@ -43,6 +43,7 @@ def sample_codebase():
     codebase.id = 1
     codebase.local_path = "/projects/test-repo"
     codebase.name = "Test Repo"
+    codebase.max_worktrees = None  # Default: unlimited worktrees
     return codebase
 
 
@@ -61,13 +62,14 @@ def sample_task(sample_codebase):
 
 @pytest.fixture
 def sample_slot():
-    """Create a sample worktree slot."""
+    """Create a sample worktree slot (non-main repo)."""
     slot = MagicMock(spec=WorktreeSlot)
     slot.id = 1
-    slot.path = "/projects/test-repo"
-    slot.is_main_repo = True
+    slot.path = "/projects/test-repo.worktree-1"
+    slot.is_main_repo = False
     slot.locked_by_task_id = None
     slot.last_used_by_task_id = None
+    slot.last_used_at = datetime.datetime.now(datetime.UTC)
     slot.get_current_branch = AsyncMock(return_value="main")
     return slot
 
@@ -245,8 +247,9 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
-    # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    # Mock git operations and worktree validation
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git, \
+         patch.object(service, "_check_worktree_valid", return_value=True):
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
 

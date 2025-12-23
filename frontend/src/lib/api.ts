@@ -170,6 +170,7 @@ export interface Codebase {
   local_path: string
   default_branch: string
   merge_strategy: MergeStrategy
+  max_worktrees: number | null
 }
 
 // Git and Worktree Management

@@ -15,7 +15,8 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
   const [newCodebase, setNewCodebase] = useState({
     name: '',
     description: '',
-    local_path: ''
+    local_path: '',
+    max_worktrees: '' as string  // Empty string = null (unlimited)
   })
 
   // Reset form when modal closes
@@ -24,7 +25,8 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
       setNewCodebase({
         name: '',
         description: '',
-        local_path: ''
+        local_path: '',
+        max_worktrees: ''
       })
     }
   }, [isOpen])
@@ -41,16 +43,31 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
     setNewCodebase(prev => ({ ...prev, local_path: e.target.value }))
   }, [])
 
+  const handleMaxWorktreesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewCodebase(prev => ({ ...prev, max_worktrees: e.target.value }))
+  }, [])
+
   const handleCreateCodebase = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const createdCodebase = await createCodebase(newCodebase)
+      // Convert max_worktrees from string to number or null
+      const maxWorktreesValue = newCodebase.max_worktrees === ''
+        ? null
+        : parseInt(newCodebase.max_worktrees, 10)
+
+      const createdCodebase = await createCodebase({
+        name: newCodebase.name,
+        description: newCodebase.description,
+        local_path: newCodebase.local_path,
+        max_worktrees: maxWorktreesValue
+      })
 
       // Reset form
       setNewCodebase({
         name: '',
         description: '',
-        local_path: ''
+        local_path: '',
+        max_worktrees: ''
       })
 
       onClose()
@@ -108,6 +125,22 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
             placeholder="/path/to/your/codebase"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Max Worktrees
+          </label>
+          <Input
+            type="number"
+            min="0"
+            value={newCodebase.max_worktrees}
+            onChange={handleMaxWorktreesChange}
+            placeholder="Leave empty for unlimited"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Empty = unlimited, 0 = main repo only, N = max N worktrees
+          </p>
         </div>
 
         <div className="flex justify-end space-x-3 pt-4">

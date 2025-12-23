@@ -95,7 +95,7 @@ class WorkspaceAllocationService:
         has_changes = await git.has_uncommitted_changes()
         return has_changes
 
-    async def allocate_for_task(self, task: Task, use_main_slot: bool = False) -> WorktreeSlot:
+    async def allocate_for_task(self, task: Task) -> WorktreeSlot:
         """Find an appropriate slot and lock it for a task.
 
         Implements smart allocation with:
@@ -103,9 +103,11 @@ class WorkspaceAllocationService:
         2. LRU - pick least recently used available slot
 
         For main repo slots:
-        - Main repo slot is only reused for a task if the task's branch is still checked out there
+        - When max_worktrees=0: Main repo is included in normal allocation pool
+        - When max_worktrees=None or >0: Main repo is excluded from automatic allocation
+        - Main repo slot is only reused for a task via stickiness if the task's branch is still checked out there
         - If main repo has a different branch checked out, the task is allocated a different slot
-        - This ensures main repo slot assignment only happens through explicit manual action
+        - This ensures main repo slot assignment only happens through explicit manual action (unless max_worktrees=0)
 
         Raises:
             ValueError: If task has invalid configuration
@@ -114,19 +116,25 @@ class WorkspaceAllocationService:
         # Clean up any stale locks before attempting allocation
         await self.cleanup_stale_locks(codebase_id=task.codebase.id)
 
-        # Get all available (unlocked) slots for this codebase
-        all_slots = self.worktree_slot_repo.get_by_codebase(task.codebase.id, include_main=use_main_slot)
-        available_slots: list[WorktreeSlot] = [s for s in all_slots if not s.locked]
+        # Determine if main repo should be included in allocation pool
+        # When max_worktrees=0, use main repo only mode - include main in pool
+        # Otherwise (None or >0), exclude main repo from automatic allocation
+        include_main_in_pool = task.codebase.max_worktrees == 0
 
-        if not available_slots:
-            raise AllSlotsLockedException("All worktree slots are currently in use")
+        # Get all slots for this codebase (including main repo for stickiness check)
+        all_slots = self.worktree_slot_repo.get_by_codebase(task.codebase.id, include_main=True)
 
-        # Strategy 1: Task stickiness - prefer last-used slot
-        # Check this FIRST before uncommitted changes check, since task can reuse its own slot regardless
-        for slot in available_slots:
+        # Single pass: find sticky slot and build candidate pool simultaneously
+        sticky_slot: WorktreeSlot | None = None
+        candidate_slots: list[WorktreeSlot] = []
+
+        for slot in all_slots:
+            if slot.locked:
+                continue
+
+            # Check for sticky slot (task previously used this slot)
             if slot.last_used_by_task_id == task.id:
-                # Special handling for main repo slot:
-                # Only use it if the task's branch is still checked out there
+                # Main repo requires branch match for stickiness
                 if slot.is_main_repo:
                     current_branch = await slot.get_current_branch()
                     if current_branch != task.branch_name:
@@ -134,29 +142,39 @@ class WorkspaceAllocationService:
                             f"Skipping main repo sticky slot {slot.id} for task {task.id}: "
                             f"branch mismatch (current={current_branch}, task={task.branch_name})"
                         )
-                        continue
-                logfire.info(f"Using sticky slot {slot.id} for task {task.id}")
-                return self.worktree_slot_repo.lock_slot(slot, task)
+                    else:
+                        sticky_slot = slot
+                else:
+                    sticky_slot = slot
 
-        # Filter out slots with uncommitted changes
-        clean_slots = []
-        for slot in available_slots:
-            has_changes = await self.slot_has_uncommitted_changes(slot)
-            if not has_changes:
-                clean_slots.append(slot)
-            else:
+            # Build candidate pool (respecting main repo inclusion rules)
+            if include_main_in_pool or not slot.is_main_repo:
+                candidate_slots.append(slot)
+
+        # Use sticky slot immediately if found (skip uncommitted changes check - task owns this slot)
+        if sticky_slot:
+            logfire.info(f"Using sticky slot {sticky_slot.id} for task {task.id}")
+            return self.worktree_slot_repo.lock_slot(sticky_slot, task)
+
+        if not candidate_slots:
+            raise AllSlotsLockedException("All worktree slots are currently in use")
+
+        # Filter candidates by uncommitted changes and find LRU in single pass
+        # (This pass involves async I/O so must be separate)
+        best_slot: WorktreeSlot | None = None
+        for slot in candidate_slots:
+            if await self.slot_has_uncommitted_changes(slot):
                 logfire.info(f"Slot {slot.id} at {slot.path} has uncommitted changes")
+                continue
+            # Track LRU among clean slots
+            if best_slot is None or slot.last_used_at < best_slot.last_used_at:
+                best_slot = slot
 
-        if not clean_slots:
-            # All unlocked slots have uncommitted changes
+        if not best_slot:
             raise AllSlotsLockedException("All available slots have uncommitted changes")
 
-        available_slots = clean_slots
-
-        # Strategy 2: LRU - least recently used slot
-        lru_slot: WorktreeSlot = min(available_slots, key=lambda s: s.last_used_at)
-        logfire.info(f"Using LRU slot {lru_slot.id} for task {task.id}")
-        return self.worktree_slot_repo.lock_slot(lru_slot, task)
+        logfire.info(f"Using LRU slot {best_slot.id} for task {task.id}")
+        return self.worktree_slot_repo.lock_slot(best_slot, task)
 
     async def checkout_branch_in_slot(self, slot: WorktreeSlot, branch_name: str) -> bool:
         """Checkout a branch in a slot if it's not already on that branch.
@@ -193,14 +211,10 @@ class WorkspaceAllocationService:
         self.worktree_slot_repo.commit()
         logfire.info(f"Released slot {slot.id}")
 
-    async def create_and_lock_slot(self, task: Task, use_main_slot: bool = False) -> WorktreeSlot:
+    async def create_and_lock_slot(self, task: Task) -> WorktreeSlot:
         """Create a new worktree slot and lock it for a task."""
         # Ensure main repo slot exists before creating worktree slots
-        main_slot = self.bootstrap_main_repo_slot(task.codebase)
-
-        if use_main_slot and not self.slot_has_uncommitted_changes(main_slot):
-            self.worktree_slot_repo.lock_slot(main_slot, task)
-            return main_slot
+        self.bootstrap_main_repo_slot(task.codebase)
 
         # Generate worktree path
         worktree_path = self._generate_new_worktree_path(task.codebase)
@@ -413,11 +427,16 @@ class WorkspaceAllocationService:
         self,
         task: Task,
         agent_stream: AsyncIterator[ConversationEvent],
-        max_worktrees: int | None = None,
-        use_main_slot: bool = False,
     ) -> AsyncIterator[ConversationEvent]:
-        """Run the task agent in an available workspace slot."""
+        """Run the task agent in an available workspace slot.
+
+        Worktree allocation is controlled by codebase.max_worktrees:
+        - None: Unlimited worktrees, main repo excluded from automatic allocation
+        - 0: No worktrees, main repo only mode (main repo included in allocation)
+        - N (>0): Up to N worktree slots, main repo excluded from automatic allocation
+        """
         slot: WorktreeSlot | None = None
+        max_worktrees = task.codebase.max_worktrees
         try:
             # Ensure task has a branch (create if needed, generate name if null)
             # TODO: Make sure task branch already exists by this point so this can be removed
@@ -427,7 +446,7 @@ class WorkspaceAllocationService:
 
             # Try to allocate an existing slot
             try:
-                slot = await self.allocate_for_task(task, use_main_slot=use_main_slot)
+                slot = await self.allocate_for_task(task)
                 self.worktree_slot_repo.commit()
 
                 # Emit SystemEvent for workspace allocation
@@ -438,10 +457,16 @@ class WorkspaceAllocationService:
                 )
 
             except AllSlotsLockedException:
-                # Check if we've reached the max worktree limit
+                # Check if we've reached the max worktree limit (or if worktrees are disabled)
+                # When max_worktrees=0, we should never create new worktrees
                 if max_worktrees is not None:
+                    # For max_worktrees=0, slot count includes main repo (1 slot)
+                    # For max_worktrees>0, slot count excludes main repo
                     total_slots = self.codebase_slot_count(task.codebase.id)
-                    if total_slots >= max_worktrees:
+                    # For max_worktrees=0, we can never create new slots (main repo only)
+                    # For max_worktrees>0, we check against the limit (counting worktrees only, not main)
+                    worktree_count = total_slots - 1 if total_slots > 0 else 0  # subtract main repo slot
+                    if max_worktrees == 0 or worktree_count >= max_worktrees:
                         logfire.warn(f"Max worktrees ({max_worktrees}) reached for codebase {task.codebase.id}")
                         raise
 
@@ -455,7 +480,7 @@ class WorkspaceAllocationService:
                     timestamp=datetime.datetime.now(datetime.UTC),
                 )
 
-                slot = await self.create_and_lock_slot(task, use_main_slot=use_main_slot)
+                slot = await self.create_and_lock_slot(task)
                 self.worktree_slot_repo.commit()
 
                 # Emit SystemEvent for workspace allocation (creation is a special case of allocation)

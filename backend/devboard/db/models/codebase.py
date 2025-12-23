@@ -36,6 +36,7 @@ class Codebase(Base):
     local_path: Mapped[str] = mapped_column(String(512))
     default_branch: Mapped[str] = mapped_column(String(255), default="origin/main")
     merge_strategy: Mapped[str] = mapped_column(String(50), default=MergeStrategy.SQUASH.value)
+    max_worktrees: Mapped[int | None] = mapped_column(default=None)
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")
     tasks: Mapped[list["Task"]] = relationship(back_populates="codebase")

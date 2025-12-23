@@ -14,6 +14,7 @@ class CodebaseBase(BaseModel):
     local_path: str
     default_branch: str
     merge_strategy: MergeStrategy
+    max_worktrees: int | None = None
 
 
 class CodebaseCreate(BaseModel):
@@ -24,6 +25,7 @@ class CodebaseCreate(BaseModel):
     local_path: str
     default_branch: str | None = None
     merge_strategy: MergeStrategy | None = None  # Auto-determined if not provided
+    max_worktrees: int | None = None
 
 
 class CodebaseUpdate(BaseModel):
@@ -35,6 +37,7 @@ class CodebaseUpdate(BaseModel):
     local_path: str | None = None
     default_branch: str | None = None
     merge_strategy: MergeStrategy | None = None
+    max_worktrees: int | None = None
 
 
 class CodebaseResponse(CodebaseBase):
