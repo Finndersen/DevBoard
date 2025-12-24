@@ -113,8 +113,7 @@ const ConversationChat = ({
     addPendingMessage,
     updateMessageStatus,
     removeMessage,
-    getPendingMessages,
-    retryMessage
+    getPendingMessages
   } = usePendingMessages()
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
   const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
@@ -286,11 +285,14 @@ const ConversationChat = ({
     }
   }, [pendingMessages])
 
-  const handleSendMessage = useCallback(async (messageText: string) => {
-    if (isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction) return
-
-    // Add message to pending state
-    const pendingMessageId = addPendingMessage(pendingKey, {
+  // Internal function that does the actual sending (no guards)
+  // Used by both handleSendMessage (new messages) and handleRetryMessage (retries)
+  const sendMessageInternal = useCallback(async (
+    messageText: string,
+    existingPendingMessageId?: string
+  ) => {
+    // Use existing pending message ID for retry, or create new one
+    const pendingMessageId = existingPendingMessageId ?? addPendingMessage(pendingKey, {
       conversationId,
       text_content: messageText
     })
@@ -344,10 +346,6 @@ const ConversationChat = ({
       updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
     }
   }, [
-    isStreaming,
-    pendingApprovals.length,
-    pendingMessage,
-    isRunningAction,
     pendingKey,
     conversationId,
     addPendingMessage,
@@ -360,13 +358,21 @@ const ConversationChat = ({
     messages
   ])
 
+  // Public handler for new messages from input (with guards)
+  const handleSendMessage = useCallback(async (messageText: string) => {
+    if (isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction) return
+    await sendMessageInternal(messageText)
+  }, [isStreaming, pendingApprovals.length, pendingMessage, isRunningAction, sendMessageInternal])
+
+  // Retry handler - bypasses guards, reuses existing pending message
   const handleRetryMessage = useCallback(async (messageId: string) => {
     const pendingMsg = pendingMessages.find(msg => msg.id === messageId)
     if (!pendingMsg) return
 
-    retryMessage(pendingKey, messageId)
-    await handleSendMessage(pendingMsg.text_content)
-  }, [pendingMessages, pendingKey, retryMessage, handleSendMessage])
+    // Send directly with existing pending message ID
+    // Status will be updated to 'sent' inside sendMessageInternal
+    await sendMessageInternal(pendingMsg.text_content, pendingMsg.id)
+  }, [pendingMessages, sendMessageInternal])
 
   // Auto-send initial message when provided (e.g., from task creation with description)
   useEffect(() => {

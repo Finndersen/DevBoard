@@ -269,7 +269,9 @@ class WorkspaceAllocationService:
 
         for slot in locked_slots:
             # Check age-based failsafe based on last_used_at
-            age = datetime.datetime.now(datetime.UTC) - slot.last_used_at
+            # SQLite stores datetimes without timezone, so we need to treat as UTC
+            last_used = slot.last_used_at.replace(tzinfo=datetime.UTC)
+            age = datetime.datetime.now(datetime.UTC) - last_used
             if age > datetime.timedelta(hours=1):
                 logfire.warn(
                     f"Releasing very old lock on slot {slot.id} (task {slot.last_used_by_task_id}, "
