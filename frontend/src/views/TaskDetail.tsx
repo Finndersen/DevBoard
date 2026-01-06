@@ -13,7 +13,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
-import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument } from '../hooks'
+import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
@@ -36,8 +36,11 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { data: task, loading, error, refetch } = useTask(id)
 
   // Fetch documents separately - only when task is loaded with valid document IDs
-  const { data: specificationDoc, refetch: refetchSpecification } = useDocument(task?.specification_document_id ?? null)
-  const { data: implementationPlanDoc, refetch: refetchImplementationPlan } = useDocument(task?.implementation_plan_document_id ?? null)
+  const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
+  const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
+
+  // Document update mutation
+  const { mutate: updateDocument } = useUpdateDocument()
 
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
   const { data: codebases } = useCodebases()
@@ -136,7 +139,6 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Memoize the updateCache function to prevent infinite re-creation
   const updateCache = useCallback(() => {
-    // Update local task state with returned data - no refetch needed!
     refetchRef.current()
   }, [])
 
@@ -146,17 +148,21 @@ function TaskDetail({ id }: TaskDetailProps) {
   })
 
   // Memoize save functions to prevent infinite re-creation of useEditableField hooks
-  const saveTitleField = useCallback((value: string) => 
+  const saveTitleField = useCallback((value: string) =>
     updateTask({ id: id!, task: { title: value }}), [updateTask, id]
   )
-  
-  const saveSpecificationField = useCallback((value: string) => 
-    updateTask({ id: id!, task: { specification: value } as unknown as Task }), [updateTask, id]
-  )
-  
-  const savePlanField = useCallback((value: string) => 
-    updateTask({ id: id!, task: { implementation_plan: value } as unknown as Task }), [updateTask, id]
-  )
+
+  const saveSpecificationField = useCallback(async (value: string) => {
+    if (!task?.specification_document_id) return
+    const updatedDoc = await updateDocument({ id: task.specification_document_id, content: value })
+    setSpecificationDoc(updatedDoc)
+  }, [task?.specification_document_id, updateDocument, setSpecificationDoc])
+
+  const savePlanField = useCallback(async (value: string) => {
+    if (!task?.implementation_plan_document_id) return
+    const updatedDoc = await updateDocument({ id: task.implementation_plan_document_id, content: value })
+    setImplementationPlanDoc(updatedDoc)
+  }, [task?.implementation_plan_document_id, updateDocument, setImplementationPlanDoc])
 
   // Use useEditableField hooks to eliminate boilerplate
   const titleField = useEditableField(task?.title || '', saveTitleField)

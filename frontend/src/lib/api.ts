@@ -463,6 +463,13 @@ export class ApiClient {
     return this.request<DocumentResponse>(`/api/documents/${id}`)
   }
 
+  async updateDocument(id: number | string, content: string): Promise<DocumentResponse> {
+    return this.request<DocumentResponse>(`/api/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    })
+  }
+
   async transitionTaskState(taskId: number | string, request: StateTransitionRequest): Promise<Task> {
     return this.request<Task>(`/api/tasks/${taskId}/state-transition`, {
       method: 'POST',

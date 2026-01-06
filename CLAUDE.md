@@ -23,10 +23,7 @@ We are working to develop an application as described in @docs/INDEX.md
 - **Configuration**: Hierarchical resolution (environment > database > defaults)
 
 ## Database Patterns
-- **SQLAlchemy 2.0**: Use `Mapped[]` annotations, `select()` statements, bidirectional relationships with `back_populates`
-- **Polymorphic Conversations**: Single Conversation model for all entities (Project/Task/Codebase) using `entity_type`/`entity_id`
-- **Conflict Detection**: Document model uses SHA-256 `content_hash` for optimistic locking
-- **Lazy Initialization**: Conversations created via `get_or_create_for_entity()` when accessing entity details
+- Do not use `db_session.commit()` unless transaction management is explicitly required (should be handled automatically by request lifecycle)
 
 ## Testing
 - **Structure**: Tests mirror source (`devboard/agents/base_agent.py` → `tests/agents/test_base_agent.py`)
