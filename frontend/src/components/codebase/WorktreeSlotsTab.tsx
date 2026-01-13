@@ -65,7 +65,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
           {/* Path */}
           <div>
             <span className={`text-xs ${textColors.secondary} block mb-1`}>Path</span>
-            <code className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded block truncate">
+            <code className="text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded block truncate">
               {slot.path}
             </code>
           </div>
@@ -75,7 +75,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
             {slot.current_branch && (
               <div className="flex items-center justify-between">
                 <span className={textColors.secondary}>Branch:</span>
-                <code className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                <code className="font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded">
                   {slot.current_branch}
                 </code>
               </div>
