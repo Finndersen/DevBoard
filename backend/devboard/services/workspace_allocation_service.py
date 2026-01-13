@@ -127,11 +127,15 @@ class WorkspaceAllocationService:
         # Get all slots for this codebase (including main repo for stickiness check)
         all_slots = self.worktree_slot_repo.get_by_codebase(task.codebase.id, include_main=True)
 
+        # Sort slots by last_used_at descending so most recently used is checked first
+        # This ensures when multiple slots have the same task ID, we prefer the most recent
+        all_slots_sorted = sorted(all_slots, key=lambda s: s.last_used_at, reverse=True)
+
         # Single pass: find sticky slot and build candidate pool simultaneously
         sticky_slot: WorktreeSlot | None = None
         candidate_slots: list[WorktreeSlot] = []
 
-        for slot in all_slots:
+        for slot in all_slots_sorted:
             if slot.locked:
                 continue
 
@@ -147,8 +151,10 @@ class WorkspaceAllocationService:
                         )
                     else:
                         sticky_slot = slot
+                        break  # Most recent sticky slot found, stop searching
                 else:
                     sticky_slot = slot
+                    break  # Most recent sticky slot found, stop searching
 
             # Build candidate pool (respecting main repo inclusion rules)
             if include_main_in_pool or not slot.is_main_repo:

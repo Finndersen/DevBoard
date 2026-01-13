@@ -736,3 +736,52 @@ async def test_rebase_task_branch_no_branch_name_raises_error(task_git_service, 
 
     with pytest.raises(ValueError, match="has no branch name configured"):
         await task_git_service.rebase_task_branch(sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_prefers_most_recent_sticky_slot(service, mock_repos, sample_task, sample_codebase):
+    """Test that when multiple slots have same last_used_by_task_id, the most recent is preferred.
+
+    This scenario occurs when a task is checked out from a worktree to main repo:
+    - Both slots have last_used_by_task_id set to the task
+    - The main repo has a more recent last_used_at (from checkout)
+    - Allocation should pick the main repo (most recent), not the worktree
+    """
+    worktree_slot_repo, task_repo = mock_repos
+
+    now = datetime.datetime.now(datetime.UTC)
+
+    # Setup: Worktree slot - older last_used_at
+    worktree_slot = MagicMock(spec=WorktreeSlot)
+    worktree_slot.id = 1
+    worktree_slot.path = "/projects/test-repo.worktree-1"
+    worktree_slot.is_main_repo = False
+    worktree_slot.locked = False
+    worktree_slot.last_used_by_task_id = sample_task.id  # Same task
+    worktree_slot.last_used_at = now - timedelta(hours=1)  # 1 hour ago
+    worktree_slot.get_current_branch = AsyncMock(return_value="some-other-branch")
+
+    # Setup: Main repo slot - more recent last_used_at (task was checked out here)
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 2
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    main_slot.locked = False
+    main_slot.last_used_by_task_id = sample_task.id  # Same task
+    main_slot.last_used_at = now  # Just now (more recent)
+    main_slot.get_current_branch = AsyncMock(return_value=sample_task.branch_name)  # Branch matches
+
+    # Return both slots (order doesn't matter since we sort by last_used_at)
+    worktree_slot_repo.get_by_codebase.return_value = [worktree_slot, main_slot]
+    worktree_slot_repo.lock_slot.return_value = main_slot
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        # Execute
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Main slot (most recent) was selected, not worktree slot
+    assert result.id == main_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(main_slot, sample_task)

@@ -930,7 +930,7 @@ async def test_get_task_diff(client, db_session):
 
     # Mock GitRepoIntegration at the integration layer
     mock_git = MagicMock()
-    mock_git.get_merge_base = AsyncMock(return_value="abc123")
+    mock_git.get_fork_point = AsyncMock(return_value="abc123")
     mock_git.get_structured_diff = AsyncMock(return_value=mock_structured_diff)
 
     # Patch GitRepoIntegration - this will affect code running during the request

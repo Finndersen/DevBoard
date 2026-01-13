@@ -37,6 +37,7 @@
 - issue: File changes tab not automatically displayed when beginning implementation phase
 - Advanced tool use capabilities like tool search & programmatic execution: https://www.anthropic.com/engineering/advanced-tool-use
 - Change layout to task list on sidebar like https://www.terragonlabs.com/
+- Add "Commit changes" workflow action for when there are new uncommitted changes - or "Approve changes" for approving initial imoplementation as well as follow ups
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
