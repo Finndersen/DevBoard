@@ -6,6 +6,8 @@ import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Card, Input, Textarea, ErrorMessage, Button } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
+import InViewTabs from '../components/common/InViewTabs'
+import WorktreeSlotsTab from '../components/codebase/WorktreeSlotsTab'
 
 // Merge strategy display labels
 const MERGE_STRATEGY_OPTIONS: { value: MergeStrategy; label: string; description: string }[] = [
@@ -14,6 +16,11 @@ const MERGE_STRATEGY_OPTIONS: { value: MergeStrategy; label: string; description
   { value: 'rebase', label: 'Rebase', description: 'Rebase for linear history' },
   { value: 'merge_commit', label: 'Merge Commit', description: 'Standard merge with merge commit' },
   { value: 'none', label: 'Manual', description: 'No automatic git operations' },
+]
+
+const CODEBASE_TABS = [
+  { id: 'details', label: 'Details' },
+  { id: 'worktrees', label: 'Worktrees' },
 ]
 
 interface CodebaseDetailProps {
@@ -87,6 +94,9 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   const [maxWorktreesSaving, setMaxWorktreesSaving] = useState(false)
   const [maxWorktreesError, setMaxWorktreesError] = useState<string | null>(null)
   const [maxWorktreesValue, setMaxWorktreesValue] = useState<string>('')
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<string>('details')
 
   // Initialize max worktrees value when codebase loads
   useEffect(() => {
@@ -193,7 +203,15 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
         </p>
       </div>
 
-      {/* Codebase Information */}
+      {/* Tab Navigation */}
+      <InViewTabs
+        tabs={CODEBASE_TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {/* Details Tab Content */}
+      {activeTab === 'details' && (
       <Card>
         <div className="space-y-6">
           {/* Name */}
@@ -674,6 +692,12 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
           </div>
         </div>
       </Card>
+      )}
+
+      {/* Worktrees Tab Content */}
+      {activeTab === 'worktrees' && (
+        <WorktreeSlotsTab codebaseId={id} />
+      )}
     </div>
   )
 }
