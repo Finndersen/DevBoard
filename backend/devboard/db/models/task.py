@@ -23,6 +23,7 @@ class TaskStatus(StrEnum):
     DEFINING = "defining"
     PLANNING = "planning"
     IMPLEMENTING = "implementing"
+    PR_OPEN = "pr_open"
     REVIEWING = "reviewing"
     COMPLETE = "complete"
 
@@ -44,9 +45,13 @@ class Task(Base):
     branch_name: Mapped[str | None] = mapped_column(String(255))
     base_branch: Mapped[str] = mapped_column(String(255))
 
+    # GitHub PR number (set when PR is created)
+    github_pr_number: Mapped[int | None] = mapped_column(default=None)
+
     # Document relationships
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
     implementation_plan_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    change_summary_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
@@ -57,6 +62,17 @@ class Task(Base):
     )
     worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(
         foreign_keys="WorktreeSlot.last_used_by_task_id", back_populates="last_used_by_task"
+    )
+
+    # Document relationships (lazy loaded by default, use eager loading where needed)
+    specification: Mapped["Document"] = relationship(
+        foreign_keys=[specification_id],
+    )
+    implementation_plan: Mapped["Document | None"] = relationship(
+        foreign_keys=[implementation_plan_id],
+    )
+    change_summary: Mapped["Document | None"] = relationship(
+        foreign_keys=[change_summary_id],
     )
 
     @property
@@ -75,64 +91,51 @@ class Task(Base):
             raise NoWorktreeAllocatedException("Workspace not allocated for task #{self.id}")
         return allocated_workspace.path
 
-    # Document relationships with eager loading
-    specification: Mapped["Document"] = relationship(
-        foreign_keys=[specification_id],
-        lazy="joined",  # Always eager load
-    )
-    implementation_plan: Mapped["Document | None"] = relationship(
-        foreign_keys=[implementation_plan_id],
-        lazy="joined",  # Always eager load
-    )
+    # Valid status transitions: from_status -> set of allowed target statuses
+    VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
+        TaskStatus.DEFINING: {TaskStatus.PLANNING},
+        TaskStatus.PLANNING: {TaskStatus.IMPLEMENTING},
+        TaskStatus.IMPLEMENTING: {TaskStatus.PR_OPEN, TaskStatus.REVIEWING, TaskStatus.COMPLETE},
+        TaskStatus.PR_OPEN: {TaskStatus.COMPLETE},
+        TaskStatus.REVIEWING: {TaskStatus.COMPLETE},
+        TaskStatus.COMPLETE: set(),
+    }
 
-    def can_transition_to_phase(self, target_status: TaskStatus) -> tuple[bool, str]:
-        """Check if this task can transition to target phase.
+    def verify_status_transition(self, target_status: TaskStatus) -> None:
+        """Verify this task can transition to target status.
 
-        Validates that required content exists before allowing phase transition.
-        Each phase has specific prerequisites:
-        - PLANNING: Requires specification content
-        - IMPLEMENTING: Requires implementation plan
-        - REVIEWING: Implementation must be marked complete
-        - COMPLETE: All work must be finished
+        Validates:
+        1. The transition is allowed from the current status
+        2. Required prerequisites exist for the target status
 
         Args:
             target_status: The target status to transition to
 
-        Returns:
-            Tuple of (can_transition, error_message)
-            - can_transition: True if transition is allowed
-            - error_message: Empty string if allowed, error description otherwise
+        Raises:
+            InvalidStatusTransitionError: If the transition is not allowed or prerequisites are missing
         """
-        # DEFINING → PLANNING
+        # Check if transition is valid from current status
+        allowed_targets = self.VALID_TRANSITIONS.get(self.status, set())
+        if target_status not in allowed_targets:
+            raise InvalidStatusTransitionError(f"Cannot transition from {self.status.value} to {target_status.value}")
+
+        # Check prerequisites for target status
         if target_status == TaskStatus.PLANNING:
             if not self.specification or not self.specification.content.strip():
-                return False, "Cannot transition to PLANNING without specification content"
+                raise InvalidStatusTransitionError("Cannot transition to PLANNING without specification content")
 
-        # PLANNING → IMPLEMENTING
         elif target_status == TaskStatus.IMPLEMENTING:
             if not self.implementation_plan or not self.implementation_plan.content.strip():
-                return False, "Cannot transition to IMPLEMENTING without implementation plan"
-
-        # IMPLEMENTING → REVIEWING
-        elif target_status == TaskStatus.REVIEWING:
-            # Could add checks for implementation completion markers
-            # For now, allow transition if explicitly requested
-            pass
-
-        # REVIEWING → COMPLETE
-        elif target_status == TaskStatus.COMPLETE:
-            # Could add checks for review completion
-            # For now, allow transition if explicitly requested
-            pass
-
-        # DEFINING is initial state, always allowed
-        elif target_status == TaskStatus.DEFINING:
-            pass
-
-        return True, ""
+                raise InvalidStatusTransitionError("Cannot transition to IMPLEMENTING without implementation plan")
 
 
 class NoWorktreeAllocatedException(Exception):
     """Raised when a task has no allocated worktree slot."""
+
+    pass
+
+
+class InvalidStatusTransitionError(Exception):
+    """Raised when a task status transition is not valid."""
 
     pass

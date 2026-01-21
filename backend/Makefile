@@ -24,8 +24,8 @@ typecheck:	## Type-check code with pyright
 test:		## Run tests
 	pytest
 
-start:		## Start development server
-	uvicorn devboard.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+start:		## Start development server (use BACKEND_PORT=XXXX to override default 8000)
+	uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
 
 migrate:	## Run database migrations
 	mkdir -p data && PYTHONPATH=. alembic upgrade head

@@ -19,18 +19,13 @@ import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerPr
 export default function TabContentContainer() {
   const { tabs, activeTabId, visitedTabs } = useUIStore()
 
-  // If no tabs are open, show loading state while URL sync happens
-  if (tabs.length === 0) {
-    return (
-      <div className="w-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
   // Memoize rendered tabs to prevent unnecessary re-renders of inactive tabs
   // Only render tabs that have been visited or are currently active (lazy mounting)
   const renderedTabs = useMemo(() => {
+    // If no tabs are open, return empty array
+    if (tabs.length === 0) {
+      return []
+    }
     return tabs.map((tab) => {
       const isActive = tab.id === activeTabId
       const hasBeenVisited = visitedTabs.has(tab.id)
@@ -69,6 +64,15 @@ export default function TabContentContainer() {
       )
     })
   }, [tabs, activeTabId, visitedTabs])
+
+  // If no tabs are open, show loading state while URL sync happens
+  if (tabs.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
   return <>{renderedTabs}</>
 }

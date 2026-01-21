@@ -2,6 +2,7 @@ from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
+from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.tools import (
     create_document_edit_tool,
     create_set_document_content_tool,
@@ -56,37 +57,9 @@ def build_task_specification_context(task: Task) -> str:
     """Build context for task specification agent.
 
     Includes task metadata, project specification, and task specification document.
-
-    Note: Requires task to be loaded within an active SQLAlchemy session,
-    as it will lazy-load the project relationship if needed.
-
-    Args:
-        task: Task instance with eager-loaded documents
-
-    Returns:
-        Formatted context string
+    Implementation plan is automatically included if present on the task.
     """
-    context = f"""
-TASK NAME: {task.title}
-TASK STATUS: {task.status.value}
-
-PROJECT SPECIFICATION:
-```markdown
-{task.project.specification.content or "<EMPTY>"}
-```
-
-TASK SPECIFICATION DOCUMENT (Dynamically updated live state):
-```markdown
-{task.specification.content or "<EMPTY>"}
-```
-
-RELEVANT CODEBASE:
-- Name: {task.codebase.name}
-- Worktree directory: {task.get_current_workspace_dir()}
-- Description: {task.codebase.description or "N/A"}
-"""
-
-    return context
+    return build_task_context(task)
 
 
 class TaskSpecificationAgentRole(AgentRole):

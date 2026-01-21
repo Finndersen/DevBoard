@@ -84,19 +84,14 @@ DevBoard implements a **local client-server architecture** optimized for develop
    cd DevBoard
    ```
 
-2. **Backend Setup**:
+2. **Run setup** (installs dependencies and runs migrations):
    ```bash
-   cd backend
-   make install      # Install dependencies
-   make migrate      # Run database migrations
-   make start        # Start development server
+   ./setup.sh
    ```
 
-3. **Frontend Setup**:
+3. **Start development servers** (runs both backend and frontend):
    ```bash
-   cd frontend
-   pnpm install      # Install dependencies
-   pnpm dev          # Start development server
+   ./start.sh
    ```
 
 4. **Access the Application**:

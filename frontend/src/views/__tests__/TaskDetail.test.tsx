@@ -180,30 +180,31 @@ describe('TaskDetail', () => {
     }, { timeout: 3000 })
   })
 
-  it('streams prompt action when transitioning to planning state', async () => {
+  it('streams workflow action when transitioning to planning state', async () => {
     const user = userEvent.setup()
+    const mockCodebase = {
+      id: 1,
+      name: 'Test Codebase',
+      local_path: '/path/to/codebase',
+    }
     const taskWithSpecification = createMockTask({
       id: 1,
       project_id: 1,
       status: 'Defining',
-    })
-    const updatedTask = createMockTask({
-      id: 1,
-      project_id: 1,
-      status: 'Planning',
+      codebase_id: 1,
+      available_workflow_actions: [
+        { key: 'task.create_implementation_plan', label: 'Begin Planning' }
+      ],
     })
 
     server.use(
       http.get('*/api/tasks/1', () => {
         return HttpResponse.json(taskWithSpecification)
       }),
-      http.post('*/api/tasks/1/state-transition', () => {
-        return HttpResponse.json({
-          ...updatedTask,
-          conversation_id: 2,
-        })
+      http.get('*/api/codebases', () => {
+        return HttpResponse.json([mockCodebase])
       }),
-      http.post('*/api/conversations/2/prompt-action', () => {
+      http.post('*/api/tasks/1/workflow-action', () => {
         return createStreamingResponse([
           {
             event_type: 'message',
@@ -233,31 +234,32 @@ describe('TaskDetail', () => {
     }, { timeout: 3000 })
   })
 
-  it('handles streaming errors during prompt action gracefully', async () => {
+  it('handles streaming errors during workflow action gracefully', async () => {
     const user = userEvent.setup()
+    const mockCodebase = {
+      id: 1,
+      name: 'Test Codebase',
+      local_path: '/path/to/codebase',
+    }
     const taskWithSpecification = createMockTask({
       id: 1,
       project_id: 1,
       status: 'Defining',
-    })
-    const updatedTask = createMockTask({
-      id: 1,
-      project_id: 1,
-      status: 'Planning',
+      codebase_id: 1,
+      available_workflow_actions: [
+        { key: 'task.create_implementation_plan', label: 'Begin Planning' }
+      ],
     })
 
     server.use(
       http.get('*/api/tasks/1', () => {
         return HttpResponse.json(taskWithSpecification)
       }),
-      http.post('*/api/tasks/1/state-transition', () => {
-        return HttpResponse.json({
-          ...updatedTask,
-          conversation_id: 2,
-        })
+      http.get('*/api/codebases', () => {
+        return HttpResponse.json([mockCodebase])
       }),
-      http.post('*/api/conversations/2/prompt-action', () => {
-        return new HttpResponse(null, { status: 404 })
+      http.post('*/api/tasks/1/workflow-action', () => {
+        return new HttpResponse(null, { status: 500 })
       })
     )
 

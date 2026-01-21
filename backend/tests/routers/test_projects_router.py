@@ -159,8 +159,9 @@ class TestProjectsRouter:
         response = client.patch(f"/api/projects/{created_project.id}", json=update_data)
         assert response.status_code == 200
 
-        # Verify the response has expected fields
+        # Verify the response contains document ID (content fetched separately)
         updated_project = response.json()
+        assert updated_project["specification_document_id"] == spec_doc.id
         assert updated_project["name"] == test_project_data["name"]
         assert updated_project["description"] == test_project_data["description"]
         assert "specification_document_id" in updated_project
@@ -169,6 +170,10 @@ class TestProjectsRouter:
         doc_response = client.get(f"/api/documents/{updated_project['specification_document_id']}")
         assert doc_response.status_code == 200
         assert doc_response.json()["content"] == new_specification
+
+        # Verify the document content was actually updated by re-querying from DB
+        updated_spec = document_repo.get_by_id(spec_doc.id)
+        assert updated_spec.content == new_specification
 
     def test_delete_project_success(self, client, db_session, test_project_data):
         """Test deleting a project."""
@@ -471,7 +476,7 @@ class TestProjectTasksRouter:
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
         assert task_data["status"] == "defining"  # Always DEFINING when created
-        assert "specification_document_id" in task_data
+        assert task_data["specification_document_id"] is not None
         assert task_data["implementation_plan_document_id"] is None  # Should be None initially
 
         # Verify the specification content was created correctly via API
@@ -534,13 +539,12 @@ class TestProjectTasksRouter:
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
         assert task_data["status"] == "defining"  # Always DEFINING when created
-        assert "specification_document_id" in task_data
+        assert task_data["specification_document_id"] is not None
         assert task_data["codebase_id"] == test_codebase.id
 
-        # Verify the specification content was created correctly via API
-        doc_response = client.get(f"/api/documents/{task_data['specification_document_id']}")
-        assert doc_response.status_code == 200
-        assert doc_response.json()["content"] == api_task_data["specification_content"]
+        # Verify the specification content was set correctly
+        task_spec = document_repo.get_by_id(task_data["specification_document_id"])
+        assert task_spec.content == api_task_data["specification_content"]
 
     def test_create_project_task_project_not_found(self, client, test_task_data, test_codebase):
         """Test creating a task for non-existent project."""

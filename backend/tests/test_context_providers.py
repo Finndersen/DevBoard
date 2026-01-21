@@ -76,13 +76,45 @@ class TestGitHubContextProvider:
     """Test GitHub context provider."""
 
     @pytest.fixture
-    def mock_integration(self):
+    def mock_pr(self):
+        """Mock PullRequest object."""
+        pr = Mock()
+        pr.title = "Test PR"
+        pr.state = "open"
+        pr.body = "PR description"
+        pr.user = Mock()
+        pr.user.login = "testuser"
+        pr.html_url = "https://github.com/owner/repo/pull/123"
+        pr.number = 123
+        pr.merged = False
+        pr.mergeable = True
+        return pr
+
+    @pytest.fixture
+    def mock_github_pr(self, mock_pr):
+        """Mock GitHubPR wrapper."""
+        github_pr = Mock()
+        github_pr.pr = mock_pr
+        return github_pr
+
+    @pytest.fixture
+    def mock_github_repo(self, mock_github_pr):
+        """Mock GitHubRepository with async methods."""
+        repo = Mock()
+        repo.get_pull_request = AsyncMock(return_value=mock_github_pr)
+        repo.get_issue = AsyncMock()
+        repo.get_commit = AsyncMock()
+        repo.full_name = "owner/repo"
+        repo._repo = Mock()
+        repo._repo.description = "Test repo"
+        repo._repo.language = "Python"
+        return repo
+
+    @pytest.fixture
+    def mock_integration(self, mock_github_repo):
         """Mock GitHub integration."""
         integration = Mock()
-        integration.get_pull_request = AsyncMock()
-        integration.get_issue = AsyncMock()
-        integration.get_commit = AsyncMock()
-        integration.get_file_content = AsyncMock()
+        integration.get_repository = Mock(return_value=mock_github_repo)
         return integration
 
     @pytest.fixture
@@ -114,16 +146,17 @@ class TestGitHubContextProvider:
             provider.get_retrieval_strategy("https://gitlab.com/owner/repo")
 
     @pytest.mark.asyncio
-    async def test_get_resource_pull_request(self, provider, mock_integration):
+    async def test_get_resource_pull_request(self, provider, mock_integration, mock_github_repo, mock_pr):
         """Test getting PR resource data."""
-        mock_integration.get_pull_request.return_value = {"id": 123, "title": "Test PR"}
-
         result = await provider.get_resource("https://github.com/owner/repo/pull/123")
 
         assert result["type"] == "pull_request"
-        assert result["data"] == {"id": 123, "title": "Test PR"}
+        assert result["data"]["title"] == mock_pr.title
+        assert result["data"]["state"] == mock_pr.state
+        assert result["data"]["number"] == mock_pr.number
         assert result["uri"] == "https://github.com/owner/repo/pull/123"
-        mock_integration.get_pull_request.assert_called_once_with("owner", "repo", 123)
+        mock_integration.get_repository.assert_called_once_with("owner", "repo")
+        mock_github_repo.get_pull_request.assert_called_once_with(123)
 
     @pytest.mark.asyncio
     async def test_get_resource_invalid_uri(self, provider):
@@ -132,17 +165,17 @@ class TestGitHubContextProvider:
             await provider.get_resource("https://gitlab.com/owner/repo")
 
     @pytest.mark.asyncio
-    async def test_generate_resource_description(self, provider, mock_integration):
+    async def test_generate_resource_description(self, provider, mock_integration, mock_github_repo, mock_pr):
         """Test generating resource descriptions."""
-        mock_integration.get_pull_request.return_value = {
-            "title": "Fix authentication bug",
-            "body": "This PR fixes a critical auth issue",
-        }
+        mock_pr.title = "Fix authentication bug"
+        mock_pr.state = "open"
 
         description = await provider.generate_resource_description("https://github.com/owner/repo/pull/123")
 
         assert "Fix authentication bug" in description
         assert "pr" in description.lower()
+        mock_integration.get_repository.assert_called_once_with("owner", "repo")
+        mock_github_repo.get_pull_request.assert_called_once_with(123)
 
 
 class TestJiraContextProvider:

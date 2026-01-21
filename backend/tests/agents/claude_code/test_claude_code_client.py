@@ -4,8 +4,18 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    TextBlock,
+    create_sdk_mcp_server,
+)
+from claude_agent_sdk import (
+    tool as sdk_tool,
+)
+from mcp.types import CallToolRequest, CallToolRequestParams
 from pydantic_ai import Tool
+from pydantic_core import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 
@@ -320,7 +330,73 @@ class TestClaudeClient:
         assert result["content"][0]["text"] == "test: 5"
 
         # Test with invalid arguments (wrong type) - should raise ValidationError
-        from pydantic_core import ValidationError
-
         with pytest.raises(ValidationError):
             await wrapper({"count": "not a number", "name": "test"})
+
+
+class TestMcpToolErrorHandling:
+    """Tests for MCP tool error handling behavior."""
+
+    @pytest.mark.asyncio
+    async def test_mcp_tool_exception_sets_is_error_flag(self):
+        """Test that when a tool raises an exception, MCP sets is_error=True on the result.
+
+        This verifies the MCP server properly flags tool errors so they can be
+        distinguished from successful results by the claude-agent-sdk.
+        """
+
+        # Create a tool that raises an exception
+        @sdk_tool(name="failing_tool", description="A tool that always fails", input_schema={})
+        async def failing_tool(_args: dict) -> dict:
+            raise ValueError("Intentional test error")
+
+        # Create MCP server with the failing tool
+        server_config = create_sdk_mcp_server(
+            name="test_server",
+            version="1.0.0",
+            tools=[failing_tool],
+        )
+        server = server_config["instance"]
+
+        # Get the call_tool handler
+        handler = server.request_handlers.get(CallToolRequest)
+        assert handler is not None
+
+        # Call the tool
+        request = CallToolRequest(
+            method="tools/call",
+            params=CallToolRequestParams(name="failing_tool", arguments={}),
+        )
+        result = await handler(request)
+
+        # Verify the result has is_error=True
+        assert hasattr(result.root, "is_error"), "Result should have is_error attribute"
+        assert result.root.is_error is True, "is_error should be True when tool raises exception"
+        assert len(result.root.content) == 1
+        assert "Intentional test error" in result.root.content[0].text
+
+    @pytest.mark.asyncio
+    async def test_mcp_tool_success_does_not_set_is_error_flag(self):
+        """Test that successful tool execution does not set is_error flag."""
+
+        @sdk_tool(name="success_tool", description="A tool that succeeds", input_schema={})
+        async def success_tool(_args: dict) -> dict:
+            return {"content": [{"type": "text", "text": "Success!"}]}
+
+        server_config = create_sdk_mcp_server(
+            name="test_server",
+            version="1.0.0",
+            tools=[success_tool],
+        )
+        server = server_config["instance"]
+
+        handler = server.request_handlers.get(CallToolRequest)
+        request = CallToolRequest(
+            method="tools/call",
+            params=CallToolRequestParams(name="success_tool", arguments={}),
+        )
+        result = await handler(request)
+
+        # Verify is_error is False for successful execution
+        assert hasattr(result.root, "is_error"), "Result should have is_error attribute"
+        assert result.root.is_error is False, "is_error should be False for successful tool"

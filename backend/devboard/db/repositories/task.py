@@ -1,7 +1,7 @@
 """Task repository for task data access operations."""
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from devboard.db.models import Conversation, Document, ParentEntityType, Task, TaskStatus
 from devboard.db.models.base import task_context_resource_association
@@ -57,17 +57,24 @@ class TaskRepository(BaseRepository[Task]):
         self.db.flush()
         return task
 
-    def get_by_id(self, task_id: int) -> Task | None:
+    def get_by_id(self, task_id: int, *, with_documents: bool = False) -> Task | None:
         """Get a task by its ID.
 
         Args:
             task_id: The task ID to search for
+            with_documents: If True, eager load document relationships
 
         Returns:
             Task instance if found, None otherwise
         """
         stmt = select(Task).where(Task.id == task_id)
-        return self.db.execute(stmt).scalar_one_or_none()
+        if with_documents:
+            stmt = stmt.options(
+                joinedload(Task.specification),
+                joinedload(Task.implementation_plan),
+                joinedload(Task.change_summary),
+            )
+        return self.db.execute(stmt).unique().scalar_one_or_none()
 
     def get_all(self) -> list[Task]:
         """Get all tasks.

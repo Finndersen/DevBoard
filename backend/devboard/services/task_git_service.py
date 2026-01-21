@@ -10,7 +10,7 @@ from enum import StrEnum
 
 import logfire
 
-from devboard.db.models.codebase import MergeStrategy
+from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import Task
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
@@ -51,7 +51,7 @@ class MergeResult:
     """Result of a task merge operation."""
 
     outcome: MergeOutcome
-    strategy: MergeStrategy
+    merge_method: MergeMethod
     message: str
     merge_commit: str | None = None
 
@@ -483,75 +483,13 @@ class TaskGitService:
             has_stash_conflicts=has_stash_conflicts,
         )
 
-    async def checkout_task_to_main_repo(self, task: Task) -> None:
-        """Checkout a task's branch to the main repository.
-
-        This flow:
-        1. Gets the last used worktree slot for the task
-        2. Stashes uncommitted changes in the worktree (if any)
-        3. Detaches HEAD in that worktree (to release the branch)
-        4. Checks out the task's branch in the main repository
-        5. Applies the stashed changes to the main repository
-        6. Updates the task's worktree slot assignment to the main repo slot
-
-        Args:
-            task: Task instance
-
-        Raises:
-            ValueError: If task has no branch name, main repo is dirty, or operation fails
-        """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
-        main_git = GitRepoIntegration(task.codebase.local_path)
-
-        # Check main repo is clean
-        if await main_git.has_uncommitted_changes():
-            raise ValueError("Main repository has uncommitted changes")
-
-        # Get last used slot for the task
-        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
-
-        stash_sha: str | None = None
-
-        # If the branch is checked out in a worktree, stash changes and detach HEAD
-        if last_used_slot and not last_used_slot.is_main_repo:
-            slot_git = GitRepoIntegration(last_used_slot.path)
-            current_branch = await slot_git.get_current_branch()
-
-            # Only process if the task's branch is actually checked out there
-            if current_branch == task.branch_name:
-                # Stash uncommitted changes (including untracked files)
-                # stash_push clears the working tree and returns stable SHA
-                if await slot_git.has_uncommitted_changes():
-                    stash_sha = await slot_git.stash_push(include_untracked=True)
-                    logfire.info(f"Stashed uncommitted changes in worktree {last_used_slot.path} for task {task.id}")
-
-                await slot_git.switch_detach()
-                logfire.info(f"Detached HEAD in worktree {last_used_slot.path} for task {task.id}")
-
-        # Checkout branch in main repository
-        await main_git.checkout_branch(task.branch_name)
-        logfire.info(f"Checked out branch {task.branch_name} in main repo for task {task.id}")
-
-        # Apply stashed changes to main repository
-        if stash_sha:
-            await main_git.stash_apply(stash_sha)
-            logfire.info(f"Applied stashed changes to main repo for task {task.id}")
-
-        # Find the main repo slot and lock it for this task
-        main_slot = self.worktree_slot_repo.get_main_slot_for_codebase(task.codebase_id)
-        if main_slot:
-            self.worktree_slot_repo.lock_slot(main_slot, task)
-            logfire.info(f"Assigned main repo slot to task {task.id}")
-
-    async def complete_task_merge(self, task: Task) -> MergeResult:
-        """Complete a task by merging its feature branch based on codebase merge strategy.
+    async def merge_task_feature_branch(self, task: Task) -> MergeResult:
+        """Merge a task's feature branch into its base branch based on codebase merge method.
 
         This method handles the complete merge workflow:
-        1. Validates strategy compatibility with codebase config
+        1. Validates merge method compatibility with codebase config
         2. Stashes uncommitted changes if present
-        3. Executes strategy-specific merge
+        3. Executes method-specific merge
         4. Cleans up feature branch
         5. Unstashes changes
 
@@ -562,29 +500,13 @@ class TaskGitService:
             MergeResult with outcome and relevant details
 
         Raises:
-            ValueError: If task has no branch, or if GITHUB_PR strategy is used
-                (GITHUB_PR should be handled via dedicated workflow action)
+            ValueError: If task has no branch, or if merge method is invalid
         """
         if not task.branch_name:
             raise ValueError("Task has no branch name configured")
 
-        strategy = MergeStrategy(task.codebase.merge_strategy)
+        merge_method = MergeMethod(task.codebase.merge_method)
         codebase = task.codebase
-
-        # GITHUB_PR strategy must be handled via dedicated workflow action
-        if strategy == MergeStrategy.GITHUB_PR:
-            raise ValueError(
-                "GitHub PR strategy should be handled via create_pull_request workflow action, "
-                "not complete_task_merge()"
-            )
-
-        # For 'none' strategy, just return skipped without any git operations
-        if strategy == MergeStrategy.NONE:
-            return MergeResult(
-                outcome=MergeOutcome.SKIPPED,
-                strategy=strategy,
-                message="Manual merge strategy - no git operations performed",
-            )
 
         # Get git integration for main repo
         git = GitRepoIntegration(codebase.local_path)
@@ -594,38 +516,48 @@ class TaskGitService:
         if comparison.has_conflicts:
             return MergeResult(
                 outcome=MergeOutcome.CONFLICT,
-                strategy=strategy,
+                merge_method=merge_method,
                 message=f"Cannot merge: conflicts detected between {task.branch_name} and {task.base_branch}",
             )
 
-        # Execute strategy-specific merge
+        # Check if branch is already merged (no new commits)
+        if comparison.ahead == 0:
+            return MergeResult(
+                outcome=MergeOutcome.SKIPPED,
+                merge_method=merge_method,
+                message=f"Branch {task.branch_name} has no new commits - already merged or up-to-date with {task.base_branch}",
+            )
+
+        # Release feature branch if checked out in a worktree
+        # Required for rebase (implicit checkout) and delete_branch
+        release_result = await git.release_branch_from_worktree(task.branch_name)
+        if release_result.worktree_path:
+            logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
+
+        # Execute method-specific merge
         try:
-            if strategy == MergeStrategy.SQUASH:
+            if merge_method == MergeMethod.SQUASH:
                 return await self._execute_squash_merge(task, git)
-            elif strategy == MergeStrategy.REBASE:
+            elif merge_method == MergeMethod.REBASE:
                 return await self._execute_rebase_merge(task, git)
-            elif strategy == MergeStrategy.MERGE_COMMIT:
+            elif merge_method == MergeMethod.MERGE_COMMIT:
                 return await self._execute_merge_commit_merge(task, git)
             else:
-                return MergeResult(
-                    outcome=MergeOutcome.ERROR,
-                    strategy=strategy,
-                    message=f"Unknown merge strategy: {strategy}",
-                )
+                raise ValueError(f"Invalid merge method for local branch merge: {merge_method}")
         except Exception as e:
             logfire.error(f"Merge failed for task {task.id}: {e}")
             return MergeResult(
                 outcome=MergeOutcome.ERROR,
-                strategy=strategy,
+                merge_method=merge_method,
                 message=f"Merge failed: {str(e)}",
             )
 
     async def _execute_squash_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
-        """Execute squash merge strategy.
+        """Execute squash merge method.
 
         Squashes all commits into one and merges into base branch.
         """
-        strategy = MergeStrategy.SQUASH
+        merge_method = MergeMethod.SQUASH
         is_remote_base = task.base_branch.startswith("origin/")
 
         # Stash any uncommitted changes
@@ -653,7 +585,7 @@ class TaskGitService:
 
             return MergeResult(
                 outcome=MergeOutcome.SUCCESS,
-                strategy=strategy,
+                merge_method=merge_method,
                 message=f"Successfully squash merged {task.branch_name} into {task.base_branch}",
                 merge_commit=merge_commit,
             )
@@ -712,11 +644,11 @@ class TaskGitService:
         return merge_commit
 
     async def _execute_rebase_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
-        """Execute rebase merge strategy.
+        """Execute rebase merge method.
 
         Rebases feature branch onto base, then fast-forward merges.
         """
-        strategy = MergeStrategy.REBASE
+        merge_method = MergeMethod.REBASE
         is_remote_base = task.base_branch.startswith("origin/")
 
         # Stash any uncommitted changes
@@ -759,7 +691,7 @@ class TaskGitService:
 
             return MergeResult(
                 outcome=MergeOutcome.SUCCESS,
-                strategy=strategy,
+                merge_method=merge_method,
                 message=f"Successfully rebased and merged {task.branch_name} into {task.base_branch}",
                 merge_commit=merge_commit,
             )
@@ -768,11 +700,11 @@ class TaskGitService:
                 await git.stash_pop()
 
     async def _execute_merge_commit_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
-        """Execute merge commit strategy.
+        """Execute merge commit method.
 
         Creates a merge commit preserving full history.
         """
-        strategy = MergeStrategy.MERGE_COMMIT
+        merge_method = MergeMethod.MERGE_COMMIT
         is_remote_base = task.base_branch.startswith("origin/")
 
         # Stash any uncommitted changes
@@ -818,7 +750,7 @@ class TaskGitService:
 
             return MergeResult(
                 outcome=MergeOutcome.SUCCESS,
-                strategy=strategy,
+                merge_method=merge_method,
                 message=f"Successfully merged {task.branch_name} into {task.base_branch} with merge commit",
                 merge_commit=merge_commit,
             )

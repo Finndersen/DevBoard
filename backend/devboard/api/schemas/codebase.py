@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from devboard.db.models.codebase import MergeStrategy
+from devboard.db.models.codebase import BranchHandling, MergeMethod
 
 
 class CodebaseBase(BaseModel):
@@ -13,7 +13,8 @@ class CodebaseBase(BaseModel):
     repository_url: str | None = None
     local_path: str
     default_branch: str
-    merge_strategy: MergeStrategy
+    merge_method: MergeMethod
+    branch_handling: BranchHandling
     max_worktrees: int | None = None
 
 
@@ -24,7 +25,8 @@ class CodebaseCreate(BaseModel):
     description: str
     local_path: str
     default_branch: str | None = None
-    merge_strategy: MergeStrategy | None = None  # Auto-determined if not provided
+    merge_method: MergeMethod | None = None  # Defaults to SQUASH
+    branch_handling: BranchHandling | None = None  # Auto-determined based on repository_url if not provided
     max_worktrees: int | None = None
 
 
@@ -36,7 +38,8 @@ class CodebaseUpdate(BaseModel):
     repository_url: str | None = None
     local_path: str | None = None
     default_branch: str | None = None
-    merge_strategy: MergeStrategy | None = None
+    merge_method: MergeMethod | None = None
+    branch_handling: BranchHandling | None = None
     max_worktrees: int | None = None
 
 

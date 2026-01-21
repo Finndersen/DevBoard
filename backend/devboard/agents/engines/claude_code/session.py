@@ -6,6 +6,8 @@ access to session messages and todos.
 """
 
 import json
+import platform
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -15,6 +17,7 @@ from typing import Any, NotRequired, TypedDict, cast
 import logfire
 
 from devboard.api.schemas.claude_code_todo import TodoItem
+from devboard.integrations.shell import execute_shell_command
 
 
 # TypedDict structures for JSONL entry types
@@ -254,6 +257,111 @@ class ClaudeCodeSessionService:
                 return session_file
 
         raise FileNotFoundError(f"Session file not found for ID: {session_id}. Searched in: {self.claude_projects_dir}")
+
+    @staticmethod
+    def encode_path_for_claude_projects(path: str) -> str:
+        """Encode a filesystem path to Claude's project directory format.
+
+        Claude encodes working directory paths by replacing '/' and '.' with '-' and
+        prepending a '-' prefix.
+
+        Example: /Users/foo/bar → -Users-foo-bar
+        """
+        return "-" + path.lstrip("/").replace("/", "-").replace(".", "-")
+
+    def _extract_cwd_from_session_file(self, session_file: Path) -> str:
+        """Extract the working directory from a session file.
+
+        Reads the JSONL file line by line until finding an entry with a 'cwd' field.
+
+        Args:
+            session_file: Path to the session JSONL file
+
+        Returns:
+            The cwd value from the first entry containing it
+
+        Raises:
+            ValueError: If no entry with 'cwd' field is found
+        """
+        with session_file.open("r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if "cwd" in entry:
+                        return entry["cwd"]
+                except json.JSONDecodeError:
+                    continue
+
+        raise ValueError(f"No 'cwd' entry found in session file: {session_file}")
+
+    async def migrate_session_to_directory(
+        self,
+        session_id: str,
+        new_working_dir: str,
+    ) -> Path | None:
+        """Migrate a session file to a new working directory.
+
+        Finds the session file automatically, moves the session JSONL file and
+        optional session directory (containing tool-results) to the new project
+        directory, then performs in-place path replacement using sed.
+
+        Args:
+            session_id: The Claude Code session ID
+            new_working_dir: The new working directory path
+
+        Returns:
+            Path to the new session file location, or None if already in correct location
+
+        Raises:
+            FileNotFoundError: If the session file doesn't exist
+            ValueError: If no 'cwd' entry found in session file
+            ShellCommandExecutionError: If sed command fails
+        """
+        # Find the session file
+        old_session_file = self.find_session_file(session_id)
+        old_project_dir = old_session_file.parent
+
+        # Calculate new project directory
+        new_encoded_path = self.encode_path_for_claude_projects(new_working_dir)
+        new_project_dir = self.claude_projects_dir / new_encoded_path
+
+        # Skip if already in the correct location
+        if old_project_dir == new_project_dir:
+            logfire.debug(f"Session {session_id} already in correct location: {new_working_dir}")
+            return None
+
+        # Create new project directory if needed
+        new_project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Move the session file
+        new_session_file = new_project_dir / old_session_file.name
+        shutil.move(str(old_session_file), str(new_session_file))
+        logfire.info(f"Moved session file from {old_session_file} to {new_session_file}")
+
+        # Move the session directory if it exists (contains tool-results)
+        old_session_dir = old_project_dir / session_id
+        if old_session_dir.exists() and old_session_dir.is_dir():
+            new_session_dir = new_project_dir / session_id
+            shutil.move(str(old_session_dir), str(new_session_dir))
+            logfire.info(f"Moved session directory from {old_session_dir} to {new_session_dir}")
+
+        # Extract old working directory from session file content
+        old_working_dir = self._extract_cwd_from_session_file(old_session_file)
+        # Perform in-place path replacement using sed
+        # Use '|' as delimiter since paths contain '/'
+        # macOS sed requires '' after -i, Linux doesn't
+        if platform.system() == "Darwin":
+            sed_cmd = ["sed", "-i", "", f"s|{old_working_dir}|{new_working_dir}|g", str(new_session_file)]
+        else:
+            sed_cmd = ["sed", "-i", f"s|{old_working_dir}|{new_working_dir}|g", str(new_session_file)]
+
+        await execute_shell_command(sed_cmd)
+        logfire.info(f"Replaced paths in session file: {old_working_dir} → {new_working_dir}")
+
+        return new_session_file
 
     def get_last_session_message(self, session_id: str) -> SessionMessage | None:
         """Get the last message from a Claude Code session.

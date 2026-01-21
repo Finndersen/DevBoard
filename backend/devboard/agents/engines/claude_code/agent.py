@@ -81,6 +81,7 @@ class ClaudeCodeAgent(BaseAgent):
         model: LanguageModel | None,
         session_id: str | None = None,
         working_dir: str | None = None,
+        additional_tools: list[Tool] | None = None,
     ):
         """Initialize Claude Code agent with role.
 
@@ -89,31 +90,31 @@ class ClaudeCodeAgent(BaseAgent):
             model: Language model instance, or None to use Claude Code's default model
             session_id: Optional session ID to resume previous conversation
             working_dir: Optional path to codebase directory
+            additional_tools: Extra tools to add beyond those defined by the role
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
 
-        super().__init__(role, model)
+        super().__init__(role, model, additional_tools)
 
         self.session_id = session_id
         self.working_dir = working_dir
         # Convert PydanticAI tools to virtual tools and function tools
-        self._virtual_tools, self._function_tools = self._convert_tools_from_role()
+        self._virtual_tools, self._function_tools = self._partition_tools()
 
-    def _convert_tools_from_role(self) -> tuple[dict[str, VirtualTool], list[Tool]]:
-        """Convert PydanticAI tools from role into virtual tools and function tools.
+    def _partition_tools(self) -> tuple[dict[str, VirtualTool], list[Tool] | None]:
+        """Partition tools into virtual tools and function tools.
 
         Tools with requires_approval=True become virtual tools.
         Tools with requires_approval=False become regular Tool instances (passed to ClaudeClient).
 
         Returns:
-            Tuple of (virtual_tools dict, function_tools list of Tool instances)
+            Tuple of (virtual_tools dict, function_tools list of Tool instances or None)
         """
-
         virtual_tools: dict[str, VirtualTool] = {}
         function_tools: list[Tool] = []
 
-        for tool in self.role.get_tools():
+        for tool in self.get_tools():
             if tool.requires_approval:
                 # Convert to virtual tool
                 virtual_tool = VirtualTool(tool)

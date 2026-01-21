@@ -517,3 +517,67 @@ class TestClaudeCodeSessionService:
         assert todos[0].priority == TodoPriority.HIGH
         assert todos[1].priority == TodoPriority.MEDIUM
         assert todos[2].priority == TodoPriority.LOW
+
+    def test_extract_cwd_from_session_file_valid(self, service):
+        """Test extracting cwd from a valid JSONL file with cwd entries."""
+        jsonl_data = [
+            {
+                "type": "user",
+                "uuid": "u1",
+                "timestamp": "2025-10-08T15:10:00.000Z",
+                "isSidechain": False,
+                "cwd": "/Users/test/projects/MyProject",
+                "message": {"role": "user", "content": "Hello"},
+            },
+            {
+                "type": "assistant",
+                "uuid": "a1",
+                "timestamp": "2025-10-08T15:10:01.000Z",
+                "isSidechain": False,
+                "cwd": "/Users/test/projects/MyProject",
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
+            },
+        ]
+
+        jsonl_content = "\n".join(json.dumps(entry) for entry in jsonl_data)
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
+            result = service._extract_cwd_from_session_file(session_file)
+
+        assert result == "/Users/test/projects/MyProject"
+
+    def test_extract_cwd_from_session_file_no_cwd_entry(self, service):
+        """Test ValueError when no cwd entry exists."""
+        jsonl_data = [
+            {"type": "summary", "summary": "Some summary", "leafUuid": "uuid-1"},
+            {"type": "summary", "summary": "Another summary", "leafUuid": "uuid-2"},
+        ]
+
+        jsonl_content = "\n".join(json.dumps(entry) for entry in jsonl_data)
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
+            with pytest.raises(ValueError, match="No 'cwd' entry found in session file"):
+                service._extract_cwd_from_session_file(session_file)
+
+    def test_extract_cwd_from_session_file_skips_malformed_lines(self, service):
+        """Test that malformed JSON lines are skipped and cwd is still extracted."""
+        jsonl_content = """{malformed json}
+{"type": "summary", "summary": "Some summary"}
+{"type": "user", "uuid": "u1", "cwd": "/Users/test/valid/path", "message": {"content": "Hello"}}"""
+
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
+            result = service._extract_cwd_from_session_file(session_file)
+
+        assert result == "/Users/test/valid/path"
+
+    def test_extract_cwd_from_session_file_empty_file(self, service):
+        """Test ValueError when file is empty."""
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch("pathlib.Path.open", mock_open(read_data="")):
+            with pytest.raises(ValueError, match="No 'cwd' entry found in session file"):
+                service._extract_cwd_from_session_file(session_file)

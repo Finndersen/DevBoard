@@ -96,6 +96,7 @@ const ConversationChat = ({
   // Local state for non-streaming concerns
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [approvalError, setApprovalError] = useState<string | null>(null)
+  const [fetchHistoryError, setFetchHistoryError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const removedPendingIdsRef = useRef<Set<string>>(new Set())
@@ -213,9 +214,20 @@ const ConversationChat = ({
       return
     }
 
+    // Mark as fetched BEFORE starting async operation to prevent duplicate fetches
+    // (React StrictMode in dev mode renders twice, causing race conditions)
+    lastFetchedConversationIdRef.current = conversationId
+
     const fetchHistory = async () => {
+      setFetchHistoryError(null)
       try {
         const data = await apiClient.getConversationMessages(conversationId)
+
+        // Debug: Log system events (especially session_expired)
+        const systemEvents = data.filter(e => e.event_type === 'system')
+        if (systemEvents.length > 0) {
+          console.log('[ConversationChat] System events received from history:', systemEvents)
+        }
 
         // Separate tool requests from regular messages (like stream processor does)
         const messages: ConversationEvent[] = []
@@ -230,6 +242,7 @@ const ConversationChat = ({
         })
 
         // Set messages (without tool requests)
+        console.log('[ConversationChat] Setting messages from history, count:', messages.length, 'types:', messages.map(m => m.event_type))
         setMessages(messages)
 
         // If there are tool requests from history, convert to approvals
@@ -256,10 +269,15 @@ const ConversationChat = ({
 
           setApprovals(approvalKey, approvals)
         }
-
-        lastFetchedConversationIdRef.current = conversationId
       } catch (error) {
         console.error('Failed to fetch chat history:', error)
+        let errorMessage = 'Failed to load conversation history'
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+          errorMessage = 'Unable to connect to server. Please check if the backend is running.'
+        } else if (error instanceof Error) {
+          errorMessage = `Failed to load conversation history: ${error.message}`
+        }
+        setFetchHistoryError(errorMessage)
       }
     }
 
@@ -452,9 +470,15 @@ const ConversationChat = ({
           pendingMessage={pendingMessage}
           onRetryMessage={handleRetryMessage}
           emptyStateMessage={emptyStateMessage}
-          showEmptyState={messages.length === 0 && !pendingMessage}
+          showEmptyState={messages.length === 0 && !pendingMessage && !fetchHistoryError}
           codebaseLocalPath={codebaseLocalPath}
         />
+
+        {fetchHistoryError && (
+          <div className="mt-2 p-2.5 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-800 dark:text-red-200">{fetchHistoryError}</p>
+          </div>
+        )}
 
         {approvalError && pendingApprovals.length > 0 && (
           <div className="mt-2 p-2.5 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">

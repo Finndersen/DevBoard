@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
+from pydantic_ai import Tool
+
 from devboard.agents.events import ConversationEvent
 from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.base import AgentRole
@@ -20,15 +22,22 @@ class BaseAgent(ABC):
         self,
         role: AgentRole,
         model: LanguageModel | None,
+        additional_tools: list[Tool] | None = None,
     ):
         """Initialize base agent with role and model.
 
         Args:
             role: Role defining agent behavior (prompts, tools, context)
             model: Language model instance, or None to use Claude Code's default model
+            additional_tools: Extra tools to add beyond those defined by the role
         """
         self.role = role
         self.model = model
+        self.additional_tools = additional_tools or []
+
+    def get_tools(self) -> list[Tool]:
+        """Get all tools for this agent (role tools + additional tools)."""
+        return self.role.get_tools() + self.additional_tools
 
     async def run(self, prompt_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
         """Execute agent with either a user message or tool approval results.

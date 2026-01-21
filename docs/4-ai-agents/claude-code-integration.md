@@ -38,10 +38,31 @@ agent = ClaudeCodeAgent(
 - `load_session_messages(session_id)`: Complete list of SessionMessage
 - `get_last_session_message(session_id)`: Most recent
 - `load_todo_list(session_id, include_subagents)`: JSON todos from `~/.claude/todos/`
+- `migrate_session_to_directory(session_id, old_working_dir, new_working_dir)`: Migrate session files to new working directory
 
 **SessionMessage**: `uuid`, `timestamp`, `role`, `content`, `tool_calls`, `tool_results`. `text_content` property extracts displayable text
 
 **Content Blocks**: TextBlock, ToolUseBlock, ToolResultBlock
+
+### Session Migration
+
+When a task moves to a different working directory (e.g., from a worktree to the main repository), Claude Code sessions must be migrated to maintain conversation continuity.
+
+**Migration Process** (`migrate_session_to_directory()`):
+1. Locate the session JSONL file in the old project directory
+2. Create new project directory (path-encoded from new working directory)
+3. Move session file and associated session directory (tool results)
+4. Perform in-place path replacement using `sed` to update all path references
+
+**Automatic Migration**: `WorkspaceAllocationService` automatically migrates Claude Code sessions when:
+- `checkout_task_to_main_repo()`: Moving task from worktree to main repo
+- `run_task_agent_in_workspace()`: Slot changes between runs
+
+**Conditions**: Migration only occurs when:
+- Task has an active conversation
+- Conversation engine is `AgentEngine.CLAUDE_CODE`
+- Conversation has an `external_session_id`
+- Working directory actually changes (slot differs)
 
 ## Message Parsing
 

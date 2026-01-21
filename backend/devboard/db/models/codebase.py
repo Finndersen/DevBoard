@@ -14,14 +14,24 @@ if TYPE_CHECKING:
     from .worktree_slot import WorktreeSlot
 
 
-class MergeStrategy(StrEnum):
-    """Strategy for merging feature branches back into base branches."""
+class MergeMethod(StrEnum):
+    """How commits are combined during merge."""
 
-    GITHUB_PR = "github_pr"  # Create a GitHub PR for external review and merge
     SQUASH = "squash"  # Squash all feature branch commits into a single commit
     REBASE = "rebase"  # Rebase feature branch onto base branch (linear history)
     MERGE_COMMIT = "merge_commit"  # Standard merge with a merge commit
-    NONE = "none"  # DevBoard does not perform any git operations (manual handling)
+
+
+class BranchHandling(StrEnum):
+    """Where/how the feature branch is finalized."""
+
+    LOCAL_MERGE = "local_merge"  # Merge locally using merge_method
+    GITHUB_PR = "github_pr"  # Create PR on GitHub, merge via GitHub using merge_method
+    MANUAL = "manual"  # No automatic handling - user manages branch manually
+
+
+# Backwards compatibility alias (deprecated)
+MergeStrategy = MergeMethod
 
 
 class Codebase(Base):
@@ -35,7 +45,8 @@ class Codebase(Base):
     repository_url: Mapped[str | None] = mapped_column(String(512))
     local_path: Mapped[str] = mapped_column(String(512))
     default_branch: Mapped[str] = mapped_column(String(255), default="origin/main")
-    merge_strategy: Mapped[str] = mapped_column(String(50), default=MergeStrategy.SQUASH.value)
+    merge_method: Mapped[str] = mapped_column(String(50), default=MergeMethod.SQUASH.value)
+    branch_handling: Mapped[str] = mapped_column(String(50), default=BranchHandling.LOCAL_MERGE.value)
     max_worktrees: Mapped[int | None] = mapped_column(default=None)
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")

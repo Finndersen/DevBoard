@@ -4,8 +4,8 @@ import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Index
-from sqlalchemy.orm import Mapped, mapped_column, object_session, relationship
+from sqlalchemy import Enum, ForeignKey, Index, select
+from sqlalchemy.orm import Mapped, joinedload, mapped_column, object_session, relationship
 
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
@@ -128,7 +128,17 @@ class Conversation(Base):
             raise RuntimeError(msg)
 
         if self.parent_entity_type == ParentEntityType.TASK:
-            entity = session.get(Task, self.parent_entity_id)
+            # Eager load document relationships for agent context building
+            stmt = (
+                select(Task)
+                .options(
+                    joinedload(Task.specification),
+                    joinedload(Task.implementation_plan),
+                    joinedload(Task.change_summary),
+                )
+                .where(Task.id == self.parent_entity_id)
+            )
+            entity = session.execute(stmt).unique().scalar_one_or_none()
         elif self.parent_entity_type == ParentEntityType.PROJECT:
             entity = session.get(Project, self.parent_entity_id)
         elif self.parent_entity_type == ParentEntityType.CODEBASE:

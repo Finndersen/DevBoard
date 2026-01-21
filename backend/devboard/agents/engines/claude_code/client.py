@@ -49,15 +49,14 @@ class ClaudeClient:
     """Low-level client wrapping ClaudeSDKClient for Claude Code CLI integration.
 
     This client provides a minimal interface to Claude Code's capabilities.
-    For application-level agents with tool handling and document editing,
-    use BaseClaudeAgent instead.
 
     Supports:
     - Session resumption for continuing previous conversations
-    - Custom tool registration via Python functions
+    - Custom tool registration via PydanticAI Tool instances
     - Custom system prompts
-    - Tool filtering via allowed_tools
+    - Tool filtering via allowed_builtin_tools
     - Streaming and non-streaming execution modes
+    - Parallel tool execution for concurrent tool calls
     """
 
     def __init__(

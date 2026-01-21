@@ -4,8 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.core.registry import Registry
-from devboard.integrations.base import BaseIntegration, IntegrationConfigurationError, IntegrationConnectionResult
+from devboard.integrations.base import IntegrationConfigurationError, IntegrationConnectionResult
 from devboard.services.integration_service import IntegrationService, IntegrationTestResult
 
 
@@ -36,14 +35,19 @@ class TestIntegrationService:
         mock_integration_class = Mock()
         mock_integration_class.side_effect = IntegrationConfigurationError("Missing config")
         mock_integration_class.integration_type = "github"
+        mock_integration_class.configuration_schema = Mock()
 
-        # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr="integration_type")
-        service = IntegrationService(mock_config_repository, test_registry)
+        service = IntegrationService(mock_config_repository)
 
         # Mock the config service get_config call to return a mock config
         mock_config = Mock()
-        with patch("devboard.services.integration_service.ConfigService") as mock_config_service_class:
+        with (
+            patch(
+                "devboard.services.integration_service.INTEGRATION_TYPE_MAP",
+                {"github": mock_integration_class},
+            ),
+            patch("devboard.services.integration_service.ConfigService") as mock_config_service_class,
+        ):
             mock_config_service = Mock()
             mock_config_service.get_config.return_value = mock_config
             mock_config_service_class.return_value = mock_config_service
@@ -67,14 +71,19 @@ class TestIntegrationService:
         mock_integration_class = Mock()
         mock_integration_class.return_value = mock_integration
         mock_integration_class.integration_type = "github"
+        mock_integration_class.configuration_schema = Mock()
 
-        # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr="integration_type")
-        service = IntegrationService(mock_config_repository, test_registry)
+        service = IntegrationService(mock_config_repository)
 
         # Mock the config service get_config call to return a mock config
         mock_config = Mock()
-        with patch("devboard.services.integration_service.ConfigService") as mock_config_service_class:
+        with (
+            patch(
+                "devboard.services.integration_service.INTEGRATION_TYPE_MAP",
+                {"github": mock_integration_class},
+            ),
+            patch("devboard.services.integration_service.ConfigService") as mock_config_service_class,
+        ):
             mock_config_service = Mock()
             mock_config_service.get_config.return_value = mock_config
             mock_config_service_class.return_value = mock_config_service
@@ -101,14 +110,19 @@ class TestIntegrationService:
         mock_integration_class = Mock()
         mock_integration_class.return_value = mock_integration
         mock_integration_class.integration_type = "github"
+        mock_integration_class.configuration_schema = Mock()
 
-        # Create test registry with mock integration
-        test_registry = Registry[type[BaseIntegration]]([mock_integration_class], key_attr="integration_type")
-        service = IntegrationService(mock_config_repository, test_registry)
+        service = IntegrationService(mock_config_repository)
 
         # Mock the config service get_config call to return a mock config
         mock_config = Mock()
-        with patch("devboard.services.integration_service.ConfigService") as mock_config_service_class:
+        with (
+            patch(
+                "devboard.services.integration_service.INTEGRATION_TYPE_MAP",
+                {"github": mock_integration_class},
+            ),
+            patch("devboard.services.integration_service.ConfigService") as mock_config_service_class,
+        ):
             mock_config_service = Mock()
             mock_config_service.get_config.return_value = mock_config
             mock_config_service_class.return_value = mock_config_service
@@ -124,23 +138,24 @@ class TestIntegrationService:
     async def test_test_all_integrations(self, mock_config_repository):
         """Test testing all integrations."""
         # Create mock integration classes
-        github_integration_class = AsyncMock()
+        github_integration_class = Mock()
         github_integration_class.integration_type = "github"
-        jira_integration_class = AsyncMock()
+        jira_integration_class = Mock()
         jira_integration_class.integration_type = "jira"
 
-        # Create test registry with both integrations
-        test_registry = Registry[type[BaseIntegration]](
-            [github_integration_class, jira_integration_class], key_attr="integration_type"
-        )
-        service = IntegrationService(mock_config_repository, test_registry)
+        service = IntegrationService(mock_config_repository)
 
         # Mock the test_integration_connection method to return predefined results
         github_result = IntegrationTestResult("github", True)
         jira_result = IntegrationTestResult("jira", False, "Config error", "config_error")
         service.test_integration_connection = AsyncMock(side_effect=[github_result, jira_result])
 
-        results = await service.test_all_integrations()
+        # Patch INTEGRATION_CLASSES to control which integrations are tested
+        with patch(
+            "devboard.services.integration_service.INTEGRATION_CLASSES",
+            [github_integration_class, jira_integration_class],
+        ):
+            results = await service.test_all_integrations()
 
         assert len(results) == 2
         assert results["github"].success

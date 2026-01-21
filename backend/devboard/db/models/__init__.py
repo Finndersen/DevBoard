@@ -1,7 +1,7 @@
 """Database models package."""
 
 from .base import Base
-from .codebase import Codebase, MergeStrategy
+from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation, ParentEntityType
 from .document import Document, DocumentType
@@ -23,6 +23,7 @@ from .worktree_slot import WorktreeSlot
 
 __all__ = [
     "Base",
+    "BranchHandling",
     "Codebase",
     "Configuration",
     "ContextProviderResource",
@@ -33,7 +34,8 @@ __all__ = [
     "HttpMCPConfig",
     "MCPServerConfig",
     "MCPServerType",
-    "MergeStrategy",
+    "MergeMethod",
+    "MergeStrategy",  # Deprecated alias for MergeMethod
     "MessageType",
     "OAuthClientInfo",
     "OAuthProvider",

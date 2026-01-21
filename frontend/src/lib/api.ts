@@ -9,6 +9,11 @@ export interface Project {
   created_at: string
 }
 
+export interface WorkflowActionInfo {
+  key: string
+  label: string
+}
+
 export interface Task {
   id: number
   title: string
@@ -20,6 +25,18 @@ export interface Task {
   created_at: string
   specification_document_id: number
   implementation_plan_document_id: number | null
+  change_summary_document_id: number | null
+  available_workflow_actions: WorkflowActionInfo[]
+}
+
+export interface GitHubPRStatusResponse {
+  merged: boolean
+  mergeable: boolean | null
+  mergeable_state: string
+  state: string
+  review_comments_count: number
+  checks_status: string | null
+  pr_url: string
 }
 
 export interface TaskCreate {
@@ -45,7 +62,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
 
-export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'stream_error' | 'branch_rebased' | 'stash_apply_conflict'
+export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'stream_error' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired'
 
 export interface ConversationMessage {
   event_type: 'message'
@@ -160,7 +177,8 @@ export interface LLMProvider {
   config: Record<string, unknown>
 }
 
-export type MergeStrategy = 'github_pr' | 'squash' | 'rebase' | 'merge_commit' | 'none'
+export type MergeMethod = 'squash' | 'rebase' | 'merge_commit'
+export type BranchHandling = 'local_merge' | 'github_pr' | 'manual'
 
 export interface Codebase {
   id: number
@@ -169,7 +187,8 @@ export interface Codebase {
   repository_url: string | null
   local_path: string
   default_branch: string
-  merge_strategy: MergeStrategy
+  merge_method: MergeMethod
+  branch_handling: BranchHandling
   max_worktrees: number | null
 }
 
@@ -687,6 +706,10 @@ export class ApiClient {
   // Git and Worktree Management
   async getTaskGitStatus(taskId: number | string): Promise<TaskGitStatus> {
     return this.request<TaskGitStatus>(`/api/tasks/${taskId}/git-status`)
+  }
+
+  async getTaskPRStatus(taskId: number | string): Promise<GitHubPRStatusResponse> {
+    return this.request<GitHubPRStatusResponse>(`/api/tasks/${taskId}/pr-status`)
   }
 
   async mergeTaskBranch(taskId: number | string, request: MergeBranchRequest): Promise<MergeBranchResponse> {

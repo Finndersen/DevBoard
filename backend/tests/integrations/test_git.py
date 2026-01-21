@@ -6,6 +6,7 @@ import pytest
 
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandResult
+from devboard.integrations.types import BranchReleaseResult
 
 
 @pytest.fixture
@@ -700,3 +701,136 @@ class TestGetConflictedFiles:
             result = await git.get_conflicted_files()
 
         assert result == []
+
+
+class TestReleaseBranchFromWorktree:
+    """Tests for release_branch_from_worktree method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_branch_not_checked_out(self, temp_git_repo):
+        """Test returns (None, None) when branch is not checked out anywhere."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_get_checked_out_location(branch):
+            return None
+
+        with patch.object(git, "get_checked_out_location", side_effect=mock_get_checked_out_location):
+            result = await git.release_branch_from_worktree("feature-branch")
+
+        assert result == BranchReleaseResult(None, None)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_branch_in_main_repo_with_exclude(self, temp_git_repo):
+        """Test returns (None, None) when branch is in main repo and exclude_main_repo=True."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_get_checked_out_location(branch):
+            return str(temp_git_repo)  # Main repo path
+
+        with patch.object(git, "get_checked_out_location", side_effect=mock_get_checked_out_location):
+            result = await git.release_branch_from_worktree("feature-branch", exclude_main_repo=True)
+
+        assert result == BranchReleaseResult(None, None)
+
+    @pytest.mark.asyncio
+    async def test_releases_branch_in_worktree_with_uncommitted_changes(self, temp_git_repo):
+        """Test stashes and detaches when branch is in worktree with uncommitted changes."""
+        git = GitRepoIntegration(temp_git_repo)
+        worktree_path = "/path/to/worktree"
+        stash_sha = "abc123def456"
+        calls = []
+
+        async def mock_get_checked_out_location(branch):
+            return worktree_path
+
+        with (
+            patch.object(git, "get_checked_out_location", side_effect=mock_get_checked_out_location),
+            patch("devboard.integrations.git.GitRepoIntegration") as MockGit,
+        ):
+            mock_worktree_git = MockGit.return_value
+
+            async def mock_has_uncommitted():
+                calls.append("has_uncommitted_changes")
+                return True
+
+            async def mock_stash_push(include_untracked=False):
+                calls.append(f"stash_push(include_untracked={include_untracked})")
+                return stash_sha
+
+            async def mock_switch_detach():
+                calls.append("switch_detach")
+
+            mock_worktree_git.has_uncommitted_changes = mock_has_uncommitted
+            mock_worktree_git.stash_push = mock_stash_push
+            mock_worktree_git.switch_detach = mock_switch_detach
+
+            result = await git.release_branch_from_worktree("feature-branch")
+
+        assert result.worktree_path == worktree_path
+        assert result.stash_sha == stash_sha
+        assert "has_uncommitted_changes" in calls
+        assert "stash_push(include_untracked=True)" in calls
+        assert "switch_detach" in calls
+
+    @pytest.mark.asyncio
+    async def test_releases_branch_in_worktree_without_uncommitted_changes(self, temp_git_repo):
+        """Test only detaches when branch is in worktree without uncommitted changes."""
+        git = GitRepoIntegration(temp_git_repo)
+        worktree_path = "/path/to/worktree"
+        calls = []
+
+        async def mock_get_checked_out_location(branch):
+            return worktree_path
+
+        with (
+            patch.object(git, "get_checked_out_location", side_effect=mock_get_checked_out_location),
+            patch("devboard.integrations.git.GitRepoIntegration") as MockGit,
+        ):
+            mock_worktree_git = MockGit.return_value
+
+            async def mock_has_uncommitted():
+                calls.append("has_uncommitted_changes")
+                return False
+
+            async def mock_switch_detach():
+                calls.append("switch_detach")
+
+            mock_worktree_git.has_uncommitted_changes = mock_has_uncommitted
+            mock_worktree_git.switch_detach = mock_switch_detach
+
+            result = await git.release_branch_from_worktree("feature-branch")
+
+        assert result.worktree_path == worktree_path
+        assert result.stash_sha is None
+        assert "has_uncommitted_changes" in calls
+        assert "switch_detach" in calls
+
+    @pytest.mark.asyncio
+    async def test_releases_branch_in_main_repo_when_not_excluded(self, temp_git_repo):
+        """Test releases branch in main repo when exclude_main_repo=False."""
+        git = GitRepoIntegration(temp_git_repo)
+        calls = []
+
+        async def mock_get_checked_out_location(branch):
+            return str(temp_git_repo)  # Main repo path
+
+        with (
+            patch.object(git, "get_checked_out_location", side_effect=mock_get_checked_out_location),
+            patch("devboard.integrations.git.GitRepoIntegration") as MockGit,
+        ):
+            mock_worktree_git = MockGit.return_value
+
+            async def mock_has_uncommitted():
+                calls.append("has_uncommitted_changes")
+                return False
+
+            async def mock_switch_detach():
+                calls.append("switch_detach")
+
+            mock_worktree_git.has_uncommitted_changes = mock_has_uncommitted
+            mock_worktree_git.switch_detach = mock_switch_detach
+
+            result = await git.release_branch_from_worktree("feature-branch", exclude_main_repo=False)
+
+        assert result.worktree_path == str(temp_git_repo)
+        assert "switch_detach" in calls

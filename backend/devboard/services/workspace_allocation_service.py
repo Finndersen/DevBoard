@@ -14,8 +14,12 @@ from typing import Literal
 
 import logfire
 
+from devboard.agents.engines.agent_engines import AgentEngine
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
+from devboard.db.models.conversation import ParentEntityType
+from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
@@ -77,15 +81,18 @@ class WorkspaceAllocationService:
         self,
         worktree_slot_repo: WorktreeSlotRepository,
         task_repo: TaskRepository,
+        conversation_repo: ConversationRepository,
     ):
         """Initialize service.
 
         Args:
             worktree_slot_repo: Repository for worktree slot operations
             task_repo: Repository for task operations
+            conversation_repo: Repository for conversation operations
         """
         self.worktree_slot_repo = worktree_slot_repo
         self.task_repo = task_repo
+        self.conversation_repo = conversation_repo
         self.task_git_service = TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
 
     async def slot_has_uncommitted_changes(self, slot: WorktreeSlot) -> bool:
@@ -93,6 +100,36 @@ class WorkspaceAllocationService:
         git = GitRepoIntegration(slot.path)
         has_changes = await git.has_uncommitted_changes()
         return has_changes
+
+    async def _migrate_claude_session_if_needed(
+        self,
+        task: Task,
+        new_working_dir: str,
+    ) -> None:
+        """Migrate Claude Code session if the task has an active Claude Code conversation.
+
+        Automatically finds the session file and migrates it to the new working directory.
+
+        Args:
+            task: Task instance
+            new_working_dir: The new working directory path
+        """
+        conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
+        if not conversation or conversation.engine != AgentEngine.CLAUDE_CODE:
+            return
+        if not conversation.external_session_id:
+            return
+
+        session_service = ClaudeCodeSessionService()
+        try:
+            result = await session_service.migrate_session_to_directory(
+                session_id=conversation.external_session_id,
+                new_working_dir=new_working_dir,
+            )
+            if result:
+                logfire.info(f"Migrated Claude Code session for task {task.id} to {new_working_dir}")
+        except FileNotFoundError:
+            logfire.debug(f"No Claude Code session file found for task {task.id}, skipping migration")
 
     async def allocate_for_task(self, task: Task) -> WorktreeSlot:
         """Find an appropriate slot and lock it for a task.
@@ -198,14 +235,13 @@ class WorkspaceAllocationService:
         Raises:
             ValueError: If git operations fail
         """
-        # Get current branch dynamically
-        current_branch = await slot.get_current_branch()
+        slot_git = GitRepoIntegration(slot.path)
+        current_branch = await slot_git.get_current_branch()
 
         # Checkout branch if different
         if current_branch != branch_name:
             logfire.info(f"Checking out branch {branch_name} in slot {slot.id}")
-            git = GitRepoIntegration(slot.path)
-            await git.checkout_branch(branch_name)
+            await slot_git.checkout_branch(branch_name)
             return True
 
         logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
@@ -275,7 +311,7 @@ class WorkspaceAllocationService:
 
         for slot in locked_slots:
             # Check age-based failsafe based on last_used_at
-            # SQLite stores datetimes without timezone, so we need to treat as UTC
+            # Database returns naive datetimes, so add UTC timezone for comparison
             last_used = slot.last_used_at.replace(tzinfo=datetime.UTC)
             age = datetime.datetime.now(datetime.UTC) - last_used
             if age > datetime.timedelta(hours=1):
@@ -485,6 +521,10 @@ class WorkspaceAllocationService:
 
                 # Only emit allocation event if slot changed (not sticky reuse)
                 if previous_slot is None or slot.id != previous_slot.id:
+                    await self._migrate_claude_session_if_needed(
+                        task=task,
+                        new_working_dir=slot.path,
+                    )
                     yield SystemEvent(
                         type=SystemEventType.WORKSPACE_ALLOCATE,
                         data={"task_id": task.id, "slot_id": slot.id},
@@ -554,3 +594,63 @@ class WorkspaceAllocationService:
             if slot:
                 self.release_slot(slot)
                 logfire.info(f"Released workspace {slot.path} for task {task.id}")
+
+    async def checkout_task_to_main_repo(self, task: Task) -> None:
+        """Checkout a task's branch to the main repository.
+
+        This flow:
+        1. Releases the branch from any worktree (stash + detach)
+        2. Checks out the task's branch in the main repository
+        3. Applies the stashed changes to the main repository
+        4. Assigns (but does NOT lock) the main repo slot to the task
+
+        If steps 2 or 3 fail, the worktree is rolled back to its original state.
+
+        Args:
+            task: Task instance
+
+        Raises:
+            ValueError: If task has no branch name, main repo is dirty, or operation fails
+        """
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch name configured")
+
+        main_git = GitRepoIntegration(task.codebase.local_path)
+
+        # Check main repo is clean
+        if await main_git.has_uncommitted_changes():
+            raise ValueError("Main repository has uncommitted changes")
+
+        # Release branch from worktree if needed (stash + detach)
+        release_result = await main_git.release_branch_from_worktree(task.branch_name)
+
+        try:
+            # Checkout branch in main repository
+            await main_git.checkout_branch(task.branch_name)
+            logfire.info(f"Checked out branch {task.branch_name} in main repo for task {task.id}")
+
+            # Apply stashed changes to main repository
+            if release_result.stash_sha:
+                await main_git.stash_apply(release_result.stash_sha)
+                logfire.info(f"Applied stashed changes to main repo for task {task.id}")
+
+        except Exception as e:
+            # ROLLBACK: Restore worktree to original state
+            if release_result.worktree_path:
+                logfire.warning(f"Rolling back worktree state after checkout failure for task {task.id}: {e}")
+                worktree_git = GitRepoIntegration(release_result.worktree_path)
+                await worktree_git.checkout_branch(task.branch_name)
+                if release_result.stash_sha:
+                    await worktree_git.stash_apply(release_result.stash_sha)
+            raise
+
+        # Migrate Claude Code session to main repo (finds session file automatically)
+        await self._migrate_claude_session_if_needed(
+            task=task,
+            new_working_dir=task.codebase.local_path,
+        )
+
+        # Assign (but don't lock) the main repo slot to this task
+        main_slot = self.worktree_slot_repo.get_main_slot_for_codebase(task.codebase_id)
+        self.worktree_slot_repo.assign_slot(main_slot, task)
+        logfire.info(f"Assigned main repo slot to task {task.id}")

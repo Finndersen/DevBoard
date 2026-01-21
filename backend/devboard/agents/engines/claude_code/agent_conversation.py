@@ -1,8 +1,10 @@
 """Claude Code agent conversation service with virtual tool calling."""
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import logfire
+from pydantic_ai import Tool
 
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
@@ -18,7 +20,15 @@ from devboard.agents.engines.claude_code.session import (
     SessionMessage,
     SessionMessageRole,
 )
-from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
+from devboard.agents.events import (
+    ConversationEvent,
+    MessageRole,
+    SystemEvent,
+    SystemEventType,
+    TextMessage,
+    ToolCall,
+    ToolResult,
+)
 from devboard.agents.language_models import llm_registry
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
@@ -29,15 +39,17 @@ from devboard.db.repositories.conversation import ConversationRepository
 
 
 class ClaudeCodeConversationService(BaseAgentConversationService):
-    """Service for Claude Code agent conversations with virtual tool calling.
+    """Service for managing Claude Code agent conversations.
 
     This service manages:
     - Claude Code session continuity via external_session_id
-    - Virtual tool call parsing and execution (from session history)
-    - Tool approval workflow
+    - Streaming events from agent execution
+    - Loading conversation history from Claude Code session files
+    - Converting session messages to ConversationEvents (text, tool calls, results)
 
-    Note: Claude Code manages its own session files. This service does NOT
-    store messages in the database - it reads from session files as needed.
+    Note: Claude Code manages its own session storage in ~/.claude/projects.
+    This service does NOT store messages in the database - it reads from
+    session files as needed.
     """
 
     def __init__(
@@ -46,6 +58,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         role: AgentRole,
         conversation_repository: ConversationRepository,
         codebase_path: str | None = None,
+        additional_tools: list[Tool] | None = None,
     ):
         """Initialize Claude Code conversation service.
 
@@ -54,8 +67,9 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations (saving session ID)
             codebase_path: Optional path to codebase directory
+            additional_tools: Optional extra tools beyond those defined by the role
         """
-        super().__init__(conversation, role, conversation_repository)
+        super().__init__(conversation, role, conversation_repository, additional_tools)
         self.codebase_path = codebase_path
 
     @property
@@ -89,16 +103,29 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             agent = self._get_agent()
 
             # Stream events from agent execution
-            async for event in agent.stream_events(message_or_approvals):
-                # Update session_id if changed
-                if agent.session_id != self.conversation.external_session_id:
-                    logfire.info(
-                        f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
-                    )
-                    self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
-                    self.conversation_repo.commit()
+            try:
+                async for event in agent.stream_events(message_or_approvals):
+                    # Update session_id if changed
+                    if agent.session_id != self.conversation.external_session_id:
+                        logfire.info(
+                            f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
+                        )
+                        self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
+                        self.conversation_repo.commit()
 
-                yield event
+                    yield event
+            except FileNotFoundError:
+                # Session file was cleaned up - reset session ID and notify user
+                logfire.info(
+                    f"Session file not found during streaming for conversation {self.conversation.id}, resetting session ID"
+                )
+                self.conversation_repo.update_external_session_id(self.conversation, None)
+                self.conversation_repo.commit()
+                yield SystemEvent(
+                    type=SystemEventType.SESSION_EXPIRED,
+                    data={"message": "Claude session was cleaned up, starting new conversation"},
+                    timestamp=datetime.now(UTC),
+                )
 
     def _get_agent(self) -> ClaudeCodeAgent:
         """Create agent with session_id"""
@@ -116,6 +143,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
             model=model,
             session_id=self.conversation.external_session_id,
             working_dir=codebase_path,
+            additional_tools=self.additional_tools,
         )
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
@@ -128,6 +156,7 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
         Returns:
             List of ConversationEvent instances in chronological order.
             Returns empty list if no session_id (conversation hasn't started or was cleared).
+            Returns a SESSION_EXPIRED event if the session file was cleaned up.
         """
         # Return empty list if no session exists yet
         if not self.session_id:
@@ -135,7 +164,20 @@ class ClaudeCodeConversationService(BaseAgentConversationService):
 
         # Load low-level session messages
         claude_session_service = ClaudeCodeSessionService()
-        session_messages = claude_session_service.load_session_messages(self.session_id)
+        try:
+            session_messages = claude_session_service.load_session_messages(self.session_id)
+        except FileNotFoundError:
+            # Session file was cleaned up - reset session ID and return warning
+            logfire.info(f"Session file not found for conversation {self.conversation.id}, resetting session ID")
+            self.conversation_repo.update_external_session_id(self.conversation, None)
+            self.conversation_repo.commit()
+            return [
+                SystemEvent(
+                    type=SystemEventType.SESSION_EXPIRED,
+                    data={"message": "Claude session was cleaned up, starting new conversation"},
+                    timestamp=datetime.now(UTC),
+                )
+            ]
 
         # Convert to conversation events with filtering
         return self._session_messages_to_events(session_messages)

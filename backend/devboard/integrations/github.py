@@ -1,6 +1,11 @@
 """GitHub integration for accessing PRs, commits, issues, and branches."""
 
-from typing import Any
+import asyncio
+import re
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Literal, cast
 
 import logfire
 from github import (
@@ -11,8 +16,17 @@ from github import (
     UnknownObjectException,
 )
 from github.Auth import Token
+from github.Branch import Branch
+from github.Commit import Commit
+from github.CommitCombinedStatus import CommitCombinedStatus
+from github.Issue import Issue
+from github.PullRequest import PullRequest
+from github.PullRequestComment import PullRequestComment
+from github.PullRequestReview import PullRequestReview
+from github.Repository import Repository
 
 from devboard.config.integration_configs import GitHubIntegrationConfig
+from devboard.db.models.codebase import MergeMethod
 
 from .base import (
     AuthenticationError,
@@ -23,6 +37,442 @@ from .base import (
     ResourceNotFoundError,
 )
 
+PRState = Literal["open", "closed"]
+MergeableState = Literal["clean", "dirty", "blocked", "behind", "unstable", "unknown", "has_hooks"]
+CIState = Literal["success", "pending", "failure", "error"]
+
+
+async def _github_api_call[T](method: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    """Execute a synchronous PyGithub API call asynchronously in a thread pool.
+
+    Wraps sync PyGithub methods to run in a thread pool executor, enabling proper
+    async behavior and consistent error handling across all GitHub API calls.
+
+    Args:
+        method: The PyGithub method to call
+        *args: Positional arguments to pass to the method
+        **kwargs: Keyword arguments to pass to the method
+
+    Returns:
+        The result of the API call
+
+    Raises:
+        AuthenticationError: If GitHub authentication fails
+        RateLimitError: If GitHub rate limit exceeded
+        ResourceNotFoundError: If resource not found
+        IntegrationError: For other GitHub errors
+    """
+
+    def _call() -> T:
+        return method(*args, **kwargs)
+
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _call)
+    except BadCredentialsException as e:
+        raise AuthenticationError(f"GitHub authentication failed: {e}") from e
+    except RateLimitExceededException as e:
+        raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
+    except UnknownObjectException as e:
+        raise ResourceNotFoundError(f"Resource not found: {e}") from e
+    except GithubException as e:
+        logfire.error(f"GitHub API error in {method.__name__}: {e}")
+        raise IntegrationError(f"GitHub error: {e}") from e
+
+
+@dataclass
+class PullRequestMergeResult:
+    """Result of merging a pull request."""
+
+    merged: bool
+    sha: str | None
+    message: str
+
+
+@dataclass
+class CICheck:
+    """Individual CI status check."""
+
+    context: str
+    state: CIState
+    description: str | None
+
+
+@dataclass
+class PRStatus:
+    """Comprehensive PR status including CI checks."""
+
+    pr_number: int
+    state: PRState
+    merged: bool
+    mergeable: bool | None
+    mergeable_state: MergeableState | None
+    ci_status: CIState | None
+    ci_checks: list[CICheck]
+
+
+@dataclass
+class ReviewComment:
+    """A single review comment with metadata."""
+
+    id: int
+    author: str
+    body: str
+    path: str
+    line: int | None
+    created_at: datetime | None
+    diff_hunk: str | None
+    in_reply_to_id: int | None
+
+
+@dataclass
+class CommentThread:
+    """A thread of comments starting with an original comment and its replies."""
+
+    original: ReviewComment
+    replies: list[ReviewComment]
+
+
+@dataclass
+class ReviewWithComments:
+    """A review with its associated comment threads."""
+
+    id: int
+    author: str
+    state: str
+    body: str
+    submitted_at: datetime | None
+    comment_threads: list[CommentThread]
+
+
+@dataclass
+class PRFeedback:
+    """Complete PR feedback including reviews with comments and standalone comment threads."""
+
+    reviews: list[ReviewWithComments]
+    standalone_threads: list[CommentThread]
+
+
+class GitHubPR:
+    """Wrapper around PyGithub PullRequest with enhanced methods."""
+
+    def __init__(self, pr: PullRequest, repo: "GitHubRepository"):
+        """Initialize with a PyGithub PullRequest object and its repository.
+
+        Args:
+            pr: PyGithub PullRequest instance
+            repo: GitHubRepository instance this PR belongs to
+        """
+        self._pr = pr
+        self._repo = repo
+
+    @property
+    def pr(self) -> PullRequest:
+        """The underlying PyGithub PullRequest object."""
+        return self._pr
+
+    @property
+    def repo(self) -> "GitHubRepository":
+        """The repository this PR belongs to."""
+        return self._repo
+
+    @property
+    def number(self) -> int:
+        """The pull request number."""
+        return self._pr.number
+
+    async def get_comments(self) -> list[PullRequestComment]:
+        """Get inline review comments for the pull request."""
+        comments = await _github_api_call(self._pr.get_review_comments)
+        return list(comments)
+
+    async def get_reviews(self) -> list[PullRequestReview]:
+        """Get reviews for the pull request.
+
+        Returns reviews with state (APPROVED, CHANGES_REQUESTED, COMMENTED, etc.),
+        reviewer info, and review body.
+        """
+        reviews = await _github_api_call(self._pr.get_reviews)
+        return list(reviews)
+
+    async def get_feedback(self) -> PRFeedback:
+        """Get comprehensive PR feedback including reviews with associated comment threads.
+
+        Fetches both reviews and comments, then:
+        1. Associates comments with their parent reviews using pull_request_review_id
+        2. Groups reply comments into threads using in_reply_to_id
+        3. Separates standalone comments (not associated with any review)
+
+        Returns:
+            PRFeedback containing reviews with their comment threads and standalone threads
+        """
+        raw_reviews = list(await _github_api_call(self._pr.get_reviews))
+        raw_comments = list(await _github_api_call(self._pr.get_review_comments))
+
+        # Convert raw comments to ReviewComment dataclass
+        def to_review_comment(c: PullRequestComment) -> ReviewComment:
+            return ReviewComment(
+                id=c.id,
+                author=c.user.login if c.user else "Unknown",
+                body=c.body or "",
+                path=c.path or "unknown",
+                line=c.line or c.original_line,
+                created_at=c.created_at,
+                diff_hunk=c.diff_hunk,
+                in_reply_to_id=c.in_reply_to_id,
+            )
+
+        comments = [to_review_comment(c) for c in raw_comments]
+
+        # Group comments by review id
+        comments_by_review: dict[int | None, list[ReviewComment]] = {}
+        for comment, raw_comment in zip(comments, raw_comments, strict=True):
+            review_id = raw_comment.pull_request_review_id
+            if review_id not in comments_by_review:
+                comments_by_review[review_id] = []
+            comments_by_review[review_id].append(comment)
+
+        # Build threads from comments
+        def build_threads(comment_list: list[ReviewComment]) -> list[CommentThread]:
+            # Find root comments (not replies)
+            root_comments = [c for c in comment_list if c.in_reply_to_id is None]
+
+            # Build reply lookup
+            replies_by_parent: dict[int, list[ReviewComment]] = {}
+            for c in comment_list:
+                if c.in_reply_to_id is not None:
+                    if c.in_reply_to_id not in replies_by_parent:
+                        replies_by_parent[c.in_reply_to_id] = []
+                    replies_by_parent[c.in_reply_to_id].append(c)
+
+            threads = []
+            for root in root_comments:
+                # Collect all replies (including nested) - flatten into single list
+                all_replies: list[ReviewComment] = []
+                to_process = [root.id]
+                processed: set[int] = set()
+
+                while to_process:
+                    parent_id = to_process.pop(0)
+                    if parent_id in processed:
+                        continue
+                    processed.add(parent_id)
+
+                    if parent_id in replies_by_parent:
+                        for reply in replies_by_parent[parent_id]:
+                            all_replies.append(reply)
+                            to_process.append(reply.id)
+
+                # Sort replies by created_at
+                all_replies.sort(key=lambda r: r.created_at or datetime.min)
+                threads.append(CommentThread(original=root, replies=all_replies))
+
+            return threads
+
+        # Build reviews with comment threads
+        reviews_with_comments = []
+        for review in raw_reviews:
+            review_comments = comments_by_review.get(review.id, [])
+            threads = build_threads(review_comments)
+
+            reviews_with_comments.append(
+                ReviewWithComments(
+                    id=review.id,
+                    author=review.user.login if review.user else "Unknown",
+                    state=review.state or "UNKNOWN",
+                    body=review.body or "",
+                    submitted_at=review.submitted_at,
+                    comment_threads=threads,
+                )
+            )
+
+        # Build standalone threads (comments not associated with any review)
+        standalone_comments = comments_by_review.get(None, [])
+        standalone_threads = build_threads(standalone_comments)
+
+        return PRFeedback(
+            reviews=reviews_with_comments,
+            standalone_threads=standalone_threads,
+        )
+
+    async def get_status(self) -> PRStatus:
+        """Get comprehensive PR status including CI checks.
+
+        Combines PR metadata (state, mergeable) with CI status checks.
+        Uses the stored repository reference to fetch CI status.
+        """
+        ci_status: CIState | None = None
+        ci_checks: list[CICheck] = []
+
+        head_sha = self._pr.head.sha if self._pr.head else None
+        if head_sha:
+            try:
+                combined = await self._repo.get_combined_status(head_sha)
+                ci_status = cast(CIState, combined.state)
+                ci_checks = [
+                    CICheck(
+                        context=s.context,
+                        state=cast(CIState, s.state),
+                        description=s.description,
+                    )
+                    for s in combined.statuses
+                ]
+            except IntegrationError:
+                pass  # CI status unavailable
+
+        return PRStatus(
+            pr_number=self._pr.number,
+            state=cast(PRState, self._pr.state),
+            merged=self._pr.merged,
+            mergeable=self._pr.mergeable,
+            mergeable_state=cast(MergeableState | None, self._pr.mergeable_state),
+            ci_status=ci_status,
+            ci_checks=ci_checks,
+        )
+
+    async def merge(
+        self,
+        merge_method: MergeMethod = MergeMethod.SQUASH,
+        commit_title: str | None = None,
+        commit_message: str | None = None,
+    ) -> PullRequestMergeResult:
+        """Merge the pull request.
+
+        Args:
+            merge_method: How to merge - squash, rebase, or merge_commit (default: squash)
+            commit_title: Optional custom commit title
+            commit_message: Optional custom commit message
+
+        Returns:
+            Merge result including merge commit SHA
+
+        Raises:
+            AuthenticationError: If GitHub authentication fails
+            RateLimitError: If GitHub rate limit exceeded
+            IntegrationError: For other GitHub errors (including merge conflicts)
+        """
+        # Map MergeMethod to GitHub API merge_method parameter
+        github_merge_method_map = {
+            MergeMethod.SQUASH: "squash",
+            MergeMethod.REBASE: "rebase",
+            MergeMethod.MERGE_COMMIT: "merge",
+        }
+        github_merge_method = github_merge_method_map[merge_method]
+
+        # Build merge parameters
+        merge_params: dict[str, Any] = {"merge_method": github_merge_method}
+        if commit_title:
+            merge_params["commit_title"] = commit_title
+        if commit_message:
+            merge_params["commit_message"] = commit_message
+
+        result = await _github_api_call(self._pr.merge, **merge_params)
+        return PullRequestMergeResult(
+            merged=result.merged,
+            sha=result.sha,
+            message=result.message,
+        )
+
+
+class GitHubRepository:
+    """Wrapper around PyGithub Repository with async methods.
+
+    Provides repository-scoped operations without requiring owner/repo
+    parameters on each call. Encapsulates error handling for GitHub API calls.
+    """
+
+    def __init__(self, repo: Repository):
+        """Initialize with a PyGithub Repository object.
+
+        Args:
+            repo: PyGithub Repository instance
+        """
+        self._repo = repo
+
+    @property
+    def owner(self) -> str:
+        """Repository owner login name."""
+        return self._repo.owner.login
+
+    @property
+    def name(self) -> str:
+        """Repository name."""
+        return self._repo.name
+
+    @property
+    def full_name(self) -> str:
+        """Full repository name (owner/repo)."""
+        return self._repo.full_name
+
+    async def get_pull_request(self, pr_number: int) -> GitHubPR:
+        """Fetch a pull request and return a wrapped GitHubPR instance.
+
+        Args:
+            pr_number: Pull request number
+
+        Returns:
+            GitHubPR wrapper with PR-specific methods and reference to this repository
+
+        Raises:
+            ResourceNotFoundError: If PR not found
+            AuthenticationError: If GitHub auth fails
+            RateLimitError: If rate limited
+            IntegrationError: For other GitHub errors
+        """
+        pr_obj = await _github_api_call(self._repo.get_pull, pr_number)
+        return GitHubPR(pr_obj, self)
+
+    async def get_commit(self, sha: str) -> Commit:
+        """Get details of a specific commit."""
+        return await _github_api_call(self._repo.get_commit, sha)
+
+    async def get_issue(self, issue_number: int) -> Issue:
+        """Get details of a specific issue."""
+        return await _github_api_call(self._repo.get_issue, issue_number)
+
+    async def list_branches(self) -> list[Branch]:
+        """List branches in the repository."""
+        branches = await _github_api_call(self._repo.get_branches)
+        return list(branches)
+
+    async def find_pull_request_for_branch(self, head_branch: str) -> PullRequest | None:
+        """Find an existing open PR for the given head branch.
+
+        Args:
+            head_branch: The head branch name (without owner prefix)
+
+        Returns:
+            The PullRequest if found, None otherwise
+        """
+        # PyGithub expects head in format "owner:branch" for cross-repo PRs
+        head = f"{self._repo.owner.login}:{head_branch}"
+        pulls = await _github_api_call(self._repo.get_pulls, state="open", head=head)
+        for pr in pulls:
+            return pr  # Return first match
+        return None
+
+    async def create_pull_request(
+        self,
+        title: str,
+        body: str,
+        head: str,
+        base: str = "main",
+    ) -> PullRequest:
+        """Create a new pull request."""
+        return await _github_api_call(self._repo.create_pull, title=title, body=body, head=head, base=base)
+
+    async def get_combined_status(self, ref: str) -> CommitCombinedStatus:
+        """Get combined status checks for a ref (branch or commit SHA).
+
+        Returns the combined state (success, pending, failure) and individual check statuses.
+        """
+
+        def _get_combined_status() -> CommitCombinedStatus:
+            commit = self._repo.get_commit(ref)
+            return commit.get_combined_status()
+
+        return await _github_api_call(_get_combined_status)
+
 
 class GitHubIntegration(BaseIntegration):
     """Integration for GitHub API access."""
@@ -30,158 +480,86 @@ class GitHubIntegration(BaseIntegration):
     integration_type = "github"
     configuration_schema = GitHubIntegrationConfig
 
+    @staticmethod
+    def parse_repo_url(url: str) -> tuple[str, str]:
+        """Parse owner and repo from a GitHub repository URL.
+
+        Supports formats:
+        - https://github.com/owner/repo
+        - https://github.com/owner/repo.git
+        - git@github.com:owner/repo.git
+
+        Args:
+            url: GitHub repository URL
+
+        Returns:
+            Tuple of (owner, repo)
+
+        Raises:
+            ValueError: If URL format is not recognized
+        """
+        # HTTPS format: https://github.com/owner/repo(.git)?
+        https_match = re.match(r"https://github\.com/([^/]+)/([^/.]+)(?:\.git)?", url)
+        if https_match:
+            return https_match.group(1), https_match.group(2)
+
+        # SSH format: git@github.com:owner/repo.git
+        ssh_match = re.match(r"git@github\.com:([^/]+)/([^/.]+)(?:\.git)?", url)
+        if ssh_match:
+            return ssh_match.group(1), ssh_match.group(2)
+
+        raise ValueError(f"Unrecognized GitHub repository URL format: {url}")
+
     def __init__(self, config: GitHubIntegrationConfig):
         """Initialize with GitHub configuration and client."""
         super().__init__(config)
-        try:
-            self.client = Github(auth=Token(config.api_token), base_url=config.base_url)
-            logfire.info("Initialized GitHub integration")
-        except Exception as e:
-            logfire.error(f"Failed to initialize GitHub integration: {e}")
-            raise AuthenticationError(f"Failed to initialize GitHub: {e}") from e
+        self.client = Github(auth=Token(config.api_token), base_url=config.base_url)
+        logfire.info("Initialized GitHub integration")
 
     async def test_connection(self) -> IntegrationConnectionResult:
         """Test GitHub API connection."""
         try:
-            # Test connection by getting current user info
-            user = self.client.get_user()
+            user = await _github_api_call(self.client.get_user)
             return IntegrationConnectionResult(
                 success=True, message=f"Successfully connected to GitHub as {user.login}"
             )
-        except BadCredentialsException:
+        except AuthenticationError:
             return IntegrationConnectionResult(
                 success=False, message="GitHub authentication failed: Invalid credentials"
             )
-        except RateLimitExceededException as e:
-            return IntegrationConnectionResult(success=False, message=f"GitHub rate limit exceeded: {e}")
+        except RateLimitError as e:
+            return IntegrationConnectionResult(success=False, message=str(e))
 
-    async def get_pull_request(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
-        """Get details of a specific pull request."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            pr = repo_obj.get_pull(pr_number)
-            return pr.raw_data  # type: ignore[return-value]
-        except UnknownObjectException as e:
-            raise ResourceNotFoundError(f"Pull request #{pr_number} not found in {owner}/{repo}") from e
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in get_pull_request({owner}/{repo}#{pr_number}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+    async def get_repository(self, owner: str, repo: str) -> GitHubRepository:
+        """Get a repository wrapper for the given owner/repo.
 
-    async def get_pull_request_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
-        """Get comments for a pull request."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            pr = repo_obj.get_pull(pr_number)
-            comments = pr.get_review_comments()
-            return [comment.raw_data for comment in comments]  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in get_pull_request_comments({owner}/{repo}#{pr_number}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+        Args:
+            owner: Repository owner (username or organization)
+            repo: Repository name
 
-    async def get_commit(self, owner: str, repo: str, sha: str) -> dict[str, Any]:
-        """Get details of a specific commit."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            commit = repo_obj.get_commit(sha)
-            return commit.raw_data  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in get_commit({owner}/{repo}/{sha}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+        Returns:
+            GitHubRepository wrapper with repository-scoped methods
+        """
+        repo_obj = await _github_api_call(self.client.get_repo, f"{owner}/{repo}")
+        return GitHubRepository(repo_obj)
 
-    async def get_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
-        """Get details of a specific issue."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            issue = repo_obj.get_issue(issue_number)
-            return issue.raw_data  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in get_issue({owner}/{repo}#{issue_number}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+    async def get_repository_from_url(self, url: str) -> GitHubRepository:
+        """Convenience method to get a repository wrapper from a GitHub URL.
 
-    async def get_repository(self, owner: str, repo: str) -> dict[str, Any]:
-        """Get repository information."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            return repo_obj.raw_data  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in get_repository({owner}/{repo}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+        Args:
+            url: GitHub repository URL (https or SSH format)
 
-    async def list_branches(self, owner: str, repo: str) -> list[dict[str, Any]]:
-        """List branches in a repository."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            branches = repo_obj.get_branches()
-            return [branch.raw_data for branch in branches]  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in list_branches({owner}/{repo}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+        Returns:
+            GitHubRepository wrapper with repository-scoped methods
+        """
+        owner, repo = self.parse_repo_url(url)
+        return await self.get_repository(owner, repo)
 
-    async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> dict[str, Any]:
+    async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> list[Issue]:
         """Search issues across GitHub."""
-        try:
-            # Build search query
-            search_query = query
-            if owner and repo:
-                search_query += f" repo:{owner}/{repo}"
+        search_query = query
+        if owner and repo:
+            search_query += f" repo:{owner}/{repo}"
 
-            issues = self.client.search_issues(search_query)
-
-            # Convert to dict format similar to REST API response
-            return {
-                "items": [issue.raw_data for issue in issues],
-                "total_count": issues.totalCount,
-            }  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in search_issues({query}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
-
-    async def create_pull_request(
-        self,
-        owner: str,
-        repo: str,
-        title: str,
-        body: str,
-        head: str,
-        base: str = "main",
-    ) -> dict[str, Any]:
-        """Create a new pull request."""
-        try:
-            repo_obj = self.client.get_repo(f"{owner}/{repo}")
-            pr = repo_obj.create_pull(title=title, body=body, head=head, base=base)
-            return pr.raw_data  # type: ignore[return-value]
-        except BadCredentialsException as e:
-            raise AuthenticationError(f"GitHub authentication failed: {e}") from e
-        except RateLimitExceededException as e:
-            raise RateLimitError(f"GitHub rate limit exceeded: {e}") from e
-        except GithubException as e:
-            logfire.error(f"GitHub error in create_pull_request({owner}/{repo}): {e}")
-            raise IntegrationError(f"GitHub error: {e}") from e
+        results = await _github_api_call(self.client.search_issues, search_query)
+        return list(results)

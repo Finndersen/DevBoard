@@ -4,7 +4,14 @@ import datetime
 from collections.abc import AsyncIterator, Generator
 
 import logfire
-from pydantic_ai import Agent, AgentRunResultEvent, AgentStreamEvent, FunctionToolCallEvent, FunctionToolResultEvent
+from pydantic_ai import (
+    Agent,
+    AgentRunResultEvent,
+    AgentStreamEvent,
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    Tool,
+)
 from pydantic_ai.messages import (
     FinalResultEvent,
     ModelMessage,
@@ -58,6 +65,7 @@ class InternalAgent(BaseAgent):
         role: AgentRole,
         model: LanguageModel,
         conversation_history: list[ModelMessage] | None = None,
+        additional_tools: list[Tool] | None = None,
     ):
         """Initialize internal agent with role.
 
@@ -65,8 +73,9 @@ class InternalAgent(BaseAgent):
             role: Role defining agent behavior (prompts, tools, context)
             model: Language model to use
             conversation_history: Previous conversation messages
+            additional_tools: Extra tools to add beyond those defined by the role
         """
-        super().__init__(role, model)
+        super().__init__(role, model, additional_tools)
         self.conversation_history = conversation_history or []
         self.last_run_result: AgentRunResult | None = None
 
@@ -75,7 +84,7 @@ class InternalAgent(BaseAgent):
         agent = Agent(
             self._get_model(),
             system_prompt=self.role.get_system_prompt(),
-            tools=self.role.get_tools(),
+            tools=self.get_tools(),
             output_type=DeferredToolRequests | str,
         )
         return agent

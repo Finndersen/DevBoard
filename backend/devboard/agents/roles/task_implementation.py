@@ -1,15 +1,21 @@
 from pydantic_ai import Tool
 
 from devboard.agents.roles.base import AgentRole
+from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.tools import (
     create_code_structure_search_tool,
+    create_complete_task_with_local_merge_tool,
     create_directory_tree_tool,
     create_document_edit_tool,
+    create_github_pr_tool,
     create_set_document_content_tool,
 )
 from devboard.db.models import Task
+from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
+from devboard.integrations.github import GitHubIntegration
+from devboard.services.task_service import TaskService
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
 You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
@@ -44,48 +50,35 @@ IMPORTANT:
 def build_task_implementation_context(task: Task) -> str:
     """Build context for task implementation agent.
 
-    Includes task metadata, codebase info, task specification, and implementation plan.
-    Note: Project specification is intentionally excluded - implementation should follow
-    the task specification and plan which already incorporate project context.
-
-    Args:
-        task: Task instance with eager-loaded relationships
-
-    Returns:
-        Formatted context string
+    Includes task metadata, task specification, implementation plan, and codebase info.
+    Project specification is excluded - implementation should follow the task
+    specification and plan which already incorporate project context.
     """
-    return f"""
-TASK NAME: {task.title}
-TASK STATUS: {task.status.value}
-RELEVANT CODEBASE:
-- Name: {task.codebase.name}
-- Worktree directory: {task.get_current_workspace_dir()}
-- Description: {task.codebase.description or "N/A"}
-
-TASK SPECIFICATION:
-```markdown
-{task.specification.content or "<EMPTY>"}
-```
-
-IMPLEMENTATION PLAN:
-```markdown
-{task.implementation_plan.content if task.implementation_plan else "<EMPTY>"}
-```
-"""
+    return build_task_context(task, include_project_specification=False)
 
 
 class TaskImplementationAgentRole(AgentRole):
     """Role for task implementation in a codebase."""
 
-    def __init__(self, task: Task, document_repository: DocumentRepository):
+    def __init__(
+        self,
+        task: Task,
+        document_repository: DocumentRepository,
+        task_service: TaskService,
+        github_integration: GitHubIntegration,
+    ):
         """Initialize task implementation role.
 
         Args:
             task: Task instance
             document_repository: Repository for document operations
+            task_service: Service for task operations
+            github_integration: GitHub integration for PR workflows
         """
         self.task = task
         self.document_repository = document_repository
+        self.task_service = task_service
+        self.github_integration = github_integration
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -116,6 +109,16 @@ class TaskImplementationAgentRole(AgentRole):
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
         ]
+
+        # Add task completion tools based on codebase branch handling
+        branch_handling = self.task.codebase.branch_handling
+        if branch_handling == BranchHandling.GITHUB_PR.value:
+            # GitHub PR workflow: create PR tool
+            tools.append(create_github_pr_tool(self.task, self.github_integration, self.task_service))
+        elif branch_handling == BranchHandling.LOCAL_MERGE.value:
+            # Local merge workflow: complete_task_with_local_merge tool handles change summary + merge
+            tools.append(create_complete_task_with_local_merge_tool(self.task, self.task_service))
+        # For MANUAL branch handling, no completion tools are provided
 
         return tools
 

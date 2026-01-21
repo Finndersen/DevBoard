@@ -100,6 +100,7 @@ class PydanticAIConversationService(BaseAgentConversationService):
             role=self.role,
             model=model,
             conversation_history=conversation_history,
+            additional_tools=self.additional_tools,
         )
 
     def _get_message_history(self) -> list[DbConversationMessage]:

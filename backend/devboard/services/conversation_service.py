@@ -2,7 +2,7 @@
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles import AgentRoleType
-from devboard.db.models import Conversation, ParentEntityType
+from devboard.db.models import Codebase, Conversation, ParentEntityType, Project, Task
 from devboard.db.repositories import ConversationRepository
 
 
@@ -96,3 +96,21 @@ class ConversationService:
             model_id=agent_config.config.model_id,
             external_session_id=None,
         )
+
+    def delete_conversations_for_parent(self, parent: Task | Project | Codebase) -> int:
+        """Delete all conversations for a parent entity.
+
+        Args:
+            parent: The parent entity (Task, Project, or Codebase)
+
+        Returns:
+            Number of conversations deleted
+        """
+        if isinstance(parent, Task):
+            parent_type = ParentEntityType.TASK
+        elif isinstance(parent, Project):
+            parent_type = ParentEntityType.PROJECT
+        else:
+            parent_type = ParentEntityType.CODEBASE
+
+        return self.conversation_repo.delete_by_parent(parent_type, parent.id)

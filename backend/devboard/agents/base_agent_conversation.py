@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 import logfire
+from pydantic_ai import Tool
 
 from devboard.agents.events import ConversationEvent
 from devboard.agents.roles.base import AgentRole
@@ -29,6 +30,7 @@ class BaseAgentConversationService(ABC):
         conversation: The conversation instance this service manages
         role: The Role defining agent behavior
         conversation_repository: Repository for conversation operations
+        additional_tools: Extra tools beyond those defined by the role
 
     TODO: Might make sense to split up the message sending and event retrieval into separate classes?
     """
@@ -38,6 +40,7 @@ class BaseAgentConversationService(ABC):
         conversation: Conversation,
         role: AgentRole,
         conversation_repository: ConversationRepository,
+        additional_tools: list[Tool] | None = None,
     ):
         """Initialize the conversation service with a conversation instance.
 
@@ -45,10 +48,13 @@ class BaseAgentConversationService(ABC):
             conversation: The conversation instance to manage
             role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations
+            additional_tools: Optional list of additional tools to provide to the agent,
+                beyond those defined by the role. Used for workflow-action-specific tools.
         """
         self.conversation = conversation
         self.role = role
         self.conversation_repo = conversation_repository
+        self.additional_tools = additional_tools or []
 
     async def send_message_or_approval(
         self,

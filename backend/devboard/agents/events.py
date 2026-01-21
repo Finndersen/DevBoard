@@ -31,6 +31,7 @@ class SystemEventType(StrEnum):
     STREAM_ERROR = "stream_error"
     BRANCH_REBASED = "branch_rebased"
     STASH_APPLY_CONFLICT = "stash_apply_conflict"
+    SESSION_EXPIRED = "session_expired"
 
 
 class TextMessage(BaseModel):

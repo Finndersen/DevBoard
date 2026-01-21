@@ -1,16 +1,14 @@
 """Tests for TaskService state transition methods."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.document import DocumentType
-from devboard.db.models.task import Task, TaskStatus
-from devboard.services.task_service import (
-    InvalidTaskStatusError,
-    TaskService,
-    TaskTransitionValidationError,
-)
+from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
+from devboard.services.task_git_service import MergeOutcome, MergeResult
+from devboard.services.task_service import TaskService
 
 
 @pytest.fixture
@@ -46,13 +44,6 @@ def mock_task_repo():
 
 
 @pytest.fixture
-def mock_conversation_repo():
-    """Mock ConversationRepository."""
-    repo = MagicMock()
-    return repo
-
-
-@pytest.fixture
 def mock_worktree_slot_repo():
     """Mock WorktreeSlotRepository."""
     repo = MagicMock()
@@ -60,15 +51,12 @@ def mock_worktree_slot_repo():
 
 
 @pytest.fixture
-def task_service(
-    mock_conversation_service, mock_document_repo, mock_task_repo, mock_conversation_repo, mock_worktree_slot_repo
-):
+def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, mock_worktree_slot_repo):
     """Create TaskService instance with mocked dependencies."""
     return TaskService(
         conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         task_repo=mock_task_repo,
-        conversation_repo=mock_conversation_repo,
         worktree_slot_repo=mock_worktree_slot_repo,
     )
 
@@ -83,8 +71,8 @@ def task_in_defining():
     task.specification.content = "# Task Specification\n\nTest content"
     task.implementation_plan = None
     task.implementation_plan_id = None
-    # Mock can_transition_to_phase to return success by default
-    task.can_transition_to_phase.return_value = (True, "")
+    # Mock verify_status_transition to succeed by default (no exception)
+    task.verify_status_transition.return_value = None
     return task
 
 
@@ -111,8 +99,8 @@ def task_in_planning():
     task.specification.content = "# Task Specification\n\nTest content"
     task.implementation_plan = MagicMock()
     task.implementation_plan.content = "# Implementation Plan\n\nTest plan"
-    # Mock can_transition_to_phase to return success by default
-    task.can_transition_to_phase.return_value = (True, "")
+    # Mock verify_status_transition to succeed by default (no exception)
+    task.verify_status_transition.return_value = None
     return task
 
 
@@ -186,18 +174,22 @@ class TestTransitionToPlanning:
 
     def test_transition_wrong_status(self, task_service, task_in_planning):
         """Test transition fails when task is not in DEFINING status."""
-        with pytest.raises(InvalidTaskStatusError, match="must be in DEFINING status"):
+        # Mock verify_status_transition to raise exception for wrong status
+        task_in_planning.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from planning to planning"
+        )
+
+        with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_planning(task_in_planning)
 
     def test_transition_empty_specification(self, task_service, task_in_defining_empty_spec):
         """Test transition fails when specification is empty."""
-        # Mock can_transition_to_phase to return False
-        task_in_defining_empty_spec.can_transition_to_phase.return_value = (
-            False,
-            "Cannot transition to PLANNING without specification content",
+        # Mock verify_status_transition to raise exception for missing spec
+        task_in_defining_empty_spec.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition to PLANNING without specification content"
         )
 
-        with pytest.raises(TaskTransitionValidationError, match="specification content"):
+        with pytest.raises(InvalidStatusTransitionError, match="specification content"):
             task_service.transition_to_planning(task_in_defining_empty_spec)
 
 
@@ -220,62 +212,166 @@ class TestTransitionToImplementing:
 
     def test_transition_wrong_status(self, task_service, task_in_defining):
         """Test transition fails when task is not in PLANNING status."""
-        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
+        # Mock verify_status_transition to raise exception for wrong status
+        task_in_defining.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from defining to implementing"
+        )
+
+        with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_implementing(task_in_defining)
 
     def test_transition_empty_plan(self, task_service, task_in_planning_empty_plan):
         """Test transition fails when implementation plan is empty."""
-        # Mock can_transition_to_phase to return False
-        task_in_planning_empty_plan.can_transition_to_phase.return_value = (
-            False,
-            "Cannot transition to IMPLEMENTING without implementation plan",
+        # Mock verify_status_transition to raise exception for missing plan
+        task_in_planning_empty_plan.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition to IMPLEMENTING without implementation plan"
         )
 
-        with pytest.raises(TaskTransitionValidationError, match="implementation plan"):
+        with pytest.raises(InvalidStatusTransitionError, match="implementation plan"):
             task_service.transition_to_implementing(task_in_planning_empty_plan)
 
     def test_transition_from_implementing_fails(self, task_service, task_in_implementing):
         """Test transition fails when task is already in IMPLEMENTING status."""
-        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
+        # Mock verify_status_transition to raise exception for wrong status
+        task_in_implementing.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from implementing to implementing"
+        )
+
+        with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_implementing(task_in_implementing)
 
 
 class TestTransitionValidation:
     """Tests for validation logic in transition methods."""
 
-    def test_planning_transition_validates_status_before_prerequisites(
-        self, task_service, task_in_planning, mock_document_repo
-    ):
-        """Test that status check happens before prerequisite validation."""
-        # Task is in PLANNING (wrong status), but has empty spec
-        task_in_planning.specification.content = ""
-        task_in_planning.can_transition_to_phase.return_value = (
-            False,
-            "Cannot transition to PLANNING without specification content",
+    def test_planning_transition_fails_for_wrong_status(self, task_service, task_in_planning, mock_document_repo):
+        """Test that transition fails when task is in wrong status."""
+        # Mock verify_status_transition to raise exception
+        task_in_planning.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from planning to planning"
         )
 
-        # Should fail with status error, not prerequisite error
-        with pytest.raises(InvalidTaskStatusError, match="must be in DEFINING status"):
+        with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_planning(task_in_planning)
 
-        # Verify can_transition_to_phase was never called (status check failed first)
-        task_in_planning.can_transition_to_phase.assert_not_called()
+        # Verify verify_status_transition was called
+        task_in_planning.verify_status_transition.assert_called_once_with(TaskStatus.PLANNING)
 
-    def test_implementing_transition_validates_status_before_prerequisites(
-        self, task_service, task_in_defining, mock_task_repo
-    ):
-        """Test that status check happens before prerequisite validation."""
-        # Task is in DEFINING (wrong status), but has empty plan
-        task_in_defining.implementation_plan = MagicMock()
-        task_in_defining.implementation_plan.content = ""
-        task_in_defining.can_transition_to_phase.return_value = (
-            False,
-            "Cannot transition to IMPLEMENTING without implementation plan",
+    def test_implementing_transition_fails_for_wrong_status(self, task_service, task_in_defining, mock_task_repo):
+        """Test that transition fails when task is in wrong status."""
+        # Mock verify_status_transition to raise exception
+        task_in_defining.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from defining to implementing"
         )
 
-        # Should fail with status error, not prerequisite error
-        with pytest.raises(InvalidTaskStatusError, match="must be in PLANNING status"):
+        with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_implementing(task_in_defining)
 
-        # Verify can_transition_to_phase was never called (status check failed first)
-        task_in_defining.can_transition_to_phase.assert_not_called()
+        # Verify verify_status_transition was called
+        task_in_defining.verify_status_transition.assert_called_once_with(TaskStatus.IMPLEMENTING)
+
+
+class TestCompleteTaskWithLocalMerge:
+    """Tests for TaskService.complete_task_with_local_merge()."""
+
+    @pytest.fixture
+    def task_with_branch(self):
+        """Create a task in IMPLEMENTING state with branch configured."""
+        task = MagicMock(spec=Task)
+        task.id = 10
+        task.status = TaskStatus.IMPLEMENTING
+        task.branch_name = "feature/test-branch"
+        task.base_branch = "main"
+        task.change_summary = None
+        task.change_summary_id = None
+        task.codebase = MagicMock()
+        task.codebase.merge_method = MergeMethod.SQUASH
+        task.verify_status_transition.return_value = None
+        return task
+
+    @pytest.mark.asyncio
+    async def test_succeeds_with_merge_success(
+        self, task_service, task_with_branch, mock_document_repo, mock_task_repo
+    ):
+        """Test complete succeeds when merge returns SUCCESS outcome."""
+        mock_merge_result = MergeResult(
+            outcome=MergeOutcome.SUCCESS,
+            merge_method=MergeMethod.SQUASH,
+            message="Squash merged feature branch into main",
+            merge_commit="abc123",
+        )
+
+        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
+            mock_git_service = MagicMock()
+            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
+            MockTaskGitService.return_value = mock_git_service
+
+            result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+        assert result.outcome == MergeOutcome.SUCCESS
+        assert task_with_branch.status == TaskStatus.COMPLETE
+        mock_document_repo.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_succeeds_with_merge_skipped(
+        self, task_service, task_with_branch, mock_document_repo, mock_task_repo
+    ):
+        """Test complete succeeds when merge returns SKIPPED outcome (already merged)."""
+        mock_merge_result = MergeResult(
+            outcome=MergeOutcome.SKIPPED,
+            merge_method=MergeMethod.SQUASH,
+            message="Branch has no new commits - already merged",
+        )
+
+        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
+            mock_git_service = MagicMock()
+            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
+            MockTaskGitService.return_value = mock_git_service
+
+            result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+        assert result.outcome == MergeOutcome.SKIPPED
+        assert task_with_branch.status == TaskStatus.COMPLETE
+        mock_document_repo.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_fails_with_merge_conflict(self, task_service, task_with_branch, mock_document_repo):
+        """Test complete raises ValueError when merge returns CONFLICT outcome."""
+        mock_merge_result = MergeResult(
+            outcome=MergeOutcome.CONFLICT,
+            merge_method=MergeMethod.SQUASH,
+            message="Conflicts detected between feature and main",
+        )
+
+        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
+            mock_git_service = MagicMock()
+            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
+            MockTaskGitService.return_value = mock_git_service
+
+            with pytest.raises(ValueError, match="Merge failed"):
+                await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+    @pytest.mark.asyncio
+    async def test_fails_with_merge_error(self, task_service, task_with_branch, mock_document_repo):
+        """Test complete raises ValueError when merge returns ERROR outcome."""
+        mock_merge_result = MergeResult(
+            outcome=MergeOutcome.ERROR,
+            merge_method=MergeMethod.SQUASH,
+            message="Git command failed",
+        )
+
+        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
+            mock_git_service = MagicMock()
+            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
+            MockTaskGitService.return_value = mock_git_service
+
+            with pytest.raises(ValueError, match="Merge failed"):
+                await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+    @pytest.mark.asyncio
+    async def test_fails_without_branch_configured(self, task_service, task_with_branch):
+        """Test complete raises ValueError when task has no branch."""
+        task_with_branch.branch_name = None
+
+        with pytest.raises(ValueError, match="has no branch configured"):
+            await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")

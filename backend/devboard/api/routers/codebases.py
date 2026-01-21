@@ -12,7 +12,7 @@ from devboard.api.schemas import (
     CodebaseUpdate,
     DeleteResponse,
 )
-from devboard.db.models import Codebase, MergeStrategy
+from devboard.db.models import BranchHandling, Codebase, MergeMethod
 from devboard.db.repositories import CodebaseRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
@@ -63,24 +63,30 @@ async def create_codebase(
     if not default_branch:
         default_branch = await git.get_default_branch()
 
-    # Determine merge strategy: use provided value, or auto-detect based on remote URL
-    merge_strategy = codebase.merge_strategy
-    if merge_strategy is None:
-        # Default to github_pr if remote URL exists, otherwise squash
-        merge_strategy = MergeStrategy.GITHUB_PR if repository_url else MergeStrategy.SQUASH
+    # Determine merge_method: use provided value, or default to SQUASH
+    merge_method = codebase.merge_method
+    if merge_method is None:
+        merge_method = MergeMethod.SQUASH
 
-    # Validate github_pr strategy requires a remote URL
-    if merge_strategy == MergeStrategy.GITHUB_PR and not repository_url:
+    # Determine branch_handling: use provided value, or auto-detect based on remote URL
+    branch_handling = codebase.branch_handling
+    if branch_handling is None:
+        # Default to GITHUB_PR if remote URL exists, otherwise LOCAL_MERGE
+        branch_handling = BranchHandling.GITHUB_PR if repository_url else BranchHandling.LOCAL_MERGE
+
+    # Validate github_pr branch handling requires a remote URL
+    if branch_handling == BranchHandling.GITHUB_PR and not repository_url:
         raise HTTPException(
             status_code=400,
-            detail="GitHub PR merge strategy requires a repository with a remote URL configured",
+            detail="GitHub PR branch handling requires a repository with a remote URL configured",
         )
 
     # Create the codebase with auto-detected values
     codebase_data = codebase.model_dump()
     codebase_data["repository_url"] = repository_url
     codebase_data["default_branch"] = default_branch
-    codebase_data["merge_strategy"] = merge_strategy.value
+    codebase_data["merge_method"] = merge_method.value
+    codebase_data["branch_handling"] = branch_handling.value
 
     db_codebase = Codebase(**codebase_data)
     created_codebase = codebase_repo.create(db_codebase)
@@ -114,8 +120,22 @@ async def update_codebase(
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
 ):
     """Update a codebase."""
-
     update_data = codebase_update.model_dump(exclude_unset=True)
+
+    # Determine the effective repository_url after update
+    effective_repository_url = update_data.get("repository_url", codebase.repository_url)
+
+    # Determine the effective branch_handling after update
+    effective_branch_handling = update_data.get("branch_handling", codebase.branch_handling)
+    if isinstance(effective_branch_handling, BranchHandling):
+        effective_branch_handling = effective_branch_handling.value
+
+    # Validate github_pr branch handling requires a remote URL
+    if effective_branch_handling == BranchHandling.GITHUB_PR.value and not effective_repository_url:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub PR branch handling requires a repository with a remote URL configured",
+        )
 
     for field, value in update_data.items():
         setattr(codebase, field, value)

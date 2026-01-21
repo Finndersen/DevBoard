@@ -5,6 +5,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 import logfire
+from github.Commit import Commit
+from github.Issue import Issue
+from github.PullRequest import PullRequest
+from github.Repository import Repository
 
 from devboard.config.integration_configs import GitHubIntegrationConfig
 
@@ -71,7 +75,7 @@ class GitHubContextProvider(BaseContextProvider):
     def get_retrieval_strategy(self, resource_uri: str) -> ContextStrategy:
         """Determine strategy based on resource scope.
 
-        Small-scope resources (single issues, PRs, commits, files) are EAGER.
+        Small-scope resources (single issues, PRs, commits) are EAGER.
         Large-scope resources (entire repos, searches) are ON_DEMAND.
         """
         if not self.can_handle_uri(resource_uri):
@@ -84,7 +88,7 @@ class GitHubContextProvider(BaseContextProvider):
         resource_type = parsed.get("type")
 
         # Small-scope resources that can be loaded eagerly
-        if resource_type in ("pull", "issues", "commit", "blob", "tree"):
+        if resource_type in ("pull", "issues", "commit"):
             return ContextStrategy.EAGER
         # Large-scope resources requiring focused querying
         else:
@@ -114,6 +118,52 @@ class GitHubContextProvider(BaseContextProvider):
 
         return result
 
+    def _pr_to_dict(self, pr: PullRequest) -> dict[str, Any]:
+        """Serialize PyGithub PullRequest to dict."""
+        return {
+            "title": pr.title,
+            "state": pr.state,
+            "body": pr.body or "",
+            "user": {"login": pr.user.login if pr.user else "Unknown"},
+            "html_url": pr.html_url,
+            "number": pr.number,
+            "merged": pr.merged,
+            "mergeable": pr.mergeable,
+        }
+
+    def _issue_to_dict(self, issue: Issue) -> dict[str, Any]:
+        """Serialize PyGithub Issue to dict."""
+        return {
+            "title": issue.title,
+            "state": issue.state,
+            "body": issue.body or "",
+            "user": {"login": issue.user.login if issue.user else "Unknown"},
+            "html_url": issue.html_url,
+            "number": issue.number,
+        }
+
+    def _commit_to_dict(self, commit: Commit) -> dict[str, Any]:
+        """Serialize PyGithub Commit to dict."""
+        return {
+            "sha": commit.sha,
+            "html_url": commit.html_url,
+            "commit": {
+                "message": commit.commit.message if commit.commit else "",
+                "author": {
+                    "name": commit.commit.author.name if commit.commit and commit.commit.author else "Unknown",
+                },
+            },
+        }
+
+    def _repo_to_dict(self, repo: Repository) -> dict[str, Any]:
+        """Serialize PyGithub Repository to dict."""
+        return {
+            "full_name": repo.full_name,
+            "description": repo.description or "",
+            "language": repo.language or "Unknown",
+            "html_url": repo.html_url,
+        }
+
     async def get_resource(self, resource_uri: str) -> dict[str, Any]:
         """Get full resource data for EAGER strategy (small-scope resources)."""
         with logfire.span("github_context_provider.get_resource", resource_uri=resource_uri):
@@ -137,19 +187,18 @@ class GitHubContextProvider(BaseContextProvider):
                     resource_id=resource_id,
                 )
 
+                github_repo = self.integration.get_repository(owner, repo)
+
                 # Load full data for small-scope resources
                 if resource_type == "pull":
-                    pr_data = await self.integration.get_pull_request(owner, repo, int(resource_id))
-                    return {"type": "pull_request", "data": pr_data, "uri": resource_uri}
+                    github_pr = await github_repo.get_pull_request(int(resource_id))
+                    return {"type": "pull_request", "data": self._pr_to_dict(github_pr.pr), "uri": resource_uri}
                 elif resource_type == "issues":
-                    issue_data = await self.integration.get_issue(owner, repo, int(resource_id))
-                    return {"type": "issue", "data": issue_data, "uri": resource_uri}
+                    issue = await github_repo.get_issue(int(resource_id))
+                    return {"type": "issue", "data": self._issue_to_dict(issue), "uri": resource_uri}
                 elif resource_type == "commit":
-                    commit_data = await self.integration.get_commit(owner, repo, resource_id)
-                    return {"type": "commit", "data": commit_data, "uri": resource_uri}
-                elif resource_type in ("blob", "tree"):
-                    file_data = await self.integration.get_file_content(owner, repo, resource_id)
-                    return {"type": "file", "data": file_data, "uri": resource_uri}
+                    commit = await github_repo.get_commit(resource_id)
+                    return {"type": "commit", "data": self._commit_to_dict(commit), "uri": resource_uri}
                 else:
                     raise ContextRetrievalError(f"Unsupported resource type for EAGER loading: {resource_type}")
 
@@ -191,19 +240,22 @@ class GitHubContextProvider(BaseContextProvider):
                     resource_id=resource_id,
                 )
 
+                github_repo = self.integration.get_repository(owner, repo)
+
                 # Fetch appropriate data based on resource type
                 if resource_type == "pull":
                     if not resource_id:
                         raise ResourceHandlingError("Missing PR number in URL")
-                    pr_data = await self.integration.get_pull_request(owner, repo, int(resource_id))
+                    github_pr = await github_repo.get_pull_request(int(resource_id))
+                    pr = github_pr.pr
 
                     # Create focused summary based on query
                     context = f"""
-GitHub Pull Request: {pr_data.get("title", "No title")}
+GitHub Pull Request: {pr.title}
 URL: {resource_uri}
-Status: {pr_data.get("state", "unknown")}
-Author: {pr_data.get("user", {}).get("login", "unknown")}
-Description: {pr_data.get("body", "No description")}
+Status: {pr.state}
+Author: {pr.user.login if pr.user else "Unknown"}
+Description: {pr.body or "No description"}
 
 Query: {query}
 
@@ -216,14 +268,14 @@ Based on this PR data and comments, here is the relevant context for your query:
                 elif resource_type == "issues":
                     if not resource_id:
                         raise ResourceHandlingError("Missing issue number in URL")
-                    issue_data = await self.integration.get_issue(owner, repo, int(resource_id))
+                    issue = await github_repo.get_issue(int(resource_id))
 
                     context = f"""
-GitHub Issue: {issue_data.get("title", "No title")}
+GitHub Issue: {issue.title}
 URL: {resource_uri}
-Status: {issue_data.get("state", "unknown")}
-Author: {issue_data.get("user", {}).get("login", "unknown")}
-Description: {issue_data.get("body", "No description")}
+Status: {issue.state}
+Author: {issue.user.login if issue.user else "Unknown"}
+Description: {issue.body or "No description"}
 
 Query: {query}
 
@@ -236,12 +288,12 @@ Based on this issue data, here is the relevant context for your query:
                 elif resource_type == "commit":
                     if not resource_id:
                         raise ResourceHandlingError("Missing commit SHA in URL")
-                    commit_data = await self.integration.get_commit(owner, repo, resource_id)
+                    commit = await github_repo.get_commit(resource_id)
 
                     context = f"""
-GitHub Commit: {commit_data.get("commit", {}).get("message", "No message")}
+GitHub Commit: {commit.commit.message if commit.commit else "No message"}
 URL: {resource_uri}
-Author: {commit_data.get("commit", {}).get("author", {}).get("name", "unknown")}
+Author: {commit.commit.author.name if commit.commit and commit.commit.author else "Unknown"}
 SHA: {resource_id}
 
 Query: {query}
@@ -254,13 +306,11 @@ Based on this commit data, here is the relevant context for your query:
 
                 else:
                     # Repository-level resource
-                    repo_data = await self.integration.get_repository(owner, repo)
-
                     context = f"""
-GitHub Repository: {repo_data.get("full_name", "unknown")}
+GitHub Repository: {github_repo.full_name}
 URL: {resource_uri}
-Description: {repo_data.get("description", "No description")}
-Language: {repo_data.get("language", "unknown")}
+Description: {github_repo._repo.description or "No description"}
+Language: {github_repo._repo.language or "Unknown"}
 
 Query: {query}
 
@@ -291,25 +341,25 @@ Based on this repository data, here is the relevant context for your query:
             resource_type = parsed.get("type")
             resource_id: str = parsed.get("id")
 
+            github_repo = self.integration.get_repository(owner, repo)
+
             if resource_type == "pull":
-                pr_data = await self.integration.get_pull_request(owner, repo, int(resource_id))
-                return (
-                    f"GitHub PR #{resource_id}: {pr_data.get('title', 'No title')} ({pr_data.get('state', 'unknown')})"
-                )
+                github_pr = await github_repo.get_pull_request(int(resource_id))
+                pr = github_pr.pr
+                return f"GitHub PR #{resource_id}: {pr.title} ({pr.state})"
 
             elif resource_type == "issues":
-                issue_data = await self.integration.get_issue(owner, repo, int(resource_id))
-                return f"GitHub Issue #{resource_id}: {issue_data.get('title', 'No title')} ({issue_data.get('state', 'unknown')})"
+                issue = await github_repo.get_issue(int(resource_id))
+                return f"GitHub Issue #{resource_id}: {issue.title} ({issue.state})"
 
             elif resource_type == "commit":
-                commit_data = await self.integration.get_commit(owner, repo, resource_id)
-                message = commit_data.get("commit", {}).get("message", "No message")
+                commit = await github_repo.get_commit(resource_id)
+                message = commit.commit.message if commit.commit else "No message"
                 short_message = message.split("\n")[0][:80]
                 return f"GitHub Commit {resource_id[:7]}: {short_message}"
 
             else:
-                repo_data = await self.integration.get_repository(owner, repo)
-                description = repo_data.get("description", "No description")
+                description = github_repo._repo.description or "No description"
                 return f"GitHub Repository {owner}/{repo}: {description}"
 
         except Exception as e:

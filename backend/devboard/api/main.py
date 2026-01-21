@@ -25,6 +25,7 @@ from devboard.api.routers import (
 from devboard.config.logfire_config import setup_logfire
 from devboard.db.database import SessionLocal
 from devboard.db.repositories.codebase import CodebaseRepository
+from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.mcp import mcp
@@ -72,10 +73,12 @@ async def cleanup_stale_locks_on_startup():
         codebase_repo = CodebaseRepository(db)
         task_repo = TaskRepository(db)
         worktree_slot_repo = WorktreeSlotRepository(db)
+        conversation_repo = ConversationRepository(db)
 
         workspace_service = WorkspaceAllocationService(
             worktree_slot_repo=worktree_slot_repo,
             task_repo=task_repo,
+            conversation_repo=conversation_repo,
         )
 
         # Get all codebases
@@ -115,10 +118,10 @@ app = FastAPI(
 
 setup_logfire(app)
 
-# Configure CORS
+# Configure CORS - allow all localhost ports in development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Frontend URLs
+    allow_origin_regex=r"^http://localhost:\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

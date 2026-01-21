@@ -1,6 +1,6 @@
 import { useEffect, useCallback, memo, useRef, useState } from 'react'
 import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon } from '@heroicons/react/24/outline'
-import type { Codebase, MergeStrategy } from '../lib/api'
+import type { Codebase, MergeMethod, BranchHandling } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useDataStore } from '../stores/dataStore'
@@ -9,13 +9,18 @@ import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import InViewTabs from '../components/common/InViewTabs'
 import WorktreeSlotsTab from '../components/codebase/WorktreeSlotsTab'
 
-// Merge strategy display labels
-const MERGE_STRATEGY_OPTIONS: { value: MergeStrategy; label: string; description: string }[] = [
-  { value: 'github_pr', label: 'GitHub PR', description: 'Create a GitHub PR for review and merge' },
+// Merge method options - how commits are combined during merge
+const MERGE_METHOD_OPTIONS: { value: MergeMethod; label: string; description: string }[] = [
   { value: 'squash', label: 'Squash', description: 'Squash commits into a single commit' },
   { value: 'rebase', label: 'Rebase', description: 'Rebase for linear history' },
   { value: 'merge_commit', label: 'Merge Commit', description: 'Standard merge with merge commit' },
-  { value: 'none', label: 'Manual', description: 'No automatic git operations' },
+]
+
+// Branch handling options - where/how the feature branch is finalized
+const BRANCH_HANDLING_OPTIONS: { value: BranchHandling; label: string; description: string }[] = [
+  { value: 'local_merge', label: 'Local Merge', description: 'Merge branch locally' },
+  { value: 'github_pr', label: 'GitHub PR', description: 'Create PR for review, merge via GitHub' },
+  { value: 'manual', label: 'Manual', description: 'No automatic handling - manage branch manually' },
 ]
 
 const CODEBASE_TABS = [
@@ -84,10 +89,15 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
     [updateCodebase, id]
   )
 
-  // Merge strategy state
-  const [mergeStrategyEditing, setMergeStrategyEditing] = useState(false)
-  const [mergeStrategySaving, setMergeStrategySaving] = useState(false)
-  const [mergeStrategyError, setMergeStrategyError] = useState<string | null>(null)
+  // Merge method state
+  const [mergeMethodEditing, setMergeMethodEditing] = useState(false)
+  const [mergeMethodSaving, setMergeMethodSaving] = useState(false)
+  const [mergeMethodError, setMergeMethodError] = useState<string | null>(null)
+
+  // Branch handling state
+  const [branchHandlingEditing, setBranchHandlingEditing] = useState(false)
+  const [branchHandlingSaving, setBranchHandlingSaving] = useState(false)
+  const [branchHandlingError, setBranchHandlingError] = useState<string | null>(null)
 
   // Max worktrees state
   const [maxWorktreesEditing, setMaxWorktreesEditing] = useState(false)
@@ -134,17 +144,33 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
     [updateCodebase, id]
   )
 
-  const saveMergeStrategy = useCallback(
-    async (value: MergeStrategy) => {
-      setMergeStrategySaving(true)
-      setMergeStrategyError(null)
+  const saveMergeMethod = useCallback(
+    async (value: MergeMethod) => {
+      setMergeMethodSaving(true)
+      setMergeMethodError(null)
       try {
-        await updateCodebase({ id: id!, codebase: { merge_strategy: value } })
-        setMergeStrategyEditing(false)
+        await updateCodebase({ id: id!, codebase: { merge_method: value } })
+        setMergeMethodEditing(false)
       } catch (err) {
-        setMergeStrategyError(err instanceof Error ? err.message : 'Failed to save')
+        setMergeMethodError(err instanceof Error ? err.message : 'Failed to save')
       } finally {
-        setMergeStrategySaving(false)
+        setMergeMethodSaving(false)
+      }
+    },
+    [updateCodebase, id]
+  )
+
+  const saveBranchHandling = useCallback(
+    async (value: BranchHandling) => {
+      setBranchHandlingSaving(true)
+      setBranchHandlingError(null)
+      try {
+        await updateCodebase({ id: id!, codebase: { branch_handling: value } })
+        setBranchHandlingEditing(false)
+      } catch (err) {
+        setBranchHandlingError(err instanceof Error ? err.message : 'Failed to save')
+      } finally {
+        setBranchHandlingSaving(false)
       }
     },
     [updateCodebase, id]
@@ -534,33 +560,38 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             </p>
           </div>
 
-          {/* Merge Strategy */}
+          {/* Branch Handling */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <ArrowPathIcon className="h-4 w-4" />
-              Merge Strategy
+              Branch Handling
             </label>
-            {mergeStrategyEditing ? (
+            {branchHandlingEditing ? (
               <div className="space-y-2">
                 <select
-                  value={codebase.merge_strategy}
-                  onChange={(e) => saveMergeStrategy(e.target.value as MergeStrategy)}
-                  disabled={mergeStrategySaving}
+                  value={codebase.branch_handling}
+                  onChange={(e) => saveBranchHandling(e.target.value as BranchHandling)}
+                  disabled={branchHandlingSaving}
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {MERGE_STRATEGY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
+                  {BRANCH_HANDLING_OPTIONS.map((option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                      disabled={option.value === 'github_pr' && !codebase.repository_url}
+                    >
                       {option.label} - {option.description}
+                      {option.value === 'github_pr' && !codebase.repository_url ? ' (requires repository URL)' : ''}
                     </option>
                   ))}
                 </select>
                 <div className="flex items-center gap-2">
                   <Button
-                    onClick={() => setMergeStrategyEditing(false)}
+                    onClick={() => setBranchHandlingEditing(false)}
                     variant="secondary"
                     size="sm"
                     className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
-                    disabled={mergeStrategySaving}
+                    disabled={branchHandlingSaving}
                   >
                     <XMarkIcon className="w-4 h-4 mr-1" />
                     Cancel
@@ -571,33 +602,95 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               <div className="group">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
-                    {MERGE_STRATEGY_OPTIONS.find((o) => o.value === codebase.merge_strategy)?.label || codebase.merge_strategy}
+                    {BRANCH_HANDLING_OPTIONS.find((o) => o.value === codebase.branch_handling)?.label || codebase.branch_handling}
                     <span className="text-gray-500 dark:text-gray-400 ml-2">
-                      ({MERGE_STRATEGY_OPTIONS.find((o) => o.value === codebase.merge_strategy)?.description})
+                      ({BRANCH_HANDLING_OPTIONS.find((o) => o.value === codebase.branch_handling)?.description})
                     </span>
                   </span>
                   <Button
-                    onClick={() => setMergeStrategyEditing(true)}
+                    onClick={() => setBranchHandlingEditing(true)}
                     variant="ghost"
                     size="sm"
                     className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Edit merge strategy"
+                    title="Edit branch handling"
                   >
                     <PencilIcon className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
             )}
-            {mergeStrategyError && <ErrorMessage message={mergeStrategyError} />}
-            {codebase.merge_strategy === 'github_pr' && !codebase.repository_url && (
+            {branchHandlingError && <ErrorMessage message={branchHandlingError} />}
+            {codebase.branch_handling === 'github_pr' && !codebase.repository_url && (
               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                ⚠️ GitHub PR strategy requires a repository URL to be configured
+                GitHub PR handling requires a repository URL to be configured
               </p>
             )}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              How feature branches are merged when completing tasks
+              Where and how the feature branch is finalized when completing tasks
             </p>
           </div>
+
+          {/* Merge Method */}
+          {codebase.branch_handling !== 'manual' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                <ArrowPathIcon className="h-4 w-4" />
+                Merge Method
+              </label>
+              {mergeMethodEditing ? (
+                <div className="space-y-2">
+                  <select
+                    value={codebase.merge_method}
+                    onChange={(e) => saveMergeMethod(e.target.value as MergeMethod)}
+                    disabled={mergeMethodSaving}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {MERGE_METHOD_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} - {option.description}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => setMergeMethodEditing(false)}
+                      variant="secondary"
+                      size="sm"
+                      className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                      disabled={mergeMethodSaving}
+                    >
+                      <XMarkIcon className="w-4 h-4 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                      {MERGE_METHOD_OPTIONS.find((o) => o.value === codebase.merge_method)?.label || codebase.merge_method}
+                      <span className="text-gray-500 dark:text-gray-400 ml-2">
+                        ({MERGE_METHOD_OPTIONS.find((o) => o.value === codebase.merge_method)?.description})
+                      </span>
+                    </span>
+                    <Button
+                      onClick={() => setMergeMethodEditing(true)}
+                      variant="ghost"
+                      size="sm"
+                      className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Edit merge method"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {mergeMethodError && <ErrorMessage message={mergeMethodError} />}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                How commits are combined when merging the feature branch
+              </p>
+            </div>
+          )}
 
           {/* Max Worktrees */}
           <div>

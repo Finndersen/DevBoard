@@ -50,6 +50,13 @@ class TaskUpdate(BaseModel):
     implementation_plan: str | None = None
 
 
+class WorkflowActionInfo(BaseModel):
+    """Schema for available workflow action information."""
+
+    key: str
+    label: str
+
+
 class TaskResponse(TaskBase):
     """Schema for task responses."""
 
@@ -60,6 +67,10 @@ class TaskResponse(TaskBase):
     # Document IDs - content fetched separately via /api/documents/{id}
     specification_document_id: int
     implementation_plan_document_id: int | None = None
+    change_summary_document_id: int | None = None
+
+    # Available workflow actions based on current state
+    available_workflow_actions: list[WorkflowActionInfo] = []
 
     model_config = {"from_attributes": True}
 
@@ -157,3 +168,18 @@ class CheckoutToMainResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class GitHubPRStatusResponse(BaseModel):
+    """Schema for GitHub PR status response.
+
+    Used by the frontend to enable/disable merge actions and display PR status.
+    """
+
+    merged: bool
+    mergeable: bool | None
+    mergeable_state: str
+    state: str
+    review_comments_count: int
+    checks_status: str | None
+    pr_url: str

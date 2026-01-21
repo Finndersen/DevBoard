@@ -15,6 +15,7 @@ class DocumentType(StrEnum):
     PROJECT_SPECIFICATION = "project_specification"
     TASK_SPECIFICATION = "task_specification"
     TASK_IMPLEMENTATION_PLAN = "task_implementation_plan"
+    CHANGE_SUMMARY = "change_summary"
 
 
 class Document(Base):

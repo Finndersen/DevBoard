@@ -7,7 +7,15 @@ import logfire
 
 from .base import IntegrationConnectionResult
 from .shell import RebaseConflictError, ShellCommandExecutionError, execute_shell_command
-from .types import BranchComparison, CommitDiff, FileDiff, GitLogEntry, StructuredDiff, WorktreeInfo
+from .types import (
+    BranchComparison,
+    BranchReleaseResult,
+    CommitDiff,
+    FileDiff,
+    GitLogEntry,
+    StructuredDiff,
+    WorktreeInfo,
+)
 
 
 class GitRepoIntegration:
@@ -1036,6 +1044,43 @@ class GitRepoIntegration:
             if worktree.branch == branch:
                 return worktree.path
         return None
+
+    async def release_branch_from_worktree(
+        self,
+        branch_name: str,
+        exclude_main_repo: bool = True,
+    ) -> BranchReleaseResult:
+        """Find where a branch is checked out and release it by detaching HEAD.
+
+        This allows operations like delete or rebase on branches that are
+        currently checked out in a worktree.
+
+        Args:
+            branch_name: Branch to release
+            exclude_main_repo: If True, don't release if checked out in main repo
+
+        Returns:
+            BranchReleaseResult with worktree_path and stash_sha if released
+        """
+        checkout_path = await self.get_checked_out_location(branch_name)
+
+        if not checkout_path:
+            return BranchReleaseResult(None, None)
+
+        if exclude_main_repo and checkout_path == str(self._repo_path):
+            return BranchReleaseResult(None, None)
+
+        worktree_git = GitRepoIntegration(checkout_path)
+        stash_sha: str | None = None
+
+        if await worktree_git.has_uncommitted_changes():
+            stash_sha = await worktree_git.stash_push(include_untracked=True)
+            logfire.info(f"Stashed uncommitted changes before releasing {branch_name}")
+
+        await worktree_git.switch_detach()
+        logfire.info(f"Detached HEAD, released branch {branch_name} from {checkout_path}")
+
+        return BranchReleaseResult(checkout_path, stash_sha)
 
     async def is_branch_pushed(self, branch: str, remote: str = "origin") -> bool:
         """Check if a local branch has been pushed to a remote.

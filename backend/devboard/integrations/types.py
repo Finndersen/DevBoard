@@ -76,3 +76,11 @@ class StructuredDiff:
     files: list[FileDiff]
     additions: int
     deletions: int
+
+
+@dataclass
+class BranchReleaseResult:
+    """Result of releasing a branch from a worktree."""
+
+    worktree_path: str | None
+    stash_sha: str | None

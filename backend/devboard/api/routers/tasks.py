@@ -15,6 +15,7 @@ from devboard.api.dependencies.repositories import (
 )
 from devboard.api.dependencies.services import (
     get_agent_config_service,
+    get_integration_service,
     get_resource_service,
     get_task_git_service,
     get_task_service,
@@ -25,6 +26,7 @@ from devboard.api.schemas import (
     CommitMetadata,
     DeleteResponse,
     FileDiff,
+    GitHubPRStatusResponse,
     MergeBranchRequest,
     MergeBranchResponse,
     PromptActionRequest,
@@ -35,16 +37,19 @@ from devboard.api.schemas import (
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
+    WorkflowActionInfo,
 )
 from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import ParentEntityType
-from devboard.db.models.task import Task
+from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     ConversationRepository,
     DocumentRepository,
     TaskRepository,
     WorktreeSlotRepository,
 )
+from devboard.integrations.github import GitHubIntegration
+from devboard.services.integration_service import IntegrationService
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
@@ -57,6 +62,21 @@ from devboard.workflow_actions.registry import workflow_action_registry
 router = APIRouter()
 
 
+def _get_available_workflow_actions(task: Task) -> list[WorkflowActionInfo]:
+    """Get list of available workflow actions for a task."""
+    available_actions = []
+
+    for action_class in workflow_action_registry.list_values():
+        if action_class.is_available(task):
+            available_actions.append(
+                WorkflowActionInfo(
+                    key=action_class.KEY, label=action_class.KEY.replace("task.", "").replace("_", " ").title()
+                )
+            )
+
+    return available_actions
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: int,
@@ -66,6 +86,9 @@ async def get_task(
     """Get a specific task with active conversation_id."""
     # Get active conversation (should always exist since created at task creation)
     conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+
+    # Get available workflow actions
+    available_actions = _get_available_workflow_actions(task)
 
     return TaskResponse(
         id=task.id,
@@ -78,6 +101,8 @@ async def get_task(
         created_at=task.created_at,
         specification_document_id=task.specification.id,
         implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
+        change_summary_document_id=task.change_summary.id if task.change_summary else None,
+        available_workflow_actions=available_actions,
     )
 
 
@@ -117,6 +142,9 @@ async def update_task(
     # Get active conversation (will raise NoActiveConversationError if not found)
     conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
 
+    # Get available workflow actions
+    available_actions = _get_available_workflow_actions(updated_task)
+
     return TaskResponse(
         id=updated_task.id,
         title=updated_task.title,
@@ -130,6 +158,8 @@ async def update_task(
         implementation_plan_document_id=(
             updated_task.implementation_plan.id if updated_task.implementation_plan else None
         ),
+        change_summary_document_id=(updated_task.change_summary.id if updated_task.change_summary else None),
+        available_workflow_actions=available_actions,
     )
 
 
@@ -271,6 +301,7 @@ async def execute_workflow_action(
     task_git_service: TaskGitService = Depends(get_task_git_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+    integration_service: IntegrationService = Depends(get_integration_service),
 ) -> StreamingResponse:
     """Stream a task workflow action.
 
@@ -300,6 +331,7 @@ async def execute_workflow_action(
         agent_config_service=agent_config_service,
         document_repository=document_repo,
         workspace_allocation_service=workspace_allocation_service,
+        integration_service=integration_service,
     )
 
     # Define exception handler to convert task transition errors to HTTP exceptions
@@ -464,7 +496,7 @@ async def delete_task_branch(
 async def checkout_task_to_main(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> CheckoutToMainResponse:
     """Checkout a task's branch to the main repository.
 
@@ -487,10 +519,78 @@ async def checkout_task_to_main(
         raise HTTPException(status_code=400, detail="Task has no branch configured")
 
     try:
-        await task_git_service.checkout_task_to_main_repo(task)
+        await workspace_allocation_service.checkout_task_to_main_repo(task)
         return CheckoutToMainResponse(
             success=True,
             message=f"Successfully checked out {task.branch_name} to main repository",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/{task_id}/pr-status", response_model=GitHubPRStatusResponse)
+async def get_task_pr_status(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    task_service: TaskService = Depends(get_task_service),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> GitHubPRStatusResponse:
+    """Get GitHub PR status for a task in PR_OPEN state.
+
+    Returns PR information including merge status, mergeable state, and checks status.
+    Used by frontend to enable/disable merge actions and display PR status.
+
+    Args:
+        task_id: ID of the task
+
+    Returns:
+        GitHubPRStatusResponse with PR status information
+
+    Raises:
+        HTTPException: 404 if task not in PR_OPEN state or has no PR reference
+        HTTPException: 500 if GitHub API fails
+    """
+    # Validate task is in PR_OPEN state
+    if task.status != TaskStatus.PR_OPEN:
+        raise HTTPException(status_code=404, detail=f"Task is not in PR_OPEN state (current: {task.status.value})")
+
+    # Check task has PR info
+    if not task.github_pr_number:
+        raise HTTPException(status_code=404, detail="Task has no PR configured")
+
+    # Check codebase has repository URL
+    if not task.codebase.repository_url:
+        raise HTTPException(status_code=404, detail="Task codebase has no repository URL configured")
+
+    # Get GitHub integration and repository wrapper
+    try:
+        github = integration_service.get_integration_instance(GitHubIntegration)
+        github_repo = await github.get_repository_from_url(task.codebase.repository_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GitHub integration not configured: {e}") from e
+
+    try:
+        github_pr = await github_repo.get_pull_request(task.github_pr_number)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch PR status: {e}") from e
+
+    pr = github_pr.pr
+    # Determine aggregate checks status from mergeable_state
+    checks_status = None
+    if pr.mergeable_state:
+        if pr.mergeable_state == "clean":
+            checks_status = "success"
+        elif pr.mergeable_state in ("blocked", "behind", "dirty"):
+            checks_status = "pending"
+        elif pr.mergeable_state == "unstable":
+            checks_status = "failure"
+
+    return GitHubPRStatusResponse(
+        merged=pr.merged,
+        mergeable=pr.mergeable,
+        mergeable_state=pr.mergeable_state or "unknown",
+        state=pr.state,
+        review_comments_count=pr.review_comments,
+        checks_status=checks_status,
+        pr_url=pr.html_url,
+    )

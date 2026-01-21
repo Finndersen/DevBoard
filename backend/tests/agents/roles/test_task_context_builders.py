@@ -109,7 +109,7 @@ class TestBuildTaskSpecificationContext:
         assert "This is a test project specification." in context
 
         # Check task specification is included
-        assert "TASK SPECIFICATION DOCUMENT" in context
+        assert "TASK SPECIFICATION:" in context
         assert "Implement feature X" in context
 
     def test_handles_empty_task_specification(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
@@ -209,9 +209,9 @@ class TestBuildTaskSpecificationContext:
 
         context = build_task_specification_context(task)
 
-        # Should show <EMPTY> for project spec
+        # Should show <EMPTY> for project spec (and impl plan which has empty content)
         assert "PROJECT SPECIFICATION:" in context
-        assert context.count("<EMPTY>") == 1
+        assert "PROJECT SPECIFICATION:\n```markdown\n<EMPTY>" in context
 
 
 class TestBuildTaskPlanningContext:
@@ -230,11 +230,11 @@ class TestBuildTaskPlanningContext:
         assert "This is a test project specification." in context
 
         # Check task specification is included
-        assert "TASK SPECIFICATION DOCUMENT:" in context
+        assert "TASK SPECIFICATION:" in context
         assert "Implement feature X" in context
 
         # Check implementation plan is included
-        assert "TASK IMPLEMENTATION PLAN DOCUMENT:" in context
+        assert "IMPLEMENTATION PLAN:" in context
         assert "Implementation Steps" in context
 
     def test_handles_empty_documents(self, db_session, project_with_spec: Project, sample_codebase: Codebase):

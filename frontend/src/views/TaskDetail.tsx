@@ -12,7 +12,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
     <path d="M12 18 Q16 14 18 8" />
   </svg>
 )
-import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo } from '../lib/api'
+import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo, GitHubPRStatusResponse } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
@@ -38,6 +38,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Fetch documents separately - only when task is loaded with valid document IDs
   const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
   const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
+  const { data: changeSummaryDoc } = useDocument(task?.change_summary_document_id ?? null)
 
   // Document update mutation
   const { mutate: updateDocument } = useUpdateDocument()
@@ -45,6 +46,20 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
+
+  // PR status for tasks in PR_OPEN state (used to disable merge button when not mergeable)
+  const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
+
+  // Fetch PR status when task is in PR_OPEN state
+  useEffect(() => {
+    if (task?.status === 'pr_open' && task?.id) {
+      apiClient.getTaskPRStatus(task.id)
+        .then(setPrStatus)
+        .catch(() => setPrStatus(null))
+    } else {
+      setPrStatus(null)
+    }
+  }, [task?.id, task?.status])
 
   // Handle initial message from navigation state (passed when creating task with description)
   const [pendingInitialMessage, setPendingInitialMessage] = useState<string | null>(null)
@@ -109,7 +124,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Update tab title when task data is loaded
   useTabTitle('task', id)
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes'>('specification')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'summary'>('specification')
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [streamingMessage, setStreamingMessage] = useState<string>('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -372,9 +387,21 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   useToolResultHandler(fileModificationMatcher, fileModificationHandler)
 
+  // Handler for complete_task_with_local_merge tool - refresh task details
+  const taskCompletionMatcher = useCallback(
+    (toolName: string) => toolName.includes('complete_task_with_local_merge'),
+    []
+  )
+
+  const taskCompletionHandler = useCallback(async () => {
+    await refetch()
+  }, [refetch])
+
+  useToolResultHandler(taskCompletionMatcher, taskCompletionHandler)
+
   const systemEventMatcher = useCallback((event: any) => {
     return (
-      (event.type === 'task_updated' || event.type === 'branch_rebased') &&
+      (event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate') &&
       event.data?.task_id === task?.id
     )
   }, [task?.id])
@@ -412,6 +439,11 @@ function TaskDetail({ id }: TaskDetailProps) {
 
       // Handle branch_rebased events - refresh git status
       if (event.type === 'branch_rebased') {
+        await refreshGitStatus()
+      }
+
+      // Handle workspace_allocate events - refresh git status to show worktree indicator
+      if (event.type === 'workspace_allocate') {
         await refreshGitStatus()
       }
     } catch (error) {
@@ -495,39 +527,66 @@ function TaskDetail({ id }: TaskDetailProps) {
     executeWorkflowAction('task.rebase_branch', 'Rebasing branch...')
   }, [task?.id, task?.conversation_id])
 
-  const getNextStateButton = () => {
-    if (!task) return null
-    const status = task.status.toLowerCase()
-
-    switch (status) {
-      case 'defining':
-        return (
-          <Button
-            onClick={() => executeWorkflowAction('task.create_implementation_plan', 'Generating Implementation Plan...')}
-            variant="primary"
-            disabled={!specificationDoc?.content || specificationDoc.content.trim() === '' || isConversationStreaming}
-          >
-            Begin Planning
-          </Button>
-        )
-      case 'planning':
-        return (
-          <Button
-            onClick={() => executeWorkflowAction('task.begin_implementation', 'Starting Implementation...')}
-            variant="primary"
-            className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
-            disabled={isConversationStreaming}
-          >
-            Start Implementation
-          </Button>
-        )
-      case 'implementing':
-      case 'reviewing':
-      case 'complete':
-        return null
-      default:
-        return null
+  // Configuration for workflow action buttons
+  const getButtonConfigForAction = (actionKey: string) => {
+    const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean }> = {
+      'task.create_implementation_plan': {
+        loadingMessage: 'Generating Implementation Plan...',
+        isDisabled: () => !specificationDoc?.content || specificationDoc.content.trim() === '',
+      },
+      'task.begin_implementation': {
+        loadingMessage: 'Starting Implementation...',
+        className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+      },
+      'task.approve_and_merge': {
+        loadingMessage: 'Merging changes...',
+        className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+      },
+      'task.approve_and_create_pr': {
+        loadingMessage: 'Creating Pull Request...',
+      },
+      'task.merge_and_finalise': {
+        loadingMessage: 'Merging PR and completing...',
+        className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+        isDisabled: () => prStatus?.mergeable === false,
+      },
+      'task.finalise': {
+        loadingMessage: 'Completing task...',
+      },
     }
+    return configs[actionKey] || { loadingMessage: 'Processing...' }
+  }
+
+  const getWorkflowActionButtons = () => {
+    if (!task?.available_workflow_actions?.length) return null
+
+    // Filter out rebase action - it's handled separately in the branch status modal
+    const actionsToShow = task.available_workflow_actions.filter(
+      action => action.key !== 'task.rebase_branch'
+    )
+
+    if (actionsToShow.length === 0) return null
+
+    return (
+      <div className="flex gap-2">
+        {actionsToShow.map(action => {
+          const config = getButtonConfigForAction(action.key)
+          const isDisabled = isConversationStreaming || (config.isDisabled?.() ?? false)
+
+          return (
+            <Button
+              key={action.key}
+              onClick={() => executeWorkflowAction(action.key, config.loadingMessage)}
+              variant="primary"
+              className={config.className}
+              disabled={isDisabled}
+            >
+              {action.label}
+            </Button>
+          )
+        })}
+      </div>
+    )
   }
 
   const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
@@ -537,6 +596,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       case 'implementing':
         return 'info'
       case 'reviewing':
+      case 'pr_open':
         return 'warning'
       case 'complete':
         return 'success'
@@ -739,8 +799,8 @@ function TaskDetail({ id }: TaskDetailProps) {
             Delete
           </Button>
 
-          {/* State Transition Controls */}
-          {getNextStateButton()}
+          {/* Workflow Action Buttons */}
+          {getWorkflowActionButtons()}
         </div>
       </div>
 
@@ -757,7 +817,8 @@ function TaskDetail({ id }: TaskDetailProps) {
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
                     ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
-                    ...(task.codebase_id && ['implementing', 'reviewing', 'complete'].includes(task.status.toLowerCase()) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
+                    ...(task.codebase_id && ['implementing', 'reviewing', 'pr_open'].includes(task.status.toLowerCase()) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
+                    ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon }] : []),
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -897,6 +958,18 @@ function TaskDetail({ id }: TaskDetailProps) {
                   onRefresh={handleDiffRefresh}
                   lastUpdated={lastDiffUpdate}
                 />
+              </div>
+            )}
+
+            {activeTab === 'summary' && (
+              <div className="h-full flex flex-col">
+                <div className="h-full overflow-y-auto">
+                  {changeSummaryDoc?.content ? (
+                    <Markdown>{changeSummaryDoc.content}</Markdown>
+                  ) : (
+                    <p className={`${textColors.secondary} italic`}>No change summary available yet.</p>
+                  )}
+                </div>
               </div>
             )}
           </div>

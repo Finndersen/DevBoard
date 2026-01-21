@@ -37,6 +37,9 @@
 - issue: File changes tab not automatically displayed when beginning implementation phase
 - Advanced tool use capabilities like tool search & programmatic execution: https://www.anthropic.com/engineering/advanced-tool-use
 - Change layout to task list on sidebar like https://www.terragonlabs.com/
+- conditionally provide change summary and merge & finalise tools depending on implementation plan status
+- Split BaseAgentConversationService into two interfaces/classes, one for conversation history (doesnt require role), and one for agent execution
+- Add handling for when Claude session file is expired/deleted
 - Add "Commit changes" workflow action for when there are new uncommitted changes - or "Approve changes" for approving initial imoplementation as well as follow ups
 - ALlow assigning custom attributes to task (e.g. Jira task ID), and custom instruction to workflow action prompts for managing interaction with external resources (e.g. Jira tasks, documentation) via MCPs
 

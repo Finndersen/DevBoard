@@ -45,6 +45,7 @@ from .task import (
     CheckoutToMainResponse,
     CommitMetadata,
     FileDiff,
+    GitHubPRStatusResponse,
     MergeBranchRequest,
     MergeBranchResponse,
     RebaseBranchResponse,
@@ -57,6 +58,7 @@ from .task import (
     TaskGitStatusResponse,
     TaskResponse,
     TaskUpdate,
+    WorkflowActionInfo,
 )
 from .worktree import (
     CreateWorktreeSlotRequest,
@@ -114,6 +116,7 @@ __all__ = [
     "CommitMetadata",
     "DocumentEdit",
     "FileDiff",
+    "GitHubPRStatusResponse",
     "MergeBranchRequest",
     "MergeBranchResponse",
     "RebaseBranchResponse",
@@ -126,6 +129,7 @@ __all__ = [
     "TaskGitStatusResponse",
     "TaskResponse",
     "TaskUpdate",
+    "WorkflowActionInfo",
     # OAuth
     "MCPServerConfigCreate",
     "MCPServerConfigResponse",

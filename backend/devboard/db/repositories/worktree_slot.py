@@ -171,6 +171,27 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         self.db.flush()
         return slot
 
+    def assign_slot(self, slot: WorktreeSlot, task: "Task") -> WorktreeSlot:
+        """Assign a slot to a task for sticky tracking without locking.
+
+        This sets the last_used_by_task_id for sticky slot allocation but does NOT
+        lock the slot. Use this for operations like checkout_task_to_main_repo where
+        we want to track which task is using a slot but the slot should remain
+        available for the agent to lock when it actually runs.
+
+        Args:
+            slot: The slot to assign
+            task: The task to assign to
+
+        Returns:
+            Updated WorktreeSlot instance
+        """
+        slot.last_used_at = datetime.datetime.now(datetime.UTC)
+        slot.last_used_by_task_id = task.id
+
+        self.db.flush()
+        return slot
+
     def update(self, slot: WorktreeSlot) -> WorktreeSlot:
         """Update a worktree slot.
 
@@ -226,17 +247,23 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_main_slot_for_codebase(self, codebase_id: int) -> WorktreeSlot | None:
+    def get_main_slot_for_codebase(self, codebase_id: int) -> WorktreeSlot:
         """Get the main repository slot for a codebase.
 
         Args:
             codebase_id: The codebase ID to search for
 
         Returns:
-            WorktreeSlot instance for the main repo if found, None otherwise
+            WorktreeSlot instance for the main repo
+
+        Raises:
+            ValueError: If no main repo slot exists for the codebase
         """
         stmt = select(WorktreeSlot).where(
             WorktreeSlot.codebase_id == codebase_id,
             WorktreeSlot.is_main_repo.is_(True),
         )
-        return self.db.execute(stmt).scalar_one_or_none()
+        slot = self.db.execute(stmt).scalar_one_or_none()
+        if slot is None:
+            raise ValueError(f"No main repo slot found for codebase {codebase_id}")
+        return slot

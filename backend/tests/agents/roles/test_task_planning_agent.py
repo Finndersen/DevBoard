@@ -78,12 +78,13 @@ class TestTaskSpecificationRole:
 
     @pytest.mark.asyncio
     async def test_context_content(self, role, mock_task):
-        """Test context content includes specification."""
+        """Test context content includes specification and plan if present."""
         content = await role.get_context_content()
 
-        assert "TASK SPECIFICATION DOCUMENT" in content
+        assert "TASK SPECIFICATION:" in content
         assert mock_task.specification.content in content
-        assert "IMPLEMENTATION PLAN" not in content  # Should not include plan in specification role
+        # Implementation plan is auto-included when present on task
+        assert "IMPLEMENTATION PLAN:" in content
 
 
 class TestTaskPlanningRole:
@@ -150,9 +151,9 @@ class TestTaskPlanningRole:
         """Test context content includes both documents."""
         content = await role.get_context_content()
 
-        assert "TASK SPECIFICATION DOCUMENT:" in content
+        assert "TASK SPECIFICATION:" in content
         assert mock_task.specification.content in content
-        assert "TASK IMPLEMENTATION PLAN DOCUMENT:" in content
+        assert "IMPLEMENTATION PLAN:" in content
         assert mock_task.implementation_plan.content in content
 
 

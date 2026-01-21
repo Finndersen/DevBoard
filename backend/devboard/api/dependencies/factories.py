@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.base_agent_conversation import BaseAgentConversationService
@@ -9,15 +10,21 @@ from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
+from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
 from devboard.agents.roles.task_specification import TaskSpecificationAgentRole
 from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.integrations.github import GitHubIntegration
+from devboard.services.integration_service import IntegrationService
+from devboard.services.task_service import TaskService
 
 
-def create_agent_role_for_conversation(
+async def create_agent_role_for_conversation(
     conversation: Conversation,
     document_repo: DocumentRepository,
     agent_config_service: AgentConfigService,
+    integration_service: IntegrationService,
+    task_service: TaskService,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
@@ -25,9 +32,10 @@ def create_agent_role_for_conversation(
 
     Args:
         conversation: The conversation instance
-        parent_entity: Either a Project or Task instance
         document_repo: Repository for document operations
         agent_config_service: Service for agent configuration
+        integration_service: Service for creating integrations
+        task_service: Service for task operations
 
     Returns:
         Role instance configured for the conversation
@@ -51,7 +59,25 @@ def create_agent_role_for_conversation(
                 agent_config_service=agent_config_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
-            return TaskImplementationAgentRole(task=parent_entity, document_repository=document_repo)
+            # Create GitHub integration (no API calls - just object instantiation)
+            github_integration = integration_service.get_integration_instance(GitHubIntegration)
+            return TaskImplementationAgentRole(
+                task=parent_entity,
+                document_repository=document_repo,
+                task_service=task_service,
+                github_integration=github_integration,
+            )
+        elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
+            # Create GitHub integration (no API calls - just object instantiation)
+            github_integration = integration_service.get_integration_instance(GitHubIntegration)
+            try:
+                return TaskPRReviewAgentRole(
+                    task=parent_entity,
+                    task_service=task_service,
+                    github_integration=github_integration,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
         else:
             raise HTTPException(
                 status_code=400,
@@ -76,6 +102,7 @@ def create_agent_conversation_service(
     conversation: Conversation,
     role: AgentRole,
     conversation_repo: ConversationRepository,
+    additional_tools: list[Tool] | None = None,
 ) -> BaseAgentConversationService:
     """Create the appropriate service based on engine type.
 
@@ -84,8 +111,8 @@ def create_agent_conversation_service(
     Args:
         conversation: The conversation instance
         role: The role defining agent behavior
-        parent_entity: Either a Project or Task instance (for codebase path)
         conversation_repo: Repository for conversation operations
+        additional_tools: Optional extra tools beyond those defined by the role
 
     Returns:
         BaseAgentConversationService instance (PydanticAI or ClaudeCode)
@@ -99,12 +126,14 @@ def create_agent_conversation_service(
             conversation=conversation,
             role=role,
             conversation_repository=conversation_repo,
+            additional_tools=additional_tools,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
         return ClaudeCodeConversationService(
             conversation=conversation,
             role=role,
             conversation_repository=conversation_repo,
+            additional_tools=additional_tools,
         )
     else:
         raise HTTPException(

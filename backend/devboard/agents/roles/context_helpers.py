@@ -1,0 +1,86 @@
+"""Helper functions for building task context content.
+
+Provides a standardized build_task_context() function that task-related
+agent roles use to build their context content consistently.
+"""
+
+from devboard.db.models import Task
+
+
+def build_task_context(
+    task: Task,
+    *,
+    include_project_specification: bool = True,
+    pr_status_content: str = "",
+) -> str:
+    """Build standardized task context for agent roles.
+
+    Args:
+        task: Task instance with eager-loaded relationships
+        include_project_specification: Whether to include project specification
+        pr_status_content: Formatted PR status string (for PR review role)
+
+    Returns:
+        Formatted context string with consistent structure.
+        PR number and implementation plan are automatically included if present.
+    """
+    sections = [_format_task_metadata(task)]
+
+    if pr_status_content:
+        sections.append(f"PR STATUS:\n{pr_status_content}")
+
+    if include_project_specification:
+        sections.append(_format_project_specification(task))
+
+    sections.append(_format_task_specification(task))
+
+    if task.implementation_plan:
+        sections.append(_format_implementation_plan(task))
+
+    sections.append(_format_codebase_info(task))
+
+    return "\n\n".join(sections)
+
+
+def _format_task_metadata(task: Task) -> str:
+    """Format task name and status metadata."""
+    lines = [
+        f"TASK NAME: {task.title}",
+        f"TASK STATUS: {task.status.value}",
+    ]
+    if task.github_pr_number:
+        lines.append(f"PULL REQUEST: #{task.github_pr_number}")
+    return "\n".join(lines)
+
+
+def _format_codebase_info(task: Task) -> str:
+    """Format codebase information block."""
+    return f"""RELEVANT CODEBASE:
+- Name: {task.codebase.name}
+- Repository URL: {task.codebase.repository_url or "N/A"}
+- Worktree directory: {task.get_current_workspace_dir()}
+- Description: {task.codebase.description or "N/A"}"""
+
+
+def _format_document_section(title: str, content: str | None) -> str:
+    """Format a document section with markdown code block."""
+    return f"""{title}:
+```markdown
+{content or "<EMPTY>"}
+```"""
+
+
+def _format_project_specification(task: Task) -> str:
+    """Format project specification document section."""
+    return _format_document_section("PROJECT SPECIFICATION", task.project.specification.content)
+
+
+def _format_task_specification(task: Task) -> str:
+    """Format task specification document section."""
+    return _format_document_section("TASK SPECIFICATION", task.specification.content)
+
+
+def _format_implementation_plan(task: Task) -> str:
+    """Format implementation plan document section."""
+    content = task.implementation_plan.content if task.implementation_plan else None
+    return _format_document_section("IMPLEMENTATION PLAN", content)

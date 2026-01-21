@@ -59,6 +59,52 @@ Multi-source configuration resolution (environment > database > defaults). Pydan
 
 **Key Operations**: Get configuration with source tracking, update database configs, validate schemas, resolve LLM provider configs
 
+### Workspace Allocation Service
+
+**File**: `workspace_allocation_service.py`
+
+Manages worktree slot allocation for task implementation. Handles intelligent slot assignment with stickiness optimization.
+
+**Key Operations**:
+- `allocate_for_task(task)`: Find and lock an appropriate worktree slot
+- `run_task_agent_in_workspace(task, agent_stream)`: Execute agent in allocated workspace
+- `checkout_task_to_main_repo(task)`: Move task's work from worktree to main repository
+- `create_and_lock_slot(task)`: Create new worktree when all slots are locked
+- `release_slot(slot)`: Unlock slot after agent execution
+
+**Allocation Strategy**:
+1. **Stickiness**: Prefer last-used slot for task (avoids unnecessary checkouts)
+2. **Main repo stickiness**: Only reuse main repo slot if task's branch is still checked out there
+3. **LRU fallback**: Use least recently used available slot
+4. **Dynamic creation**: Create new worktree if all slots locked (respects `max_worktrees` limit)
+
+**Main Repo Checkout**: `checkout_task_to_main_repo()` enables manual work in IDE:
+1. Stash uncommitted changes from worktree (if any)
+2. Detach HEAD in worktree to release branch
+3. Checkout branch in main repository
+4. Apply stashed changes to main repo
+5. Migrate Claude Code session (if applicable)
+6. Assign main repo slot to task (without locking)
+
+**Session Migration**: Automatically migrates Claude Code sessions when task moves between directories.
+
+### Task Git Service
+
+**File**: `task_git_service.py`
+
+Git operations for task branches including creation, rebasing, and branch management.
+
+**Key Operations**:
+- `ensure_task_branch(task)`: Create task branch if it doesn't exist
+- `rebase_task_branch(task)`: Rebase task branch onto its base branch with stash handling
+- `get_task_diff(task)`: Get diff of task changes vs base branch
+
+**Rebase Workflow**: Handles uncommitted changes during rebase:
+1. Stash uncommitted changes (including untracked files)
+2. Perform rebase onto base branch
+3. On success: Apply stashed changes
+4. On conflict: Abort rebase, restore stash, raise error
+
 ### Other Services
 
 - **resource_service.py**: Context resource management, URI-based identification, resource sharing
@@ -114,6 +160,11 @@ AI-powered agent system with role-based architecture and pluggable execution eng
 **Tools** (`tools.py`): Engine-agnostic tool definitions converted for each execution engine.
 
 **Workflow Actions** (`workflow_actions/`): Reusable, named operations combining task state transitions with agent interactions. Base class in `base.py`, task-specific actions in `task_workflows.py`, registry in `registry.py`.
+
+Available workflow actions:
+- `CreateImplementationPlanAction`: Transitions task from DEFINING to PLANNING and generates implementation plan
+- `StartImplementationAction`: Transitions task from PLANNING to IMPLEMENTING and starts implementation
+- `RebaseTaskBranchAction`: Rebases task feature branch onto base branch with stash handling and conflict detection
 
 ### Agent Engines
 
