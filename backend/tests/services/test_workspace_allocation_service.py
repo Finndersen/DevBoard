@@ -77,6 +77,231 @@ def sample_slot():
     return slot
 
 
+# =============================================================================
+# Branch-Location Allocation Strategy Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_already_checked_out_in_worktree(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that allocation uses slot where branch is already checked out."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: Branch is checked out in a worktree slot
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = 999  # Different task
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Used slot where branch was checked out (not stickiness or LRU)
+    assert result.id == sample_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(sample_slot, sample_task)
+    # Verify get_checked_out_location was called for branch-location check
+    mock_git.return_value.get_checked_out_location.assert_called_once_with(sample_task.branch_name)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_in_main_repo_ignores_exclusion(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Test that branch-location strategy uses main repo even when excluded from pool."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: max_worktrees > 0 (main repo excluded from automatic allocation)
+    sample_codebase.max_worktrees = 2
+    sample_task.codebase = sample_codebase
+
+    # Setup: Main repo slot with branch already checked out
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 1
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    main_slot.locked = False
+    main_slot.last_used_by_task_id = 999  # Different task
+    main_slot.last_used_at = datetime.datetime.now(datetime.UTC)
+
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
+    worktree_slot_repo.lock_slot.return_value = main_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is checked out in main repo
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_codebase.local_path)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Main repo was used despite exclusion (branch is there)
+    assert result.id == main_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(main_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_location_with_uncommitted_changes(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that branch-location strategy ignores uncommitted changes (task's WIP)."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: Slot with uncommitted changes
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = 999  # Different task
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is checked out in slot with uncommitted changes
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=True)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Slot was used despite uncommitted changes
+    assert result.id == sample_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(sample_slot, sample_task)
+    # Verify has_uncommitted_changes was NOT called (branch-location skips this check)
+    mock_git.return_value.has_uncommitted_changes.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_location_slot_locked_falls_back(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that if branch's slot is locked, allocation falls back to stickiness/LRU."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    now = datetime.datetime.now(datetime.UTC)
+
+    # Setup: Slot with branch is locked
+    branch_slot = MagicMock(spec=WorktreeSlot)
+    branch_slot.id = 1
+    branch_slot.path = "/projects/test-repo.worktree-1"
+    branch_slot.is_main_repo = False
+    branch_slot.locked = True  # Locked!
+    branch_slot.last_used_by_task_id = 999
+    branch_slot.last_used_at = now - timedelta(hours=1)
+
+    # Setup: Another slot available for LRU
+    sample_slot.id = 2
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = None
+    sample_slot.last_used_at = now
+
+    worktree_slot_repo.get_by_codebase.return_value = [branch_slot, sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is checked out in locked slot
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=branch_slot.path)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Fell back to LRU since branch's slot is locked
+    assert result.id == sample_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(sample_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_no_branch_name_skips_location_check(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that branch-location check is skipped when task has no branch_name."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: Task has no branch name
+    sample_task.branch_name = None
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = None
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: get_checked_out_location was NOT called (no branch name)
+    mock_git.return_value.get_checked_out_location.assert_not_called()
+    # Verify: Fell back to LRU
+    assert result.id == sample_slot.id
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_not_checked_out_anywhere(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that allocation falls back to stickiness/LRU when branch isn't checked out."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = None
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is not checked out anywhere
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Fell back to LRU (branch not checked out)
+    assert result.id == sample_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(sample_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_location_takes_priority_over_stickiness(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Test that branch-location takes priority over sticky slot."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: Sticky slot (different from where branch is checked out)
+    sticky_slot = MagicMock(spec=WorktreeSlot)
+    sticky_slot.id = 1
+    sticky_slot.path = "/projects/test-repo.worktree-1"
+    sticky_slot.is_main_repo = False
+    sticky_slot.locked = False
+    sticky_slot.last_used_by_task_id = sample_task.id  # Sticky slot for this task
+    sticky_slot.last_used_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+
+    # Setup: Slot where branch is currently checked out
+    branch_slot = MagicMock(spec=WorktreeSlot)
+    branch_slot.id = 2
+    branch_slot.path = "/projects/test-repo.worktree-2"
+    branch_slot.is_main_repo = False
+    branch_slot.locked = False
+    branch_slot.last_used_by_task_id = 999  # Different task
+    branch_slot.last_used_at = datetime.datetime.now(datetime.UTC)
+
+    worktree_slot_repo.get_by_codebase.return_value = [sticky_slot, branch_slot]
+    worktree_slot_repo.lock_slot.return_value = branch_slot
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is checked out in branch_slot, not sticky_slot
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=branch_slot.path)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        result = await service.allocate_for_task(sample_task)
+
+    # Verify: Used branch_slot (where branch is) instead of sticky_slot
+    assert result.id == branch_slot.id
+    worktree_slot_repo.lock_slot.assert_called_once_with(branch_slot, sample_task)
+
+
+# =============================================================================
+# Task Stickiness Allocation Strategy Tests
+# =============================================================================
+
+
 @pytest.mark.asyncio
 async def test_allocate_for_task_sticky_slot(service, mock_repos, sample_task, sample_codebase, sample_slot):
     """Test allocation with task stickiness (prefer previously used slot)."""
@@ -89,6 +314,8 @@ async def test_allocate_for_task_sticky_slot(service, mock_repos, sample_task, s
     worktree_slot_repo.lock_slot.return_value = sample_slot  # Return same slot after locking
     # Mock git dirty check (clean slot)
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch not checked out anywhere (falls through to stickiness)
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute (no branch checkout - that's caller's responsibility)
@@ -114,6 +341,8 @@ async def test_allocate_for_task_branch_optimization(service, mock_repos, sample
 
     # Mock git dirty check (clean slot)
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch not checked out anywhere (falls through to LRU)
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute - should use branch optimization
@@ -138,9 +367,14 @@ async def test_allocate_for_task_all_slots_locked(service, mock_repos, sample_ta
     locked_slot.path = "/projects/test-repo"
 
     worktree_slot_repo.get_by_codebase.return_value = [locked_slot]  # Only locked slots
-    # Execute and verify exception
-    with pytest.raises(AllSlotsLockedException):
-        await service.allocate_for_task(sample_task)
+
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch location check finds nothing (slot is locked anyway)
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+
+        # Execute and verify exception
+        with pytest.raises(AllSlotsLockedException):
+            await service.allocate_for_task(sample_task)
 
 
 @pytest.mark.asyncio
@@ -239,6 +473,7 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
         patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
         patch.object(service, "_check_worktree_valid", return_value=True),
     ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
         mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
@@ -294,6 +529,7 @@ async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
     ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_checkout.return_value = True  # Checkout was performed
 
@@ -350,6 +586,7 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
 
     # Mock git operations
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.create_worktree = AsyncMock()
         mock_git.return_value.checkout_branch = AsyncMock()
         mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
@@ -423,6 +660,7 @@ async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
 
     # Mock git operations
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute
@@ -462,6 +700,7 @@ async def test_run_task_agent_yields_stream_error_when_all_slots_locked(
 
     # Mock git operations
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Mock agent stream (should never be reached)
@@ -735,7 +974,7 @@ async def test_allocate_for_task_prefers_most_recent_sticky_slot(service, mock_r
     - The main repo has a more recent last_used_at (from checkout)
     - Allocation should pick the main repo (most recent), not the worktree
     """
-    worktree_slot_repo, task_repo = mock_repos
+    worktree_slot_repo, task_repo, _ = mock_repos
 
     now = datetime.datetime.now(datetime.UTC)
 
@@ -765,6 +1004,7 @@ async def test_allocate_for_task_prefers_most_recent_sticky_slot(service, mock_r
 
     # Mock git operations
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute
@@ -906,6 +1146,7 @@ async def test_allocate_uses_main_repo_assigned_but_not_locked_by_same_task(
 
     # Mock git operations
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute

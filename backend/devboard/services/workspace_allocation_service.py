@@ -134,13 +134,20 @@ class WorkspaceAllocationService:
     async def allocate_for_task(self, task: Task) -> WorktreeSlot:
         """Find an appropriate slot and lock it for a task.
 
-        Implements smart allocation with:
-        1. Task stickiness - prefer last-used slot (with special handling for main repo)
-        2. LRU - pick least recently used available slot
+        Implements smart allocation with priority:
+        1. Branch location - slot already has task's branch checked out
+        2. Task stickiness - prefer last-used slot (with special handling for main repo)
+        3. LRU - pick least recently used available slot
+
+        Branch-location strategy prevents git checkout errors when a branch is already
+        checked out elsewhere. If the task's branch is checked out in any unlocked slot,
+        that slot is used regardless of main repo exclusion rules or uncommitted changes
+        (which belong to the task's WIP).
 
         For main repo slots:
         - When max_worktrees=0: Main repo is included in normal allocation pool
         - When max_worktrees=None or >0: Main repo is excluded from automatic allocation
+        - Exception: If task's branch is already checked out in main repo, it's used
         - Main repo slot is only reused for a task via stickiness if the task's branch is still checked out there
         - If main repo has a different branch checked out, the task is allocated a different slot
         - This ensures main repo slot assignment only happens through explicit manual action (unless max_worktrees=0)
@@ -149,6 +156,9 @@ class WorkspaceAllocationService:
             ValueError: If task has invalid configuration
             AllSlotsLockedException: If no suitable slots are available
         """
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch configured")
+
         # Clean up any stale locks before attempting allocation
         await self.cleanup_stale_locks(codebase_id=task.codebase.id)
 
@@ -168,7 +178,22 @@ class WorkspaceAllocationService:
         # This ensures when multiple slots have the same task ID, we prefer the most recent
         all_slots_sorted = sorted(all_slots, key=lambda s: s.last_used_at, reverse=True)
 
-        # Single pass: find sticky slot and build candidate pool simultaneously
+        # PRIORITY 1: Check if task's branch is already checked out in any available slot
+        # This prevents git checkout errors when the branch is checked out elsewhere.
+        # Ignores main repo exclusion rules - if branch is there, use it.
+        # Ignores uncommitted changes filter - changes are the task's WIP.
+        git = GitRepoIntegration(task.codebase.local_path)
+        branch_location = await git.get_checked_out_location(task.branch_name)
+
+        if branch_location:
+            for slot in all_slots_sorted:
+                if slot.path == branch_location and not slot.locked:
+                    logfire.info(
+                        f"Using slot {slot.id} for task {task.id} - branch {task.branch_name} already checked out there"
+                    )
+                    return self.worktree_slot_repo.lock_slot(slot, task)
+
+        # PRIORITY 2: Single pass - find sticky slot and build candidate pool simultaneously
         sticky_slot: WorktreeSlot | None = None
         candidate_slots: list[WorktreeSlot] = []
 
