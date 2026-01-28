@@ -32,7 +32,7 @@
 - Split BaseAgentConversationService into two interfaces/classes, one for conversation history (doesnt require role), and one for agent execution
 - Add "Commit changes" workflow action for when there are new uncommitted changes - or "Approve changes" for approving initial imoplementation as well as follow ups
 - ALlow assigning custom attributes to task (e.g. Jira task ID), and custom instruction to workflow action prompts for managing interaction with external resources (e.g. Jira tasks, documentation) via MCPs
-
+- Better handling of errors during virtual tool calls (or any tool calls?) - frontend left showing tool call running and no error indicator
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

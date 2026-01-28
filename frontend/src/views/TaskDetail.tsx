@@ -337,12 +337,14 @@ function TaskDetail({ id }: TaskDetailProps) {
   const specificationHandler = useCallback(async (result: any) => {
     try {
       await refetchSpecification()
+      // Refetch task to update available_workflow_actions (e.g., "Create implementation plan" becomes available)
+      await refetch()
       // Switch to specification tab to show the updated content
       setActiveTab('specification')
     } catch (error) {
       console.error('Failed to refetch specification document:', error)
     }
-  }, [refetchSpecification, setActiveTab])
+  }, [refetchSpecification, refetch, setActiveTab])
 
   // Handle specification document updates from MCP tools
   useToolResultHandler(specificationMatcher, specificationHandler)
