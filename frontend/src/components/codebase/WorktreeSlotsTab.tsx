@@ -97,6 +97,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
               </div>
             )}
 
+            {/* Show locked task OR last used task (not both) */}
             {isLocked && slot.locked_by_task && (
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                 <span className={`${textColors.secondary} block mb-1`}>Locked by task:</span>
@@ -104,11 +105,22 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                   <div className="font-medium text-orange-700 dark:text-orange-300">
                     {slot.locked_by_task.title}
                   </div>
-                  <div className="flex items-center justify-between text-orange-600 dark:text-orange-400">
+                  <div className="text-orange-600 dark:text-orange-400">
                     <span>Task ID: {slot.locked_by_task.id}</span>
-                    <code className="font-mono text-xs bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded">
-                      {slot.locked_by_task.branch}
-                    </code>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!isLocked && slot.last_used_by_task && (
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                <span className={`${textColors.secondary} block mb-1`}>Last used by task:</span>
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 space-y-1">
+                  <div className="font-medium text-blue-700 dark:text-blue-300">
+                    {slot.last_used_by_task.title}
+                  </div>
+                  <div className="text-blue-600 dark:text-blue-400">
+                    <span>Task ID: {slot.last_used_by_task.id}</span>
                   </div>
                 </div>
               </div>

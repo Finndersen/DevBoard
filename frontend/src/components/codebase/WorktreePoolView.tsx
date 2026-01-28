@@ -122,11 +122,21 @@ export function WorktreePoolView({ codebaseId }: WorktreePoolViewProps) {
               </div>
             )}
 
+            {/* Show locked task OR last used task (not both) */}
             {isLocked && slot.locked_by_task && (
               <div className="flex items-center justify-between">
                 <span className={textColors.secondary}>Locked by:</span>
-                <span className="text-orange-600 dark:text-orange-400 font-medium">
+                <span className="text-orange-600 dark:text-orange-400 font-medium truncate ml-2" title={slot.locked_by_task.title}>
                   {slot.locked_by_task.title}
+                </span>
+              </div>
+            )}
+
+            {!isLocked && slot.last_used_by_task && (
+              <div className="flex items-center justify-between">
+                <span className={textColors.secondary}>Last used by:</span>
+                <span className="text-blue-600 dark:text-blue-400 font-medium truncate ml-2" title={slot.last_used_by_task.title}>
+                  {slot.last_used_by_task.title}
                 </span>
               </div>
             )}

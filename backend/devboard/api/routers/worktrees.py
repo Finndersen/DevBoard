@@ -54,7 +54,11 @@ async def get_worktree_pool_status(
             slot_dict["locked_by_task"] = {
                 "id": slot.locked_by_task.id,
                 "title": slot.locked_by_task.title,
-                "branch": slot.locked_by_task.branch,
+            }
+        if slot.last_used_by_task:
+            slot_dict["last_used_by_task"] = {
+                "id": slot.last_used_by_task.id,
+                "title": slot.last_used_by_task.title,
             }
         slots_with_info.append(WorktreeSlotWithTaskInfo(**slot_dict))
 

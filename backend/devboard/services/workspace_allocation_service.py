@@ -33,7 +33,14 @@ class LockedByTaskInfo:
 
     id: int
     title: str
-    branch: str | None
+
+
+@dataclass
+class LastUsedByTaskInfo:
+    """Information about the last task that used a slot."""
+
+    id: int
+    title: str
 
 
 @dataclass
@@ -47,6 +54,7 @@ class SlotInfo:
     current_branch: str | None
     last_used_at: str | None
     locked_by_task: LockedByTaskInfo | None = None
+    last_used_by_task: LastUsedByTaskInfo | None = None
 
 
 @dataclass
@@ -461,13 +469,19 @@ class WorkspaceAllocationService:
             # Get current branch dynamically
             current_branch = await slot.get_current_branch()
 
-            # Build locked_by_task info if applicable
+            # Build task info - either locked_by_task (if locked) or last_used_by_task (if available)
             locked_by_task = None
+            last_used_by_task = None
+
             if slot.locked and slot.last_used_by_task:
                 locked_by_task = LockedByTaskInfo(
                     id=slot.last_used_by_task.id,
                     title=slot.last_used_by_task.title,
-                    branch=slot.last_used_by_task.branch_name,
+                )
+            elif not slot.locked and slot.last_used_by_task:
+                last_used_by_task = LastUsedByTaskInfo(
+                    id=slot.last_used_by_task.id,
+                    title=slot.last_used_by_task.title,
                 )
 
             slot_info = SlotInfo(
@@ -478,6 +492,7 @@ class WorkspaceAllocationService:
                 current_branch=current_branch,
                 last_used_at=slot.last_used_at.isoformat() if slot.last_used_at else None,
                 locked_by_task=locked_by_task,
+                last_used_by_task=last_used_by_task,
             )
 
             slot_data.append(slot_info)

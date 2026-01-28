@@ -215,6 +215,11 @@ export interface WorktreeSlotInfo {
   locked_since: string | null
 }
 
+export interface TaskInfoSimple {
+  id: number
+  title: string
+}
+
 export interface WorktreeSlot {
   id: number
   path: string
@@ -222,7 +227,8 @@ export interface WorktreeSlot {
   status: 'locked' | 'available'
   current_branch: string | null
   last_used_at: string | null
-  locked_by_task: TaskInfo | null
+  locked_by_task: TaskInfoSimple | null
+  last_used_by_task: TaskInfoSimple | null
   locked_at: string | null
 }
 
