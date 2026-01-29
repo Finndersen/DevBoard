@@ -34,6 +34,7 @@
 - ALlow assigning custom attributes to task (e.g. Jira task ID), and custom instruction to workflow action prompts for managing interaction with external resources (e.g. Jira tasks, documentation) via MCPs
 - Better handling of errors during virtual tool calls (or any tool calls?) - frontend left showing tool call running and no error indicator
 - make task.branch_name mandatory
+- add tool to allow agent to update task custom field values
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
