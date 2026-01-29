@@ -545,11 +545,11 @@ class WorkspaceAllocationService:
         """
         slot: WorktreeSlot | None = None
         try:
-            # Ensure task has a branch (create if needed, generate name if null)
-            # TODO: Make sure task branch already exists by this point so this can be removed
+            # Task must have branch_name set at creation time
+            assert task.branch_name, f"Task {task.id} must have branch_name set"
+
+            # Ensure git branch exists (create if needed)
             await self.task_git_service.ensure_task_branch(task)
-            # Commit to persist branch_name if it was just generated
-            self.task_repo.db.commit()
 
             # Track previous slot to determine if allocation changed
             previous_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)

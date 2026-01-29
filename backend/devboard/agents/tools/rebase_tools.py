@@ -47,7 +47,14 @@ def create_rebase_task_branch_tool(
             raise ModelRetry(str(e))
 
         if result.outcome == RebaseOutcome.SUCCESS:
-            return f"Rebase completed successfully. New HEAD: {result.new_head}"
+            message = f"Rebase completed successfully. New HEAD: {result.new_head}"
+
+            # Include base branch changes summary if available
+            if result.base_branch_changes:
+                message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch)}"
+                message += "\n\nPlease review these changes and note if any are relevant to the current task."
+
+            return message
 
         elif result.outcome == RebaseOutcome.CONFLICT:
             conflict_list = (

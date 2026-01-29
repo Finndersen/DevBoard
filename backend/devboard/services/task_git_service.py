@@ -4,7 +4,6 @@ Handles git branch operations for tasks including branch creation,
 status checking, merging, and deletion.
 """
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -65,6 +64,43 @@ class RebaseOutcome(StrEnum):
 
 
 @dataclass
+class BaseBranchChanges:
+    """Changes in the base branch since last rebase/sync.
+
+    Captures information about what changed in the base branch between
+    the previous and current HEAD after fetching from remote.
+    """
+
+    commits: list[GitLogEntry]
+    files_changed: list[str]
+    additions: int
+    deletions: int
+
+    def format_summary(self, base_branch: str, max_files: int = 20) -> str:
+        """Format a human-readable summary of the base branch changes.
+
+        Args:
+            base_branch: Name of the base branch for display
+            max_files: Maximum number of files to list before truncating
+
+        Returns:
+            Formatted markdown summary of the changes
+        """
+        commit_list = "\n".join(f"  - {c.hash[:7]}: {c.message}" for c in self.commits)
+        file_list = "\n".join(f"  - {f}" for f in self.files_changed[:max_files])
+        if len(self.files_changed) > max_files:
+            file_list += f"\n  - ... and {len(self.files_changed) - max_files} more files"
+
+        return (
+            f"**Base branch ({base_branch}) changes since last sync** "
+            f"({len(self.commits)} commits, {len(self.files_changed)} files, "
+            f"+{self.additions}/-{self.deletions}):\n\n"
+            f"**Commits:**\n{commit_list}\n\n"
+            f"**Files changed:**\n{file_list}"
+        )
+
+
+@dataclass
 class RebaseResult:
     """Result of a rebase operation."""
 
@@ -73,6 +109,7 @@ class RebaseResult:
     new_head: str | None = None  # Set when rebase completes successfully
     conflicted_files: list[str] | None = None  # Set when there are conflicts
     has_pending_stash: bool = False  # True if uncommitted changes are stashed waiting to be restored
+    base_branch_changes: BaseBranchChanges | None = None  # Changes in base branch since last sync
 
 
 class TaskGitService:
@@ -89,31 +126,25 @@ class TaskGitService:
         self.worktree_slot_repo = worktree_slot_repo
 
     async def ensure_task_branch(self, task: Task) -> str:
-        """Ensure task has a branch, creating it if necessary.
+        """Ensure task's git branch exists, creating it if necessary.
 
         This method is called at the start of the implementation phase to ensure
-        the task has a git branch to work on. If branch_name is not set, it will
-        auto-generate one. If the branch doesn't exist in git, it will be created.
+        the task has a git branch to work on. The branch_name must already be set
+        on the task (generated at task creation time).
 
         Args:
-            task: Task instance
+            task: Task instance with branch_name set
 
         Returns:
-            The branch name (either existing or newly generated)
+            The branch name
 
         Raises:
-            ValueError: If task configuration is invalid
+            ValueError: If task.branch_name is not set
         """
-        # Generate branch name if not set
         if not task.branch_name:
-            branch_name = self._generate_branch_name(task)
-            task.branch_name = branch_name
+            raise ValueError(f"Task {task.id} must have branch_name set")
 
-            # Update task in database
-            self.task_repo.update(task)
-            logfire.info(f"Auto-generated branch name {branch_name} for task {task.id}")
-        else:
-            branch_name = task.branch_name
+        branch_name = task.branch_name
 
         # Create branch if it doesn't exist
         git = GitRepoIntegration(task.codebase.local_path)
@@ -124,17 +155,6 @@ class TaskGitService:
             logfire.info(f"Branch {branch_name} already exists for task {task.id}")
 
         return branch_name
-
-    def _generate_branch_name(self, task: Task) -> str:
-        """Generate a branch name for a task.
-
-        Format: devboard/task-{id}-{slug}
-        """
-        # Create slug from title (lowercase, alphanumeric + hyphens only, max 40 chars)
-        slug = re.sub(r"[^a-z0-9]+", "-", task.title.lower()).strip("-")[:40]
-        # TODO: Make this a configurable template on a per-codebase basis?
-        # return f"devboard/task-{task.id}-{slug}"
-        return slug
 
     async def get_task_commit_metadata(self, task: Task) -> list[GitLogEntry]:
         """Get lightweight commit metadata for a task branch.
@@ -502,6 +522,9 @@ class TaskGitService:
             await git.stash_push(include_untracked=True, message=stash_message)
             logfire.info(f"Stashed uncommitted changes for task {task.id}")
 
+        # Get base branch HEAD before fetch to detect changes
+        base_head_before = await git.get_branch_head(task.base_branch)
+
         # Fetch latest from remote to ensure we have up-to-date base branch
         try:
             await git.fetch()
@@ -509,12 +532,36 @@ class TaskGitService:
             # Fetch failure is non-fatal - continue with local state
             pass
 
+        # Get base branch HEAD after fetch to detect changes
+        base_head_after = await git.get_branch_head(task.base_branch)
+
+        # Compute base branch changes if HEAD changed
+        base_branch_changes: BaseBranchChanges | None = None
+        if base_head_before and base_head_after and base_head_before != base_head_after:
+            try:
+                commits = await git.get_commits_in_range(base_head_before, base_head_after)
+                diff = await git.get_structured_diff(base_head_before, base_head_after)
+                base_branch_changes = BaseBranchChanges(
+                    commits=commits,
+                    files_changed=[f.path for f in diff.files],
+                    additions=diff.additions,
+                    deletions=diff.deletions,
+                )
+                logfire.info(
+                    f"Base branch {task.base_branch} changed: {len(commits)} new commits, "
+                    f"{len(base_branch_changes.files_changed)} files changed"
+                )
+            except Exception as e:
+                logfire.warning(f"Failed to compute base branch changes: {e}")
+
         # Start the rebase (don't abort on conflict - leave paused)
         try:
             new_head = await git.rebase_onto(task.base_branch, abort_on_conflict=False)
             logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
             # Rebase complete - try to restore stashed changes
-            return await self._apply_rebase_stash_if_exists(task, git, repo_path, stash_message, new_head)
+            return await self._apply_rebase_stash_if_exists(
+                task, git, repo_path, stash_message, new_head, base_branch_changes
+            )
         except RebaseConflictError:
             # Rebase has conflicts
             conflicted_files = await git.get_conflicted_files()
@@ -525,10 +572,17 @@ class TaskGitService:
                 slot_path=repo_path,
                 conflicted_files=conflicted_files,
                 has_pending_stash=has_pending_stash,
+                base_branch_changes=base_branch_changes,
             )
 
     async def _apply_rebase_stash_if_exists(
-        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str, new_head: str
+        self,
+        task: Task,
+        git: GitRepoIntegration,
+        repo_path: str,
+        stash_message: str,
+        new_head: str,
+        base_branch_changes: BaseBranchChanges | None = None,
     ) -> RebaseResult:
         """Check for and apply any rebase stash after successful rebase."""
         stash_ref = await git.find_stash_by_message(stash_message)
@@ -538,6 +592,7 @@ class TaskGitService:
                 outcome=RebaseOutcome.SUCCESS,
                 slot_path=repo_path,
                 new_head=new_head,
+                base_branch_changes=base_branch_changes,
             )
 
         # Found a rebase stash - try to apply it
@@ -550,6 +605,7 @@ class TaskGitService:
                 outcome=RebaseOutcome.SUCCESS,
                 slot_path=repo_path,
                 new_head=new_head,
+                base_branch_changes=base_branch_changes,
             )
         except ShellCommandExecutionError:
             # Stash apply had conflicts
@@ -560,6 +616,7 @@ class TaskGitService:
                 slot_path=repo_path,
                 new_head=new_head,
                 conflicted_files=conflicted_files,
+                base_branch_changes=base_branch_changes,
             )
 
     async def merge_task_feature_branch(self, task: Task) -> MergeResult:

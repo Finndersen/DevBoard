@@ -168,7 +168,11 @@ class BeginImplementationAction(TaskWorkflowAction):
 class RebaseTaskBranchAction(TaskWorkflowAction):
     """Workflow action that rebases a task's feature branch onto its base branch.
 
-    This action delegates to the agent with the rebase_task_branch tool, which handles:
+    Behavior varies by task status:
+    - DEFINING/PLANNING: Direct service call (no agent involvement, no file changes expected)
+    - IMPLEMENTING: Delegates to agent with rebase_task_branch tool for conflict resolution
+
+    For IMPLEMENTING, the agent handles:
     1. Stashing uncommitted changes (if any)
     2. Starting/continuing the rebase
     3. Conflict resolution (agent resolves, then calls tool again)
@@ -178,7 +182,7 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
     KEY = "task.rebase_branch"
     DESCRIPTION = "Rebase task branch onto base branch"
 
-    PROMPT = """Use the rebase_task_branch tool to rebase this task's feature branch onto the base branch.
+    IMPLEMENTING_PROMPT = """Use the rebase_task_branch tool to rebase this task's feature branch onto the base branch.
 
 The tool is idempotent - if a rebase is already in progress, it will continue it.
 If you encounter merge conflicts:
@@ -189,29 +193,100 @@ If you encounter merge conflicts:
 
 Keep using the tool until the rebase completes successfully."""
 
+    BASE_BRANCH_CHANGES_PROMPT_TEMPLATE = """The task branch has been rebased onto the latest base branch.
+
+{changes_summary}
+
+Please briefly review these changes and note if any are relevant to the current task."""
+
     @classmethod
     def is_available(cls, task: Task) -> bool:
         """Check if this action is available for the given task.
 
-        Available when: status is IMPLEMENTING and task has feature branch.
+        Available when: task has feature branch and status is DEFINING, PLANNING, or IMPLEMENTING.
         """
-        return task.status == TaskStatus.IMPLEMENTING and task.branch_name is not None
+        return task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING, TaskStatus.IMPLEMENTING) and task.branch_name is not None
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: delegate rebase to agent with rebase tool.
+        """Execute the action: rebase task branch onto base branch.
+
+        For DEFINING/PLANNING: Direct service call, then agent reviews base branch changes.
+        For IMPLEMENTING: Delegates to agent with rebase tool for conflict resolution.
 
         Yields:
-            ConversationEvent objects from agent interaction
+            ConversationEvent objects from agent interaction or system events
         """
+        if self.task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING):
+            async for event in self._run_direct_rebase():
+                yield event
+        else:
+            # IMPLEMENTING: Use agent for potential conflict resolution
+            async for event in self._run_agent_rebase():
+                yield event
+
+    async def _run_direct_rebase(self) -> AsyncIterator[ConversationEvent]:
+        """Execute direct rebase for DEFINING/PLANNING states (no file changes expected)."""
+        try:
+            rebase_result = await self.task_git_service.rebase_task_branch(self.task)
+        except Exception as e:
+            yield SystemEvent(
+                event_type="system",
+                type=SystemEventType.STREAM_ERROR,
+                data={
+                    "task_id": self.task.id,
+                    "message": f"Rebase failed: {str(e)}",
+                },
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            return
+
+        # Check for conflicts (shouldn't happen in DEFINING/PLANNING since no file changes)
+        if rebase_result.outcome.value == "conflict":
+            yield SystemEvent(
+                event_type="system",
+                type=SystemEventType.STREAM_ERROR,
+                data={
+                    "task_id": self.task.id,
+                    "message": f"Rebase encountered conflicts. Conflicted files: {', '.join(rebase_result.conflicted_files or [])}",
+                },
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            return
+
+        # Emit success event
+        yield SystemEvent(
+            event_type="system",
+            type=SystemEventType.BRANCH_REBASED,
+            data={
+                "task_id": self.task.id,
+                "message": f"Rebased onto {self.task.base_branch}",
+            },
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        # If base branch had changes, stream agent response to review them
+        if rebase_result.base_branch_changes:
+            prompt = self.BASE_BRANCH_CHANGES_PROMPT_TEMPLATE.format(
+                changes_summary=rebase_result.base_branch_changes.format_summary(self.task.base_branch),
+            )
+
+            current_conversation = self.conversation_repo.get_active_conversation_for_entity(
+                ParentEntityType.TASK, self.task.id
+            )
+
+            agent_conversation_service = await self._create_agent_conversation_service(current_conversation)
+            async for event in agent_conversation_service.stream_events_for_message_or_approval(prompt):
+                yield event
+
+    async def _run_agent_rebase(self) -> AsyncIterator[ConversationEvent]:
+        """Execute agent-based rebase for IMPLEMENTING state (handles conflict resolution)."""
         # Get current active conversation
         current_conversation = self.conversation_repo.get_active_conversation_for_entity(
             ParentEntityType.TASK, self.task.id
         )
 
         # Stream agent response - agent uses the rebase_task_branch tool
-        async for event in self._stream_agent_response(current_conversation, self.PROMPT):
-            # Check if this is a successful rebase completion (from the tool)
-            # We emit BRANCH_REBASED event when the agent finishes successfully
+        async for event in self._stream_agent_response(current_conversation, self.IMPLEMENTING_PROMPT):
             yield event
 
         # After agent completes, emit success event

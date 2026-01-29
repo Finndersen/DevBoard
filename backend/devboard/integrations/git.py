@@ -509,6 +509,21 @@ class GitRepoIntegration:
         """
         return await self._run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
 
+    async def get_branch_head(self, branch: str) -> str | None:
+        """Get the HEAD commit hash for a branch.
+
+        Args:
+            branch: Branch name (can be local like 'main' or remote like 'origin/main')
+
+        Returns:
+            The commit hash, or None if the branch doesn't exist
+        """
+        result = await self._run_git_command(
+            ["rev-parse", "--verify", branch],
+            raise_on_error=False,
+        )
+        return result if result else None
+
     async def get_default_branch(self) -> str:
         """Get the repository's default branch.
 

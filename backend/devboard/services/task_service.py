@@ -4,6 +4,8 @@ Handles task creation, phase transitions, and conversation lifecycle management.
 Ensures proper agent configuration and conversation state throughout the task lifecycle.
 """
 
+import re
+
 import logfire
 
 from devboard.agents.roles import AgentRoleType
@@ -45,6 +47,14 @@ class TaskService:
         self.task_repo = task_repo
         self.worktree_slot_repo = worktree_slot_repo
 
+    def _generate_branch_name(self, title: str) -> str:
+        """Generate a branch name from a task title.
+
+        Format: lowercase, alphanumeric + hyphens only, max 40 chars.
+        """
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
+        return slug
+
     def create_task(
         self,
         project_id: int,
@@ -61,8 +71,7 @@ class TaskService:
         configured with the appropriate agent role, engine, and model based on the
         task's initial status.
 
-        If no branch name is provided, a branch name will be auto-generated and the
-        branch will be created in git (if it doesn't already exist).
+        If no branch name is provided, a branch name will be auto-generated from the title.
 
         Args:
             project_id: ID of the project this task belongs to
@@ -76,6 +85,11 @@ class TaskService:
         Returns:
             Created Task instance with active conversation
         """
+        # Auto-generate branch name from title if not provided
+        if not branch_name:
+            branch_name = self._generate_branch_name(title)
+            logfire.info(f"Auto-generated branch name '{branch_name}' for new task")
+
         # Create documents
         specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, specification_content)
 
