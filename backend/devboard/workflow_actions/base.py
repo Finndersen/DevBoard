@@ -99,6 +99,7 @@ class TaskWorkflowAction(ABC):
             agent_config_service=self.agent_config_service,
             integration_service=self.integration_service,
             task_service=self.task_service,
+            task_git_service=self.task_git_service,
         )
 
         # Create service with role and any additional tools

@@ -138,6 +138,8 @@ class TaskGitStatusResponse(BaseModel):
     worktree_slot_path: str | None = None
     main_repo_is_clean: bool = True
     main_repo_current_branch: str | None = None
+    # Rebase state
+    rebase_in_progress: bool = False
 
 
 class MergeBranchRequest(BaseModel):

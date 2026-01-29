@@ -24,6 +24,7 @@ export default function GitBranchStatusModal({
   isStreaming = false
 }: GitBranchStatusModalProps) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [abortLoading, setAbortLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleRebase = useCallback(() => {
@@ -52,11 +53,30 @@ export default function GitBranchStatusModal({
     }
   }, [taskId, gitStatus, onStatusUpdate, onClose])
 
+  const handleAbortRebase = useCallback(async () => {
+    setAbortLoading(true)
+    setError(null)
+
+    try {
+      await apiClient.abortTaskRebase(taskId)
+      onStatusUpdate?.()
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to abort rebase')
+      }
+    } finally {
+      setAbortLoading(false)
+    }
+  }, [taskId, onStatusUpdate])
+
   if (!gitStatus) return null
 
-  const canRebase = gitStatus.commits_behind > 0 && !gitStatus.has_conflicts
+  // Allow rebase even with potential conflicts - agent will resolve them
+  const canRebase = gitStatus.commits_behind > 0 && !gitStatus.rebase_in_progress
   const isAlreadyInMainRepo = gitStatus.main_repo_current_branch === gitStatus.branch_name
-  const canCheckoutToMain = gitStatus.main_repo_is_clean && !isAlreadyInMainRepo
+  const canCheckoutToMain = gitStatus.main_repo_is_clean && !isAlreadyInMainRepo && !gitStatus.rebase_in_progress
 
   return (
     <Modal
@@ -66,6 +86,31 @@ export default function GitBranchStatusModal({
       maxWidth="xl"
     >
       <div className="space-y-4">
+        {/* Rebase in progress indicator */}
+        {gitStatus.rebase_in_progress && (
+          <div className="flex items-center p-3 rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
+            <svg className="w-5 h-5 mr-2 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <div className="flex-1">
+              <span className="text-sm font-medium">Rebase in progress</span>
+              <p className="text-xs mt-0.5">Agent is resolving conflicts or the rebase was interrupted</p>
+            </div>
+            {!isStreaming && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAbortRebase}
+                loading={abortLoading}
+                className="ml-3"
+              >
+                Abort Rebase
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Branch Info */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
@@ -112,15 +157,6 @@ export default function GitBranchStatusModal({
               )}
             </div>
           </div>
-
-          {gitStatus.has_conflicts && (
-            <div className="flex items-center p-2 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300">
-              <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <span className="text-sm">Predicted merge conflicts</span>
-            </div>
-          )}
         </div>
 
         {/* Error message */}
@@ -133,23 +169,34 @@ export default function GitBranchStatusModal({
         {/* Actions */}
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
           {/* Rebase button - show when behind */}
-          {gitStatus.commits_behind > 0 && (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Rebase onto base branch</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Update branch with latest changes from {gitStatus.base_branch}
-                </p>
+          {gitStatus.commits_behind > 0 && !gitStatus.rebase_in_progress && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Rebase onto base branch</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Update branch with latest changes from {gitStatus.base_branch}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleRebase}
+                  disabled={!canRebase || checkoutLoading || isStreaming}
+                  title={isStreaming ? 'Agent is currently running' : undefined}
+                >
+                  Rebase
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRebase}
-                disabled={!canRebase || checkoutLoading || isStreaming}
-                title={isStreaming ? 'Agent is currently running' : gitStatus.has_conflicts ? 'Predicted merge conflicts' : undefined}
-              >
-                Rebase
-              </Button>
+              {/* Warning for potential conflicts - but allow proceeding */}
+              {gitStatus.has_conflicts && (
+                <div className="flex items-center p-2 rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
+                  <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Potential merge conflicts detected - agent will resolve them</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -197,7 +244,7 @@ export default function GitBranchStatusModal({
           <Button
             variant="ghost"
             onClick={onClose}
-            disabled={checkoutLoading}
+            disabled={checkoutLoading || abortLoading}
           >
             Close
           </Button>

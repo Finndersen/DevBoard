@@ -56,15 +56,23 @@ class MergeResult:
     merge_commit: str | None = None
 
 
+class RebaseOutcome(StrEnum):
+    """Outcome of a rebase operation."""
+
+    SUCCESS = "success"  # Rebase completed successfully
+    CONFLICT = "conflict"  # Rebase has conflicts that need resolution
+    STASH_CONFLICT = "stash_conflict"  # Rebase succeeded but stash apply had conflicts
+
+
 @dataclass
 class RebaseResult:
     """Result of a rebase operation."""
 
-    new_head: str
+    outcome: RebaseOutcome
     slot_path: str
-    had_uncommitted_changes: bool
-    uncommitted_changes_restored: bool
-    has_stash_conflicts: bool = False
+    new_head: str | None = None  # Set when rebase completes successfully
+    conflicted_files: list[str] | None = None  # Set when there are conflicts
+    has_pending_stash: bool = False  # True if uncommitted changes are stashed waiting to be restored
 
 
 class TaskGitService:
@@ -178,6 +186,7 @@ class TaskGitService:
             - worktree_slot_path: str | None
             - main_repo_is_clean: bool
             - main_repo_current_branch: str | None
+            - rebase_in_progress: bool
 
         Raises:
             ValueError: If task configuration is invalid
@@ -191,6 +200,12 @@ class TaskGitService:
         main_repo_is_clean = not await main_git.has_uncommitted_changes()
         main_repo_current_branch = await main_git.get_current_branch()
 
+        # Check for rebase in progress in the task's working directory
+        rebase_in_progress = False
+        if worktree_slot_path:
+            worktree_git = GitRepoIntegration(worktree_slot_path)
+            rebase_in_progress = worktree_git.is_rebase_in_progress()
+
         if not task.branch_name:
             return {
                 "branch_name": None,
@@ -203,6 +218,7 @@ class TaskGitService:
                 "worktree_slot_path": worktree_slot_path,
                 "main_repo_is_clean": main_repo_is_clean,
                 "main_repo_current_branch": main_repo_current_branch,
+                "rebase_in_progress": rebase_in_progress,
             }
 
         git = GitRepoIntegration(task.codebase.local_path)
@@ -222,6 +238,7 @@ class TaskGitService:
                 "worktree_slot_path": worktree_slot_path,
                 "main_repo_is_clean": main_repo_is_clean,
                 "main_repo_current_branch": main_repo_current_branch,
+                "rebase_in_progress": rebase_in_progress,
             }
 
         # Get branch comparison
@@ -238,6 +255,7 @@ class TaskGitService:
             "worktree_slot_path": worktree_slot_path,
             "main_repo_is_clean": main_repo_is_clean,
             "main_repo_current_branch": main_repo_current_branch,
+            "rebase_in_progress": rebase_in_progress,
         }
 
     async def merge_task_branch(
@@ -410,11 +428,21 @@ class TaskGitService:
                 deletions=commit_diff.deletions,
             )
 
-    async def rebase_task_branch(self, task: Task) -> RebaseResult:
-        """Rebase a task's branch onto its base branch.
+    # Message pattern for identifying rebase stashes
+    REBASE_STASH_MESSAGE_PREFIX = "DevBoard: rebase stash for task"
 
-        This brings the task branch up-to-date with the latest changes in the base branch.
-        Uncommitted changes are stashed before rebase and restored after.
+    def _get_rebase_stash_message(self, task_id: int) -> str:
+        """Get the stash message for a task's rebase operation."""
+        return f"{self.REBASE_STASH_MESSAGE_PREFIX} {task_id}"
+
+    async def rebase_task_branch(self, task: Task) -> RebaseResult:
+        """Rebase a task's branch onto its base branch (idempotent).
+
+        This method handles the complete rebase lifecycle:
+        - If rebase is already in progress: attempts to continue
+        - If no rebase in progress: starts new rebase (stashing uncommitted changes first)
+        - On conflict: returns CONFLICT outcome with list of conflicted files
+        - On success: applies stashed changes (if any), returns SUCCESS outcome
 
         The rebase is performed from the worktree where the branch is checked out (if any),
         otherwise from the main repository.
@@ -423,11 +451,10 @@ class TaskGitService:
             task: Task instance
 
         Returns:
-            RebaseResult with new HEAD, stash status, and pending stash ref if conflicts
+            RebaseResult with outcome, new HEAD (if successful), and conflict info (if applicable)
 
         Raises:
             ValueError: If task has no branch name configured
-            RebaseConflictError: If rebase encounters conflicts (stash is restored first)
         """
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch name configured")
@@ -437,51 +464,103 @@ class TaskGitService:
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
 
         git = GitRepoIntegration(repo_path)
+        stash_message = self._get_rebase_stash_message(task.id)
 
-        # Stash uncommitted changes (including untracked files)
-        # stash_push automatically cleans the working tree
-        had_uncommitted = await git.has_uncommitted_changes()
-        stash_ref: str | None = None
-        if had_uncommitted:
-            stash_ref = await git.stash_push(include_untracked=True)
+        # Check if rebase is already in progress
+        if git.is_rebase_in_progress():
+            return await self._continue_rebase(task, git, repo_path, stash_message)
+
+        # No rebase in progress - start a new one
+        return await self._start_rebase(task, git, repo_path, stash_message)
+
+    async def _continue_rebase(
+        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
+    ) -> RebaseResult:
+        """Continue an in-progress rebase."""
+        try:
+            new_head = await git.rebase_continue()
+            logfire.info(f"Rebase continued successfully for task {task.id}")
+            # Rebase complete - try to restore stashed changes
+            return await self._apply_rebase_stash_if_exists(task, git, repo_path, stash_message, new_head)
+        except RebaseConflictError:
+            # Still have conflicts (files still contain conflict markers)
+            conflicted_files = await git.get_conflicted_files()
+            has_pending_stash = await git.find_stash_by_message(stash_message) is not None
+            return RebaseResult(
+                outcome=RebaseOutcome.CONFLICT,
+                slot_path=repo_path,
+                conflicted_files=conflicted_files,
+                has_pending_stash=has_pending_stash,
+            )
+
+    async def _start_rebase(
+        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
+    ) -> RebaseResult:
+        """Start a new rebase operation."""
+        # Stash uncommitted changes if any (with identifiable message)
+        if await git.has_uncommitted_changes():
+            await git.stash_push(include_untracked=True, message=stash_message)
             logfire.info(f"Stashed uncommitted changes for task {task.id}")
 
-        uncommitted_restored = False
-        has_stash_conflicts = False
-
+        # Fetch latest from remote to ensure we have up-to-date base branch
         try:
-            # Fetch latest from remote to ensure we have up-to-date base branch
             await git.fetch()
+        except ShellCommandExecutionError:
+            # Fetch failure is non-fatal - continue with local state
+            pass
 
-            # Perform rebase - this will raise RebaseConflictError if there are conflicts
-            new_head = await git.rebase_onto(task.base_branch)
+        # Start the rebase (don't abort on conflict - leave paused)
+        try:
+            new_head = await git.rebase_onto(task.base_branch, abort_on_conflict=False)
             logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
+            # Rebase complete - try to restore stashed changes
+            return await self._apply_rebase_stash_if_exists(task, git, repo_path, stash_message, new_head)
         except RebaseConflictError:
-            # Restore stashed changes before re-raising
-            if stash_ref:
-                await git.stash_apply(stash_ref)
-                logfire.info(f"Restored stashed changes after rebase conflict for task {task.id}")
-            raise
+            # Rebase has conflicts
+            conflicted_files = await git.get_conflicted_files()
+            has_pending_stash = await git.find_stash_by_message(stash_message) is not None
+            logfire.info(f"Rebase encountered conflicts for task {task.id}")
+            return RebaseResult(
+                outcome=RebaseOutcome.CONFLICT,
+                slot_path=repo_path,
+                conflicted_files=conflicted_files,
+                has_pending_stash=has_pending_stash,
+            )
 
-        # Apply stash after successful rebase
-        if stash_ref:
-            try:
-                await git.stash_apply(stash_ref)
-                uncommitted_restored = True
-                logfire.info(f"Restored stashed changes after rebase for task {task.id}")
-            except ShellCommandExecutionError:
-                # Stash apply had conflicts - leave files in conflicted state
-                # Agent will resolve conflicts from the partially-applied files
-                has_stash_conflicts = True
-                logfire.warning(f"Stash apply had conflicts for task {task.id}")
+    async def _apply_rebase_stash_if_exists(
+        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str, new_head: str
+    ) -> RebaseResult:
+        """Check for and apply any rebase stash after successful rebase."""
+        stash_ref = await git.find_stash_by_message(stash_message)
 
-        return RebaseResult(
-            new_head=new_head,
-            slot_path=repo_path,
-            had_uncommitted_changes=had_uncommitted,
-            uncommitted_changes_restored=uncommitted_restored,
-            has_stash_conflicts=has_stash_conflicts,
-        )
+        if not stash_ref:
+            return RebaseResult(
+                outcome=RebaseOutcome.SUCCESS,
+                slot_path=repo_path,
+                new_head=new_head,
+            )
+
+        # Found a rebase stash - try to apply it
+        try:
+            await git.stash_apply(stash_ref)
+            # Drop the stash after successful apply
+            await git.stash_drop(stash_ref)
+            logfire.info(f"Restored stashed changes after rebase for task {task.id}")
+            return RebaseResult(
+                outcome=RebaseOutcome.SUCCESS,
+                slot_path=repo_path,
+                new_head=new_head,
+            )
+        except ShellCommandExecutionError:
+            # Stash apply had conflicts
+            conflicted_files = await git.get_conflicted_files()
+            logfire.warning(f"Stash apply had conflicts for task {task.id}")
+            return RebaseResult(
+                outcome=RebaseOutcome.STASH_CONFLICT,
+                slot_path=repo_path,
+                new_head=new_head,
+                conflicted_files=conflicted_files,
+            )
 
     async def merge_task_feature_branch(self, task: Task) -> MergeResult:
         """Merge a task's feature branch into its base branch based on codebase merge method.
@@ -757,3 +836,27 @@ class TaskGitService:
         finally:
             if stash_ref:
                 await git.stash_pop()
+
+    async def abort_rebase(self, task: Task) -> None:
+        """Abort an in-progress rebase for a task.
+
+        Args:
+            task: Task instance
+
+        Raises:
+            ValueError: If task has no branch or no rebase is in progress
+        """
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch name configured")
+
+        # Use the worktree slot path if available, otherwise main repo
+        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
+
+        git = GitRepoIntegration(repo_path)
+
+        if not git.is_rebase_in_progress():
+            raise ValueError("No rebase is currently in progress")
+
+        await git.rebase_abort()
+        logfire.info(f"Aborted rebase for task {task.id}")

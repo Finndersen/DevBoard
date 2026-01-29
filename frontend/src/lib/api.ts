@@ -206,6 +206,8 @@ export interface TaskGitStatus {
   worktree_slot_path: string | null
   main_repo_is_clean: boolean
   main_repo_current_branch: string | null
+  // Rebase state
+  rebase_in_progress: boolean
 }
 
 export interface WorktreeSlotInfo {
@@ -728,6 +730,12 @@ export class ApiClient {
   async deleteTaskBranch(taskId: number | string, force: boolean = false): Promise<void> {
     return this.request<void>(`/api/tasks/${taskId}/branch?force=${force}`, {
       method: 'DELETE',
+    })
+  }
+
+  async abortTaskRebase(taskId: number | string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/tasks/${taskId}/abort-rebase`, {
+      method: 'POST',
     })
   }
 

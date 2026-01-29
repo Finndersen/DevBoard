@@ -8,6 +8,7 @@ from devboard.agents.tools import (
     create_directory_tree_tool,
     create_document_edit_tool,
     create_github_pr_tool,
+    create_rebase_task_branch_tool,
     create_set_document_content_tool,
 )
 from devboard.db.models import Task
@@ -15,6 +16,7 @@ from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
@@ -65,6 +67,7 @@ class TaskImplementationAgentRole(AgentRole):
         task: Task,
         document_repository: DocumentRepository,
         task_service: TaskService,
+        task_git_service: TaskGitService,
         github_integration: GitHubIntegration,
     ):
         """Initialize task implementation role.
@@ -73,11 +76,13 @@ class TaskImplementationAgentRole(AgentRole):
             task: Task instance
             document_repository: Repository for document operations
             task_service: Service for task operations
+            task_git_service: Service for task git operations
             github_integration: GitHub integration for PR workflows
         """
         self.task = task
         self.document_repository = document_repository
         self.task_service = task_service
+        self.task_git_service = task_git_service
         self.github_integration = github_integration
 
     def get_system_prompt(self) -> str:
@@ -108,6 +113,8 @@ class TaskImplementationAgentRole(AgentRole):
             create_document_edit_tool(self.task.implementation_plan, self.document_repository, requires_approval=False),
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
+            # Rebase tool for updating branch with latest base branch changes
+            create_rebase_task_branch_tool(self.task, self.task_git_service),
         ]
 
         # Add task completion tools based on codebase branch handling

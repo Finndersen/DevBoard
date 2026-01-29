@@ -492,6 +492,36 @@ async def delete_task_branch(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.post("/{task_id}/abort-rebase", response_model=DeleteResponse)
+async def abort_task_rebase(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+) -> DeleteResponse:
+    """Abort an in-progress rebase for a task.
+
+    Args:
+        task_id: ID of the task
+
+    Returns:
+        Success confirmation
+
+    Raises:
+        HTTPException: 400 if task has no branch, no rebase in progress, or abort fails
+    """
+    if not task.branch_name:
+        raise HTTPException(status_code=400, detail="Task has no branch configured")
+
+    try:
+        await task_git_service.abort_rebase(task)
+        return DeleteResponse(
+            success=True,
+            message="Rebase aborted successfully",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.post("/{task_id}/checkout-to-main", response_model=CheckoutToMainResponse)
 async def checkout_task_to_main(
     task_id: int,

@@ -6,10 +6,16 @@ from devboard.agents.roles import AgentRole
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.factories import create_agent_conversation_service, create_agent_role_for_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository, get_document_repository
-from devboard.api.dependencies.services import get_agent_config_service, get_integration_service, get_task_service
+from devboard.api.dependencies.services import (
+    get_agent_config_service,
+    get_integration_service,
+    get_task_git_service,
+    get_task_service,
+)
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.integration_service import IntegrationService
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 
@@ -19,6 +25,7 @@ async def get_agent_role_for_conversation(
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     integration_service: IntegrationService = Depends(get_integration_service),
     task_service: TaskService = Depends(get_task_service),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> AgentRole:
     """Get agent role for a conversation.
 
@@ -31,6 +38,7 @@ async def get_agent_role_for_conversation(
         agent_config_service: Agent configuration service
         integration_service: Service for resolving integrations
         task_service: Service for task operations
+        task_git_service: Service for task git operations
 
     Returns:
         Role instance for the conversation
@@ -44,6 +52,7 @@ async def get_agent_role_for_conversation(
         agent_config_service,
         integration_service=integration_service,
         task_service=task_service,
+        task_git_service=task_git_service,
     )
 
 

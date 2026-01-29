@@ -16,6 +16,7 @@ from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 
@@ -25,6 +26,7 @@ async def create_agent_role_for_conversation(
     agent_config_service: AgentConfigService,
     integration_service: IntegrationService,
     task_service: TaskService,
+    task_git_service: TaskGitService,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
@@ -36,6 +38,7 @@ async def create_agent_role_for_conversation(
         agent_config_service: Service for agent configuration
         integration_service: Service for creating integrations
         task_service: Service for task operations
+        task_git_service: Service for task git operations
 
     Returns:
         Role instance configured for the conversation
@@ -65,6 +68,7 @@ async def create_agent_role_for_conversation(
                 task=parent_entity,
                 document_repository=document_repo,
                 task_service=task_service,
+                task_git_service=task_git_service,
                 github_integration=github_integration,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:

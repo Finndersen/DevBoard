@@ -6,9 +6,7 @@ from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling
 from devboard.db.models.conversation import AgentRoleType
 from devboard.db.models.task import TaskStatus
-from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.github import GitHubIntegration
-from devboard.integrations.shell import RebaseConflictError
 from devboard.workflow_actions.base import TaskWorkflowAction
 
 
@@ -170,17 +168,26 @@ class BeginImplementationAction(TaskWorkflowAction):
 class RebaseTaskBranchAction(TaskWorkflowAction):
     """Workflow action that rebases a task's feature branch onto its base branch.
 
-    This action:
-    1. Stashes uncommitted changes (if any)
-    2. Rebases the feature branch onto the base branch
-    3. Restores stashed changes
-    4. If stash apply conflicts, hands off to agent to resolve
-
-    Replaces the direct rebase endpoint with a streaming workflow action.
+    This action delegates to the agent with the rebase_task_branch tool, which handles:
+    1. Stashing uncommitted changes (if any)
+    2. Starting/continuing the rebase
+    3. Conflict resolution (agent resolves, then calls tool again)
+    4. Restoring stashed changes after successful rebase
     """
 
     KEY = "task.rebase_branch"
     DESCRIPTION = "Rebase task branch onto base branch"
+
+    PROMPT = """Use the rebase_task_branch tool to rebase this task's feature branch onto the base branch.
+
+The tool is idempotent - if a rebase is already in progress, it will continue it.
+If you encounter merge conflicts:
+1. The tool will tell you which files have conflicts
+2. Edit those files to resolve the conflicts (remove conflict markers, keep correct code)
+3. Stage the resolved files with `git add`
+4. Call the rebase_task_branch tool again to continue
+
+Keep using the tool until the rebase completes successfully."""
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -191,84 +198,32 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
         return task.status == TaskStatus.IMPLEMENTING and task.branch_name is not None
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: rebase branch with stash handling.
+        """Execute the action: delegate rebase to agent with rebase tool.
 
         Yields:
-            ConversationEvent objects including SystemEvents and optionally agent messages
-
-        Raises:
-            ValueError: If task has no branch name or worktree slot
+            ConversationEvent objects from agent interaction
         """
-        task = self.task
+        # Get current active conversation
+        current_conversation = self.conversation_repo.get_active_conversation_for_entity(
+            ParentEntityType.TASK, self.task.id
+        )
 
-        try:
-            result = await self.task_git_service.rebase_task_branch(task)
-        except ValueError as e:
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={"message": str(e)},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
-        except RebaseConflictError as e:
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={"message": str(e), "error_code": "REBASE_CONFLICT"},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
+        # Stream agent response - agent uses the rebase_task_branch tool
+        async for event in self._stream_agent_response(current_conversation, self.PROMPT):
+            # Check if this is a successful rebase completion (from the tool)
+            # We emit BRANCH_REBASED event when the agent finishes successfully
+            yield event
 
-        # Emit success event
+        # After agent completes, emit success event
         yield SystemEvent(
             event_type="system",
             type=SystemEventType.BRANCH_REBASED,
             data={
-                "task_id": task.id,
-                "message": f"Rebased onto {task.base_branch}",
-                "new_head": result.new_head,
+                "task_id": self.task.id,
+                "message": f"Rebased onto {self.task.base_branch}",
             },
             timestamp=datetime.datetime.now(datetime.UTC),
         )
-
-        # If stash couldn't be applied cleanly, hand to agent to resolve conflicts
-        if result.has_stash_conflicts:
-            git = GitRepoIntegration(result.slot_path)
-
-            # Get list of conflicted files for context
-            conflicted_files = await git.get_conflicted_files()
-            conflict_list = (
-                "\n".join(f"  - {f}" for f in conflicted_files) if conflicted_files else "  (unable to determine)"
-            )
-
-            # Emit event to notify UI that stash apply had conflicts
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STASH_APPLY_CONFLICT,
-                data={
-                    "task_id": task.id,
-                    "message": "Stash apply had conflicts - agent will resolve",
-                    "conflicted_files": conflicted_files,
-                },
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-
-            # Get or create implementation conversation for agent
-            current_conversation = self.conversation_repo.get_active_conversation_for_entity(
-                ParentEntityType.TASK, task.id
-            )
-
-            prompt = (
-                f"The rebase onto {task.base_branch} succeeded, but restoring your uncommitted changes "
-                f"resulted in merge conflicts.\n\n"
-                f"**Conflicted files:**\n{conflict_list}\n\n"
-                f"Please resolve the merge conflicts in these files."
-            )
-
-            # Stream agent response to resolve conflicts
-            async for event in self._stream_agent_response(current_conversation, prompt):
-                yield event
 
 
 class ApproveAndMergeAction(TaskWorkflowAction):

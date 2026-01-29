@@ -695,7 +695,7 @@ class GitRepoIntegration:
         """
         await self._run_git_command(["fetch", remote])
 
-    async def rebase_onto(self, onto: str) -> str:
+    async def rebase_onto(self, onto: str, abort_on_conflict: bool = True) -> str:
         """Rebase the current branch onto another branch.
 
         This performs `git rebase <onto>` which rebases the current HEAD onto <onto>.
@@ -703,12 +703,14 @@ class GitRepoIntegration:
 
         Args:
             onto: Branch to rebase onto
+            abort_on_conflict: If True (default), abort rebase on conflict. If False,
+                leave rebase paused on conflict for manual resolution.
 
         Returns:
             New HEAD commit hash after successful rebase
 
         Raises:
-            RebaseConflictError: If rebase encounters conflicts (rebase is aborted)
+            RebaseConflictError: If rebase encounters conflicts (rebase is aborted if abort_on_conflict=True)
             ShellCommandExecutionError: If git command fails for other reasons
         """
         try:
@@ -717,8 +719,9 @@ class GitRepoIntegration:
             # Check if this is a conflict error
             error_msg = str(e).lower()
             if "conflict" in error_msg or "could not apply" in error_msg:
-                # Abort the rebase
-                await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
+                if abort_on_conflict:
+                    # Abort the rebase
+                    await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
                 raise RebaseConflictError(f"Rebase onto {onto} encountered conflicts") from e
             # Re-raise other errors
             raise
@@ -726,7 +729,7 @@ class GitRepoIntegration:
         # Return new HEAD commit hash
         return await self._run_git_command(["rev-parse", "HEAD"])
 
-    async def rebase_branch(self, branch: str, onto: str) -> str:
+    async def rebase_branch(self, branch: str, onto: str, abort_on_conflict: bool = True) -> str:
         """Rebase a branch onto another branch.
 
         This performs `git rebase <onto> <branch>` which rebases <branch> onto <onto>.
@@ -734,12 +737,14 @@ class GitRepoIntegration:
         Args:
             branch: Branch to rebase
             onto: Branch to rebase onto
+            abort_on_conflict: If True (default), abort rebase on conflict. If False,
+                leave rebase paused on conflict for manual resolution.
 
         Returns:
             New HEAD commit hash after successful rebase
 
         Raises:
-            RebaseConflictError: If rebase encounters conflicts (rebase is aborted)
+            RebaseConflictError: If rebase encounters conflicts (rebase is aborted if abort_on_conflict=True)
             ShellCommandExecutionError: If git command fails for other reasons
         """
         try:
@@ -748,14 +753,77 @@ class GitRepoIntegration:
             # Check if this is a conflict error
             error_msg = str(e).lower()
             if "conflict" in error_msg or "could not apply" in error_msg:
-                # Abort the rebase
-                await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
+                if abort_on_conflict:
+                    # Abort the rebase
+                    await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
                 raise RebaseConflictError(f"Rebase of {branch} onto {onto} encountered conflicts") from e
             # Re-raise other errors
             raise
 
         # Return new HEAD commit hash
         return await self._run_git_command(["rev-parse", "HEAD"])
+
+    def is_rebase_in_progress(self) -> bool:
+        """Check if a rebase is currently in progress.
+
+        Checks for the existence of `.git/rebase-merge/` or `.git/rebase-apply/` directories.
+
+        Returns:
+            True if a rebase is in progress, False otherwise
+        """
+        git_dir = self._repo_path / ".git"
+
+        # For worktrees, .git is a file pointing to the actual git dir
+        if git_dir.is_file():
+            # Read the gitdir path from the file
+            content = git_dir.read_text().strip()
+            if content.startswith("gitdir: "):
+                git_dir = Path(content[8:])
+
+        rebase_merge = git_dir / "rebase-merge"
+        rebase_apply = git_dir / "rebase-apply"
+
+        return rebase_merge.exists() or rebase_apply.exists()
+
+    async def rebase_continue(self) -> str:
+        """Continue a paused rebase after conflicts have been resolved.
+
+        Automatically stages all changes before continuing, since during a rebase
+        conflict state the only unstaged changes should be the resolved conflict files.
+
+        Returns:
+            New HEAD commit hash after successful rebase continuation
+
+        Raises:
+            RebaseConflictError: If rebase encounters more conflicts (files still have conflict markers)
+            ShellCommandExecutionError: If git command fails for other reasons
+        """
+        # Stage all changes - during rebase conflict, unstaged changes are the resolved files
+        await self._run_git_command(["add", "-A"])
+
+        try:
+            await self._run_git_command(["rebase", "--continue"])
+        except ShellCommandExecutionError as e:
+            # Check if this is a conflict error
+            error_msg = str(e).lower()
+            if "conflict" in error_msg or "could not apply" in error_msg:
+                raise RebaseConflictError("Rebase continue encountered conflicts") from e
+            # Re-raise other errors
+            raise
+
+        # Return new HEAD commit hash
+        return await self._run_git_command(["rev-parse", "HEAD"])
+
+    async def rebase_abort(self) -> None:
+        """Abort an in-progress rebase.
+
+        Executes `git rebase --abort` to cancel the rebase and restore
+        the branch to its state before the rebase started.
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        await self._run_git_command(["rebase", "--abort"])
 
     async def detect_git_remote_url(self) -> str | None:
         """Detect git remote URL for this repository.
@@ -878,7 +946,7 @@ class GitRepoIntegration:
         await self._run_git_command(["stash", "pop"])
         return True
 
-    async def stash_push(self, include_untracked: bool = False) -> str:
+    async def stash_push(self, include_untracked: bool = False, message: str | None = None) -> str:
         """Stash changes, clear working tree, and return the stash SHA.
 
         Note: Caller should check has_uncommitted_changes() first if needed.
@@ -886,6 +954,7 @@ class GitRepoIntegration:
 
         Args:
             include_untracked: If True, include untracked (new) files in stash
+            message: Optional message for the stash entry
 
         Returns:
             SHA of the stash commit (stable identifier that works across worktrees)
@@ -897,6 +966,8 @@ class GitRepoIntegration:
         args = ["stash", "push"]
         if include_untracked:
             args.append("-u")
+        if message:
+            args.extend(["-m", message])
 
         await self._run_git_command(args)
         # Return SHA instead of "stash@{0}" for stability across worktrees
@@ -913,6 +984,38 @@ class GitRepoIntegration:
             ShellCommandExecutionError: If git command fails
         """
         await self._run_git_command(["stash", "apply", stash_ref])
+
+    async def find_stash_by_message(self, message_pattern: str) -> str | None:
+        """Find a stash entry by message pattern.
+
+        Args:
+            message_pattern: Substring to search for in stash messages
+
+        Returns:
+            Stash reference (e.g., 'stash@{0}') if found, None otherwise
+        """
+        stash_list = await self._run_git_command(["stash", "list"], raise_on_error=False)
+        if not stash_list:
+            return None
+
+        for line in stash_list.split("\n"):
+            if message_pattern in line:
+                # Extract stash reference from the line (format: "stash@{N}: ...")
+                if ":" in line:
+                    stash_ref = line.split(":")[0].strip()
+                    return stash_ref
+        return None
+
+    async def stash_drop(self, stash_ref: str) -> None:
+        """Drop a stash entry.
+
+        Args:
+            stash_ref: The stash reference (e.g., 'stash@{0}')
+
+        Raises:
+            ShellCommandExecutionError: If git command fails
+        """
+        await self._run_git_command(["stash", "drop", stash_ref])
 
     async def stash_store(self, commit_sha: str, message: str | None = None) -> None:
         """Store a stash commit to the stash list.
