@@ -37,6 +37,9 @@ def build_task_context(
     if task.implementation_plan:
         sections.append(_format_implementation_plan(task))
 
+    if task.custom_fields:
+        sections.append(_format_custom_fields(task))
+
     sections.append(_format_codebase_info(task))
 
     return "\n\n".join(sections)
@@ -84,3 +87,20 @@ def _format_implementation_plan(task: Task) -> str:
     """Format implementation plan document section."""
     content = task.implementation_plan.content if task.implementation_plan else None
     return _format_document_section("IMPLEMENTATION PLAN", content)
+
+
+def _format_custom_fields(task: Task) -> str:
+    """Format task custom fields as key-value pairs."""
+    if not task.custom_fields:
+        return ""
+
+    lines = ["TASK CUSTOM FIELDS:"]
+    for field_name, value in task.custom_fields.items():
+        # Format boolean values as Yes/No for readability
+        if isinstance(value, bool):
+            display_value = "Yes" if value else "No"
+        else:
+            display_value = str(value)
+        lines.append(f"- {field_name}: {display_value}")
+
+    return "\n".join(lines)

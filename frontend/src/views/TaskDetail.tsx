@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
@@ -12,7 +12,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
     <path d="M12 18 Q16 14 18 8" />
   </svg>
 )
-import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo, GitHubPRStatusResponse } from '../lib/api'
+import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo, GitHubPRStatusResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
@@ -23,6 +23,7 @@ import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat from '../components/chat/AgentChat'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
+import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
 
@@ -49,6 +50,16 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // PR status for tasks in PR_OPEN state (used to disable merge button when not mergeable)
   const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
+
+  // Custom field definitions (fetched once to determine display type)
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+
+  // Fetch custom field definitions on mount
+  useEffect(() => {
+    apiClient.getCustomFieldDefinitions()
+      .then(setCustomFieldDefinitions)
+      .catch(err => console.error('Failed to load custom field definitions:', err))
+  }, [])
 
   // Fetch PR status when task is in PR_OPEN state
   useEffect(() => {
@@ -132,6 +143,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
   const [showBranchStatusModal, setShowBranchStatusModal] = useState(false)
   const [branchStatusLoading, setBranchStatusLoading] = useState(false)
+  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
 
   // State for branch info and diff data
   const [branchInfo, setBranchInfo] = useState<TaskBranchInfo | null>(null)
@@ -796,6 +808,18 @@ function TaskDetail({ id }: TaskDetailProps) {
                 )}
               </button>
             )}
+
+            {/* Custom Fields Button - only shown when task has custom fields */}
+            {task.custom_fields && Object.keys(task.custom_fields).length > 0 && (
+              <button
+                onClick={() => setShowCustomFieldsModal(true)}
+                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
+                title="View custom fields"
+              >
+                <TagIcon className="w-4 h-4" />
+                <span>{Object.keys(task.custom_fields).length} field{Object.keys(task.custom_fields).length !== 1 ? 's' : ''}</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -818,6 +842,7 @@ function TaskDetail({ id }: TaskDetailProps) {
         </div>
       </div>
 
+      
       {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)] overflow-hidden">
         {/* Left Column: Document Content with Integrated Tabs */}
@@ -1056,6 +1081,14 @@ function TaskDetail({ id }: TaskDetailProps) {
         onStatusUpdate={refreshGitStatus}
         onTriggerRebase={handleTriggerRebase}
         isStreaming={isConversationStreaming}
+      />
+
+      {/* Custom Fields Modal */}
+      <TaskCustomFieldsModal
+        isOpen={showCustomFieldsModal}
+        onClose={() => setShowCustomFieldsModal(false)}
+        customFields={task.custom_fields || {}}
+        fieldDefinitions={customFieldDefinitions}
       />
     </div>
   )
