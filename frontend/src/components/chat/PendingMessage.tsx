@@ -3,8 +3,6 @@ import type { PendingMessage } from '../../contexts/PendingMessagesContext'
 import { Button, Markdown } from '../ui'
 import {
   getPendingMessageBubbleClasses,
-  getTimestampClasses,
-  formatTimestamp,
   getStatusIcon
 } from '../../styles/messageStyles'
 
@@ -14,9 +12,6 @@ interface PendingMessageProps {
 }
 
 export default function PendingMessageComponent({ message, onRetry }: PendingMessageProps) {
-  // Pending messages are always from users and always the most recent, so never collapse them
-  const isUser = true
-
   return (
     <div className="flex flex-col w-full">
       <div className="flex w-full justify-end">
@@ -25,9 +20,8 @@ export default function PendingMessageComponent({ message, onRetry }: PendingMes
           <Markdown forceWhiteText={true}>
             {message.text_content}
           </Markdown>
-          {/* Timestamp at bottom-right */}
-          <div className="flex justify-end items-center gap-1 mt-1">
-            <span className="text-xs text-blue-200 dark:text-blue-300">{formatTimestamp(message.timestamp)}</span>
+          {/* Status icon at bottom-right */}
+          <div className="flex justify-end items-center mt-1">
             <span className="text-xs">{getStatusIcon(message.status)}</span>
           </div>
         </div>
