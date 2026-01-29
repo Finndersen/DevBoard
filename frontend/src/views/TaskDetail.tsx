@@ -759,8 +759,8 @@ function TaskDetail({ id }: TaskDetailProps) {
               )}
             </div>
 
-            {/* Branch Status Icon - only shown when task has a branch_name */}
-            {gitStatus?.branch_name && (
+            {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
+            {gitStatus?.branch_name && task.status !== 'complete' && (
               <button
                 onClick={handleOpenBranchStatusModal}
                 className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${
@@ -990,6 +990,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             initialMessage={pendingInitialMessage}
             onInitialMessageSent={() => setPendingInitialMessage(null)}
             codebaseLocalPath={selectedCodebase?.local_path}
+            isDisabled={task.status === 'complete'}
           />
         </div>
       </div>

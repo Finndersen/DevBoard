@@ -22,6 +22,7 @@ interface ConversationChatProps {
   initialMessage?: string | null
   onInitialMessageSent?: () => void
   codebaseLocalPath?: string
+  isDisabled?: boolean
 }
 
 const ConversationChat = ({
@@ -33,7 +34,8 @@ const ConversationChat = ({
   onStreamingStarted,
   initialMessage,
   onInitialMessageSent,
-  codebaseLocalPath
+  codebaseLocalPath,
+  isDisabled = false
 }: ConversationChatProps) => {
   // Track conversationId changes for debugging
   const prevConversationIdRef = useRef(conversationId)
@@ -527,21 +529,29 @@ const ConversationChat = ({
       </div>
 
       <div className="border-t border-gray-200 dark:border-gray-600 p-3 flex-shrink-0">
-        <ConversationInput
-          onSendMessage={handleSendMessage}
-          disabled={isInputDisabled}
-          placeholder={placeholder}
-        />
+        {isDisabled ? (
+          <div className="text-center text-gray-500 dark:text-gray-400 py-3 text-sm">
+            Chat disabled — task is complete
+          </div>
+        ) : (
+          <>
+            <ConversationInput
+              onSendMessage={handleSendMessage}
+              disabled={isInputDisabled}
+              placeholder={placeholder}
+            />
 
-        {pendingApprovals.length > 0 && (
-          <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-            Please review and approve/deny the pending tool requests above before sending another message.
-          </p>
-        )}
-        {pendingMessage && pendingMessage.status !== 'failed' && (
-          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-            Waiting for agent response...
-          </p>
+            {pendingApprovals.length > 0 && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                Please review and approve/deny the pending tool requests above before sending another message.
+              </p>
+            )}
+            {pendingMessage && pendingMessage.status !== 'failed' && (
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                Waiting for agent response...
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -21,7 +21,7 @@ from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.api.streaming import stream_conversation_events
-from devboard.db.models import Conversation, Task
+from devboard.db.models import Conversation, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
@@ -79,8 +79,12 @@ async def stream_conversation_message(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request.message)
+    # Check if parent task is complete - chat is disabled for completed tasks
     conversation_parent = conversation.get_parent_entity()
+    if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
+        raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
+
+    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request.message)
     if isinstance(conversation_parent, Task):
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream
@@ -104,8 +108,12 @@ async def stream_approve_conversation_tools(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request)
+    # Check if parent task is complete - chat is disabled for completed tasks
     conversation_parent = conversation.get_parent_entity()
+    if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
+        raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
+
+    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request)
     if isinstance(conversation_parent, Task):
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream
