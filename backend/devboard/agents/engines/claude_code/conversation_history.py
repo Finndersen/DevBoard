@@ -1,13 +1,10 @@
-"""Claude Code agent conversation service with virtual tool calling."""
+"""Claude Code conversation history service implementation."""
 
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import logfire
-from pydantic_ai import Tool
 
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
-from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
     TextResponse,
@@ -29,122 +26,26 @@ from devboard.agents.events import (
     ToolCall,
     ToolResult,
 )
-from devboard.agents.language_models import llm_registry
-from devboard.agents.roles.base import AgentRole
-from devboard.api.schemas.agent_conversation import (
-    ToolApprovals,
-)
-from devboard.db.models import Codebase, Conversation, Task
-from devboard.db.repositories.conversation import ConversationRepository
 
 
-class ClaudeCodeConversationService(BaseAgentConversationService):
-    """Service for managing Claude Code agent conversations.
+class ClaudeCodeConversationHistoryService(ConversationHistoryService):
+    """Service for retrieving conversation history from Claude Code sessions.
 
-    This service manages:
-    - Claude Code session continuity via external_session_id
-    - Streaming events from agent execution
-    - Loading conversation history from Claude Code session files
-    - Converting session messages to ConversationEvents (text, tool calls, results)
+    This service retrieves messages from Claude Code session files and converts them
+    to ConversationEvent format for display.
 
-    Note: Claude Code manages its own session storage in ~/.claude/projects.
-    This service does NOT store messages in the database - it reads from
-    session files as needed.
+    Note: Claude Code manages its own session files. This service reads from
+    session files as needed rather than storing messages in the database.
+
+    Attributes:
+        conversation: The conversation instance (from base class)
+        conversation_repo: Repository for conversation operations
     """
-
-    def __init__(
-        self,
-        conversation: Conversation,
-        role: AgentRole,
-        conversation_repository: ConversationRepository,
-        codebase_path: str | None = None,
-        additional_tools: list[Tool] | None = None,
-    ):
-        """Initialize Claude Code conversation service.
-
-        Args:
-            conversation: Conversation instance with session tracking
-            role: The Role defining agent behavior
-            conversation_repository: Repository for conversation operations (saving session ID)
-            codebase_path: Optional path to codebase directory
-            additional_tools: Optional extra tools beyond those defined by the role
-        """
-        super().__init__(conversation, role, conversation_repository, additional_tools)
-        self.codebase_path = codebase_path
 
     @property
     def session_id(self) -> str | None:
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
-
-    async def stream_events_for_message_or_approval(
-        self,
-        message_or_approvals: str | ToolApprovals,
-    ) -> AsyncIterator[ConversationEvent]:
-        """Stream conversation events from agent execution.
-
-        Args:
-            message_or_approvals: Either a user message string or ToolApprovals model
-
-        Yields:
-            ConversationEvent instances as they are generated during agent execution
-        """
-        is_approval = isinstance(message_or_approvals, ToolApprovals)
-
-        with logfire.span(
-            "claude_code_conversation.stream_events_for_message_or_approval",
-            conversation_id=self.conversation.id,
-            is_approval=is_approval,
-        ):
-            # Check session ID for approvals
-            if is_approval and not self.session_id:
-                raise ValueError("No session ID available - cannot process tool approvals")
-
-            agent = self._get_agent()
-
-            # Stream events from agent execution
-            try:
-                async for event in agent.stream_events(message_or_approvals):
-                    # Update session_id if changed
-                    if agent.session_id != self.conversation.external_session_id:
-                        logfire.info(
-                            f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
-                        )
-                        self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
-                        self.conversation_repo.commit()
-
-                    yield event
-            except FileNotFoundError:
-                # Session file was cleaned up - reset session ID and notify user
-                logfire.info(
-                    f"Session file not found during streaming for conversation {self.conversation.id}, resetting session ID"
-                )
-                self.conversation_repo.update_external_session_id(self.conversation, None)
-                self.conversation_repo.commit()
-                yield SystemEvent(
-                    type=SystemEventType.SESSION_EXPIRED,
-                    data={"message": "Claude session was cleaned up, starting new conversation"},
-                    timestamp=datetime.now(UTC),
-                )
-
-    def _get_agent(self) -> ClaudeCodeAgent:
-        """Create agent with session_id"""
-        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
-        conversation_parent = self.conversation.get_parent_entity()
-        if isinstance(conversation_parent, Task):
-            codebase_path = conversation_parent.get_current_workspace_dir()
-        elif isinstance(conversation_parent, Codebase):
-            codebase_path = conversation_parent.local_path
-        else:
-            codebase_path = None
-
-        return ClaudeCodeAgent(
-            role=self.role,
-            model=model,
-            session_id=self.conversation.external_session_id,
-            working_dir=codebase_path,
-            additional_tools=self.additional_tools,
-        )
 
     async def get_conversation_messages(self) -> list[ConversationEvent]:
         """Retrieve all events for the Claude Code conversation.

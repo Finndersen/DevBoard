@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.agent_execution import AgentExecutionService
+from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.events import ConversationEvent
-from devboard.api.dependencies.conversations import get_agent_conversation_service
+from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import get_agent_config_service, get_workspace_allocation_service
@@ -51,7 +52,7 @@ async def get_conversation(
 
 @router.get("/{conversation_id}/messages", response_model=list[ConversationEvent])
 async def get_conversation_messages(
-    conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    history_service: ConversationHistoryService = Depends(get_conversation_history_service),
 ) -> list[ConversationEvent]:
     """Get all messages for a conversation.
 
@@ -61,14 +62,14 @@ async def get_conversation_messages(
     Note: ToolCallRequest events are excluded as they are ephemeral approval
     requests, not conversation history.
     """
-    return await conversation_service.get_conversation_messages()
+    return await history_service.get_conversation_messages()
 
 
 @router.post("/{conversation_id}/messages/stream")
 async def stream_conversation_message(
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
-    agent_conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
     workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream conversation events as they are generated.
@@ -84,7 +85,7 @@ async def stream_conversation_message(
     if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
 
-    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request.message)
+    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(request.message)
     if isinstance(conversation_parent, Task):
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream
@@ -97,7 +98,7 @@ async def stream_conversation_message(
 async def stream_approve_conversation_tools(
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
-    agent_conversation_service: BaseAgentConversationService = Depends(get_agent_conversation_service),
+    agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
     workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream tool approval events as they are generated.
@@ -113,7 +114,7 @@ async def stream_approve_conversation_tools(
     if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
 
-    agent_event_stream = agent_conversation_service.stream_events_for_message_or_approval(request)
+    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(request)
     if isinstance(conversation_parent, Task):
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream

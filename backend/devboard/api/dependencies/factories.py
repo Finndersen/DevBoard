@@ -2,10 +2,11 @@ from fastapi import HTTPException
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.agent_execution import AgentExecutionService
+from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.claude_code.agent_conversation import ClaudeCodeConversationService
-from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService, ClaudeCodeConversationHistoryService
+from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
@@ -102,15 +103,51 @@ async def create_agent_role_for_conversation(
             )
 
 
-def create_agent_conversation_service(
+def create_conversation_history_service(
+    conversation: Conversation,
+    conversation_repo: ConversationRepository,
+) -> ConversationHistoryService:
+    """Create the appropriate history service based on engine type.
+
+    Non-dependency helper that can be called directly from any context.
+
+    Args:
+        conversation: The conversation instance
+        conversation_repo: Repository for conversation operations
+
+    Returns:
+        ConversationHistoryService instance (PydanticAI or ClaudeCode)
+
+    Raises:
+        HTTPException: If engine type is unsupported
+    """
+    if conversation.engine == AgentEngine.INTERNAL:
+        return PydanticAIConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+    elif conversation.engine == AgentEngine.CLAUDE_CODE:
+        return ClaudeCodeConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported engine: {conversation.engine}",
+        )
+
+
+def create_agent_execution_service(
     conversation: Conversation,
     role: AgentRole,
     conversation_repo: ConversationRepository,
     additional_tools: list[Tool] | None = None,
-) -> BaseAgentConversationService:
-    """Create the appropriate service based on engine type.
+) -> AgentExecutionService:
+    """Create the appropriate execution service based on engine type.
 
     Non-dependency helper that can be called directly from any context.
+    Internally creates the appropriate history service.
 
     Args:
         conversation: The conversation instance
@@ -119,24 +156,29 @@ def create_agent_conversation_service(
         additional_tools: Optional extra tools beyond those defined by the role
 
     Returns:
-        BaseAgentConversationService instance (PydanticAI or ClaudeCode)
+        AgentExecutionService instance (PydanticAI or ClaudeCode)
 
     Raises:
         HTTPException: If engine type is unsupported
     """
-    # Create service based on engine type
+    # Create history service first
+    history_service = create_conversation_history_service(conversation, conversation_repo)
+
+    # Create execution service based on engine type
     if conversation.engine == AgentEngine.INTERNAL:
-        return PydanticAIConversationService(
+        return PydanticAIAgentExecutionService(
             conversation=conversation,
             role=role,
             conversation_repository=conversation_repo,
+            history_service=history_service,
             additional_tools=additional_tools,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
-        return ClaudeCodeConversationService(
+        return ClaudeCodeAgentExecutionService(
             conversation=conversation,
             role=role,
             conversation_repository=conversation_repo,
+            history_service=history_service,
             additional_tools=additional_tools,
         )
     else:

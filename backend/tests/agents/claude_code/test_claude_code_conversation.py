@@ -1,4 +1,4 @@
-"""Tests for ClaudeCodeConversationService session expiration handling."""
+"""Tests for ClaudeCodeConversationHistoryService session expiration handling."""
 
 import datetime
 from unittest.mock import Mock, patch
@@ -8,7 +8,10 @@ from pydantic_ai import Tool
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.claude_code.agent_conversation import ClaudeCodeConversationService
+from devboard.agents.engines.claude_code import (
+    ClaudeCodeAgentExecutionService,
+    ClaudeCodeConversationHistoryService,
+)
 from devboard.agents.events import MessageRole, SystemEventType, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
@@ -28,8 +31,8 @@ class MockAgentRole(AgentRole):
         return "Test context"
 
 
-class TestClaudeCodeConversationServiceSessionExpiration:
-    """Test session expiration handling in ClaudeCodeConversationService."""
+class TestClaudeCodeConversationHistoryServiceSessionExpiration:
+    """Test session expiration handling in ClaudeCodeConversationHistoryService."""
 
     @pytest.fixture
     def mock_role(self):
@@ -59,30 +62,39 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         return ConversationRepository(db_session)
 
     @pytest.fixture
-    def service(self, mock_role, conversation_repo, conversation):
-        """Create ClaudeCodeConversationService instance."""
-        return ClaudeCodeConversationService(
+    def history_service(self, conversation_repo, conversation):
+        """Create ClaudeCodeConversationHistoryService instance."""
+        return ClaudeCodeConversationHistoryService(
             conversation=conversation,
-            role=mock_role,
             conversation_repository=conversation_repo,
         )
 
+    @pytest.fixture
+    def execution_service(self, mock_role, conversation_repo, conversation, history_service):
+        """Create ClaudeCodeAgentExecutionService instance."""
+        return ClaudeCodeAgentExecutionService(
+            conversation=conversation,
+            role=mock_role,
+            conversation_repository=conversation_repo,
+            history_service=history_service,
+        )
+
     @pytest.mark.asyncio
-    async def test_get_conversation_messages_session_expired(self, service, conversation, db_session):
+    async def test_get_conversation_messages_session_expired(self, history_service, conversation, db_session):
         """Test that get_conversation_messages handles FileNotFoundError gracefully."""
         # Verify the session ID is set
         assert conversation.external_session_id == "test-session-id-12345"
 
         # Mock load_session_messages to raise FileNotFoundError
         with patch(
-            "devboard.agents.engines.claude_code.agent_conversation.ClaudeCodeSessionService"
+            "devboard.agents.engines.claude_code.conversation_history.ClaudeCodeSessionService"
         ) as mock_session_service_class:
             mock_session_service = Mock()
             mock_session_service.load_session_messages.side_effect = FileNotFoundError("Session file not found")
             mock_session_service_class.return_value = mock_session_service
 
             # Call get_conversation_messages
-            events = await service.get_conversation_messages()
+            events = await history_service.get_conversation_messages()
 
         # Verify a SESSION_EXPIRED event is returned
         assert len(events) == 1
@@ -96,7 +108,7 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         assert conversation.external_session_id is None
 
     @pytest.mark.asyncio
-    async def test_get_conversation_messages_no_session_id(self, mock_role, conversation_repo, db_session):
+    async def test_get_conversation_messages_no_session_id(self, conversation_repo, db_session):
         """Test that get_conversation_messages returns empty list when no session ID."""
         # Create conversation without external session ID
         conversation = conversation_repo.create(
@@ -109,17 +121,16 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         )
         db_session.commit()
 
-        service = ClaudeCodeConversationService(
+        history_service = ClaudeCodeConversationHistoryService(
             conversation=conversation,
-            role=mock_role,
             conversation_repository=conversation_repo,
         )
 
-        events = await service.get_conversation_messages()
+        events = await history_service.get_conversation_messages()
         assert events == []
 
     @pytest.mark.asyncio
-    async def test_stream_events_session_expired(self, service, conversation, db_session, monkeypatch):
+    async def test_stream_events_session_expired(self, execution_service, conversation, db_session, monkeypatch):
         """Test that stream_events_for_message_or_approval handles FileNotFoundError gracefully."""
         # Verify the session ID is set
         assert conversation.external_session_id == "test-session-id-12345"
@@ -139,11 +150,11 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda: mock_agent)
 
         # Collect all streamed events
         events = []
-        async for event in service.stream_events_for_message_or_approval("Test message"):
+        async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
         # Verify we got the initial event and then the SESSION_EXPIRED event
@@ -163,7 +174,9 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         assert conversation.external_session_id is None
 
     @pytest.mark.asyncio
-    async def test_stream_events_session_expired_immediate(self, service, conversation, db_session, monkeypatch):
+    async def test_stream_events_session_expired_immediate(
+        self, execution_service, conversation, db_session, monkeypatch
+    ):
         """Test FileNotFoundError raised immediately in stream_events."""
         # Verify the session ID is set
         assert conversation.external_session_id == "test-session-id-12345"
@@ -178,11 +191,11 @@ class TestClaudeCodeConversationServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf_immediate
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda: mock_agent)
 
         # Collect all streamed events
         events = []
-        async for event in service.stream_events_for_message_or_approval("Test message"):
+        async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
         # Verify only the SESSION_EXPIRED event is returned

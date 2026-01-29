@@ -1,4 +1,4 @@
-"""Abstract base interface for agent conversation services."""
+"""Abstract base interface for agent execution services."""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 import logfire
 from pydantic_ai import Tool
 
+from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.events import ConversationEvent
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -13,26 +14,24 @@ from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
 
 
-class BaseAgentConversationService(ABC):
-    """Abstract base class for agent conversation services.
+class AgentExecutionService(ABC):
+    """Abstract base class for agent execution services.
 
-    This interface allows different agent engines (PydanticAI, Claude Code)
-    to be used interchangeably via a unified API.
+    This interface handles agent execution operations, including sending messages
+    and processing tool approvals. It composes a ConversationHistoryService for
+    retrieving conversation history when needed.
 
     Implementations should handle:
     - Agent initialization and configuration
-    - Conversation state management (message history or session ID)
+    - Message/approval processing
     - Tool approval workflows
-    - Response formatting
-    - Event retrieval
+    - Response formatting and event streaming
 
     Attributes:
         conversation: The conversation instance this service manages
         role: The Role defining agent behavior
-        conversation_repository: Repository for conversation operations
+        conversation_repo: Repository for conversation operations
         additional_tools: Extra tools beyond those defined by the role
-
-    TODO: Might make sense to split up the message sending and event retrieval into separate classes?
     """
 
     def __init__(
@@ -40,20 +39,23 @@ class BaseAgentConversationService(ABC):
         conversation: Conversation,
         role: AgentRole,
         conversation_repository: ConversationRepository,
+        history_service: ConversationHistoryService,
         additional_tools: list[Tool] | None = None,
     ):
-        """Initialize the conversation service with a conversation instance.
+        """Initialize the agent execution service.
 
         Args:
             conversation: The conversation instance to manage
             role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations
+            history_service: Service for retrieving conversation history
             additional_tools: Optional list of additional tools to provide to the agent,
                 beyond those defined by the role. Used for workflow-action-specific tools.
         """
         self.conversation = conversation
         self.role = role
         self.conversation_repo = conversation_repository
+        self._history_service = history_service
         self.additional_tools = additional_tools or []
 
     async def send_message_or_approval(
@@ -73,7 +75,7 @@ class BaseAgentConversationService(ABC):
         is_approval = isinstance(message_or_approvals, ToolApprovals)
 
         with logfire.span(
-            "agent_conversation.send_message_or_approval",
+            "agent_execution.send_message_or_approval",
             conversation_id=self.conversation.id,
             is_approval=is_approval,
         ):
@@ -98,22 +100,3 @@ class BaseAgentConversationService(ABC):
         """
         if False:
             yield  # type: ignore[unreachable]  # Required for async generator type inference
-
-    @abstractmethod
-    async def get_conversation_messages(self) -> list[ConversationEvent]:
-        """Retrieve all events for the conversation.
-
-        Events include text messages, tool calls, and tool results in chronological order.
-        This provides a complete timeline of the conversation including intermediate steps.
-
-        For PydanticAI conversations, events are queried from the database.
-        For external engines (Claude Code, Gemini CLI), events are loaded
-        from their respective session storage.
-
-        Returns:
-            List of ConversationEvent instances (ConversationMessage, ToolCall, ToolResult)
-            in chronological order.
-            Note: ToolCallRequest events are excluded as they are ephemeral approval
-            requests, not conversation history.
-        """
-        pass

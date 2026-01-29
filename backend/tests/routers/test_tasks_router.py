@@ -9,7 +9,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
@@ -71,10 +71,18 @@ def mock_task_service_for_workflow():
 
 
 @pytest.fixture
-def mock_agent_conversation_service_for_workflow(mock_agent, db_session, mock_agent_config_service, monkeypatch):
-    """Create a conversation service with mocked agent for workflow tests."""
+def mock_agent_execution_service_for_workflow(mock_agent, db_session, mock_agent_config_service, monkeypatch):
+    """Create an execution service with mocked agent for workflow tests."""
 
     def _create_service(conversation, task, document_repo):
+        conversation_repo = ConversationRepository(db_session)
+
+        # Create history service first
+        history_service = PydanticAIConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+
         # Create role for the service
         role = TaskPlanningAgentRole(
             task=task,
@@ -82,10 +90,11 @@ def mock_agent_conversation_service_for_workflow(mock_agent, db_session, mock_ag
             agent_config_service=mock_agent_config_service,
         )
 
-        service = PydanticAIConversationService(
+        service = PydanticAIAgentExecutionService(
             conversation=conversation,
             role=role,
-            conversation_repository=ConversationRepository(db_session),
+            conversation_repository=conversation_repo,
+            history_service=history_service,
         )
 
         # Patch the _get_agent method to return our mock
@@ -823,10 +832,10 @@ class TestWorkflowActions:
 
         mock_agent.stream_events = mock_stream
 
-        # Patch PydanticAIConversationService._get_agent to return our mock
-        from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
+        # Patch PydanticAIAgentExecutionService._get_agent to return our mock
+        from devboard.agents.engines.internal.agent_execution import PydanticAIAgentExecutionService
 
-        monkeypatch.setattr(PydanticAIConversationService, "_get_agent", lambda self, conversation_history: mock_agent)
+        monkeypatch.setattr(PydanticAIAgentExecutionService, "_get_agent", lambda self, conversation_history: mock_agent)
 
         prompt_action_request = {"action_key": "task.create_implementation_plan"}
 

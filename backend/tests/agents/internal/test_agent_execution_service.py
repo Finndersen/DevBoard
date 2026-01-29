@@ -1,4 +1,4 @@
-"""Tests for PydanticAIConversationService with Role-based architecture."""
+"""Tests for PydanticAIAgentExecutionService with Role-based architecture."""
 
 import datetime
 from unittest.mock import Mock
@@ -15,7 +15,7 @@ from pydantic_ai.messages import (
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.api.schemas.agent_conversation import (
@@ -38,8 +38,8 @@ class MockAgentRole(AgentRole):
         return "Test context"
 
 
-class TestPydanticAIConversationService:
-    """Test PydanticAIConversationService functionality."""
+class TestPydanticAIAgentExecutionService:
+    """Test PydanticAIAgentExecutionService functionality."""
 
     @pytest.fixture
     def mock_role(self):
@@ -67,12 +67,21 @@ class TestPydanticAIConversationService:
         return ConversationRepository(db_session)
 
     @pytest.fixture
-    def service(self, mock_role, conversation_repo, conversation):
-        """Create PydanticAIConversationService instance."""
-        return PydanticAIConversationService(
+    def history_service(self, conversation_repo, conversation):
+        """Create PydanticAIConversationHistoryService instance."""
+        return PydanticAIConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+
+    @pytest.fixture
+    def service(self, mock_role, conversation_repo, conversation, history_service):
+        """Create PydanticAIAgentExecutionService instance."""
+        return PydanticAIAgentExecutionService(
             conversation=conversation,
             role=mock_role,
             conversation_repository=conversation_repo,
+            history_service=history_service,
         )
 
     @pytest.mark.asyncio

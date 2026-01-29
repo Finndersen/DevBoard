@@ -8,7 +8,7 @@ from pydantic_ai.messages import (
 from sqlalchemy.orm import Session
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal.agent_conversation import PydanticAIConversationService
+from devboard.agents.engines.internal.conversation_history import convert_messages_to_pydantic
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
@@ -179,7 +179,7 @@ class TestConversationRepository:
 
         # Get messages and convert
         messages = repo.get_messages(conversation.id)
-        converted = PydanticAIConversationService.convert_messages_to_pydantic(messages)
+        converted = convert_messages_to_pydantic(messages)
 
         assert len(converted) == 1
         assert isinstance(converted[0], ModelRequest)

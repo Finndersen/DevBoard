@@ -1,10 +1,15 @@
 from fastapi import Depends
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.agent_execution import AgentExecutionService
+from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.roles import AgentRole
 from devboard.api.dependencies.entities import get_verified_conversation
-from devboard.api.dependencies.factories import create_agent_conversation_service, create_agent_role_for_conversation
+from devboard.api.dependencies.factories import (
+    create_agent_execution_service,
+    create_agent_role_for_conversation,
+    create_conversation_history_service,
+)
 from devboard.api.dependencies.repositories import get_conversation_repository, get_document_repository
 from devboard.api.dependencies.services import (
     get_agent_config_service,
@@ -56,14 +61,39 @@ async def get_agent_role_for_conversation(
     )
 
 
-def get_agent_conversation_service(
+def get_conversation_history_service(
+    conversation: Conversation = Depends(get_verified_conversation),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> ConversationHistoryService:
+    """Get conversation history service instance.
+
+    FastAPI dependency that creates the appropriate history service (PydanticAI or Claude Code)
+    based on the conversation's engine configuration. Does not require agent role.
+
+    Args:
+        conversation: Verified conversation instance
+        conversation_repo: Conversation repository
+
+    Returns:
+        ConversationHistoryService instance (PydanticAI or Claude Code implementation)
+
+    Raises:
+        HTTPException: 400 if unsupported engine
+    """
+    return create_conversation_history_service(
+        conversation=conversation,
+        conversation_repo=conversation_repo,
+    )
+
+
+def get_agent_execution_service(
     conversation: Conversation = Depends(get_verified_conversation),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     role: AgentRole = Depends(get_agent_role_for_conversation),
-) -> BaseAgentConversationService:
-    """Get conversation service instance.
+) -> AgentExecutionService:
+    """Get agent execution service instance.
 
-    FastAPI dependency that creates the appropriate conversation service (PydanticAI or Claude Code)
+    FastAPI dependency that creates the appropriate execution service (PydanticAI or Claude Code)
     based on the conversation's engine configuration.
 
     Args:
@@ -72,12 +102,12 @@ def get_agent_conversation_service(
         role: Role instance for the conversation
 
     Returns:
-        BaseAgentConversationService instance (PydanticAI or Claude Code implementation)
+        AgentExecutionService instance (PydanticAI or Claude Code implementation)
 
     Raises:
         HTTPException: 400 if unsupported engine, 404 if parent entity not found
     """
-    return create_agent_conversation_service(
+    return create_agent_execution_service(
         conversation=conversation,
         role=role,
         conversation_repo=conversation_repo,

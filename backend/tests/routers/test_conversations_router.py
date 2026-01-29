@@ -9,11 +9,11 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from starlette.testclient import TestClient
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal import PydanticAIConversationService
+from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
-from devboard.api.dependencies.conversations import get_agent_conversation_service
+from devboard.api.dependencies.conversations import get_agent_execution_service
 from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
@@ -22,12 +22,18 @@ from devboard.db.repositories import ConversationRepository, DocumentRepository,
 
 
 @pytest.fixture
-def mock_agent_conversation_service(
+def mock_agent_execution_service(
     mock_agent, test_conversation, test_project, db_session, mock_agent_config_service, monkeypatch
 ):
-    """Create a conversation service with mocked agent."""
+    """Create an execution service with mocked agent."""
     conversation_repo = ConversationRepository(db_session)
     document_repo = DocumentRepository(db_session)
+
+    # Create history service first
+    history_service = PydanticAIConversationHistoryService(
+        conversation=test_conversation,
+        conversation_repository=conversation_repo,
+    )
 
     # Create role for the service
     role = ProjectQAAgentRole(
@@ -36,10 +42,11 @@ def mock_agent_conversation_service(
         agent_config_service=mock_agent_config_service,
     )
 
-    service = PydanticAIConversationService(
+    service = PydanticAIAgentExecutionService(
         conversation=test_conversation,
         role=role,
         conversation_repository=conversation_repo,
+        history_service=history_service,
     )
 
     # Patch the _get_agent method to return our mock (accept conversation_history arg)
@@ -49,12 +56,12 @@ def mock_agent_conversation_service(
 
 
 @pytest.fixture
-def client_with_mock_agent(client, mock_agent_conversation_service) -> Iterator[TestClient]:
-    """Client with mocked conversation service."""
-    app.dependency_overrides[get_agent_conversation_service] = lambda: mock_agent_conversation_service
+def client_with_mock_agent(client, mock_agent_execution_service) -> Iterator[TestClient]:
+    """Client with mocked execution service."""
+    app.dependency_overrides[get_agent_execution_service] = lambda: mock_agent_execution_service
     yield client
-    if get_agent_conversation_service in app.dependency_overrides:
-        del app.dependency_overrides[get_agent_conversation_service]
+    if get_agent_execution_service in app.dependency_overrides:
+        del app.dependency_overrides[get_agent_execution_service]
 
 
 @pytest.fixture

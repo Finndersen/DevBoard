@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.base_agent_conversation import BaseAgentConversationService
+from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.factories import (
-    create_agent_conversation_service,
+    create_agent_execution_service,
     create_agent_role_for_conversation,
 )
 from devboard.db.models import Conversation, ParentEntityType, Task
@@ -75,12 +75,12 @@ class TaskWorkflowAction(ABC):
         self.workspace_allocation_service = workspace_allocation_service
         self.integration_service = integration_service
 
-    async def _create_agent_conversation_service(
+    async def _create_agent_execution_service(
         self,
         conversation: Conversation,
         additional_tools: list[Tool] | None = None,
-    ) -> BaseAgentConversationService:
-        """Create a new agent service for the given conversation with appropriate role.
+    ) -> AgentExecutionService:
+        """Create a new agent execution service for the given conversation with appropriate role.
 
         This factory method handles creating both the role and service instances
         for a conversation, ensuring the role matches the conversation's agent_role field.
@@ -90,7 +90,7 @@ class TaskWorkflowAction(ABC):
             additional_tools: Optional list of additional tools to provide to the agent
 
         Returns:
-            BaseAgentConversationService instance configured with the correct role
+            AgentExecutionService instance configured with the correct role
         """
         # Create role using the conversation's parent entity
         role = await create_agent_role_for_conversation(
@@ -103,7 +103,7 @@ class TaskWorkflowAction(ABC):
         )
 
         # Create service with role and any additional tools
-        return create_agent_conversation_service(
+        return create_agent_execution_service(
             conversation=conversation,
             role=role,
             conversation_repo=self.conversation_repo,
@@ -131,14 +131,14 @@ class TaskWorkflowAction(ABC):
         Yields:
             ConversationEvent objects from the agent's response
         """
-        agent_conversation_service = await self._create_agent_conversation_service(
+        agent_execution_service = await self._create_agent_execution_service(
             conversation,
             additional_tools=additional_tools,
         )
 
         agent_event_stream = self.workspace_allocation_service.run_task_agent_in_workspace(
             task=self.task,
-            agent_stream=agent_conversation_service.stream_events_for_message_or_approval(prompt),
+            agent_stream=agent_execution_service.stream_events_for_message_or_approval(prompt),
         )
 
         async for event in agent_event_stream:
@@ -250,10 +250,10 @@ class PromptTemplateAction(TaskWorkflowAction):
         """
         # Get current active conversation and create service
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        agent_conversation_service = await self._create_agent_conversation_service(conversation)
+        agent_execution_service = await self._create_agent_execution_service(conversation)
 
         # Stream agent prompt events
-        async for event in agent_conversation_service.stream_events_for_message_or_approval(
+        async for event in agent_execution_service.stream_events_for_message_or_approval(
             self.prompt_config.prompt_template
         ):
             yield event
