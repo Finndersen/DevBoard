@@ -1,11 +1,6 @@
 import type { ConversationEvent, ToolCallRequest } from './api'
 import { invokeEventHandlers } from '../hooks/useConversationEventHandlers'
-import type { ToolResultHandler, ToolResultMatcher, SystemEventHandler, SystemEventMatcher } from '../hooks/useConversationEventHandlers'
-
-interface EventHandlerRegistry {
-  toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandler>>
-  systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
-}
+import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 
 export interface StreamProcessorOptions {
   stream: AsyncGenerator<ConversationEvent>

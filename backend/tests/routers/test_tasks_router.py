@@ -835,7 +835,9 @@ class TestWorkflowActions:
         # Patch PydanticAIAgentExecutionService._get_agent to return our mock
         from devboard.agents.engines.internal.agent_execution import PydanticAIAgentExecutionService
 
-        monkeypatch.setattr(PydanticAIAgentExecutionService, "_get_agent", lambda self, conversation_history: mock_agent)
+        monkeypatch.setattr(
+            PydanticAIAgentExecutionService, "_get_agent", lambda self, conversation_history: mock_agent
+        )
 
         prompt_action_request = {"action_key": "task.create_implementation_plan"}
 

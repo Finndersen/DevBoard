@@ -522,8 +522,8 @@ class TaskGitService:
             await git.stash_push(include_untracked=True, message=stash_message)
             logfire.info(f"Stashed uncommitted changes for task {task.id}")
 
-        # Get base branch HEAD before fetch to detect changes
-        base_head_before = await git.get_branch_head(task.base_branch)
+        # Get fork point - where task branch diverged from base branch
+        fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
 
         # Fetch latest from remote to ensure we have up-to-date base branch
         try:
@@ -532,15 +532,15 @@ class TaskGitService:
             # Fetch failure is non-fatal - continue with local state
             pass
 
-        # Get base branch HEAD after fetch to detect changes
-        base_head_after = await git.get_branch_head(task.base_branch)
+        # Get current base branch HEAD after fetch
+        base_head_current = await git.get_branch_head(task.base_branch)
 
-        # Compute base branch changes if HEAD changed
+        # Compute base branch changes between fork point and current base HEAD
         base_branch_changes: BaseBranchChanges | None = None
-        if base_head_before and base_head_after and base_head_before != base_head_after:
+        if fork_point and base_head_current and fork_point != base_head_current:
             try:
-                commits = await git.get_commits_in_range(base_head_before, base_head_after)
-                diff = await git.get_structured_diff(base_head_before, base_head_after)
+                commits = await git.get_commits_in_range(fork_point, base_head_current)
+                diff = await git.get_structured_diff(fork_point, base_head_current)
                 base_branch_changes = BaseBranchChanges(
                     commits=commits,
                     files_changed=[f.path for f in diff.files],
@@ -548,7 +548,7 @@ class TaskGitService:
                     deletions=diff.deletions,
                 )
                 logfire.info(
-                    f"Base branch {task.base_branch} changed: {len(commits)} new commits, "
+                    f"Base branch {task.base_branch} changed since fork: {len(commits)} commits, "
                     f"{len(base_branch_changes.files_changed)} files changed"
                 )
             except Exception as e:

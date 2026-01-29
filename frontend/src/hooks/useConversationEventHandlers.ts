@@ -39,12 +39,12 @@ export type SystemEventMatcher = (event: SystemEvent) => boolean
  */
 export type StreamCompleteHandler = () => void | Promise<void>
 
-interface ToolResultHandlerEntry {
+export interface ToolResultHandlerEntry {
   handler: ToolResultHandler
   includeErrors: boolean
 }
 
-interface EventHandlerRegistry {
+export interface EventHandlerRegistry {
   toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandlerEntry>>
   systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
   streamCompleteHandlers: Set<StreamCompleteHandler>
