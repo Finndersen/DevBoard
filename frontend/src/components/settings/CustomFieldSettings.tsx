@@ -1,0 +1,248 @@
+import { useState, useEffect, useCallback } from 'react'
+import { PlusIcon, PencilIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline'
+import { Card, Button, Modal, ConfirmDialog } from '../ui'
+import { CustomFieldForm } from './CustomFieldForm'
+import { apiClient } from '../../lib/api'
+import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate } from '../../lib/api'
+import { textColors } from '../../styles/designSystem'
+
+export function CustomFieldSettings() {
+  const [fields, setFields] = useState<CustomFieldDefinition[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Modal state
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingField, setEditingField] = useState<CustomFieldDefinition | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Delete confirmation state
+  const [deleteConfirmField, setDeleteConfirmField] = useState<CustomFieldDefinition | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const loadFields = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await apiClient.getCustomFieldDefinitions()
+      setFields(data)
+    } catch (err) {
+      console.error('Failed to load custom fields:', err)
+      setError('Failed to load task custom fields')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadFields()
+  }, [loadFields])
+
+  const handleCreate = () => {
+    setEditingField(null)
+    setIsFormOpen(true)
+  }
+
+  const handleEdit = (field: CustomFieldDefinition) => {
+    setEditingField(field)
+    setIsFormOpen(true)
+  }
+
+  const handleDelete = (field: CustomFieldDefinition) => {
+    setDeleteConfirmField(field)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmField) return
+
+    try {
+      setIsDeleting(true)
+      await apiClient.deleteCustomFieldDefinition(deleteConfirmField.id)
+      setFields(prev => prev.filter(f => f.id !== deleteConfirmField.id))
+      setDeleteConfirmField(null)
+    } catch (err) {
+      console.error('Failed to delete custom field:', err)
+      setError('Failed to delete task custom field')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleFormSubmit = async (data: CustomFieldCreate | CustomFieldUpdate) => {
+    try {
+      setIsSaving(true)
+
+      if (editingField) {
+        // Update existing field
+        const updated = await apiClient.updateCustomFieldDefinition(editingField.id, data as CustomFieldUpdate)
+        setFields(prev => prev.map(f => f.id === updated.id ? updated : f))
+      } else {
+        // Create new field
+        const created = await apiClient.createCustomFieldDefinition(data as CustomFieldCreate)
+        setFields(prev => [...prev, created])
+      }
+
+      setIsFormOpen(false)
+      setEditingField(null)
+    } catch (err) {
+      console.error('Failed to save custom field:', err)
+      throw err // Let the form handle the error display
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleFormClose = () => {
+    setIsFormOpen(false)
+    setEditingField(null)
+  }
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'text': return 'Text'
+      case 'boolean': return 'Boolean'
+      case 'enum': return 'Dropdown'
+      default: return type
+    }
+  }
+
+  const getTypeBadgeColor = (type: string) => {
+    switch (type) {
+      case 'text': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+      case 'boolean': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
+      case 'enum': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+          <div className="space-y-3">
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-2">
+            <TagIcon className="w-5 h-5 text-gray-400" />
+            <h3 className={`text-lg font-medium ${textColors.primary}`}>Task Custom Fields</h3>
+          </div>
+          <Button variant="primary" size="sm" onClick={handleCreate}>
+            <PlusIcon className="w-4 h-4 mr-1" />
+            Add Field
+          </Button>
+        </div>
+
+        <p className={`text-sm ${textColors.secondary} mb-6`}>
+          Define custom fields that can be added to tasks. These fields are available globally across all projects.
+        </p>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md text-sm">
+            {error}
+          </div>
+        )}
+
+        {fields.length === 0 ? (
+          <div className="text-center py-8">
+            <TagIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <h4 className="mt-4 text-sm font-medium text-gray-900 dark:text-white">No task custom fields</h4>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Get started by creating a custom field for your tasks.
+            </p>
+            <Button variant="primary" size="sm" className="mt-4" onClick={handleCreate}>
+              <PlusIcon className="w-4 h-4 mr-1" />
+              Create Field
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {fields.map(field => (
+              <div
+                key={field.id}
+                className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-3">
+                    <span className={`font-medium ${textColors.primary}`}>{field.name}</span>
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${getTypeBadgeColor(field.type)}`}>
+                      {getTypeLabel(field.type)}
+                    </span>
+                    {field.mandatory && (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
+                        Required
+                      </span>
+                    )}
+                  </div>
+                  {field.description && (
+                    <p className={`mt-1 text-sm ${textColors.secondary} truncate`}>{field.description}</p>
+                  )}
+                  {field.type === 'enum' && field.options && field.options.length > 0 && (
+                    <p className={`mt-1 text-xs ${textColors.tertiary}`}>
+                      Options: {field.options.join(', ')}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2 ml-4">
+                  <button
+                    onClick={() => handleEdit(field)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    title="Edit field"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(field)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    title="Delete field"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Create/Edit Modal */}
+      <Modal
+        isOpen={isFormOpen}
+        onClose={handleFormClose}
+        title={editingField ? 'Edit Task Custom Field' : 'Create Task Custom Field'}
+        maxWidth="lg"
+      >
+        <CustomFieldForm
+          field={editingField}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormClose}
+          isSaving={isSaving}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteConfirmField}
+        onClose={() => setDeleteConfirmField(null)}
+        onConfirm={confirmDelete}
+        title="Delete Task Custom Field"
+        message={`Are you sure you want to delete the field "${deleteConfirmField?.name}"? Existing task values will be retained but displayed as plain text.`}
+        confirmText="Delete"
+        variant="danger"
+        loading={isDeleting}
+      />
+    </>
+  )
+}

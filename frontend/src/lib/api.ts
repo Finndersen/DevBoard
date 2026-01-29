@@ -26,6 +26,7 @@ export interface Task {
   specification_document_id: number
   implementation_plan_document_id: number | null
   change_summary_document_id: number | null
+  custom_fields: Record<string, unknown> | null
   available_workflow_actions: WorkflowActionInfo[]
 }
 
@@ -46,6 +47,36 @@ export interface TaskCreate {
   specification_content: string | null
   branch_name?: string  // Optional - auto-generated if not provided
   base_branch?: string  // Optional - defaults to "main"
+  custom_fields?: Record<string, unknown> | null
+}
+
+// Custom Field Definition types
+export type CustomFieldType = 'text' | 'boolean' | 'enum'
+
+export interface CustomFieldDefinition {
+  id: number
+  name: string
+  description: string | null
+  type: CustomFieldType
+  options: string[] | null
+  mandatory: boolean
+  created_at: string
+}
+
+export interface CustomFieldCreate {
+  name: string
+  description?: string | null
+  type: CustomFieldType
+  options?: string[] | null
+  mandatory?: boolean
+}
+
+export interface CustomFieldUpdate {
+  name?: string | null
+  description?: string | null
+  type?: CustomFieldType | null
+  options?: string[] | null
+  mandatory?: boolean | null
 }
 
 export interface DocumentResponse {
@@ -605,6 +636,31 @@ export class ApiClient {
   async toggleLLMProvider(id: string): Promise<LLMProvider> {
     return this.request<LLMProvider>(`/api/settings/llm-providers/${id}/toggle`, {
       method: 'POST',
+    })
+  }
+
+  // Custom Fields
+  async getCustomFieldDefinitions(): Promise<CustomFieldDefinition[]> {
+    return this.request<CustomFieldDefinition[]>('/api/custom-fields/')
+  }
+
+  async createCustomFieldDefinition(field: CustomFieldCreate): Promise<CustomFieldDefinition> {
+    return this.request<CustomFieldDefinition>('/api/custom-fields/', {
+      method: 'POST',
+      body: JSON.stringify(field),
+    })
+  }
+
+  async updateCustomFieldDefinition(fieldId: number, field: CustomFieldUpdate): Promise<CustomFieldDefinition> {
+    return this.request<CustomFieldDefinition>(`/api/custom-fields/${fieldId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(field),
+    })
+  }
+
+  async deleteCustomFieldDefinition(fieldId: number): Promise<{ message: string; success: boolean }> {
+    return this.request<{ message: string; success: boolean }>(`/api/custom-fields/${fieldId}`, {
+      method: 'DELETE',
     })
   }
 

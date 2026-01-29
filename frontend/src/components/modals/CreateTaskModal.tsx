@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
+import type { CustomFieldDefinition } from '../../lib/api'
 import { useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
 
@@ -27,10 +28,33 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   const [isCreating, setIsCreating] = useState(false)
   const [autoGenerateBranch, setAutoGenerateBranch] = useState(true)
 
-  // Refetch codebases when modal opens (in case new ones were linked)
+  // Custom fields state
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
+
+  // Refetch codebases and custom fields when modal opens
   useEffect(() => {
     if (isOpen) {
       refetchCodebases()
+      // Fetch custom field definitions
+      setCustomFieldsLoading(true)
+      apiClient.getCustomFieldDefinitions()
+        .then(fields => {
+          setCustomFieldDefinitions(fields)
+          // Initialize values for all fields
+          const initialValues: Record<string, unknown> = {}
+          fields.forEach(field => {
+            if (field.type === 'boolean') {
+              initialValues[field.name] = false
+            } else {
+              initialValues[field.name] = ''
+            }
+          })
+          setCustomFieldValues(initialValues)
+        })
+        .catch(err => console.error('Failed to load custom fields:', err))
+        .finally(() => setCustomFieldsLoading(false))
     }
   }, [isOpen, refetchCodebases])
 
@@ -47,6 +71,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       })
       setIsCreating(false)
       setAutoGenerateBranch(true)
+      setCustomFieldValues({})
     }
   }, [isOpen])
 
@@ -88,15 +113,38 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     }
   }, [])
 
+  // Custom field change handler
+  const handleCustomFieldChange = useCallback((fieldName: string, value: unknown) => {
+    setCustomFieldValues(prev => ({ ...prev, [fieldName]: value }))
+  }, [])
+
+  // Check if all mandatory custom fields are filled
+  const areMandatoryFieldsFilled = useCallback(() => {
+    const mandatoryFields = customFieldDefinitions.filter(f => f.mandatory)
+    return mandatoryFields.every(field => {
+      const value = customFieldValues[field.name]
+      return value !== undefined && value !== null && value !== ''
+    })
+  }, [customFieldDefinitions, customFieldValues])
+
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setIsCreating(true)
     try {
+      // Build custom fields object (only include non-empty values)
+      const customFields: Record<string, unknown> = {}
+      Object.entries(customFieldValues).forEach(([name, value]) => {
+        if (value !== '' && value !== null && value !== undefined) {
+          customFields[name] = value
+        }
+      })
+
       const taskData: any = {
         title: newTask.title,
         codebase_id: newTask.codebase_id,
         remote_task_id: newTask.remote_task_id,
-        specification_content: null  // Always empty, initial message is sent via chat
+        specification_content: null,  // Always empty, initial message is sent via chat
+        custom_fields: Object.keys(customFields).length > 0 ? customFields : null
       }
 
       // Add working branch if provided (otherwise auto-generated)
@@ -138,7 +186,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     } finally {
       setIsCreating(false)
     }
-  }, [newTask, projectId, navigate, onClose, setTask, fetchProjectTasks])
+  }, [newTask, projectId, navigate, onClose, setTask, fetchProjectTasks, customFieldValues])
 
   return (
     <Modal
@@ -256,6 +304,60 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           />
         </div>
 
+        {/* Custom Fields */}
+        {!customFieldsLoading && customFieldDefinitions.length > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Custom Fields</h4>
+            <div className="space-y-4">
+              {customFieldDefinitions.map(field => (
+                <div key={field.id}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {field.name}
+                    {field.mandatory && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  {field.description && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{field.description}</p>
+                  )}
+
+                  {field.type === 'text' && (
+                    <Input
+                      type="text"
+                      value={(customFieldValues[field.name] as string) || ''}
+                      onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
+                      placeholder={`Enter ${field.name}`}
+                    />
+                  )}
+
+                  {field.type === 'boolean' && (
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={(customFieldValues[field.name] as boolean) || false}
+                        onChange={(e) => handleCustomFieldChange(field.name, e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"></div>
+                    </label>
+                  )}
+
+                  {field.type === 'enum' && field.options && (
+                    <select
+                      value={(customFieldValues[field.name] as string) || ''}
+                      onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Select {field.name}</option>
+                      {field.options.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end space-x-3 pt-4">
           <Button
             type="button"
@@ -269,7 +371,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             type="submit"
             variant="primary"
             loading={isCreating}
-            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating || !codebases || codebases.length === 0}
+            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating || !codebases || codebases.length === 0 || !areMandatoryFieldsFilled()}
           >
             Create Task
           </Button>
