@@ -4,6 +4,7 @@ from .base import Base
 from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation, ParentEntityType
+from .custom_field import CustomFieldDefinition, CustomFieldType
 from .document import Document, DocumentType
 from .messages import ConversationMessage, MessageType
 from .oauth import (
@@ -25,6 +26,8 @@ __all__ = [
     "Base",
     "BranchHandling",
     "Codebase",
+    "CustomFieldDefinition",
+    "CustomFieldType",
     "Configuration",
     "ContextProviderResource",
     "Conversation",

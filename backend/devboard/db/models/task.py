@@ -2,9 +2,9 @@
 
 import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import JSON, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, task_context_resource_association
@@ -47,6 +47,9 @@ class Task(Base):
 
     # GitHub PR number (set when PR is created)
     github_pr_number: Mapped[int | None] = mapped_column(default=None)
+
+    # Custom field values stored as JSON (e.g., {"jira_issue_id": "PROJ-123", "priority": "High"})
+    custom_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Document relationships
     specification_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))

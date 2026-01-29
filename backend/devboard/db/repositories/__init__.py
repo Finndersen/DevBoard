@@ -5,6 +5,7 @@ from .codebase import CodebaseRepository
 from .configuration import ConfigurationRepository
 from .context_provider_resource import ContextProviderResourceRepository
 from .conversation import ConversationRepository
+from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
 from .mcp_server import MCPServerRepository
 from .oauth import OAuthRepository
@@ -16,6 +17,7 @@ __all__ = [
     "BaseRepository",
     "CodebaseRepository",
     "ConfigurationRepository",
+    "CustomFieldRepository",
     "ContextProviderResourceRepository",
     "ConversationRepository",
     "DocumentRepository",

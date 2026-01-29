@@ -1,5 +1,7 @@
 """Task repository for task data access operations."""
 
+from typing import Any
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -25,6 +27,7 @@ class TaskRepository(BaseRepository[Task]):
         status: TaskStatus = TaskStatus.DEFINING,
         remote_task_id: str | None = None,
         branch_name: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Task:
         """Create a new task.
 
@@ -38,6 +41,7 @@ class TaskRepository(BaseRepository[Task]):
             status: Initial task status (defaults to DEFINING)
             remote_task_id: Optional remote task identifier
             branch_name: Optional git branch name
+            custom_fields: Optional custom field values as a JSON-compatible dict
 
         Returns:
             Created Task instance
@@ -52,6 +56,7 @@ class TaskRepository(BaseRepository[Task]):
             remote_task_id=remote_task_id,
             branch_name=branch_name,
             base_branch=base_branch,
+            custom_fields=custom_fields,
         )
         self.db.add(task)
         self.db.flush()
