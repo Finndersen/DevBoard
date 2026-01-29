@@ -85,17 +85,31 @@ def db_session(db_connection: Connection, db_tables) -> Generator[Session, None,
         nested_trans.rollback()
 
 
+@fixture(scope="session")
+def _test_client() -> Iterator[TestClient]:
+    """Session-scoped TestClient to avoid MCP lifespan issues.
+
+    The FastMCP HTTP session manager cannot be cleanly re-entered after exit,
+    so we keep a single TestClient for the entire test session.
+    """
+    with TestClient(app) as test_client:
+        yield test_client
+
+
 @fixture
-def client(db_session) -> Iterator[TestClient]:
-    """FastAPI test client with database setup."""
+def client(db_session, _test_client) -> Iterator[TestClient]:
+    """FastAPI test client with database setup.
+
+    Uses the session-scoped TestClient but sets up per-test database overrides
+    to maintain test isolation.
+    """
 
     def override_get_db():
         return db_session
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
-        yield test_client
+    yield _test_client
 
     app.dependency_overrides.clear()
 

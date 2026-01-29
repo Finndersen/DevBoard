@@ -205,7 +205,10 @@ Please briefly review these changes and note if any are relevant to the current 
 
         Available when: task has feature branch and status is DEFINING, PLANNING, or IMPLEMENTING.
         """
-        return task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING, TaskStatus.IMPLEMENTING) and task.branch_name is not None
+        return (
+            task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING, TaskStatus.IMPLEMENTING)
+            and task.branch_name is not None
+        )
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
         """Execute the action: rebase task branch onto base branch.

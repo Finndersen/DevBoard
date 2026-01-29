@@ -2,7 +2,7 @@
 
 import datetime
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -209,28 +209,15 @@ async def test_allocate_for_task_branch_location_slot_locked_falls_back(
 
 
 @pytest.mark.asyncio
-async def test_allocate_for_task_no_branch_name_skips_location_check(
+async def test_allocate_for_task_no_branch_name_raises_error(
     service, mock_repos, sample_task, sample_codebase, sample_slot
 ):
-    """Test that branch-location check is skipped when task has no branch_name."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
+    """Test that allocation raises ValueError when task has no branch_name."""
     # Setup: Task has no branch name
     sample_task.branch_name = None
-    sample_slot.locked = False
-    sample_slot.last_used_by_task_id = None
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-
-        result = await service.allocate_for_task(sample_task)
-
-    # Verify: get_checked_out_location was NOT called (no branch name)
-    mock_git.return_value.get_checked_out_location.assert_not_called()
-    # Verify: Fell back to LRU
-    assert result.id == sample_slot.id
+    with pytest.raises(ValueError, match="has no branch configured"):
+        await service.allocate_for_task(sample_task)
 
 
 @pytest.mark.asyncio
@@ -826,7 +813,7 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(service, mock
 @pytest.mark.asyncio
 async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch stashes changes, rebases, and restores stash."""
-    from devboard.services.task_git_service import RebaseResult
+    from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
 
@@ -837,34 +824,37 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
+        # is_rebase_in_progress is sync, must be a regular Mock
+        mock_git.is_rebase_in_progress = Mock(return_value=False)
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "abc123stashsha"
         mock_git.rebase_onto.return_value = "newhead456"
+        # find_stash_by_message returns stash ref after stash_push, then None after drop
+        mock_git.find_stash_by_message.side_effect = ["stash@{0}", None]
 
         # Execute
         result = await task_git_service.rebase_task_branch(sample_task)
 
         # Verify result
         assert isinstance(result, RebaseResult)
+        assert result.outcome == RebaseOutcome.SUCCESS
         assert result.new_head == "newhead456"
         assert result.slot_path == sample_slot.path
-        assert result.had_uncommitted_changes is True
-        assert result.uncommitted_changes_restored is True
-        assert result.has_stash_conflicts is False
+        assert result.has_pending_stash is False
 
-        # Verify stash flow (stash_push cleans working tree automatically)
+        # Verify stash flow
         mock_git.has_uncommitted_changes.assert_called_once()
-        mock_git.stash_push.assert_called_once_with(include_untracked=True)
+        mock_git.stash_push.assert_called_once()
         mock_git.fetch.assert_called_once()
-        mock_git.rebase_onto.assert_called_once_with(sample_task.base_branch)
-        mock_git.stash_apply.assert_called_once_with("abc123stashsha")
+        mock_git.rebase_onto.assert_called_once_with(sample_task.base_branch, abort_on_conflict=False)
+        mock_git.stash_apply.assert_called_once_with("stash@{0}")
+        mock_git.stash_drop.assert_called_once_with("stash@{0}")
 
 
 @pytest.mark.asyncio
 async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch without uncommitted changes skips stash operations."""
-    from devboard.services.task_git_service import RebaseResult
+    from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
@@ -873,19 +863,22 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
+        # is_rebase_in_progress is sync, must be a regular Mock
+        mock_git.is_rebase_in_progress = Mock(return_value=False)
         # No uncommitted changes
         mock_git.has_uncommitted_changes.return_value = False
         mock_git.rebase_onto.return_value = "newhead789"
+        # No stash exists
+        mock_git.find_stash_by_message.return_value = None
 
         # Execute
         result = await task_git_service.rebase_task_branch(sample_task)
 
         # Verify result
         assert isinstance(result, RebaseResult)
+        assert result.outcome == RebaseOutcome.SUCCESS
         assert result.new_head == "newhead789"
-        assert result.had_uncommitted_changes is False
-        assert result.uncommitted_changes_restored is False
-        assert result.has_stash_conflicts is False
+        assert result.has_pending_stash is False
 
         # Verify no stash operations when nothing to stash
         mock_git.stash_push.assert_not_called()
@@ -893,9 +886,12 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_conflict_restores_stash(task_git_service, mock_repos, sample_task, sample_slot):
-    """Test rebase_task_branch restores stash before raising RebaseConflictError."""
+async def test_rebase_task_branch_conflict_returns_conflict_result(
+    task_git_service, mock_repos, sample_task, sample_slot
+):
+    """Test rebase_task_branch returns CONFLICT outcome when rebase has conflicts."""
     from devboard.integrations.shell import RebaseConflictError
+    from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
@@ -904,56 +900,62 @@ async def test_rebase_task_branch_conflict_restores_stash(task_git_service, mock
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
+        # is_rebase_in_progress is sync, must be a regular Mock
+        mock_git.is_rebase_in_progress = Mock(return_value=False)
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "abc123stashsha"
         mock_git.rebase_onto.side_effect = RebaseConflictError("Rebase conflict on file.txt")
-
-        # Execute and verify exception is raised
-        with pytest.raises(RebaseConflictError):
-            await task_git_service.rebase_task_branch(sample_task)
-
-        # Verify stash was created before rebase
-        mock_git.stash_push.assert_called_once_with(include_untracked=True)
-
-        # Verify stash was restored after conflict
-        mock_git.stash_apply.assert_called_once_with("abc123stashsha")
-
-
-@pytest.mark.asyncio
-async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_repos, sample_task, sample_slot):
-    """Test rebase_task_branch handles stash apply conflicts by storing pending stash."""
-    from devboard.integrations.shell import ShellCommandExecutionError
-    from devboard.services.task_git_service import RebaseResult
-
-    worktree_slot_repo, _, _ = mock_repos
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
-
-    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
-        mock_git = AsyncMock()
-        mock_git_class.return_value = mock_git
-
-        # Has uncommitted changes
-        mock_git.has_uncommitted_changes.return_value = True
-        mock_git.stash_push.return_value = "abc123stashsha"
-        mock_git.rebase_onto.return_value = "newhead456"
-        # Stash apply fails with conflict
-        mock_git.stash_apply.side_effect = ShellCommandExecutionError("error: could not apply stash")
+        mock_git.get_conflicted_files.return_value = ["file.txt"]
+        mock_git.find_stash_by_message.return_value = "stash@{0}"
 
         # Execute
         result = await task_git_service.rebase_task_branch(sample_task)
 
-        # Verify result has stash conflicts flag
+        # Verify result indicates conflict with pending stash
         assert isinstance(result, RebaseResult)
-        assert result.new_head == "newhead456"
-        assert result.had_uncommitted_changes is True
-        assert result.uncommitted_changes_restored is False
-        assert result.has_stash_conflicts is True
+        assert result.outcome == RebaseOutcome.CONFLICT
+        assert result.conflicted_files == ["file.txt"]
+        assert result.has_pending_stash is True
 
-        # Verify stash_push was called (cleans working tree automatically)
-        mock_git.stash_push.assert_called_once_with(include_untracked=True)
-        # Stash store is no longer called - files left in conflicted state
-        mock_git.stash_store.assert_not_called()
+        # Verify stash was created before rebase
+        mock_git.stash_push.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_repos, sample_task, sample_slot):
+    """Test rebase_task_branch handles stash apply conflicts."""
+    from devboard.integrations.shell import ShellCommandExecutionError
+    from devboard.services.task_git_service import RebaseOutcome, RebaseResult
+
+    worktree_slot_repo, _, _ = mock_repos
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+        mock_git = AsyncMock()
+        mock_git_class.return_value = mock_git
+
+        # is_rebase_in_progress is sync, must be a regular Mock
+        mock_git.is_rebase_in_progress = Mock(return_value=False)
+        # Has uncommitted changes
+        mock_git.has_uncommitted_changes.return_value = True
+        mock_git.rebase_onto.return_value = "newhead456"
+        mock_git.find_stash_by_message.return_value = "stash@{0}"
+        # Stash apply fails with conflict
+        mock_git.stash_apply.side_effect = ShellCommandExecutionError("error: could not apply stash")
+        mock_git.get_conflicted_files.return_value = ["conflicted_file.txt"]
+
+        # Execute
+        result = await task_git_service.rebase_task_branch(sample_task)
+
+        # Verify result indicates stash conflict
+        assert isinstance(result, RebaseResult)
+        assert result.outcome == RebaseOutcome.STASH_CONFLICT
+        assert result.new_head == "newhead456"
+        assert result.conflicted_files == ["conflicted_file.txt"]
+
+        # Verify stash_push was called
+        mock_git.stash_push.assert_called_once()
+        mock_git.stash_apply.assert_called_once_with("stash@{0}")
 
 
 @pytest.mark.asyncio

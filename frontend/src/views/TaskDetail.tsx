@@ -401,6 +401,18 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   useToolResultHandler(taskCompletionMatcher, taskCompletionHandler)
 
+  // Handler for rebase_task_branch tool - refresh git status on success or failure
+  const rebaseMatcher = useCallback(
+    (toolName: string) => toolName.includes('rebase_task_branch'),
+    []
+  )
+
+  const rebaseHandler = useCallback(async () => {
+    await refreshGitStatus()
+  }, [refreshGitStatus])
+
+  useToolResultHandler(rebaseMatcher, rebaseHandler, { includeErrors: true })
+
   const systemEventMatcher = useCallback((event: any) => {
     return (
       (event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate') &&

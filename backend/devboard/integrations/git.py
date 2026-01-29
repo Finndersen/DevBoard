@@ -17,6 +17,12 @@ from .types import (
     WorktreeInfo,
 )
 
+# Environment variables to prevent git from prompting for input
+GIT_ENV = {
+    "GIT_EDITOR": "true",  # Prevents editor prompts (e.g., during rebase --continue)
+    "GIT_TERMINAL_PROMPT": "0",  # Prevents credential prompts
+}
+
 
 class GitRepoIntegration:
     """
@@ -74,6 +80,7 @@ class GitRepoIntegration:
             working_dir=self._repo_path,
             timeout=timeout,
             raise_on_error=raise_on_error,
+            env=GIT_ENV,
         )
         return result.stdout.strip() if result.success else ""
 

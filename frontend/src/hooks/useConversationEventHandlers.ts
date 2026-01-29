@@ -14,6 +14,14 @@ export type ToolResultHandler = (result: ToolResult) => void | Promise<void>
 export type ToolResultMatcher = (toolName: string, result: ToolResult) => boolean
 
 /**
+ * Options for tool result handler registration.
+ */
+export interface ToolResultHandlerOptions {
+  /** If true, handler will be called for error results as well. Default: false */
+  includeErrors?: boolean
+}
+
+/**
  * Handler function for system events.
  * Called when a system event is received.
  */
@@ -31,8 +39,13 @@ export type SystemEventMatcher = (event: SystemEvent) => boolean
  */
 export type StreamCompleteHandler = () => void | Promise<void>
 
+interface ToolResultHandlerEntry {
+  handler: ToolResultHandler
+  includeErrors: boolean
+}
+
 interface EventHandlerRegistry {
-  toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandler>>
+  toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandlerEntry>>
   systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
   streamCompleteHandlers: Set<StreamCompleteHandler>
 }
@@ -105,10 +118,23 @@ export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undef
  *   (name) => name.includes('edit_') || name.includes('set_'),
  *   (result) => console.log('Document modified:', result.result_content)
  * )
+ *
+ * @example
+ * Handle both success and error results:
+ * useToolResultHandler(
+ *   (name) => name.includes('rebase_task_branch'),
+ *   (result) => refreshGitStatus(),
+ *   { includeErrors: true }
+ * )
  */
-export function useToolResultHandler(matcher: ToolResultMatcher, handler: ToolResultHandler): void {
+export function useToolResultHandler(
+  matcher: ToolResultMatcher,
+  handler: ToolResultHandler,
+  options?: ToolResultHandlerOptions
+): void {
   const registry = useEventHandlerRegistry()
   const handlerRef = useRef(handler)
+  const includeErrors = options?.includeErrors ?? false
 
   // Update ref when handler changes
   useEffect(() => {
@@ -116,26 +142,29 @@ export function useToolResultHandler(matcher: ToolResultMatcher, handler: ToolRe
   }, [handler])
 
   useEffect(() => {
-    // Create wrapper that uses current handler
-    const wrappedHandler: ToolResultHandler = (...args) => handlerRef.current(...args)
+    // Create entry with wrapped handler and options
+    const entry: ToolResultHandlerEntry = {
+      handler: (...args) => handlerRef.current(...args),
+      includeErrors
+    }
 
     // Register handler
     if (!registry.toolResultHandlers.has(matcher)) {
       registry.toolResultHandlers.set(matcher, new Set())
     }
-    registry.toolResultHandlers.get(matcher)!.add(wrappedHandler)
+    registry.toolResultHandlers.get(matcher)!.add(entry)
 
     // Cleanup: unregister handler
     return () => {
-      const handlers = registry.toolResultHandlers.get(matcher)
-      if (handlers) {
-        handlers.delete(wrappedHandler)
-        if (handlers.size === 0) {
+      const entries = registry.toolResultHandlers.get(matcher)
+      if (entries) {
+        entries.delete(entry)
+        if (entries.size === 0) {
           registry.toolResultHandlers.delete(matcher)
         }
       }
     }
-  }, [registry, matcher])
+  }, [registry, matcher, includeErrors])
 }
 
 /**
@@ -287,14 +316,17 @@ export async function invokeEventHandlers(
     const toolName = toolCallMap.get(event.tool_call_id)
     if (!toolName) return
 
-    // Skip error results - handlers shouldn't be invoked for errors
-    if (event.is_error) return
+    const isError = event.is_error
 
-    // Find matching handlers
+    // Find matching handlers (filter by includeErrors when result is an error)
     const matchingHandlers: ToolResultHandler[] = []
-    for (const [matcher, handlers] of registry.toolResultHandlers.entries()) {
+    for (const [matcher, entries] of registry.toolResultHandlers.entries()) {
       if (matcher(toolName, event)) {
-        matchingHandlers.push(...Array.from(handlers))
+        for (const entry of entries) {
+          // Skip error results unless handler explicitly wants them
+          if (isError && !entry.includeErrors) continue
+          matchingHandlers.push(entry.handler)
+        }
       }
     }
 

@@ -44,7 +44,7 @@ def create_rebase_task_branch_tool(
         try:
             result = await task_git_service.rebase_task_branch(task)
         except ValueError as e:
-            raise ModelRetry(str(e))
+            raise ModelRetry(str(e)) from e
 
         if result.outcome == RebaseOutcome.SUCCESS:
             message = f"Rebase completed successfully. New HEAD: {result.new_head}"
@@ -58,9 +58,7 @@ def create_rebase_task_branch_tool(
 
         elif result.outcome == RebaseOutcome.CONFLICT:
             conflict_list = (
-                "\n".join(f"  - {f}" for f in result.conflicted_files)
-                if result.conflicted_files
-                else "  (unknown)"
+                "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
             )
 
             stash_note = ""
@@ -79,9 +77,7 @@ def create_rebase_task_branch_tool(
 
         elif result.outcome == RebaseOutcome.STASH_CONFLICT:
             conflict_list = (
-                "\n".join(f"  - {f}" for f in result.conflicted_files)
-                if result.conflicted_files
-                else "  (unknown)"
+                "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
             )
             raise ModelRetry(
                 f"Rebase completed successfully (new HEAD: {result.new_head}), but restoring your "

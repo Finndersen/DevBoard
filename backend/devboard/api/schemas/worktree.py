@@ -29,7 +29,9 @@ class WorktreeSlotWithTaskInfo(BaseModel):
     current_branch: str | None
     last_used_at: datetime.datetime | None
     locked_by_task: dict | None = None  # {"id": int, "title": str} - only present if locked
-    last_used_by_task: dict | None = None  # {"id": int, "title": str} - only present if available and was previously used
+    last_used_by_task: dict | None = (
+        None  # {"id": int, "title": str} - only present if available and was previously used
+    )
 
 
 class WorktreePoolStatusResponse(BaseModel):

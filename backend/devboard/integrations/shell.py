@@ -1,6 +1,7 @@
 """Async shell command execution utility."""
 
 import asyncio
+import os
 from pathlib import Path
 
 import logfire
@@ -55,6 +56,7 @@ async def execute_shell_command(
     working_dir: str | Path | None = None,
     timeout: float = 30.0,
     raise_on_error: bool = True,
+    env: dict[str, str] | None = None,
 ) -> ShellCommandResult:
     """Execute a shell command asynchronously.
 
@@ -65,6 +67,7 @@ async def execute_shell_command(
         working_dir: Working directory for the command (default: current directory)
         timeout: Command timeout in seconds (default: 30)
         raise_on_error: Whether to raise exception on non-zero return code (default: True)
+        env: Additional environment variables to set for the command (merged with current env)
 
     Returns:
         ShellCommandResult with stdout, stderr, and return code
@@ -84,17 +87,24 @@ async def execute_shell_command(
     else:
         cwd = str(Path.cwd())
 
+    # Build command environment (merge provided env with current environment)
+    command_env: dict[str, str] | None = None
+    if env:
+        command_env = os.environ.copy()
+        command_env.update(env)
+
     # Determine if we need shell execution (single string with shell syntax)
     use_shell = len(command) == 1 and ("|" in command[0] or ">" in command[0] or "<" in command[0])
     try:
         if use_shell:
-            logfire.debug(f"Executing shell command in {cwd}: {command[0]}, timeout {timeout}s")
+            logfire.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
             process = await asyncio.create_subprocess_shell(
                 command[0],
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.DEVNULL,
+                env=command_env,
             )
         else:
             logfire.debug(f"Executing shell command in {cwd}: {' '.join(command)}, timeout {timeout}s")
@@ -104,6 +114,7 @@ async def execute_shell_command(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.DEVNULL,
+                env=command_env,
             )
 
         try:
@@ -115,7 +126,7 @@ async def execute_shell_command(
             except ProcessLookupError:
                 pass
 
-            raise ShellCommandTimeoutError(f"Command timed out after {timeout} seconds: {command[0]}") from e
+            raise ShellCommandTimeoutError(f"Command timed out after {timeout} seconds: {' '.join(command)}") from e
 
         stdout_text = stdout.decode("utf-8")
         stderr_text = stderr.decode("utf-8")
@@ -125,10 +136,10 @@ async def execute_shell_command(
         if not result.success and raise_on_error:
             error_msg = stderr_text.strip() or f"Command failed with return code {process.returncode}"
             logfire.error(f"Shell command failed: {' '.join(command)} - {error_msg}")
-            raise ShellCommandExecutionError(f"Command '{command[0]}' failed: {error_msg}")
+            raise ShellCommandExecutionError(f"Command '{' '.join(command)}' failed: {error_msg}")
 
-        logfire.debug(f"Shell command completed successfully: {command[0]}")
+        logfire.debug(f"Shell command completed successfully: {' '.join(command)}")
         return result
     except FileNotFoundError as e:
-        logfire.error(f"Shell command not found: {command[0]}")
-        raise ShellCommandNotFoundError(f"Command not found: {command[0]}") from e
+        logfire.error(f"Shell command not found: {' '.join(command)}")
+        raise ShellCommandNotFoundError(f"Command not found: {' '.join(command)}") from e

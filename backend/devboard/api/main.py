@@ -50,6 +50,12 @@ class SingleSessionMCP:
         await self.lifespan_generator.__aenter__()
         self.generator_started = True
 
+    async def stop_session(self):
+        if not self.generator_started:
+            return
+        await self.lifespan_generator.__aexit__(None, None, None)
+        self.generator_started = False
+
 
 ss_mcp = SingleSessionMCP(mcp)
 
@@ -59,7 +65,10 @@ async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
     await ss_mcp.start_session()
     await cleanup_stale_locks_on_startup()
-    yield
+    try:
+        yield
+    finally:
+        await ss_mcp.stop_session()
 
 
 async def cleanup_stale_locks_on_startup():
