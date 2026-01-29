@@ -102,6 +102,7 @@ async def get_task(
         specification_document_id=task.specification.id,
         implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
         change_summary_document_id=task.change_summary.id if task.change_summary else None,
+        custom_fields=task.custom_fields,
         available_workflow_actions=available_actions,
     )
 
@@ -159,6 +160,7 @@ async def update_task(
             updated_task.implementation_plan.id if updated_task.implementation_plan else None
         ),
         change_summary_document_id=(updated_task.change_summary.id if updated_task.change_summary else None),
+        custom_fields=updated_task.custom_fields,
         available_workflow_actions=available_actions,
     )
 

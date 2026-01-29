@@ -14,6 +14,7 @@ from devboard.api.routers import (
     codebases,
     configurations,
     conversations,
+    custom_fields,
     documents,
     oauth,
     projects,
@@ -142,6 +143,7 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(codebases.router, prefix="/api/codebases", tags=["codebases"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(configurations.router, prefix="/api/configurations", tags=["configurations"])
+app.include_router(custom_fields.router, prefix="/api/custom-fields", tags=["custom-fields"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])

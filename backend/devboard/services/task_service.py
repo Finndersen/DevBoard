@@ -64,6 +64,7 @@ class TaskService:
         remote_task_id: str | None = None,
         specification_content: str = "",
         branch_name: str | None = None,
+        custom_fields: dict | None = None,
     ) -> Task:
         """Create a new task with initial conversation.
 
@@ -81,6 +82,7 @@ class TaskService:
             remote_task_id: Optional remote task identifier (e.g., Jira issue key)
             specification_content: Initial content for the specification document (defaults to empty string)
             branch_name: Optional git branch name (auto-generated if not provided)
+            custom_fields: Optional custom field values as a JSON-compatible dict
 
         Returns:
             Created Task instance with active conversation
@@ -104,6 +106,7 @@ class TaskService:
             remote_task_id=remote_task_id,
             branch_name=branch_name,
             base_branch=base_branch,
+            custom_fields=custom_fields,
         )
 
         # Create initial conversation

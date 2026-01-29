@@ -9,6 +9,7 @@ from devboard.db.repositories import (
     ConfigurationRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
+    CustomFieldRepository,
     DocumentRepository,
     MCPServerRepository,
     OAuthRepository,
@@ -70,3 +71,8 @@ def get_oauth_repository(db: Session = Depends(get_db)) -> OAuthRepository:
 def get_mcp_server_repository(db: Session = Depends(get_db)) -> MCPServerRepository:
     """Get MCPServerRepository instance."""
     return MCPServerRepository(db)
+
+
+def get_custom_field_repository(db: Session = Depends(get_db)) -> CustomFieldRepository:
+    """Get CustomFieldRepository instance."""
+    return CustomFieldRepository(db)

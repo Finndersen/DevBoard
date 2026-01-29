@@ -1,6 +1,7 @@
 """Task Pydantic schemas."""
 
 import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -36,6 +37,7 @@ class TaskCreateNested(BaseModel):
     specification_content: str | None = None
     branch_name: str | None = None
     base_branch: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -48,6 +50,7 @@ class TaskUpdate(BaseModel):
     conversation_id: str | None = None
     specification: str | None = None
     implementation_plan: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class WorkflowActionInfo(BaseModel):
@@ -68,6 +71,9 @@ class TaskResponse(TaskBase):
     specification_document_id: int
     implementation_plan_document_id: int | None = None
     change_summary_document_id: int | None = None
+
+    # Custom field values
+    custom_fields: dict[str, Any] | None = None
 
     # Available workflow actions based on current state
     available_workflow_actions: list[WorkflowActionInfo] = []

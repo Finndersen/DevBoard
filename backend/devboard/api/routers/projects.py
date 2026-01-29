@@ -9,6 +9,7 @@ from devboard.api.dependencies.entities import get_verified_codebase, get_verifi
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
+    get_custom_field_repository,
     get_document_repository,
     get_project_repository,
     get_task_repository,
@@ -37,6 +38,7 @@ from devboard.db.models.project import Project
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
+    CustomFieldRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
@@ -191,6 +193,7 @@ async def list_project_tasks(
                 created_at=task.created_at,
                 specification_document_id=task.specification.id,
                 implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
+                custom_fields=task.custom_fields,
             )
         )
 
@@ -206,6 +209,7 @@ async def create_project_task(
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
+    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
     """Create a new task under a project with initial conversation."""
 
@@ -215,6 +219,20 @@ async def create_project_task(
         raise HTTPException(status_code=404, detail="Project not found")
 
     codebase = get_verified_codebase(task.codebase_id, codebase_repo)
+
+    # Validate mandatory custom fields
+    mandatory_fields = custom_field_repo.get_mandatory_fields()
+    if mandatory_fields:
+        custom_fields = task.custom_fields or {}
+        missing_fields = []
+        for field in mandatory_fields:
+            if field.name not in custom_fields or custom_fields[field.name] is None or custom_fields[field.name] == "":
+                missing_fields.append(field.name)
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required custom fields: {', '.join(missing_fields)}",
+            )
 
     # Use provided base_branch or fall back to codebase's default_branch
     base_branch = task.base_branch or codebase.default_branch
@@ -229,6 +247,7 @@ async def create_project_task(
         specification_content=task.specification_content or "",
         branch_name=task.branch_name,
         base_branch=base_branch,
+        custom_fields=task.custom_fields,
     )
 
     # Create git branch immediately to ensure consistent codebase view during planning
@@ -252,6 +271,7 @@ async def create_project_task(
         implementation_plan_document_id=(
             created_task.implementation_plan.id if created_task.implementation_plan else None
         ),
+        custom_fields=created_task.custom_fields,
     )
 
 

@@ -8,6 +8,7 @@ from .codebase import (
 )
 from .common import DeleteResponse
 from .conversation import ConversationResponse
+from .custom_field import CustomFieldCreate, CustomFieldResponse, CustomFieldUpdate
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .integration import (
     AgentConfigurationResponse,
@@ -80,6 +81,10 @@ __all__ = [
     "DeleteResponse",
     # Conversation
     "ConversationResponse",
+    # Custom Field
+    "CustomFieldCreate",
+    "CustomFieldResponse",
+    "CustomFieldUpdate",
     # Document
     "DocumentCreate",
     "DocumentResponse",
