@@ -56,7 +56,7 @@ class TestTaskRepository:
         db_session.commit()
         assert created.id is not None
         assert created.title == "Test Task"
-        assert created.status.value == "defining"  # Default status
+        assert created.status.value == "planning"  # Default status
 
     def test_get_by_id(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test getting a task by ID."""

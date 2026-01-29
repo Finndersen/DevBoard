@@ -32,7 +32,7 @@ def test_task_data():
     """Sample task data for testing."""
     return {
         "title": "Test Task",
-        "status": TaskStatus.DEFINING,
+        "status": TaskStatus.PLANNING,
         "project_id": 1,
     }
 
@@ -56,15 +56,15 @@ def mock_task_service_for_workflow():
     service = MagicMock()
 
     # Mock transition methods to just update status
-    def mock_transition_to_planning(task):
-        task.status = TaskStatus.PLANNING
+    def mock_create_implementation_plan(task):
+        # Just create the plan document (doesn't change status)
         return task
 
     def mock_transition_to_implementing(task):
         task.status = TaskStatus.IMPLEMENTING
         return task
 
-    service.transition_to_planning.side_effect = mock_transition_to_planning
+    service.create_implementation_plan.side_effect = mock_create_implementation_plan
     service.transition_to_implementing.side_effect = mock_transition_to_implementing
 
     return service
@@ -168,7 +168,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -217,7 +217,7 @@ class TestTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -274,7 +274,7 @@ class TestTasksRouter:
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -375,7 +375,7 @@ class TestTasksRouter:
         task = task_repo.create(
             project_id=project.id,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification=task_spec_doc,
             base_branch="main",
             codebase_id=codebase.id,
@@ -428,7 +428,7 @@ class TestTasksRouter:
         task = task_repo.create(
             project_id=project.id,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification=task_spec_doc,
             base_branch="main",
             codebase_id=codebase.id,
@@ -477,7 +477,7 @@ class TestTasksRouter:
         task = task_repo.create(
             project_id=project.id,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification=task_spec_doc,
             base_branch="main",
             codebase_id=codebase.id,
@@ -754,7 +754,7 @@ class TestTaskStateTransition:
         created_task = task_repo.create(
             project_id=created_project.id,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification=task_spec_doc,
             implementation_plan=None,
             base_branch="main",
@@ -766,7 +766,7 @@ class TestTaskStateTransition:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=created_task.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -797,7 +797,7 @@ class TestWorkflowActions:
         task = task_repo.create(
             project_id=created_project.id,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification=task_spec_doc,
             base_branch="main",
             codebase_id=test_codebase.id,

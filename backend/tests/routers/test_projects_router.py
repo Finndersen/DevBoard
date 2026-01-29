@@ -39,7 +39,7 @@ def test_task_data():
     return {
         "title": "Test Task",
         "description": "Test task description",
-        "status": "defining",
+        "status": "planning",
     }
 
 
@@ -396,14 +396,14 @@ class TestProjectTasksRouter:
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task1.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
         conversation_repo.create(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task2.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.INTERNAL,
             model_id="openai:gpt-4",
         )
@@ -433,7 +433,7 @@ class TestProjectTasksRouter:
         )
         db_session.commit()
 
-        # Create task under project (no project_id or status in body - status always defaults to DEFINING)
+        # Create task under project (no project_id or status in body - status always defaults to PLANNING)
         api_task_data = {
             "title": test_task_data["title"],
             "codebase_id": test_codebase.id,
@@ -445,7 +445,7 @@ class TestProjectTasksRouter:
 
         task_data = response.json()
         assert task_data["title"] == test_task_data["title"]
-        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["status"] == "planning"  # Always PLANNING when created
         assert task_data["project_id"] == created_project.id
         assert "id" in task_data
         assert "conversation_id" in task_data
@@ -462,7 +462,7 @@ class TestProjectTasksRouter:
         )
         db_session.commit()
 
-        # Create task with specification content (status not provided, defaults to DEFINING)
+        # Create task with specification content (status not provided, defaults to PLANNING)
         api_task_data = {
             "title": "Task with Specification",
             "specification_content": "This is the initial task specification content.",
@@ -475,7 +475,7 @@ class TestProjectTasksRouter:
 
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
-        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["status"] == "planning"  # Always PLANNING when created
         assert task_data["specification_document_id"] is not None
         assert task_data["implementation_plan_document_id"] is None  # Should be None initially
 
@@ -496,7 +496,7 @@ class TestProjectTasksRouter:
         )
         db_session.commit()
 
-        # Create task with codebase (status not provided, defaults to DEFINING)
+        # Create task with codebase (status not provided, defaults to PLANNING)
         api_task_data = {
             "title": "Task with Codebase",
             "codebase_id": test_codebase.id,
@@ -508,7 +508,7 @@ class TestProjectTasksRouter:
 
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
-        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["status"] == "planning"  # Always PLANNING when created
         assert task_data["codebase_id"] == test_codebase.id
 
     def test_create_project_task_with_specification_and_codebase(
@@ -525,7 +525,7 @@ class TestProjectTasksRouter:
         )
         db_session.commit()
 
-        # Create task with both (status not provided, defaults to DEFINING)
+        # Create task with both (status not provided, defaults to PLANNING)
         api_task_data = {
             "title": "Task with Both",
             "specification_content": "Task specification for the codebase work.",
@@ -538,7 +538,7 @@ class TestProjectTasksRouter:
 
         task_data = response.json()
         assert task_data["title"] == api_task_data["title"]
-        assert task_data["status"] == "defining"  # Always DEFINING when created
+        assert task_data["status"] == "planning"  # Always PLANNING when created
         assert task_data["specification_document_id"] is not None
         assert task_data["codebase_id"] == test_codebase.id
 

@@ -14,7 +14,7 @@ class TaskBase(BaseModel):
     title: str
     project_id: int
     codebase_id: int
-    status: TaskStatus = TaskStatus.DEFINING
+    status: TaskStatus = TaskStatus.PLANNING
     remote_task_id: str | None = None
 
 
@@ -24,7 +24,7 @@ class TaskCreate(BaseModel):
     title: str
     project_id: int
     codebase_id: int
-    status: TaskStatus = TaskStatus.DEFINING
+    status: TaskStatus = TaskStatus.PLANNING
     remote_task_id: str | None = None
 
 

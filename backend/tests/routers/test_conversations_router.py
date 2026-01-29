@@ -106,7 +106,7 @@ def test_task(db_session, test_project) -> Task:
     task = task_repo.create(
         project_id=test_project.id,
         title="Test Task",
-        status=TaskStatus.DEFINING,
+        status=TaskStatus.PLANNING,
         specification=specification_doc,
     )
     db_session.commit()
@@ -303,7 +303,7 @@ class TestConversationsRouter:
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=test_project.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
             engine=AgentEngine.CLAUDE_CODE,
             model_id="anthropic:claude-sonnet-4.5",
             is_active=True,

@@ -109,8 +109,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'defining':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
       case 'planning':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
       case 'implementing':
@@ -207,7 +205,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     )
   }
 
-  const statusColumns = ['defining', 'planning', 'implementing', 'reviewing', 'complete']
+  const statusColumns = ['planning', 'implementing', 'reviewing', 'complete']
 
   return (
     <div>

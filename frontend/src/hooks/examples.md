@@ -135,7 +135,7 @@ Update task status badge when task is updated:
 import { useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 
 function TaskStatusBadge({ taskId }: { taskId: number }) {
-  const [status, setStatus] = useState<string>('defining')
+  const [status, setStatus] = useState<string>('planning')
 
   useSystemEventHandler('task_updated', (event) => {
     const { task_id, updated_fields } = event.data

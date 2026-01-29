@@ -11,7 +11,7 @@ import logfire
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
-from devboard.db.models.task import Task, TaskStatus
+from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
@@ -101,7 +101,7 @@ class TaskService:
             title=title,
             specification=specification_doc,
             implementation_plan=None,
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             codebase_id=codebase_id,
             remote_task_id=remote_task_id,
             branch_name=branch_name,
@@ -109,39 +109,47 @@ class TaskService:
             custom_fields=custom_fields,
         )
 
-        # Create initial conversation
+        # Create initial conversation with TASK_PLANNING role (handles both spec and planning)
         self.conversation_service.create_initial_conversation_for_parent_entity(
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
-            agent_role=AgentRoleType.TASK_SPECIFICATION,
+            agent_role=AgentRoleType.TASK_PLANNING,
         )
 
         return task
 
-    def transition_to_planning(self, task: Task) -> Task:
-        """Transition task from DEFINING to PLANNING status.
+    def create_implementation_plan(self, task: Task) -> Task:
+        """Create implementation plan document for a task.
 
-        Creates implementation_plan document if needed and updates task status.
+        Creates the implementation_plan document if it doesn't exist.
+        Does not change task status - task remains in PLANNING.
 
         Args:
-            task: Task to transition
+            task: Task to create implementation plan for
 
         Returns:
-            Updated task instance
+            Updated task instance with implementation_plan
 
         Raises:
-            InvalidStatusTransitionError: If transition is not valid
+            InvalidTaskStatusError: If task is not in PLANNING status
+            ValueError: If task already has an implementation plan
         """
-        task.verify_status_transition(TaskStatus.PLANNING)
+        # Verify current status
+        if task.status != TaskStatus.PLANNING:
+            raise InvalidStatusTransitionError(
+                f"Cannot create implementation plan: task {task.id} must be in PLANNING status, "
+                f"currently in {task.status.value}"
+            )
 
-        # Create implementation_plan document if needed
-        if not task.implementation_plan:
-            implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-            task.implementation_plan_id = implementation_plan_doc.id
-            task.implementation_plan = implementation_plan_doc
+        # Check if implementation plan already exists
+        if task.implementation_plan:
+            raise ValueError(f"Task {task.id} already has an implementation plan")
 
-        # Update task status
-        task.status = TaskStatus.PLANNING
+        # Create implementation_plan document
+        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
+        task.implementation_plan_id = implementation_plan_doc.id
+        task.implementation_plan = implementation_plan_doc
+
         return self.task_repo.update(task)
 
     def transition_to_implementing(self, task: Task) -> Task:

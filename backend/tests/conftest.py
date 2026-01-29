@@ -220,7 +220,7 @@ def test_task(db_session, test_codebase):
     task = task_repo.create(
         project_id=project.id,
         title="Test Task",
-        status=TaskStatus.DEFINING,
+        status=TaskStatus.PLANNING,
         specification=task_spec_doc,
         base_branch="main",
         codebase_id=test_codebase.id,
@@ -239,7 +239,7 @@ def test_task(db_session, test_codebase):
     conversation_repo.create(
         parent_entity_type=ParentEntityType.TASK,
         parent_entity_id=task.id,
-        agent_role=AgentRoleType.TASK_SPECIFICATION,
+        agent_role=AgentRoleType.TASK_PLANNING,
         engine=AgentEngine.INTERNAL,
         model_id="openai:gpt-4",
     )
@@ -334,7 +334,7 @@ def mock_agent():
 def create_mock_task(
     task_id: int = 1,
     title: str = "Test Task",
-    status: TaskStatus = TaskStatus.DEFINING,
+    status: TaskStatus = TaskStatus.PLANNING,
     specification_content: str = "",
     implementation_plan_content: str | None = None,
     codebase_path: str = "/tmp/test-codebase",

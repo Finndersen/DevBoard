@@ -238,7 +238,7 @@ async def create_project_task(
     base_branch = task.base_branch or codebase.default_branch
 
     # Create task using service (creates task + documents + conversation)
-    # Tasks always start in DEFINING status
+    # Tasks always start in PLANNING status
     created_task = task_service.create_task(
         project_id=project_id,
         title=task.title,

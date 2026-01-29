@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 class TaskStatus(StrEnum):
     """Enumeration of possible task statuses."""
 
-    DEFINING = "defining"
     PLANNING = "planning"
     IMPLEMENTING = "implementing"
     PR_OPEN = "pr_open"
@@ -38,7 +37,7 @@ class Task(Base):
     codebase_id: Mapped[int] = mapped_column(ForeignKey("codebases.id"))
 
     title: Mapped[str] = mapped_column(String(255))
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.DEFINING)
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.PLANNING)
     remote_task_id: Mapped[str | None] = mapped_column(String(100))
 
     # Git branch configuration
@@ -123,11 +122,7 @@ class Task(Base):
             raise InvalidStatusTransitionError(f"Cannot transition from {self.status.value} to {target_status.value}")
 
         # Check prerequisites for target status
-        if target_status == TaskStatus.PLANNING:
-            if not self.specification or not self.specification.content.strip():
-                raise InvalidStatusTransitionError("Cannot transition to PLANNING without specification content")
-
-        elif target_status == TaskStatus.IMPLEMENTING:
+        if target_status == TaskStatus.IMPLEMENTING:
             if not self.implementation_plan or not self.implementation_plan.content.strip():
                 raise InvalidStatusTransitionError("Cannot transition to IMPLEMENTING without implementation plan")
 

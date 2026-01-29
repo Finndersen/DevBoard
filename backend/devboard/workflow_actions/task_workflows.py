@@ -11,17 +11,16 @@ from devboard.workflow_actions.base import TaskWorkflowAction
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
-    """Workflow action that transitions a task to PLANNING and generates an implementation plan.
+    """Workflow action that creates an implementation plan document and prompts the agent to generate it.
 
     This action:
-    1. Validates the task has a specification
-    2. Creates an implementation_plan document if needed
-    3. Updates task status to PLANNING
-    4. Reuses the conversation (if same engine) or creates new one for the planning phase
-    5. Emits a TASK_UPDATED SystemEvent
-    6. Streams the agent's implementation plan generation
+    1. Validates the task is in PLANNING status and has no implementation plan yet
+    2. Creates an implementation_plan document
+    3. Emits a TASK_UPDATED SystemEvent
+    4. Streams the agent's implementation plan generation
 
-    Note: Conversation is reused from DEFINING→PLANNING to maintain specification context.
+    Note: Does NOT change task status - task remains in PLANNING throughout.
+    The same conversation is used for both specification and planning work.
     """
 
     KEY = "task.create_implementation_plan"
@@ -33,48 +32,31 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
     def is_available(cls, task: Task) -> bool:
         """Check if this action is available for the given task.
 
-        Available when: status is DEFINING and specification has content.
+        Available when: status is PLANNING, specification has content, and no implementation plan yet.
         """
         return (
-            task.status == TaskStatus.DEFINING
+            task.status == TaskStatus.PLANNING
             and task.specification is not None
             and bool(task.specification.content.strip())
+            and task.implementation_plan is None
         )
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: transition to PLANNING and generate implementation plan.
+        """Execute the action: create implementation plan document and generate content.
 
         Yields:
             ConversationEvent objects including SystemEvent and agent messages
 
         Raises:
-            ValueError: If task is not in DEFINING status or transition validation fails
+            ValueError: If task is not in PLANNING status or already has an implementation plan
         """
-        # Transition task to PLANNING (validates status, creates implementation_plan doc, updates status)
-        self.task_service.transition_to_planning(self.task)
+        # Create implementation plan document (validates status, checks plan doesn't exist)
+        self.task_service.create_implementation_plan(self.task)
 
-        # Handle conversation: reuse if DEFINING→PLANNING with same engine, otherwise replace
+        # Get the current conversation (no role change needed)
         current_conversation = self.conversation_repo.get_active_conversation_for_entity(
             ParentEntityType.TASK, self.task.id
         )
-        new_agent_role = AgentRoleType.TASK_PLANNING
-        agent_config = self.agent_config_service.get_agent_configuration(new_agent_role)
-
-        # Check if we can reuse the conversation when same engine
-        if current_conversation.engine == agent_config.config.engine:
-            # Reuse conversation by updating role and model
-            new_conversation = self.conversation_repo.update_role_and_model(
-                conversation=current_conversation,
-                agent_role=new_agent_role,
-                model_id=agent_config.config.model_id,
-            )
-        else:
-            # Replace: archive current and create new conversation
-            new_conversation = self.conversation_service.replace_active_conversation(
-                entity_type=ParentEntityType.TASK,
-                entity_id=self.task.id,
-                new_agent_role=new_agent_role,
-            )
 
         # Commit changes before sending event
         self.conversation_repo.commit()
@@ -86,16 +68,14 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
             data={
                 "task_id": self.task.id,
                 "updated_fields": {
-                    "status": self.task.status.value,
-                    "conversation_id": new_conversation.id,
                     "implementation_plan_id": self.task.implementation_plan_id,
                 },
             },
             timestamp=datetime.datetime.now(datetime.UTC),
         )
 
-        # Stream agent response for the new conversation
-        async for event in self._stream_agent_response(new_conversation, self.PROMPT):
+        # Stream agent response for the current conversation
+        async for event in self._stream_agent_response(current_conversation, self.PROMPT):
             yield event
 
 
@@ -169,7 +149,7 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
     """Workflow action that rebases a task's feature branch onto its base branch.
 
     Behavior varies by task status:
-    - DEFINING/PLANNING: Direct service call (no agent involvement, no file changes expected)
+    - PLANNING: Direct service call (no agent involvement, no file changes expected)
     - IMPLEMENTING: Delegates to agent with rebase_task_branch tool for conflict resolution
 
     For IMPLEMENTING, the agent handles:
@@ -203,23 +183,20 @@ Please briefly review these changes and note if any are relevant to the current 
     def is_available(cls, task: Task) -> bool:
         """Check if this action is available for the given task.
 
-        Available when: task has feature branch and status is DEFINING, PLANNING, or IMPLEMENTING.
+        Available when: task has feature branch and status is PLANNING or IMPLEMENTING.
         """
-        return (
-            task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING, TaskStatus.IMPLEMENTING)
-            and task.branch_name is not None
-        )
+        return task.status in (TaskStatus.PLANNING, TaskStatus.IMPLEMENTING) and task.branch_name is not None
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
         """Execute the action: rebase task branch onto base branch.
 
-        For DEFINING/PLANNING: Direct service call, then agent reviews base branch changes.
+        For PLANNING: Direct service call, then agent reviews base branch changes.
         For IMPLEMENTING: Delegates to agent with rebase tool for conflict resolution.
 
         Yields:
             ConversationEvent objects from agent interaction or system events
         """
-        if self.task.status in (TaskStatus.DEFINING, TaskStatus.PLANNING):
+        if self.task.status == TaskStatus.PLANNING:
             async for event in self._run_direct_rebase():
                 yield event
         else:
@@ -228,7 +205,7 @@ Please briefly review these changes and note if any are relevant to the current 
                 yield event
 
     async def _run_direct_rebase(self) -> AsyncIterator[ConversationEvent]:
-        """Execute direct rebase for DEFINING/PLANNING states (no file changes expected)."""
+        """Execute direct rebase for PLANNING states (no file changes expected)."""
         try:
             rebase_result = await self.task_git_service.rebase_task_branch(self.task)
         except Exception as e:
@@ -243,7 +220,7 @@ Please briefly review these changes and note if any are relevant to the current 
             )
             return
 
-        # Check for conflicts (shouldn't happen in DEFINING/PLANNING since no file changes)
+        # Check for conflicts (shouldn't happen in PLANNING since no file changes)
         if rebase_result.outcome.value == "conflict":
             yield SystemEvent(
                 event_type="system",

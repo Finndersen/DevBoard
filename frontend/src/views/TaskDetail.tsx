@@ -617,7 +617,6 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
     switch (status.toLowerCase()) {
-      case 'defining':
       case 'planning':
       case 'implementing':
         return 'info'

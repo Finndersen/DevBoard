@@ -1,4 +1,4 @@
-"""Tests for Task Role classes with deferred tools."""
+"""Tests for Task Planning Role class with deferred tools."""
 
 from unittest.mock import Mock
 
@@ -7,7 +7,6 @@ from pydantic_ai.exceptions import ModelRetry
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
-from devboard.agents.roles.task_specification import TaskSpecificationAgentRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Document
@@ -17,18 +16,18 @@ from devboard.db.repositories import DocumentRepository
 from tests.conftest import create_mock_task
 
 
-class TestTaskSpecificationRole:
-    """Test the TaskSpecificationRole for the Designing state."""
+class TestTaskPlanningRoleWithSpec:
+    """Test the TaskPlanningRole when focused on specification (no implementation plan yet)."""
 
     @pytest.fixture
     def mock_task(self):
-        """Create a mock task with specification document."""
+        """Create a mock task with specification document but no implementation plan."""
         return create_mock_task(
             task_id=1,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification_content="# Task Specification\n\nInitial content",
-            implementation_plan_content="# Implementation Plan\n\nEmpty",
+            implementation_plan_content=None,  # No plan yet
         )
 
     @pytest.fixture
@@ -45,8 +44,8 @@ class TestTaskSpecificationRole:
 
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service):
-        """Create TaskSpecificationRole instance."""
-        return TaskSpecificationAgentRole(
+        """Create TaskPlanningRole instance."""
+        return TaskPlanningAgentRole(
             task=mock_task,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
@@ -60,35 +59,40 @@ class TestTaskSpecificationRole:
     def test_system_prompt(self, role):
         """Test role has appropriate system prompt."""
         prompt = role.get_system_prompt()
-        assert "Task Specification Assistant" in prompt
+        assert "Task Planning Assistant" in prompt
         assert "task specification" in prompt.lower()
+        assert "implementation plan" in prompt.lower()
 
-    def test_get_tools(self, role, mock_task):
-        """Test role creates correct tools for specification."""
+    def test_get_tools_without_implementation_plan(self, role, mock_task):
+        """Test role creates correct tools when no implementation plan exists."""
         tools = role.get_tools()
 
-        # Should have set_content, edit tools for specification, and codebase investigation tool
+        # Should have set_content for spec, edit for spec, and codebase investigation tool
         assert len(tools) == 3
         tool_names = [tool.name for tool in tools]
 
-        # Should have set_content, edit, and codebase investigation tools
+        # Should have set_content, edit for spec, and codebase investigation tools
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert "investigate_codebase" in tool_names
 
+        # Should NOT have plan tools (no plan exists yet)
+        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
+
     @pytest.mark.asyncio
-    async def test_context_content(self, role, mock_task):
-        """Test context content includes specification and plan if present."""
+    async def test_context_content_without_implementation_plan(self, role, mock_task):
+        """Test context content includes specification but not plan when plan doesn't exist."""
         content = await role.get_context_content()
 
         assert "TASK SPECIFICATION:" in content
         assert mock_task.specification.content in content
-        # Implementation plan is auto-included when present on task
-        assert "IMPLEMENTATION PLAN:" in content
+        # Should NOT include implementation plan section when it doesn't exist
+        assert "IMPLEMENTATION PLAN" not in content
 
 
-class TestTaskPlanningRole:
-    """Test the TaskPlanningRole for the Planning state."""
+class TestTaskPlanningRoleWithPlan:
+    """Test the TaskPlanningRole when implementation plan exists."""
 
     @pytest.fixture
     def mock_task(self):
@@ -133,21 +137,22 @@ class TestTaskPlanningRole:
         assert "Implementation Plan" in prompt
         assert "implementation plan" in prompt.lower()
 
-    def test_get_tools(self, role, mock_task):
+    def test_get_tools_with_implementation_plan(self, role, mock_task):
         """Test role creates tools for both documents in planning."""
         tools = role.get_tools()
 
-        # Should have set_content for implementation plan, edit tools for both documents, and codebase investigation tool
-        assert len(tools) == 4
+        # Should have: set_content for spec, edit for spec, set_content for plan, edit for plan, investigate
+        assert len(tools) == 5
 
         tool_names = [tool.name for tool in tools]
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
         assert "investigate_codebase" in tool_names
 
     @pytest.mark.asyncio
-    async def test_context_content(self, role, mock_task):
+    async def test_context_content_with_implementation_plan(self, role, mock_task):
         """Test context content includes both documents."""
         content = await role.get_context_content()
 
@@ -375,12 +380,12 @@ class TestRoleToolSelection:
     """Test that roles select the correct tools based on document state."""
 
     @pytest.fixture
-    def mock_task_with_blank_spec(self):
-        """Create a mock task with blank specification."""
+    def mock_task_with_blank_spec_and_plan(self):
+        """Create a mock task with blank specification and plan."""
         return create_mock_task(
             task_id=300,
             title="Test Task",
-            status=TaskStatus.DEFINING,
+            status=TaskStatus.PLANNING,
             specification_content="",
             implementation_plan_content="",
         )
@@ -397,6 +402,17 @@ class TestRoleToolSelection:
         )
 
     @pytest.fixture
+    def mock_task_with_spec_only(self):
+        """Create a mock task with specification content but no plan yet."""
+        return create_mock_task(
+            task_id=500,
+            title="Spec Only Task",
+            status=TaskStatus.PLANNING,
+            specification_content="# Specification\n\nContent here",
+            implementation_plan_content=None,
+        )
+
+    @pytest.fixture
     def mock_document_repo(self):
         """Create a mock document repository."""
         return Mock(spec=DocumentRepository)
@@ -406,71 +422,68 @@ class TestRoleToolSelection:
         """Create a mock agent config service."""
         return Mock(spec=AgentConfigService)
 
-    def test_specification_role_providesonly_set_content_for_empty(
-        self, mock_task_with_blank_spec, mock_document_repo, mock_agent_config_service
+    def test_planning_role_provides_set_content_only_for_empty_spec(
+        self, mock_task_with_blank_spec_and_plan, mock_document_repo, mock_agent_config_service
     ):
-        """Test TaskSpecificationRole provides set_content and investigation tool for empty documents."""
-        role = TaskSpecificationAgentRole(
-            task=mock_task_with_blank_spec,
-            document_repository=mock_document_repo,
-            agent_config_service=mock_agent_config_service,
-        )
-
-        tools = role.get_tools()
-        assert len(tools) == 2
-        tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
-        assert "investigate_codebase" in tool_names
-
-    def test_specification_role_provides_both_tools_for_document_with_content(
-        self, mock_task_with_content, mock_document_repo, mock_agent_config_service
-    ):
-        """Test TaskSpecificationRole provides document tools and investigation tool when document has content."""
-        role = TaskSpecificationAgentRole(
-            task=mock_task_with_content,
-            document_repository=mock_document_repo,
-            agent_config_service=mock_agent_config_service,
-        )
-
-        tools = role.get_tools()
-        assert len(tools) == 3
-        tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
-        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
-        assert "investigate_codebase" in tool_names
-
-    def test_planning_role_provides_only_set_content_for_empty_plan(
-        self, mock_task_with_blank_spec, mock_document_repo
-    ):
-        """Test TaskPlanningRole provides set_content for plan, edit for specification, and investigation tool."""
+        """Test TaskPlanningRole provides set_content for empty spec and investigation tool."""
         role = TaskPlanningAgentRole(
-            task=mock_task_with_blank_spec,
+            task=mock_task_with_blank_spec_and_plan,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 3  # set_content for plan, edit for specification, and investigation tool
         tool_names = [tool.name for tool in tools]
-        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+
+        # Should have set_content for spec, set_content for plan, and investigation tool
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert "investigate_codebase" in tool_names
 
-    def test_planning_role_provides_set_and_edit_for_plan_with_content(
-        self, mock_task_with_content, mock_document_repo
+        # Should NOT have edit tools (documents are empty)
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" not in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
+
+    def test_planning_role_provides_both_tools_for_documents_with_content(
+        self, mock_task_with_content, mock_document_repo, mock_agent_config_service
     ):
         """Test TaskPlanningRole provides all tools when documents have content."""
         role = TaskPlanningAgentRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
         )
 
         tools = role.get_tools()
-        assert len(tools) == 4  # set_content + edit for plan, edit for specification, investigation tool
         tool_names = [tool.name for tool in tools]
+
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
         assert "investigate_codebase" in tool_names
+
+    def test_planning_role_provides_spec_tools_only_when_no_plan_exists(
+        self, mock_task_with_spec_only, mock_document_repo, mock_agent_config_service
+    ):
+        """Test TaskPlanningRole provides only spec tools when no implementation plan exists."""
+        role = TaskPlanningAgentRole(
+            task=mock_task_with_spec_only,
+            document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        tools = role.get_tools()
+        tool_names = [tool.name for tool in tools]
+
+        # Should have spec tools
+        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert "investigate_codebase" in tool_names
+
+        # Should NOT have plan tools (no plan exists yet)
+        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
+        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
 
 
 class TestDocumentEdit:

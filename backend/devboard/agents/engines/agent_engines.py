@@ -5,7 +5,7 @@ capabilities, following the pattern established in language_models.py.
 
 An AgentEngine represents the underlying technology/framework that powers an agent
 (e.g., PydanticAI, Claude Code, Gemini CLI), which is separate from the AgentRole
-(role/purpose like PROJECT, TASK_SPECIFICATION, etc.).
+(role/purpose like PROJECT, TASK_PLANNING, etc.).
 """
 
 from dataclasses import dataclass
@@ -70,12 +70,11 @@ ALL_ENGINES: list[AgentEngineDefinition] = [
 
 
 # Engine restrictions by agent role
-# PROJECT, SPECIFICATION, and PLANNING require tool approval (PydanticAI only)
+# PROJECT and PLANNING require tool approval (PydanticAI only)
 # IMPLEMENTATION can use any external engine for full capabilities
 # First engine in the list is the recommended one for each role
 ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRoleType, list[AgentEngine]] = {
     AgentRoleType.PROJECT: [AgentEngine.INTERNAL],
-    AgentRoleType.TASK_SPECIFICATION: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.TASK_PLANNING: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.TASK_IMPLEMENTATION: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],
     AgentRoleType.TASK_PR_REVIEW: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],

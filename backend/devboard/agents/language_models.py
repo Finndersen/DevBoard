@@ -136,7 +136,6 @@ class LLMRegistry(Registry[LanguageModel]):
 # Recommended model types for different agent roles
 RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentRoleType.PROJECT: ModelType.REASONING,
-    AgentRoleType.TASK_SPECIFICATION: ModelType.REASONING,
     AgentRoleType.TASK_PLANNING: ModelType.REASONING,
     AgentRoleType.TASK_IMPLEMENTATION: ModelType.REASONING,
     AgentRoleType.INVESTIGATION: ModelType.FAST,

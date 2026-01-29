@@ -121,31 +121,6 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
-    def update_role_and_model(
-        self,
-        conversation: Conversation,
-        agent_role: AgentRoleType,
-        model_id: str | None,
-    ) -> Conversation:
-        """Update the agent role and model for a conversation.
-
-        Used when transitioning between task phases with the same agent engine,
-        allowing conversation reuse instead of archiving and creating a new one.
-
-        Args:
-            conversation: Conversation instance to update
-            agent_role: New agent role
-            model_id: New model identifier or None for default
-
-        Returns:
-            Updated Conversation instance
-        """
-        conversation.agent_role = agent_role
-        conversation.model_id = model_id
-        self.db.flush()
-
-        return conversation
-
     def archive_conversation(self, conversation_id: int) -> None:
         """Archive a conversation by setting is_active=False.
 

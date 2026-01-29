@@ -24,7 +24,7 @@ class TaskRepository(BaseRepository[Task]):
         base_branch: str,
         codebase_id: int,
         implementation_plan: "Document | None" = None,
-        status: TaskStatus = TaskStatus.DEFINING,
+        status: TaskStatus = TaskStatus.PLANNING,
         remote_task_id: str | None = None,
         branch_name: str | None = None,
         custom_fields: dict[str, Any] | None = None,
@@ -38,7 +38,7 @@ class TaskRepository(BaseRepository[Task]):
             base_branch: Base branch for git operations
             codebase_id: Codebase ID
             implementation_plan: Optional implementation plan document instance
-            status: Initial task status (defaults to DEFINING)
+            status: Initial task status (defaults to PLANNING)
             remote_task_id: Optional remote task identifier
             branch_name: Optional git branch name
             custom_fields: Optional custom field values as a JSON-compatible dict

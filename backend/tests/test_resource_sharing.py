@@ -35,12 +35,12 @@ def test_tasks_data():
     return [
         {
             "title": "Implement OAuth",
-            "status": "DEFINING",
+            "status": "PLANNING",
             "project_id": 1,
         },
         {
             "title": "Add JWT validation",
-            "status": "DEFINING",
+            "status": "PLANNING",
             "project_id": 2,
         },
     ]
@@ -126,7 +126,7 @@ class TestResourceSharing:
         task_data = test_tasks_data[0].copy()
         task_data["project_id"] = project.id
         # Remove status from task_data as it will be passed separately
-        task_data.pop("status", "DEFINING")
+        task_data.pop("status", "PLANNING")
         task = task_repo.create(
             **task_data,
             specification=task_spec_doc,

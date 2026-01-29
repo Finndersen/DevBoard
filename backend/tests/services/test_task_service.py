@@ -62,28 +62,13 @@ def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, 
 
 
 @pytest.fixture
-def task_in_defining():
-    """Create a task in DEFINING state with specification content."""
+def task_in_planning_no_plan():
+    """Create a task in PLANNING state without implementation plan."""
     task = MagicMock(spec=Task)
     task.id = 1
-    task.status = TaskStatus.DEFINING
+    task.status = TaskStatus.PLANNING
     task.specification = MagicMock()
     task.specification.content = "# Task Specification\n\nTest content"
-    task.implementation_plan = None
-    task.implementation_plan_id = None
-    # Mock verify_status_transition to succeed by default (no exception)
-    task.verify_status_transition.return_value = None
-    return task
-
-
-@pytest.fixture
-def task_in_defining_empty_spec():
-    """Create a task in DEFINING state with empty specification."""
-    task = MagicMock(spec=Task)
-    task.id = 2
-    task.status = TaskStatus.DEFINING
-    task.specification = MagicMock()
-    task.specification.content = ""
     task.implementation_plan = None
     task.implementation_plan_id = None
     return task
@@ -130,67 +115,47 @@ def task_in_implementing():
     return task
 
 
-class TestTransitionToPlanning:
-    """Tests for TaskService.transition_to_planning()."""
+class TestCreateImplementationPlan:
+    """Tests for TaskService.create_implementation_plan()."""
 
-    def test_successful_transition(self, task_service, task_in_defining, mock_document_repo, mock_task_repo):
-        """Test successful transition from DEFINING to PLANNING."""
-        # Execute transition
-        result = task_service.transition_to_planning(task_in_defining)
+    def test_successful_creation(self, task_service, task_in_planning_no_plan, mock_document_repo, mock_task_repo):
+        """Test successful creation of implementation plan."""
+        # Execute
+        result = task_service.create_implementation_plan(task_in_planning_no_plan)
 
         # Verify implementation_plan document was created
         mock_document_repo.create.assert_called_once_with(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
 
-        # Verify task status was updated
-        assert task_in_defining.status == TaskStatus.PLANNING
-
         # Verify implementation_plan was assigned
-        assert task_in_defining.implementation_plan_id == 999
+        assert task_in_planning_no_plan.implementation_plan_id == 999
 
         # Verify task was updated in repository
-        mock_task_repo.update.assert_called_once_with(task_in_defining)
+        mock_task_repo.update.assert_called_once_with(task_in_planning_no_plan)
 
         # Verify result is the updated task
-        assert result == task_in_defining
+        assert result == task_in_planning_no_plan
 
-    def test_transition_with_existing_plan(self, task_service, task_in_defining, mock_document_repo, mock_task_repo):
-        """Test transition when implementation_plan already exists."""
-        # Setup: Task already has a plan
-        task_in_defining.implementation_plan = MagicMock()
-        task_in_defining.implementation_plan.id = 100
-        task_in_defining.implementation_plan_id = 100
+        # Verify task status was NOT changed (still PLANNING)
+        assert task_in_planning_no_plan.status == TaskStatus.PLANNING
 
-        # Execute transition
-        task_service.transition_to_planning(task_in_defining)
+    def test_creation_fails_when_plan_exists(self, task_service, task_in_planning, mock_document_repo):
+        """Test creation fails when implementation_plan already exists."""
+        with pytest.raises(ValueError, match="already has an implementation plan"):
+            task_service.create_implementation_plan(task_in_planning)
 
-        # Verify implementation_plan document was NOT created (already exists)
+        # Verify no document was created
         mock_document_repo.create.assert_not_called()
 
-        # Verify task status was updated
-        assert task_in_defining.status == TaskStatus.PLANNING
+    def test_creation_fails_wrong_status(self, task_service, task_in_implementing, mock_document_repo):
+        """Test creation fails when task is not in PLANNING status."""
+        # Remove the plan so it doesn't fail on the plan check first
+        task_in_implementing.implementation_plan = None
 
-        # Verify task was updated in repository
-        mock_task_repo.update.assert_called_once_with(task_in_defining)
+        with pytest.raises(InvalidStatusTransitionError, match="must be in PLANNING status"):
+            task_service.create_implementation_plan(task_in_implementing)
 
-    def test_transition_wrong_status(self, task_service, task_in_planning):
-        """Test transition fails when task is not in DEFINING status."""
-        # Mock verify_status_transition to raise exception for wrong status
-        task_in_planning.verify_status_transition.side_effect = InvalidStatusTransitionError(
-            "Cannot transition from planning to planning"
-        )
-
-        with pytest.raises(InvalidStatusTransitionError):
-            task_service.transition_to_planning(task_in_planning)
-
-    def test_transition_empty_specification(self, task_service, task_in_defining_empty_spec):
-        """Test transition fails when specification is empty."""
-        # Mock verify_status_transition to raise exception for missing spec
-        task_in_defining_empty_spec.verify_status_transition.side_effect = InvalidStatusTransitionError(
-            "Cannot transition to PLANNING without specification content"
-        )
-
-        with pytest.raises(InvalidStatusTransitionError, match="specification content"):
-            task_service.transition_to_planning(task_in_defining_empty_spec)
+        # Verify no document was created
+        mock_document_repo.create.assert_not_called()
 
 
 class TestTransitionToImplementing:
@@ -210,15 +175,15 @@ class TestTransitionToImplementing:
         # Verify result is the updated task
         assert result == task_in_planning
 
-    def test_transition_wrong_status(self, task_service, task_in_defining):
+    def test_transition_wrong_status(self, task_service, task_in_implementing):
         """Test transition fails when task is not in PLANNING status."""
         # Mock verify_status_transition to raise exception for wrong status
-        task_in_defining.verify_status_transition.side_effect = InvalidStatusTransitionError(
-            "Cannot transition from defining to implementing"
+        task_in_implementing.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from implementing to implementing"
         )
 
         with pytest.raises(InvalidStatusTransitionError):
-            task_service.transition_to_implementing(task_in_defining)
+            task_service.transition_to_implementing(task_in_implementing)
 
     def test_transition_empty_plan(self, task_service, task_in_planning_empty_plan):
         """Test transition fails when implementation plan is empty."""
@@ -244,31 +209,21 @@ class TestTransitionToImplementing:
 class TestTransitionValidation:
     """Tests for validation logic in transition methods."""
 
-    def test_planning_transition_fails_for_wrong_status(self, task_service, task_in_planning, mock_document_repo):
-        """Test that transition fails when task is in wrong status."""
-        # Mock verify_status_transition to raise exception
-        task_in_planning.verify_status_transition.side_effect = InvalidStatusTransitionError(
-            "Cannot transition from planning to planning"
+    def test_implementing_transition_validates_status_before_prerequisites(
+        self, task_service, task_in_planning_no_plan, mock_task_repo
+    ):
+        """Test that status check happens before prerequisite validation."""
+        # Change status to IMPLEMENTING (wrong status for this transition)
+        task_in_planning_no_plan.status = TaskStatus.IMPLEMENTING
+
+        # Mock verify_status_transition to raise exception for wrong status
+        task_in_planning_no_plan.verify_status_transition.side_effect = InvalidStatusTransitionError(
+            "Cannot transition from implementing to implementing"
         )
 
+        # Should fail with status error
         with pytest.raises(InvalidStatusTransitionError):
-            task_service.transition_to_planning(task_in_planning)
-
-        # Verify verify_status_transition was called
-        task_in_planning.verify_status_transition.assert_called_once_with(TaskStatus.PLANNING)
-
-    def test_implementing_transition_fails_for_wrong_status(self, task_service, task_in_defining, mock_task_repo):
-        """Test that transition fails when task is in wrong status."""
-        # Mock verify_status_transition to raise exception
-        task_in_defining.verify_status_transition.side_effect = InvalidStatusTransitionError(
-            "Cannot transition from defining to implementing"
-        )
-
-        with pytest.raises(InvalidStatusTransitionError):
-            task_service.transition_to_implementing(task_in_defining)
-
-        # Verify verify_status_transition was called
-        task_in_defining.verify_status_transition.assert_called_once_with(TaskStatus.IMPLEMENTING)
+            task_service.transition_to_implementing(task_in_planning_no_plan)
 
 
 class TestCompleteTaskWithLocalMerge:

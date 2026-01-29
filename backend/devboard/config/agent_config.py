@@ -11,7 +11,7 @@ class AgentConfig(BaseConfig):
     """Base configuration for AI agents.
 
     Attributes:
-        agent_type: Type/role of the agent (PROJECT, TASK_SPECIFICATION, etc.)
+        agent_type: Type/role of the agent (PROJECT, TASK_PLANNING, etc.)
         selected_engine: User's preferred agent engine override (PydanticAI, Claude Code, etc.)
         selected_model: User's preferred model override (provider:model format)
     """
@@ -32,15 +32,8 @@ class ProjectAgentConfig(AgentConfig):
     agent_type = AgentRoleType.PROJECT
 
 
-# TODO: Keep these two task agents seperate or combine?
-class TaskSpecificationAgentConfig(AgentConfig):
-    """Configuration for Task Planning Agent."""
-
-    agent_type = AgentRoleType.TASK_SPECIFICATION
-
-
 class TaskPlanningAgentConfig(AgentConfig):
-    """Configuration for Task Planning Agent."""
+    """Configuration for Task Planning Agent (handles both specification and planning)."""
 
     agent_type = AgentRoleType.TASK_PLANNING
 

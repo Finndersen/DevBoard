@@ -12,7 +12,6 @@ from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
-from devboard.agents.roles.task_specification import TaskSpecificationAgentRole
 from devboard.db.models import Conversation, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.github import GitHubIntegration
@@ -50,13 +49,7 @@ async def create_agent_role_for_conversation(
     parent_entity = conversation.get_parent_entity()
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
-        if conversation.agent_role == AgentRoleType.TASK_SPECIFICATION:
-            return TaskSpecificationAgentRole(
-                task=parent_entity,
-                document_repository=document_repo,
-                agent_config_service=agent_config_service,
-            )
-        elif conversation.agent_role == AgentRoleType.TASK_PLANNING:
+        if conversation.agent_role == AgentRoleType.TASK_PLANNING:
             return TaskPlanningAgentRole(
                 task=parent_entity,
                 document_repository=document_repo,

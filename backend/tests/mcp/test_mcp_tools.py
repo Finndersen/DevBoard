@@ -35,7 +35,7 @@ def mock_tasks():
     task1 = Mock(spec=Task)
     task1.id = 1
     task1.title = "Test Task 1"
-    task1.status = TaskStatus.DEFINING
+    task1.status = TaskStatus.PLANNING
     task1.project_id = 1
     task1.codebase_id = None
     task1.remote_task_id = None
@@ -172,7 +172,7 @@ class TestGetTasks:
             assert len(result) == 2
             assert result[0]["id"] == 1
             assert result[0]["title"] == "Test Task 1"
-            assert result[0]["status"] == "defining"
+            assert result[0]["status"] == "planning"
             assert result[0]["project_id"] == 1
             assert result[1]["project_id"] == 1
 

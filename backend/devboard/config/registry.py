@@ -5,7 +5,6 @@ from devboard.config.agent_config import (
     ProjectAgentConfig,
     TaskImplementationAgentConfig,
     TaskPlanningAgentConfig,
-    TaskSpecificationAgentConfig,
 )
 from devboard.config.base import BaseConfig
 from devboard.config.integration_configs import (
@@ -33,7 +32,6 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
         GoogleProviderConfig,
         # Agent configurations
         ProjectAgentConfig,
-        TaskSpecificationAgentConfig,
         TaskPlanningAgentConfig,
         TaskImplementationAgentConfig,
         InvestigationAgentConfig,
