@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from devboard.db.models.oauth import HttpMCPConfig, MCPServerType, StdioMCPConfig
+from devboard.db.models.mcp_server import HttpMCPConfig, MCPServerType, StdioMCPConfig
 
 # MCP Server Config schemas
 

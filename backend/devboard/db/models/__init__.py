@@ -6,17 +6,19 @@ from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation, ParentEntityType
 from .custom_field import CustomFieldDefinition, CustomFieldType
 from .document import Document, DocumentType
-from .messages import ConversationMessage, MessageType
-from .oauth import (
+from .mcp_server import (
     HttpMCPConfig,
     MCPServerConfig,
     MCPServerType,
+    StdioMCPConfig,
+)
+from .messages import ConversationMessage, MessageType
+from .oauth import (
     OAuthClientInfo,
     OAuthProvider,
     OAuthProviderType,
     OAuthToken,
     PendingOAuthAuthorization,
-    StdioMCPConfig,
 )
 from .project import Project
 from .task import Task, TaskStatus
