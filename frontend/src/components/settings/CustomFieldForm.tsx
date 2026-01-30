@@ -111,7 +111,7 @@ export function CustomFieldForm({ field, onSubmit, onCancel, isSaving }: CustomF
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white resize-none"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white resize-none"
           placeholder="Help text describing what this field is for"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -126,7 +126,7 @@ export function CustomFieldForm({ field, onSubmit, onCancel, isSaving }: CustomF
         <select
           value={type}
           onChange={(e) => setType(e.target.value as CustomFieldType)}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
         >
           <option value="text">Text - Free-form text input</option>
           <option value="boolean">Boolean - Toggle switch (yes/no)</option>
@@ -146,7 +146,7 @@ export function CustomFieldForm({ field, onSubmit, onCancel, isSaving }: CustomF
               onChange={(e) => setNewOption(e.target.value)}
               onKeyDown={handleOptionKeyDown}
               placeholder="Add an option..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
             />
             <Button
               type="button"
