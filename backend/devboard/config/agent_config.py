@@ -23,8 +23,7 @@ class AgentConfig(BaseConfig):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if hasattr(cls, "agent_type"):
-            cls.config_key = f"agent.{cls.agent_type.value}.default"
+        cls.config_key = f"agent.{cls.agent_type.value}.default"
 
 
 class ProjectAgentConfig(AgentConfig):

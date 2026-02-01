@@ -277,8 +277,8 @@ Please briefly review these changes and note if any are relevant to the current 
                 ParentEntityType.TASK, self.task.id
             )
 
-            agent_conversation_service = await self._create_agent_conversation_service(current_conversation)
-            async for event in agent_conversation_service.stream_events_for_message_or_approval(prompt):
+            # Stream agent response - agent uses the rebase_task_branch tool
+            async for event in self._stream_agent_response(current_conversation, prompt):
                 yield event
 
     async def _run_agent_rebase(self) -> AsyncIterator[ConversationEvent]:

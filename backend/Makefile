@@ -7,31 +7,31 @@ help:		## Show this help message
 
 install:	## Install development dependencies & setup dev environment
 	env -u PIP_INDEX_URL -u UV_DEFAULT_INDEX uv sync --extra dev --frozen
-	pre-commit install
+	uv run --frozen pre-commit install
 
 format:		## Format code with ruff
-	ruff format .
-	ruff check . --fix
+	uv run --frozen ruff format .
+	uv run --frozen ruff check . --fix
 
 lint:		## Lint code with ruff
-	ruff format . --check
-	ruff check .
-	pyright
+	uv run --frozen ruff format . --check
+	uv run --frozen ruff check .
+	uv run --frozen pyright
 
 typecheck:	## Type-check code with pyright
-	pyright
+	uv run --frozen pyright
 
 test:		## Run tests
-	pytest
+	uv run --frozen pytest
 
 start:		## Start development server (use BACKEND_PORT=XXXX to override default 8000)
-	uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
+	uv run --frozen uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
 
 migrate:	## Run database migrations
-	mkdir -p data && PYTHONPATH=. alembic upgrade head
+	mkdir -p data && uv run alembic upgrade head
 
 migrate-auto:	## Generate new migration
-	PYTHONPATH=. alembic revision --autogenerate
+	uv run --frozen alembic revision --autogenerate
 
 clean:		## Clean up generated files
 	rm -rf .venv __pycache__ .pytest_cache .ruff_cache
@@ -39,4 +39,4 @@ clean:		## Clean up generated files
 	find . -type f -name "*.pyc" -delete
 
 all-checks:	## Run all checks (format, lint, type-check, test)
-	make format lint type-check test
+	make format lint typecheck test
