@@ -1,11 +1,14 @@
 """Tests for AgentConfigService."""
 
+from unittest.mock import Mock
+
 import pytest
 
 from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
 from devboard.agents.engines import AgentEngine, agent_engine_registry
 from devboard.agents.language_models import ModelType, llm_registry
 from devboard.agents.roles import AgentRoleType
+from devboard.config.base import ConfigValidationResult
 
 
 class TestAgentConfigService:
@@ -232,3 +235,53 @@ class TestAgentConfigService:
         effective_config = agent_config_service.get_effective_config(AgentRoleType.TASK_IMPLEMENTATION)
         assert effective_config.engine == AgentEngine.CLAUDE_CODE
         assert effective_config.model_id is None
+
+    def test_check_engine_availability_internal_with_configured_providers(self, agent_config_service):
+        """INTERNAL engine should be available when LLM providers are configured."""
+        is_available, reason = agent_config_service._check_engine_availability(AgentEngine.INTERNAL)
+        # In test environment, Anthropic is typically configured
+        assert is_available is True
+        assert reason is None
+
+    def test_check_engine_availability_external_engines_always_available(self, agent_config_service):
+        """External engines (CLAUDE_CODE, GEMINI_CLI) should always be available."""
+        is_available, reason = agent_config_service._check_engine_availability(AgentEngine.CLAUDE_CODE)
+        assert is_available is True
+        assert reason is None
+
+        is_available, reason = agent_config_service._check_engine_availability(AgentEngine.GEMINI_CLI)
+        assert is_available is True
+        assert reason is None
+
+    def test_engine_info_includes_availability_fields(self, agent_config_service):
+        """Engine info should include is_available and unavailable_reason fields."""
+        config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
+
+        for engine_info in config.available_engines:
+            assert hasattr(engine_info, "is_available")
+            assert hasattr(engine_info, "unavailable_reason")
+            # External engines should always be available
+            if engine_info.engine in ("claude_code", "gemini_cli"):
+                assert engine_info.is_available is True
+                assert engine_info.unavailable_reason is None
+
+    def test_check_engine_availability_internal_without_providers(self):
+        """INTERNAL engine should be unavailable when no LLM providers are configured."""
+        mock_config_service = Mock()
+        # All provider validation calls return failure (no providers configured)
+        mock_config_service.validate_config_by_key.return_value = ConfigValidationResult(
+            success=False,
+            config=None,
+            errors=["API key not configured"],
+        )
+
+        service = AgentConfigService(
+            config_service=mock_config_service,
+            llm_registry=llm_registry,
+            engine_registry=agent_engine_registry,
+        )
+
+        is_available, reason = service._check_engine_availability(AgentEngine.INTERNAL)
+        assert is_available is False
+        assert reason is not None
+        assert "No LLM providers configured" in reason

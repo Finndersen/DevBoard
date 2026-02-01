@@ -51,9 +51,13 @@ class AgentEngineInfo(BaseModel):
         display_name: Human-readable name for display in UI
         description: Description of what the engine does
         requires_model_selection: Whether this engine requires explicit model selection
+        is_available: Whether the engine is currently available for use
+        unavailable_reason: Explanation of why engine is unavailable (if is_available is False)
     """
 
     engine: AgentEngine
     display_name: str
     description: str
     requires_model_selection: bool
+    is_available: bool = True
+    unavailable_reason: str | None = None

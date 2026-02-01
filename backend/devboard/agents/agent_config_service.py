@@ -82,16 +82,20 @@ class AgentConfigService:
         # Get effective configuration
         effective_config = self.get_effective_config(agent_role)
 
-        # Get available engines for this role
-        available_engines = [
-            AgentEngineInfo(
-                engine=defn.engine,
-                display_name=defn.display_name,
-                description=defn.description,
-                requires_model_selection=defn.requires_model_selection,
+        # Get available engines for this role, including availability status
+        available_engines = []
+        for defn in self.engine_registry.get_available_engines_for_agent_role(agent_role):
+            is_available, unavailable_reason = self._check_engine_availability(defn.engine)
+            available_engines.append(
+                AgentEngineInfo(
+                    engine=defn.engine,
+                    display_name=defn.display_name,
+                    description=defn.description,
+                    requires_model_selection=defn.requires_model_selection,
+                    is_available=is_available,
+                    unavailable_reason=unavailable_reason,
+                )
             )
-            for defn in self.engine_registry.get_available_engines_for_agent_role(agent_role)
-        ]
 
         return AgentConfiguration(
             agent_role=agent_role,
@@ -273,6 +277,21 @@ class AgentConfigService:
 
         # Return models from working providers
         return [model for model in self.llm_registry.get_all_models() if model.provider in working_providers]
+
+    def _check_engine_availability(self, engine: AgentEngine) -> tuple[bool, str | None]:
+        """Check if an engine is available for use.
+
+        Args:
+            engine: The engine to check availability for
+
+        Returns:
+            Tuple of (is_available, unavailable_reason). If available, reason is None.
+        """
+        if engine == AgentEngine.INTERNAL:
+            available_models = self._get_all_available_internal_models()
+            if not available_models:
+                return False, "No LLM providers configured. Add an API key in Settings."
+        return True, None
 
     def _get_default_model_for_agent_role_and_engine(
         self, agent_role: AgentRoleType, engine: AgentEngine

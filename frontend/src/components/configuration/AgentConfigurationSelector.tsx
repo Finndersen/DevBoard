@@ -83,6 +83,11 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
       return
     }
 
+    // Don't allow selecting unavailable engines
+    if (!engineInfo.is_available) {
+      return
+    }
+
     // If engine doesn't require model selection, use null (default)
     if (!engineInfo.requires_model_selection) {
       await handleConfigChange(engine, null)
@@ -222,25 +227,38 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
 
             {isEngineOpen && (
               <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
-                {configuration.available_engines.map((engine) => (
-                  <button
-                    key={engine.engine}
-                    type="button"
-                    onClick={() => handleEngineChange(engine.engine)}
-                    className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                      selectedEngine === engine.engine
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-900 dark:text-gray-100'
-                    }`}
-                  >
-                    <div>
-                      <div className="font-medium">{getEngineDisplayName(engine)}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {engine.description}
+                {configuration.available_engines.map((engine) => {
+                  const isUnavailable = !engine.is_available
+                  return (
+                    <button
+                      key={engine.engine}
+                      type="button"
+                      onClick={() => handleEngineChange(engine.engine)}
+                      disabled={isUnavailable}
+                      className={`w-full text-left px-3 py-2 ${
+                        isUnavailable
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer'
+                      } ${
+                        selectedEngine === engine.engine && !isUnavailable
+                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {getEngineDisplayName(engine)}
+                          {isUnavailable && <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Unavailable)</span>}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {isUnavailable && engine.unavailable_reason
+                            ? engine.unavailable_reason
+                            : engine.description}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  )
+                })}
               </div>
             )}
             </div>

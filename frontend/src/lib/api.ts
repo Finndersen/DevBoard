@@ -386,6 +386,8 @@ export interface AgentEngineInfo {
   display_name: string
   description: string
   requires_model_selection: boolean
+  is_available: boolean
+  unavailable_reason: string | null
 }
 
 export interface AgentEngineModelConfig {

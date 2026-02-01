@@ -50,6 +50,8 @@ class AgentEngineInfo(BaseModel):
     display_name: str
     description: str
     requires_model_selection: bool
+    is_available: bool = True
+    unavailable_reason: str | None = None
 
 
 class AgentEngineModelConfigSchema(BaseModel):
