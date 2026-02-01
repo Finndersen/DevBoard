@@ -1,6 +1,6 @@
 """Agent configuration schemas."""
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
@@ -21,10 +21,10 @@ class AgentConfig(BaseConfig):
     selected_engine: AgentEngine | None = None  # User's preferred engine override
     selected_model: str | None = None  # User's preferred model override
 
-    @classmethod
-    @property  # type: ignore[misc]
-    def config_key(cls) -> str:  # type: ignore[misc,override]
-        return f"agent.{cls.agent_type.value}.default"
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if hasattr(cls, "agent_type"):
+            cls.config_key = f"agent.{cls.agent_type.value}.default"
 
 
 class ProjectAgentConfig(AgentConfig):
