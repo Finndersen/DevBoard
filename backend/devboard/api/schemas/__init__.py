@@ -1,5 +1,14 @@
 """Pydantic schemas package."""
 
+from .bootstrap import (
+    BootstrapCodebaseRequest,
+    BootstrapCodebaseResponse,
+    BootstrapPreviewRequest,
+    BootstrapPreviewResponse,
+    FilePreviewResponse,
+    ValidatePathRequest,
+    ValidatePathResponse,
+)
 from .codebase import (
     CodebaseBase,
     CodebaseCreate,
@@ -72,6 +81,14 @@ from .worktree import (
 )
 
 __all__ = [
+    # Bootstrap
+    "BootstrapCodebaseRequest",
+    "BootstrapCodebaseResponse",
+    "BootstrapPreviewRequest",
+    "BootstrapPreviewResponse",
+    "FilePreviewResponse",
+    "ValidatePathRequest",
+    "ValidatePathResponse",
     # Codebase
     "CodebaseBase",
     "CodebaseCreate",

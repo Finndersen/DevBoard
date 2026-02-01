@@ -426,6 +426,55 @@ export interface ConversationResponse {
   created_at: string
 }
 
+export interface DirectoryListResponse {
+  current_path: string
+  parent_path: string | null
+  directories: string[]
+}
+
+// Bootstrap types
+export interface ValidatePathResponse {
+  exists: boolean
+  is_directory: boolean
+  has_git: boolean
+  has_commits: boolean
+  has_remote: boolean
+  remote_url: string | null
+  current_branch: string | null
+  needs_bootstrap: boolean
+  detected_project_type: string | null
+}
+
+export interface FilePreviewResponse {
+  path: string
+  content: string
+  file_type: string
+}
+
+export interface BootstrapPreviewResponse {
+  files: FilePreviewResponse[]
+}
+
+export interface BootstrapCodebaseRequest {
+  path: string
+  name: string
+  description: string
+  create_gitignore: boolean
+  create_readme: boolean
+  create_claude_md: boolean
+  branch_name: string
+  initial_commit_message: string
+  remote_url: string | null
+  push_to_remote: boolean
+}
+
+export interface BootstrapCodebaseResponse {
+  success: boolean
+  commit_hash: string | null
+  files_created: string[]
+  error_message: string | null
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -828,6 +877,48 @@ export class ApiClient {
   async checkoutTaskToMain(taskId: number | string): Promise<CheckoutToMainResponse> {
     return this.request<CheckoutToMainResponse>(`/api/tasks/${taskId}/checkout-to-main`, {
       method: 'POST',
+    })
+  }
+
+  // Filesystem
+  async listDirectory(path?: string): Promise<DirectoryListResponse> {
+    const queryParam = path ? `?path=${encodeURIComponent(path)}` : ''
+    return this.request<DirectoryListResponse>(`/api/filesystem/browse${queryParam}`)
+  }
+
+  // Bootstrap
+  async validateCodebasePath(path: string): Promise<ValidatePathResponse> {
+    return this.request<ValidatePathResponse>('/api/codebases/validate-path', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    })
+  }
+
+  async previewBootstrap(
+    path: string,
+    name: string,
+    description: string,
+    createGitignore: boolean = true,
+    createReadme: boolean = true,
+    createClaudeMd: boolean = true,
+  ): Promise<BootstrapPreviewResponse> {
+    return this.request<BootstrapPreviewResponse>('/api/codebases/bootstrap/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        path,
+        name,
+        description,
+        create_gitignore: createGitignore,
+        create_readme: createReadme,
+        create_claude_md: createClaudeMd,
+      }),
+    })
+  }
+
+  async bootstrapCodebase(request: BootstrapCodebaseRequest): Promise<BootstrapCodebaseResponse> {
+    return this.request<BootstrapCodebaseResponse>('/api/codebases/bootstrap', {
+      method: 'POST',
+      body: JSON.stringify(request),
     })
   }
 }

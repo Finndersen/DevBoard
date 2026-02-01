@@ -51,4 +51,4 @@ class Codebase(Base):
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")
     tasks: Mapped[list["Task"]] = relationship(back_populates="codebase")
-    worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(back_populates="codebase")
+    worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(back_populates="codebase", cascade="all, delete-orphan")

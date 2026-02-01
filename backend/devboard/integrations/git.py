@@ -1259,3 +1259,148 @@ class GitRepoIntegration:
         """
         await self._run_git_command(["commit", "-m", message])
         return await self._run_git_command(["rev-parse", "HEAD"])
+
+    # ==================== Bootstrap Methods ====================
+
+    async def init_repository(self) -> bool:
+        """Initialize a new git repository in the current directory.
+
+        Returns:
+            True if repository was initialized, False if already initialized
+
+        Raises:
+            ShellCommandExecutionError: If git init fails
+        """
+        git_dir = self._repo_path / ".git"
+        if git_dir.exists():
+            return False
+
+        await self._run_git_command(["init"])
+        return True
+
+    async def add_remote(self, name: str, url: str) -> None:
+        """Add a remote to the repository.
+
+        Args:
+            name: Remote name (e.g., 'origin')
+            url: Remote URL
+
+        Raises:
+            ShellCommandExecutionError: If command fails
+        """
+        await self._run_git_command(["remote", "add", name, url])
+
+    async def get_remotes(self) -> list[dict[str, str]]:
+        """Get list of configured remotes with their URLs.
+
+        Returns:
+            List of dicts with 'name' and 'url' keys
+        """
+        output = await self._run_git_command(["remote", "-v"], raise_on_error=False)
+        if not output:
+            return []
+
+        remotes: dict[str, str] = {}
+        for line in output.split("\n"):
+            if line.strip():
+                parts = line.split()
+                if len(parts) >= 2:
+                    name = parts[0]
+                    url = parts[1]
+                    # Only keep fetch URL (avoid duplicates from push URL)
+                    if name not in remotes:
+                        remotes[name] = url
+
+        return [{"name": name, "url": url} for name, url in remotes.items()]
+
+    async def stage_all(self) -> None:
+        """Stage all changes including untracked files.
+
+        Raises:
+            ShellCommandExecutionError: If command fails
+        """
+        await self._run_git_command(["add", "-A"])
+
+    async def create_initial_commit(self, message: str = "Initial commit") -> str:
+        """Create the initial commit for a new repository.
+
+        This stages all files and creates the first commit.
+
+        Args:
+            message: Commit message (default: "Initial commit")
+
+        Returns:
+            Hash of the new commit
+
+        Raises:
+            ShellCommandExecutionError: If commit fails
+        """
+        await self.stage_all()
+        return await self.commit(message)
+
+    async def push_with_upstream(self, branch: str, remote: str = "origin") -> None:
+        """Push a branch and set upstream tracking.
+
+        Args:
+            branch: Branch name to push
+            remote: Remote name (default: origin)
+
+        Raises:
+            ShellCommandExecutionError: If push fails
+        """
+        await self._run_git_command(
+            ["push", "-u", remote, branch],
+            timeout=120.0,
+        )
+
+    async def set_default_branch_name(self, name: str) -> None:
+        """Set the name of the default branch for new repositories.
+
+        This should be called before the first commit to set the branch name.
+
+        Args:
+            name: Branch name (e.g., 'main')
+
+        Raises:
+            ShellCommandExecutionError: If command fails
+        """
+        await self._run_git_command(["config", "init.defaultBranch", name])
+
+    async def rename_branch(self, old_name: str, new_name: str) -> None:
+        """Rename a branch.
+
+        Args:
+            old_name: Current branch name
+            new_name: New branch name
+
+        Raises:
+            ShellCommandExecutionError: If command fails
+        """
+        await self._run_git_command(["branch", "-m", old_name, new_name])
+
+    async def get_config(self, key: str) -> str | None:
+        """Get a git config value.
+
+        Args:
+            key: Config key (e.g., 'user.name')
+
+        Returns:
+            Config value or None if not set
+        """
+        output = await self._run_git_command(
+            ["config", "--get", key],
+            raise_on_error=False,
+        )
+        return output if output else None
+
+    async def set_config(self, key: str, value: str) -> None:
+        """Set a git config value.
+
+        Args:
+            key: Config key (e.g., 'user.name')
+            value: Config value
+
+        Raises:
+            ShellCommandExecutionError: If command fails
+        """
+        await self._run_git_command(["config", key, value])

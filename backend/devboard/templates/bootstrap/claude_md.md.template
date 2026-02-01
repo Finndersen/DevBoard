@@ -1,0 +1,29 @@
+# {{ name }}
+
+{{ description }}
+
+## Project Structure
+
+TODO: Describe the project structure and key directories.
+
+## Development Guidelines
+
+### Code Style
+
+TODO: Add code style guidelines specific to this project.
+
+### Testing
+
+TODO: Add testing guidelines.
+
+### Building
+
+TODO: Add build instructions.
+
+## Key Concepts
+
+TODO: Document key concepts and patterns used in this codebase.
+
+## Common Tasks
+
+TODO: Add examples of common development tasks.
