@@ -773,3 +773,188 @@ class TestStreamEventsEdgeCases:
         assert isinstance(events[0], ToolCall)
         assert isinstance(events[1], ToolResult)
         assert isinstance(events[2], TextMessage)
+
+
+class TestStreamEventsApi500Retry:
+    """Tests for stream_events() retry logic on API 500 errors."""
+
+    def create_api_500_error_result_message(self, session_id: str = "test-session-123") -> ResultMessage:
+        """Helper to create a ResultMessage with API 500 error."""
+        return ResultMessage(
+            subtype="error",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=True,
+            num_turns=1,
+            session_id=session_id,
+            total_cost_usd=0.001,
+            result='API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXoNGDoLWwez3NpZwQL8s"}',
+        )
+
+    def create_api_500_error_stream(self, session_id: str = "test-session-123") -> list:
+        """Helper to create a message stream that ends with API 500 error."""
+        error_text = 'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}'
+        return [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            create_mock_assistant_message_with_text(error_text),
+            self.create_api_500_error_result_message(session_id),
+        ]
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_500_error_triggers_retry_and_succeeds(self, mock_client_class, agent_with_virtual_tool):
+        """Test that API 500 error triggers retry with 'continue' message and succeeds."""
+        call_count = 0
+        call_messages = []
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            call_messages.append(user_query)
+            if call_count == 1:
+                # First call: return API 500 error
+                for message in self.create_api_500_error_stream():
+                    yield message
+            else:
+                # Second call: return success
+                for message in create_mock_text_stream("Successfully recovered!"):
+                    yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream twice (initial + 1 retry)
+        assert call_count == 2
+        # Second call should have "continue" as the message
+        assert call_messages[1] == "continue"
+
+        # Should have SystemEvent for retry and final TextMessage
+        from devboard.agents.events import SystemEvent, SystemEventType
+
+        assert len(events) == 3  # Error text, SystemEvent, and success message
+        # First event is the error text message streamed before ResultMessage
+        assert isinstance(events[0], TextMessage)
+        assert "API Error: 500" in events[0].text_content
+        # Second event is the retry notification
+        assert isinstance(events[1], SystemEvent)
+        assert events[1].type == SystemEventType.API_ERROR_RETRY
+        assert events[1].data["attempt"] == 1
+        assert events[1].data["max_attempts"] == 3
+        # Third event is the successful response
+        assert isinstance(events[2], TextMessage)
+        assert events[2].text_content == "Successfully recovered!"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_500_error_max_retries_exceeded_continues_normally(
+        self, mock_client_class, agent_with_virtual_tool
+    ):
+        """Test that exceeding max retries for API 500 error continues without raising."""
+        from devboard.agents.events import SystemEvent, SystemEventType
+
+        call_count = 0
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            # Always return API 500 error
+            for message in self.create_api_500_error_stream():
+                yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream 4 times (initial + 3 retries)
+        assert call_count == 4
+
+        # Should have 4 error text messages + 3 retry SystemEvents (no retry on 4th attempt)
+        text_events = [e for e in events if isinstance(e, TextMessage)]
+        system_events = [e for e in events if isinstance(e, SystemEvent)]
+
+        assert len(text_events) == 4  # One error message per attempt
+        assert len(system_events) == 3  # Three retry notifications
+        for i, event in enumerate(system_events):
+            assert event.type == SystemEventType.API_ERROR_RETRY
+            assert event.data["attempt"] == i + 1
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_non_500_api_error_not_retried(self, mock_client_class, agent_with_virtual_tool):
+        """Test that non-500 API errors (e.g., 429) are not retried."""
+        call_count = 0
+
+        def create_api_429_error_stream():
+            """Create a stream with 429 rate limit error."""
+            error_text = 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}'
+            return [
+                SystemMessage(subtype="session_start", data={"session_id": "test-session"}),
+                create_mock_assistant_message_with_text(error_text),
+                ResultMessage(
+                    subtype="error",
+                    duration_ms=1000,
+                    duration_api_ms=800,
+                    is_error=True,
+                    num_turns=1,
+                    session_id="test-session",
+                    total_cost_usd=0.001,
+                    result=error_text,
+                ),
+            ]
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            for message in create_api_429_error_stream():
+                yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream only once (no retry for 429)
+        assert call_count == 1
+        # Should only have the error text message (ResultMessage is skipped)
+        assert len(events) == 1
+        assert isinstance(events[0], TextMessage)
+        assert "API Error: 429" in events[0].text_content
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_500_retry_preserves_session_id(self, mock_client_class, agent_with_virtual_tool):
+        """Test that session_id is preserved across API 500 retries."""
+        session_id = "preserved-session-456"
+        call_count = 0
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First call: return API 500 error with session_id
+                for message in self.create_api_500_error_stream(session_id):
+                    yield message
+            else:
+                # Second call: return success
+                for message in create_mock_text_stream("Success!", session_id):
+                    yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        # Start without session_id
+        assert agent_with_virtual_tool.session_id is None
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Session ID should be set from the first stream
+        assert agent_with_virtual_tool.session_id == session_id
+        # Should have succeeded after retry
+        assert call_count == 2

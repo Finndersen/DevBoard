@@ -32,6 +32,7 @@ class SystemEventType(StrEnum):
     BRANCH_REBASED = "branch_rebased"
     STASH_APPLY_CONFLICT = "stash_apply_conflict"
     SESSION_EXPIRED = "session_expired"
+    API_ERROR_RETRY = "api_error_retry"
 
 
 class TextMessage(BaseModel):
