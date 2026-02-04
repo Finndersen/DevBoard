@@ -95,7 +95,6 @@ class Task(Base):
 
     # Valid status transitions: from_status -> set of allowed target statuses
     VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
-        TaskStatus.DEFINING: {TaskStatus.PLANNING},
         TaskStatus.PLANNING: {TaskStatus.IMPLEMENTING},
         TaskStatus.IMPLEMENTING: {TaskStatus.PR_OPEN, TaskStatus.REVIEWING, TaskStatus.COMPLETE},
         TaskStatus.PR_OPEN: {TaskStatus.COMPLETE},
