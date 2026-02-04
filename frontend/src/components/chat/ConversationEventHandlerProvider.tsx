@@ -2,9 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { EventHandlerProvider } from '../../hooks/useConversationEventHandlers'
 import type {
   ToolResultHandler,
-  ToolResultMatcher,
   SystemEventHandler,
-  SystemEventMatcher,
   StreamCompleteHandler
 } from '../../hooks/useConversationEventHandlers'
 
@@ -23,8 +21,8 @@ interface ConversationEventHandlerProviderProps {
  */
 export default function ConversationEventHandlerProvider({ children }: ConversationEventHandlerProviderProps) {
   const registry = useMemo(() => ({
-    toolResultHandlers: new Map<ToolResultMatcher, Set<ToolResultHandler>>(),
-    systemEventHandlers: new Map<SystemEventMatcher, Set<SystemEventHandler>>(),
+    toolResultHandlers: new Set<ToolResultHandler>(),
+    systemEventHandlers: new Set<SystemEventHandler>(),
     streamCompleteHandlers: new Set<StreamCompleteHandler>()
   }), [])
 

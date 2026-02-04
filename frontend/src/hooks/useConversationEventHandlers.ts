@@ -4,34 +4,16 @@ import type { ConversationEvent, ToolResult, SystemEvent, SystemEventType } from
 /**
  * Handler function for tool results.
  * Called when a tool execution completes.
+ * Receives both toolName and result so handler can decide internally whether to act.
  */
-export type ToolResultHandler = (result: ToolResult) => void | Promise<void>
-
-/**
- * Matcher function for tool results.
- * Returns true if this handler should be invoked for the given tool.
- */
-export type ToolResultMatcher = (toolName: string, result: ToolResult) => boolean
-
-/**
- * Options for tool result handler registration.
- */
-export interface ToolResultHandlerOptions {
-  /** If true, handler will be called for error results as well. Default: false */
-  includeErrors?: boolean
-}
+export type ToolResultHandler = (toolName: string, result: ToolResult) => void | Promise<void>
 
 /**
  * Handler function for system events.
  * Called when a system event is received.
+ * Handler can decide internally whether to act based on event properties.
  */
 export type SystemEventHandler = (event: SystemEvent) => void | Promise<void>
-
-/**
- * Matcher function for system events.
- * Returns true if this handler should be invoked for the given event.
- */
-export type SystemEventMatcher = (event: SystemEvent) => boolean
 
 /**
  * Handler function for stream completion.
@@ -39,14 +21,9 @@ export type SystemEventMatcher = (event: SystemEvent) => boolean
  */
 export type StreamCompleteHandler = () => void | Promise<void>
 
-export interface ToolResultHandlerEntry {
-  handler: ToolResultHandler
-  includeErrors: boolean
-}
-
 export interface EventHandlerRegistry {
-  toolResultHandlers: Map<ToolResultMatcher, Set<ToolResultHandlerEntry>>
-  systemEventHandlers: Map<SystemEventMatcher, Set<SystemEventHandler>>
+  toolResultHandlers: Set<ToolResultHandler>
+  systemEventHandlers: Set<SystemEventHandler>
   streamCompleteHandlers: Set<StreamCompleteHandler>
 }
 
@@ -85,56 +62,38 @@ export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undef
 
 /**
  * Register a handler for tool call results.
- * The handler is called when the matcher returns true for a tool result.
- * Error results (is_error=true) are automatically skipped.
+ * The handler receives both toolName and result, and can decide internally whether to act.
  *
- * @param matcher - Function that returns true if handler should be called
- * @param handler - Function to call when tool result matches
+ * @param handler - Function to call for each tool result
  *
  * @example
  * Handle specific tool:
- * useToolResultHandler(
- *   (name) => name === 'mcp__devboard_tools__edit_specification',
- *   (result) => refetchSpecification()
- * )
+ * useToolResultHandler((toolName, result) => {
+ *   if (toolName === 'mcp__devboard_tools__edit_specification') {
+ *     refetchSpecification()
+ *   }
+ * })
  *
  * @example
  * Handle multiple tools:
- * useToolResultHandler(
- *   (name) => ['edit_specification', 'set_specification_content'].some(t => name.includes(t)),
- *   (result) => refetchSpecification()
- * )
+ * useToolResultHandler((toolName, result) => {
+ *   if (toolName.includes('edit_specification') || toolName.includes('set_specification_content')) {
+ *     refetchSpecification()
+ *   }
+ * })
  *
  * @example
- * Handle with pattern matching:
- * useToolResultHandler(
- *   (name) => name.startsWith('mcp__devboard_tools__edit_'),
- *   (result) => refetchAllDocuments()
- * )
- *
- * @example
- * Access result data (errors are automatically skipped):
- * useToolResultHandler(
- *   (name) => name.includes('edit_') || name.includes('set_'),
- *   (result) => console.log('Document modified:', result.result_content)
- * )
- *
- * @example
- * Handle both success and error results:
- * useToolResultHandler(
- *   (name) => name.includes('rebase_task_branch'),
- *   (result) => refreshGitStatus(),
- *   { includeErrors: true }
- * )
+ * Handle errors explicitly:
+ * useToolResultHandler((toolName, result) => {
+ *   if (toolName.includes('rebase_task_branch')) {
+ *     // Called for both success and error results
+ *     refreshGitStatus()
+ *   }
+ * })
  */
-export function useToolResultHandler(
-  matcher: ToolResultMatcher,
-  handler: ToolResultHandler,
-  options?: ToolResultHandlerOptions
-): void {
+export function useToolResultHandler(handler: ToolResultHandler): void {
   const registry = useEventHandlerRegistry()
   const handlerRef = useRef(handler)
-  const includeErrors = options?.includeErrors ?? false
 
   // Update ref when handler changes
   useEffect(() => {
@@ -142,72 +101,53 @@ export function useToolResultHandler(
   }, [handler])
 
   useEffect(() => {
-    // Create entry with wrapped handler and options
-    const entry: ToolResultHandlerEntry = {
-      handler: (...args) => handlerRef.current(...args),
-      includeErrors
-    }
+    // Create wrapper that uses current handler
+    const wrappedHandler: ToolResultHandler = (...args) => handlerRef.current(...args)
 
     // Register handler
-    if (!registry.toolResultHandlers.has(matcher)) {
-      registry.toolResultHandlers.set(matcher, new Set())
-    }
-    registry.toolResultHandlers.get(matcher)!.add(entry)
+    registry.toolResultHandlers.add(wrappedHandler)
 
     // Cleanup: unregister handler
     return () => {
-      const entries = registry.toolResultHandlers.get(matcher)
-      if (entries) {
-        entries.delete(entry)
-        if (entries.size === 0) {
-          registry.toolResultHandlers.delete(matcher)
-        }
-      }
+      registry.toolResultHandlers.delete(wrappedHandler)
     }
-  }, [registry, matcher, includeErrors])
+  }, [registry])
 }
 
 /**
  * Register a handler for system events.
- * The handler is called when the matcher returns true for a system event.
+ * The handler receives the event and can decide internally whether to act.
  *
- * @param matcher - Function that returns true if handler should be called
- * @param handler - Function to call when system event matches
+ * @param handler - Function to call for each system event
  *
  * @example
  * Handle specific event type:
- * useSystemEventHandler(
- *   (event) => event.type === 'task_updated',
- *   (event) => refetchTask()
- * )
+ * useSystemEventHandler((event) => {
+ *   if (event.type === 'task_updated') {
+ *     refetchTask()
+ *   }
+ * })
  *
  * @example
  * Handle multiple event types:
- * useSystemEventHandler(
- *   (event) => ['task_updated', 'conversation_updated'].includes(event.type),
- *   (event) => console.log('Entity updated')
- * )
- *
- * @example
- * Handle all events:
- * useSystemEventHandler(
- *   () => true,
- *   (event) => console.log('System event:', event)
- * )
+ * useSystemEventHandler((event) => {
+ *   if (event.type === 'task_updated' || event.type === 'conversation_updated') {
+ *     console.log('Entity updated')
+ *   }
+ * })
  *
  * @example
  * Filter by entity ID:
- * useSystemEventHandler(
- *   (event) => event.type === 'task_updated' && event.data.task_id === myTaskId,
- *   (event) => {
+ * useSystemEventHandler((event) => {
+ *   if (event.type === 'task_updated' && event.data.task_id === myTaskId) {
  *     const { updated_fields } = event.data
  *     if ('status' in updated_fields) {
  *       setStatus(updated_fields.status)
  *     }
  *   }
- * )
+ * })
  */
-export function useSystemEventHandler(matcher: SystemEventMatcher, handler: SystemEventHandler): void {
+export function useSystemEventHandler(handler: SystemEventHandler): void {
   const registry = useEventHandlerRegistry()
   const handlerRef = useRef(handler)
 
@@ -221,22 +161,13 @@ export function useSystemEventHandler(matcher: SystemEventMatcher, handler: Syst
     const wrappedHandler: SystemEventHandler = (...args) => handlerRef.current(...args)
 
     // Register handler
-    if (!registry.systemEventHandlers.has(matcher)) {
-      registry.systemEventHandlers.set(matcher, new Set())
-    }
-    registry.systemEventHandlers.get(matcher)!.add(wrappedHandler)
+    registry.systemEventHandlers.add(wrappedHandler)
 
     // Cleanup: unregister handler
     return () => {
-      const handlers = registry.systemEventHandlers.get(matcher)
-      if (handlers) {
-        handlers.delete(wrappedHandler)
-        if (handlers.size === 0) {
-          registry.systemEventHandlers.delete(matcher)
-        }
-      }
+      registry.systemEventHandlers.delete(wrappedHandler)
     }
-  }, [registry, matcher])
+  }, [registry])
 }
 
 /**
@@ -316,22 +247,10 @@ export async function invokeEventHandlers(
     const toolName = toolCallMap.get(event.tool_call_id)
     if (!toolName) return
 
-    const isError = event.is_error
+    const handlers = Array.from(registry.toolResultHandlers)
 
-    // Find matching handlers (filter by includeErrors when result is an error)
-    const matchingHandlers: ToolResultHandler[] = []
-    for (const [matcher, entries] of registry.toolResultHandlers.entries()) {
-      if (matcher(toolName, event)) {
-        for (const entry of entries) {
-          // Skip error results unless handler explicitly wants them
-          if (isError && !entry.includeErrors) continue
-          matchingHandlers.push(entry.handler)
-        }
-      }
-    }
-
-    // Call all matching handlers (use allSettled to prevent one failure from stopping others)
-    const results = await Promise.allSettled(matchingHandlers.map(handler => handler(event)))
+    // Call all handlers with toolName and result (use allSettled to prevent one failure from stopping others)
+    const results = await Promise.allSettled(handlers.map(handler => handler(toolName, event)))
 
     // Log any handler failures for debugging
     results.forEach((result, index) => {
@@ -343,16 +262,10 @@ export async function invokeEventHandlers(
 
   // Handle system events
   if (event.event_type === 'system') {
-    // Find matching handlers
-    const matchingHandlers: SystemEventHandler[] = []
-    for (const [matcher, handlers] of registry.systemEventHandlers.entries()) {
-      if (matcher(event)) {
-        matchingHandlers.push(...Array.from(handlers))
-      }
-    }
+    const handlers = Array.from(registry.systemEventHandlers)
 
-    // Call all matching handlers (use allSettled to prevent one failure from stopping others)
-    const results = await Promise.allSettled(matchingHandlers.map(handler => handler(event)))
+    // Call all handlers (use allSettled to prevent one failure from stopping others)
+    const results = await Promise.allSettled(handlers.map(handler => handler(event)))
 
     // Log any handler failures for debugging
     results.forEach((result, index) => {

@@ -55,33 +55,28 @@ function TaskDocumentView({ taskId }: { taskId: number }) {
   const { data: implementationPlan, refetch: refetchPlan } = useQuery(/* ... */)
 
   // Handle specification edits
-  useToolResultHandler(
-    /mcp__devboard_tools__(?:edit|set)_specification/,
-    async (result) => {
+  useToolResultHandler(async (toolName, result) => {
+    if (toolName.includes('edit_specification') || toolName.includes('set_specification_content')) {
       console.log('Specification updated, refetching...')
       await refetchSpec()
     }
-  )
+  })
 
   // Handle implementation plan edits
-  useToolResultHandler(
-    /mcp__devboard_tools__(?:edit|set)_implementation_plan/,
-    async (result) => {
+  useToolResultHandler(async (toolName, result) => {
+    if (toolName.includes('edit_implementation_plan') || toolName.includes('set_implementation_plan_content')) {
       console.log('Implementation plan updated, refetching...')
       await refetchPlan()
     }
-  )
+  })
 
   // Or handle all document edits together
-  useToolResultHandler(
-    (toolName) => toolName.startsWith('mcp__devboard_tools__') &&
-                  (toolName.includes('edit_') || toolName.includes('set_')),
-    async (result) => {
-        console.log('Document edited, refetching all...')
-        await Promise.all([refetchSpec(), refetchPlan()])
-      }
+  useToolResultHandler(async (toolName, result) => {
+    if (toolName.startsWith('mcp__devboard_tools__') && (toolName.includes('edit_') || toolName.includes('set_'))) {
+      console.log('Document edited, refetching all...')
+      await Promise.all([refetchSpec(), refetchPlan()])
     }
-  )
+  })
 
   return (
     <div>
@@ -102,20 +97,19 @@ function ConversationDetailsPanel({ conversationId }: { conversationId: number }
   const [sessionId, setSessionId] = useState<string | null>(null)
 
   // Handle conversation updates
-  useSystemEventHandler('conversation_updated', (event) => {
-    const { conversation_id, updated_fields } = event.data
+  useSystemEventHandler((event) => {
+    if (event.type === 'conversation_updated' && event.data.conversation_id === conversationId) {
+      const { updated_fields } = event.data
 
-    // Only update if this is our conversation
-    if (conversation_id !== conversationId) return
+      // Check which fields were updated and update local state
+      if ('external_session_id' in updated_fields) {
+        setSessionId(updated_fields.external_session_id)
+        console.log('Session ID updated:', updated_fields.external_session_id)
+      }
 
-    // Check which fields were updated and update local state
-    if ('external_session_id' in updated_fields) {
-      setSessionId(updated_fields.external_session_id)
-      console.log('Session ID updated:', updated_fields.external_session_id)
+      // Could also refetch full conversation data
+      // refetchConversation()
     }
-
-    // Could also refetch full conversation data
-    // refetchConversation()
   })
 
   return (
@@ -137,21 +131,20 @@ import { useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 function TaskStatusBadge({ taskId }: { taskId: number }) {
   const [status, setStatus] = useState<string>('planning')
 
-  useSystemEventHandler('task_updated', (event) => {
-    const { task_id, updated_fields } = event.data
+  useSystemEventHandler((event) => {
+    if (event.type === 'task_updated' && event.data.task_id === taskId) {
+      const { updated_fields } = event.data
 
-    // Only update if this is our task
-    if (task_id !== taskId) return
+      // Check if status was updated
+      if ('status' in updated_fields) {
+        setStatus(updated_fields.status)
+      }
 
-    // Check if status was updated
-    if ('status' in updated_fields) {
-      setStatus(updated_fields.status)
-    }
-
-    // Check if documents were updated
-    if ('specification_id' in updated_fields || 'implementation_plan_id' in updated_fields) {
-      console.log('Task documents updated')
-      // Could trigger document refresh here
+      // Check if documents were updated
+      if ('specification_id' in updated_fields || 'implementation_plan_id' in updated_fields) {
+        console.log('Task documents updated')
+        // Could trigger document refresh here
+      }
     }
   })
 
@@ -165,7 +158,7 @@ function TaskStatusBadge({ taskId }: { taskId: number }) {
 import { useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 
 function DebugEventMonitor() {
-  useSystemEventHandler('*', (event) => {
+  useSystemEventHandler((event) => {
     console.log('System event received:', {
       type: event.type,
       data: event.data,
@@ -188,35 +181,34 @@ function TaskPage({ taskId }: { taskId: number }) {
   const { data: plan, refetch: refetchPlan } = usePlanQuery(taskId)
 
   // Handle task status changes
-  useSystemEventHandler('task_updated', (event) => {
-    if (event.data.task_id !== taskId) return
+  useSystemEventHandler((event) => {
+    if (event.type === 'task_updated' && event.data.task_id === taskId) {
+      const { updated_fields } = event.data
 
-    const { updated_fields } = event.data
-
-    // Refetch based on what changed
-    if ('status' in updated_fields) {
-      refetchTask()
-    }
-    if ('specification_id' in updated_fields) {
-      refetchSpec()
-    }
-    if ('implementation_plan_id' in updated_fields) {
-      refetchPlan()
+      // Refetch based on what changed
+      if ('status' in updated_fields) {
+        refetchTask()
+      }
+      if ('specification_id' in updated_fields) {
+        refetchSpec()
+      }
+      if ('implementation_plan_id' in updated_fields) {
+        refetchPlan()
+      }
     }
   })
 
   // Handle document content edits
-  useToolResultHandler(/mcp__devboard_tools__edit_specification/, async () => {
-    await refetchSpec()
-  })
-
-  useToolResultHandler(/mcp__devboard_tools__edit_implementation_plan/, async () => {
-    await refetchPlan()
-  })
-
-  // Handle full content replacements
-  useToolResultHandler(/mcp__devboard_tools__set_.*_content/, async (result) => {
-    await Promise.all([refetchSpec(), refetchPlan()])
+  useToolResultHandler(async (toolName, result) => {
+    if (toolName.includes('edit_specification')) {
+      await refetchSpec()
+    }
+    if (toolName.includes('edit_implementation_plan')) {
+      await refetchPlan()
+    }
+    if (toolName.includes('set_') && toolName.includes('_content')) {
+      await Promise.all([refetchSpec(), refetchPlan()])
+    }
   })
 
   return (
@@ -231,30 +223,11 @@ function TaskPage({ taskId }: { taskId: number }) {
 }
 ```
 
-## Pattern Matching
-
-### String Pattern (Exact Match)
-```tsx
-useToolResultHandler('mcp__devboard_tools__edit_specification', handler)
-```
-
-### Regex Pattern
-```tsx
-useToolResultHandler(/mcp__devboard_tools__edit_.*/, handler)
-```
-
-### Function Pattern
-```tsx
-useToolResultHandler(
-  (name) => name.startsWith('mcp__') && name.includes('edit'),
-  handler
-)
-```
-
 ## Best Practices
 
-1. **Error handling**: Tool result handlers automatically skip error results (is_error=true), so you only handle successful operations
+1. **Positive conditionals**: Use positive conditional logic for clarity (e.g., `if (toolName === 'Edit')` instead of `if (toolName !== 'Edit') return`)
 2. **Filter by entity ID**: For system events, check the entity ID matches what you're displaying
 3. **Granular refetching**: Only refetch data that actually changed
 4. **Debounce refetches**: If multiple events might fire rapidly, consider debouncing
 5. **Cleanup**: Handlers are automatically cleaned up when components unmount
+6. **Memoize handlers**: Use `useCallback` to prevent unnecessary re-registrations

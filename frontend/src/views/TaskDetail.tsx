@@ -340,146 +340,127 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [task?.id])
 
 
-  // Memoize matchers and handlers to prevent re-registration on every render
-  const specificationMatcher = useCallback(
-    (toolName: string) => toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content'),
-    []
-  )
-
-  const specificationHandler = useCallback(async (result: any) => {
-    try {
-      await refetchSpecification()
-      // Refetch task to update available_workflow_actions (e.g., "Create implementation plan" becomes available)
-      await refetch()
-      // Switch to specification tab to show the updated content
-      setActiveTab('specification')
-    } catch (error) {
-      console.error('Failed to refetch specification document:', error)
+  // Handle specification document updates from MCP tools
+  const specificationHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
+      try {
+        await refetchSpecification()
+        // Refetch task to update available_workflow_actions (e.g., "Create implementation plan" becomes available)
+        await refetch()
+        // Switch to specification tab to show the updated content
+        setActiveTab('specification')
+      } catch (error) {
+        console.error('Failed to refetch specification document:', error)
+      }
     }
   }, [refetchSpecification, refetch, setActiveTab])
 
-  // Handle specification document updates from MCP tools
-  useToolResultHandler(specificationMatcher, specificationHandler)
+  useToolResultHandler(specificationHandler)
 
-  const implementationPlanMatcher = useCallback(
-    (toolName: string) => toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content'),
-    []
-  )
-
-  const implementationPlanHandler = useCallback(async (result: any) => {
-    try {
-      await refetchImplementationPlan()
-      // Switch to plan tab to show the updated content
-      setActiveTab('plan')
-    } catch (error) {
-      console.error('Failed to refetch implementation plan document:', error)
+  // Handle implementation plan document updates from MCP tools
+  const implementationPlanHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content')) {
+      try {
+        await refetchImplementationPlan()
+        // Switch to plan tab to show the updated content
+        setActiveTab('plan')
+      } catch (error) {
+        console.error('Failed to refetch implementation plan document:', error)
+      }
     }
   }, [refetchImplementationPlan, setActiveTab])
 
-  // Handle implementation plan document updates from MCP tools
-  useToolResultHandler(implementationPlanMatcher, implementationPlanHandler)
+  useToolResultHandler(implementationPlanHandler)
 
   // Handle file modification tool results to refresh diff view
-  const fileModificationMatcher = useCallback(
-    (toolName: string) => toolName === 'Edit' || toolName === 'Write',
-    []
-  )
+  const fileModificationHandler = useCallback((toolName: string, result: any) => {
+    const isFileModification = toolName === 'Edit' || toolName === 'Write'
+    const isImplementing = task?.status?.toLowerCase() === 'implementing' && task?.codebase_id
 
-  const fileModificationHandler = useCallback(() => {
-    if (task?.status?.toLowerCase() !== 'implementing' || !task?.codebase_id) {
-      return
+    if (isFileModification && isImplementing) {
+      if (diffRefreshTimeoutRef.current) {
+        clearTimeout(diffRefreshTimeoutRef.current)
+      }
+
+      diffRefreshTimeoutRef.current = setTimeout(() => {
+        handleDiffRefresh('all')
+      }, 500)
     }
-
-    if (diffRefreshTimeoutRef.current) {
-      clearTimeout(diffRefreshTimeoutRef.current)
-    }
-
-    diffRefreshTimeoutRef.current = setTimeout(() => {
-      handleDiffRefresh('all')
-    }, 500)
   }, [task?.status, task?.codebase_id, handleDiffRefresh])
 
-  useToolResultHandler(fileModificationMatcher, fileModificationHandler)
+  useToolResultHandler(fileModificationHandler)
 
   // Handler for complete_task_with_local_merge tool - refresh task details
-  const taskCompletionMatcher = useCallback(
-    (toolName: string) => toolName.includes('complete_task_with_local_merge'),
-    []
-  )
-
-  const taskCompletionHandler = useCallback(async () => {
-    await refetch()
+  const taskCompletionHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('complete_task_with_local_merge')) {
+      await refetch()
+    }
   }, [refetch])
 
-  useToolResultHandler(taskCompletionMatcher, taskCompletionHandler)
+  useToolResultHandler(taskCompletionHandler)
 
   // Handler for rebase_task_branch tool - refresh git status on success or failure
-  const rebaseMatcher = useCallback(
-    (toolName: string) => toolName.includes('rebase_task_branch'),
-    []
-  )
-
-  const rebaseHandler = useCallback(async () => {
-    await refreshGitStatus()
+  const rebaseHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('rebase_task_branch')) {
+      await refreshGitStatus()
+    }
   }, [refreshGitStatus])
 
-  useToolResultHandler(rebaseMatcher, rebaseHandler, { includeErrors: true })
+  useToolResultHandler(rebaseHandler)
 
-  const systemEventMatcher = useCallback((event: any) => {
-    return (
-      (event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate') &&
-      event.data?.task_id === task?.id
-    )
-  }, [task?.id])
-
+  // Handle task updates from SystemEvents (emitted during workflow actions)
   const systemEventHandler = useCallback(async (event: any) => {
-    console.log('[TaskDetail] SystemEvent received:', {
-      taskId: task?.id,
-      eventType: event.type,
-      eventData: event.data,
-      timestamp: new Date().toISOString()
-    })
+    const isRelevantEventType = event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate'
+    const isForThisTask = event.data?.task_id === task?.id
 
-    try {
-      // Handle task_updated events
-      if (event.type === 'task_updated') {
-        // Check if conversation_id is changing
-        const oldConversationId = task?.conversation_id
-        const newConversationId = event.data?.updated_fields?.conversation_id
+    if (isRelevantEventType && isForThisTask) {
+      console.log('[TaskDetail] SystemEvent received:', {
+        taskId: task?.id,
+        eventType: event.type,
+        eventData: event.data,
+        timestamp: new Date().toISOString()
+      })
 
-        // Migrate stream FIRST (before refetch updates conversation_id in state)
-        // This prevents race condition where component re-renders with new conversation_id
-        // but stream is still registered under old conversation_id
-        if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
-          console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
-          migrateStream(oldConversationId, newConversationId)
-          // Clear streaming message immediately after migration
-          // The isConversationStreaming check in the effect won't work during migration
-          // because task.conversation_id hasn't updated yet
-          setStreamingMessage('')
+      try {
+        // Handle task_updated events
+        if (event.type === 'task_updated') {
+          // Check if conversation_id is changing
+          const oldConversationId = task?.conversation_id
+          const newConversationId = event.data?.updated_fields?.conversation_id
+
+          // Migrate stream FIRST (before refetch updates conversation_id in state)
+          // This prevents race condition where component re-renders with new conversation_id
+          // but stream is still registered under old conversation_id
+          if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
+            console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
+            migrateStream(oldConversationId, newConversationId)
+            // Clear streaming message immediately after migration
+            // The isConversationStreaming check in the effect won't work during migration
+            // because task.conversation_id hasn't updated yet
+            setStreamingMessage('')
+          }
+
+          // THEN refetch task to get updated status and conversation_id
+          await refetch()
         }
 
-        // THEN refetch task to get updated status and conversation_id
-        await refetch()
-      }
+        // Handle branch_rebased events - refresh git status
+        if (event.type === 'branch_rebased') {
+          await refreshGitStatus()
+        }
 
-      // Handle branch_rebased events - refresh git status
-      if (event.type === 'branch_rebased') {
-        await refreshGitStatus()
+        // Handle workspace_allocate events - refresh git status to show worktree indicator
+        if (event.type === 'workspace_allocate') {
+          await refreshGitStatus()
+        }
+      } catch (error) {
+        console.error('Failed to handle system event:', error)
+        // Don't throw - allow other handlers and stream to continue
       }
-
-      // Handle workspace_allocate events - refresh git status to show worktree indicator
-      if (event.type === 'workspace_allocate') {
-        await refreshGitStatus()
-      }
-    } catch (error) {
-      console.error('Failed to handle system event:', error)
-      // Don't throw - allow other handlers and stream to continue
     }
   }, [task?.id, task?.conversation_id, migrateStream, refetch, refreshGitStatus])
 
-  // Handle task updates from SystemEvents (emitted during workflow actions)
-  useSystemEventHandler(systemEventMatcher, systemEventHandler)
+  useSystemEventHandler(systemEventHandler)
 
   // Handle stream completion - refresh diff view when agent finishes during implementation phase
   const streamCompleteHandler = useCallback(() => {
