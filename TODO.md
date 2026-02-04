@@ -14,7 +14,7 @@
 - allow configuring which patterns to exclude from directory tree view
 - Integrate memory (maybe with https://github.com/mem0ai/mem0)
 - Change implementation of Project Specification to a more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
-- Handle CladueCOde error responses like: API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4.5"},"request_id":"req_011CU9vQ1DSP73cZHsQ62QNL"}
+- Handle CladueCOde error responses like: API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4.5"},"request_id":"req_011CU9vQ1DSP73cZHsQ62QNL"} OR API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXoMiXVKGx7uZ488mMbm3"}
 - CLAUDE.md prompt management and continuous feedback (https://www.reddit.com/r/ClaudeAI/comments/1laby6h/i_discovered_a_powerful_way_to_continuously/)
 - Handle ClaudeCode compaction
 - Track important events (e.g. user document edits) and include as system messages to agent
@@ -35,6 +35,7 @@
 - Better handling of errors during virtual tool calls (or any tool calls?) - frontend left showing tool call running and no error indicator
 - make task.branch_name mandatory
 - add tool to allow agent to update task custom field values
+- Custom macros/prompts for Project Agent for creating task from Jira ticket etc
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

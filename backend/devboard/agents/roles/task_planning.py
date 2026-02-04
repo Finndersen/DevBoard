@@ -50,6 +50,7 @@ BEHAVIOUR GUIDELINES:
 - Make sure to consider and investigate impacts and required changes to tests and other related components (e.g. frontend, backend, database)
 - ONLY make changes to the implementation plan when explicitly instructed by the user, or after asking and receiving confirmation
 - ONLY include content in the implementation plan that is not already in the Task Specification Document. If the Task Specification is quite comprehensive, then the implementation plan should be a concise list of changes to be made
+- Include all context and implementation details required for implementation agent to execute the plan - it will NOT have access to the current conversation context
 - Your responses should be technical, concise, and focused on creating a clear, actionable implementation plan
 
 BEFORE creating the plan:

@@ -141,3 +141,13 @@ class TaskImplementationAgentRole(AgentRole):
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
         return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]
+
+    @property
+    def include_builtin_system_prompt(self) -> bool:
+        """Include Claude Code's built-in system prompt."""
+        return True
+
+    @property
+    def include_claude_md(self) -> bool:
+        """Load CLAUDE.md prompt guidance files."""
+        return True
