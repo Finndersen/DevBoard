@@ -112,6 +112,10 @@ export function getToolDisplayLabel(
       if (description) {
         return { toolName: 'Bash', details: description }
       }
+      const command = args.command as string | undefined
+      if (command) {
+        return { toolName: 'Bash', details: command }
+      }
       return { toolName: cleanedName }
     }
 
