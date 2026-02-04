@@ -743,40 +743,6 @@ class GitRepoIntegration:
         """
         await self._run_git_command(["fetch", remote])
 
-    async def rebase_onto(self, onto: str, abort_on_conflict: bool = True) -> str:
-        """Rebase the current branch onto another branch.
-
-        This performs `git rebase <onto>` which rebases the current HEAD onto <onto>.
-        Use this when working in a worktree where the branch is already checked out.
-
-        Args:
-            onto: Branch to rebase onto
-            abort_on_conflict: If True (default), abort rebase on conflict. If False,
-                leave rebase paused on conflict for manual resolution.
-
-        Returns:
-            New HEAD commit hash after successful rebase
-
-        Raises:
-            RebaseConflictError: If rebase encounters conflicts (rebase is aborted if abort_on_conflict=True)
-            ShellCommandExecutionError: If git command fails for other reasons
-        """
-        try:
-            await self._run_git_command(["rebase", onto])
-        except ShellCommandExecutionError as e:
-            # Check if this is a conflict error
-            error_msg = str(e).lower()
-            if "conflict" in error_msg or "could not apply" in error_msg:
-                if abort_on_conflict:
-                    # Abort the rebase
-                    await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
-                raise RebaseConflictError(f"Rebase onto {onto} encountered conflicts") from e
-            # Re-raise other errors
-            raise
-
-        # Return new HEAD commit hash
-        return await self._run_git_command(["rev-parse", "HEAD"])
-
     async def rebase_branch(self, branch: str, onto: str, abort_on_conflict: bool = True) -> str:
         """Rebase a branch onto another branch.
 

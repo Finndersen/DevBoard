@@ -828,7 +828,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         mock_git.is_rebase_in_progress = Mock(return_value=False)
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.rebase_onto.return_value = "newhead456"
+        mock_git.rebase_branch.return_value = "newhead456"
         # find_stash_by_message returns stash ref after stash_push, then None after drop
         mock_git.find_stash_by_message.side_effect = ["stash@{0}", None]
 
@@ -846,7 +846,9 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         mock_git.has_uncommitted_changes.assert_called_once()
         mock_git.stash_push.assert_called_once()
         mock_git.fetch.assert_called_once()
-        mock_git.rebase_onto.assert_called_once_with(sample_task.base_branch, abort_on_conflict=False)
+        mock_git.rebase_branch.assert_called_once_with(
+            sample_task.branch_name, sample_task.base_branch, abort_on_conflict=False
+        )
         mock_git.stash_apply.assert_called_once_with("stash@{0}")
         mock_git.stash_drop.assert_called_once_with("stash@{0}")
 
@@ -867,7 +869,7 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
         mock_git.is_rebase_in_progress = Mock(return_value=False)
         # No uncommitted changes
         mock_git.has_uncommitted_changes.return_value = False
-        mock_git.rebase_onto.return_value = "newhead789"
+        mock_git.rebase_branch.return_value = "newhead789"
         # No stash exists
         mock_git.find_stash_by_message.return_value = None
 
@@ -904,7 +906,7 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
         mock_git.is_rebase_in_progress = Mock(return_value=False)
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.rebase_onto.side_effect = RebaseConflictError("Rebase conflict on file.txt")
+        mock_git.rebase_branch.side_effect = RebaseConflictError("Rebase conflict on file.txt")
         mock_git.get_conflicted_files.return_value = ["file.txt"]
         mock_git.find_stash_by_message.return_value = "stash@{0}"
 
@@ -938,7 +940,7 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
         mock_git.is_rebase_in_progress = Mock(return_value=False)
         # Has uncommitted changes
         mock_git.has_uncommitted_changes.return_value = True
-        mock_git.rebase_onto.return_value = "newhead456"
+        mock_git.rebase_branch.return_value = "newhead456"
         mock_git.find_stash_by_message.return_value = "stash@{0}"
         # Stash apply fails with conflict
         mock_git.stash_apply.side_effect = ShellCommandExecutionError("error: could not apply stash")

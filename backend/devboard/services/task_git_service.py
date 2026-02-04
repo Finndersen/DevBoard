@@ -560,7 +560,7 @@ class TaskGitService:
 
         # Start the rebase (don't abort on conflict - leave paused)
         try:
-            new_head = await git.rebase_onto(task.base_branch, abort_on_conflict=False)
+            new_head = await git.rebase_branch(task.branch_name, task.base_branch, abort_on_conflict=False)
             logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
             # Rebase complete - try to restore stashed changes
             return await self._apply_rebase_stash_if_exists(

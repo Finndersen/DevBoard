@@ -31,6 +31,7 @@ We are working to develop an application as described in @docs/INDEX.md
 - **Async Tests**: Use `@pytest.mark.asyncio` decorator
 - **API Testing**: Use TestClient with mocked dependencies
 - NEVER patch Service classes or methods doing testing, only lower level dependencies such as data-layer repositories or filesystem/git/external integrations
+- Run tests using `uv run --frozen --active pytest <args>` to force using already-resolved dependencies
 
 ## Development Process
 - Run `make format` to automatically reformat code and remove unused imports instead of manually editing
