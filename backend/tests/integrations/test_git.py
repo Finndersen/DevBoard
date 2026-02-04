@@ -669,6 +669,121 @@ class TestResetWorkingTree:
         assert ["clean", "-fd"] not in calls
 
 
+class TestParseGitLogOutput:
+    """Tests for _parse_git_log_output method."""
+
+    def test_parse_empty_output(self, temp_git_repo):
+        """Test parsing empty output returns empty list."""
+        git = GitRepoIntegration(temp_git_repo)
+        result = git._parse_git_log_output("")
+
+        assert result == []
+
+    def test_parse_single_commit_subject_only(self, temp_git_repo):
+        """Test parsing single commit with subject only (no body)."""
+        git = GitRepoIntegration(temp_git_repo)
+        # Format: hash\x00author\x00date\x00subject\x00body\x1e
+        output = "abc123\x00John Doe\x002024-01-15 10:00:00 +0000\x00Fix bug in parser\x00\x1e"
+        result = git._parse_git_log_output(output)
+
+        assert len(result) == 1
+        assert result[0].hash == "abc123"
+        assert result[0].author == "John Doe"
+        assert result[0].date == "2024-01-15 10:00:00 +0000"
+        assert result[0].subject == "Fix bug in parser"
+        assert result[0].body is None
+
+    def test_parse_single_commit_with_body(self, temp_git_repo):
+        """Test parsing single commit with subject and body."""
+        git = GitRepoIntegration(temp_git_repo)
+        body_content = "This is a detailed description.\n\nWith multiple lines."
+        output = f"abc123\x00John Doe\x002024-01-15\x00Fix bug\x00{body_content}\x1e"
+        result = git._parse_git_log_output(output)
+
+        assert len(result) == 1
+        assert result[0].subject == "Fix bug"
+        assert result[0].body == body_content
+
+    def test_parse_multiple_commits(self, temp_git_repo):
+        """Test parsing multiple commits with newlines between records.
+
+        Git inserts a newline after each commit's format output, so the actual
+        format is: hash\x00author\x00date\x00subject\x00body\x1e\n
+        """
+        git = GitRepoIntegration(temp_git_repo)
+        # Include \n after \x1e to match actual git output
+        output = (
+            "abc123\x00John\x002024-01-15\x00First commit\x00Body 1\x1e\n"
+            "def456\x00Jane\x002024-01-16\x00Second commit\x00\x1e\n"
+            "ghi789\x00Bob\x002024-01-17\x00Third commit\x00Multi\nLine\nBody\x1e"
+        )
+        result = git._parse_git_log_output(output)
+
+        assert len(result) == 3
+        assert result[0].hash == "abc123"
+        assert result[0].subject == "First commit"
+        assert result[0].body == "Body 1"
+
+        assert result[1].hash == "def456"
+        assert result[1].subject == "Second commit"
+        assert result[1].body is None
+
+        assert result[2].hash == "ghi789"
+        assert result[2].subject == "Third commit"
+        assert result[2].body == "Multi\nLine\nBody"
+
+    def test_parse_handles_whitespace_only_body(self, temp_git_repo):
+        """Test that whitespace-only body is treated as None."""
+        git = GitRepoIntegration(temp_git_repo)
+        output = "abc123\x00John\x002024-01-15\x00Subject\x00   \n  \x1e"
+        result = git._parse_git_log_output(output)
+
+        assert len(result) == 1
+        assert result[0].body is None
+
+
+class TestGetCommitsInRangeWithFileFilter:
+    """Tests for get_commits_in_range with file_paths parameter."""
+
+    @pytest.mark.asyncio
+    async def test_get_commits_in_range_without_file_filter(self, temp_git_repo):
+        """Test get_commits_in_range without file filter."""
+        git = GitRepoIntegration(temp_git_repo)
+        output = "abc123\x00John\x002024-01-15\x00Fix bug\x00Body\x1e"
+
+        async def mock_run_git_command(args, **kwargs):
+            # Verify no file paths are in the args
+            assert "--" not in args
+            return output
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_commits_in_range("base", "head")
+
+        assert len(result) == 1
+        assert result[0].subject == "Fix bug"
+
+    @pytest.mark.asyncio
+    async def test_get_commits_in_range_with_file_filter(self, temp_git_repo):
+        """Test get_commits_in_range with file_paths filter."""
+        git = GitRepoIntegration(temp_git_repo)
+        output = "abc123\x00John\x002024-01-15\x00Update file1\x00\x1e"
+        captured_args = []
+
+        async def mock_run_git_command(args, **kwargs):
+            captured_args.extend(args)
+            return output
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_commits_in_range("base", "head", file_paths=["file1.py", "file2.py"])
+
+        assert len(result) == 1
+        # Verify file paths are added after "--"
+        assert "--" in captured_args
+        dash_index = captured_args.index("--")
+        assert "file1.py" in captured_args[dash_index + 1 :]
+        assert "file2.py" in captured_args[dash_index + 1 :]
+
+
 class TestGetConflictedFiles:
     """Tests for get_conflicted_files method."""
 

@@ -94,10 +94,12 @@ class GitRepoIntegration:
         Returns:
             List of GitLogEntry objects
         """
+        # Use null bytes as field delimiters and RS (record separator, \x1e) as record separator
+        # Format: hash\x00author\x00date\x00subject\x00body\x1e
         args = [
             "log",
             f"--max-count={max_count}",
-            "--pretty=format:%H|%an|%ad|%s",
+            "--pretty=format:%H%x00%an%x00%ad%x00%s%x00%b%x1e",
             "--date=iso",
         ]
         if file_path:
@@ -106,21 +108,7 @@ class GitRepoIntegration:
 
         output = await self._run_git_command(args)
 
-        commits = []
-        for line in output.split("\n"):
-            if line.strip():
-                parts = line.split("|", 3)
-                if len(parts) >= 4:
-                    commits.append(
-                        GitLogEntry(
-                            hash=parts[0],
-                            author=parts[1],
-                            date=parts[2],
-                            message=parts[3],
-                        )
-                    )
-
-        return commits
+        return self._parse_git_log_output(output)
 
     async def get_git_diff(
         self,
@@ -192,40 +180,78 @@ class GitRepoIntegration:
 
         return merge_base if merge_base else None
 
-    async def get_commits_in_range(self, base_commit: str, head_commit: str) -> list[GitLogEntry]:
+    def _parse_git_log_output(self, output: str) -> list[GitLogEntry]:
+        """Parse git log output with null-byte delimited format.
+
+        Expects format: hash\x00author\x00date\x00subject\x00body\x1e
+        (RS/\x1e as record separator, null as field separator)
+
+        Args:
+            output: Raw git log output
+
+        Returns:
+            List of GitLogEntry objects
+        """
+        commits = []
+        if not output.strip():
+            return commits
+
+        # Split by RS (record separator, \x1e)
+        records = output.split("\x1e")
+
+        for record in records:
+            record = record.strip()
+            if not record:
+                continue
+
+            # Split by null byte (field separator)
+            parts = record.split("\x00", 4)
+            if len(parts) >= 4:
+                body = parts[4].strip() if len(parts) > 4 and parts[4].strip() else None
+                commits.append(
+                    GitLogEntry(
+                        hash=parts[0],
+                        author=parts[1],
+                        date=parts[2],
+                        subject=parts[3],
+                        body=body,
+                    )
+                )
+
+        return commits
+
+    async def get_commits_in_range(
+        self,
+        base_commit: str,
+        head_commit: str,
+        file_paths: list[str] | None = None,
+    ) -> list[GitLogEntry]:
         """Get commits in a range (base..head).
 
         Args:
             base_commit: Base commit hash/reference (exclusive)
             head_commit: Head commit hash/reference (inclusive)
+            file_paths: Optional list of file paths to filter commits by
 
         Returns:
             List of GitLogEntry objects for commits in the range
         """
+        # Use null bytes as field delimiters and RS (\x1e) as record separator
         args = [
             "log",
             f"{base_commit}..{head_commit}",
-            "--pretty=format:%H|%an|%ad|%s",
+            "--pretty=format:%H%x00%an%x00%ad%x00%s%x00%b%x1e",
             "--date=iso",
         ]
 
+        # Add file path filter if provided
+        if file_paths:
+            args.append("--")
+            args.extend(file_paths)
+
         output = await self._run_git_command(args)
 
-        commits = []
-        for line in output.split("\n"):
-            if line.strip():
-                parts = line.split("|", 3)
-                if len(parts) >= 4:
-                    commits.append(
-                        GitLogEntry(
-                            hash=parts[0],
-                            author=parts[1],
-                            date=parts[2],
-                            message=parts[3],
-                        )
-                    )
-
-        return commits
+        return self._parse_git_log_output(output)
 
     async def get_commit_diff(self, commit_hash: str) -> str:
         """Get the diff for a specific commit.
@@ -1107,7 +1133,7 @@ class GitRepoIntegration:
             message_lines.append("Squashed commits:")
             for commit in commits:
                 # Indent each commit message
-                message_lines.append(f"* {commit.message}")
+                message_lines.append(f"* {commit.subject}")
 
         message = "\n".join(message_lines)
 

@@ -3,7 +3,40 @@
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models import Task
-from devboard.services.task_git_service import RebaseOutcome, TaskGitService
+from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.types import GitLogEntry
+from devboard.services.task_git_service import BaseBranchChanges, RebaseOutcome, TaskGitService
+
+
+def _format_commit_details(commits: list[GitLogEntry]) -> str:
+    """Format commit details including subject and body for display."""
+    if not commits:
+        return ""
+
+    lines = []
+    for commit in commits:
+        lines.append(f"  - **{commit.hash[:7]}**: {commit.subject}")
+        if commit.body:
+            # Indent each line of the body
+            body_lines = commit.body.strip().split("\n")
+            for body_line in body_lines:
+                lines.append(f"    {body_line}")
+    return "\n".join(lines)
+
+
+async def _get_commits_for_conflicted_files(
+    base_branch_changes: BaseBranchChanges,
+    conflicted_files: list[str],
+    repo_path: str,
+) -> list[GitLogEntry]:
+    """Get base branch commits that touched any of the conflicting files."""
+    git = GitRepoIntegration(repo_path)
+    commits = await git.get_commits_in_range(
+        base_branch_changes.fork_point,
+        base_branch_changes.base_head,
+        file_paths=conflicted_files,
+    )
+    return commits
 
 
 def create_rebase_task_branch_tool(
@@ -68,9 +101,24 @@ def create_rebase_task_branch_tool(
                     "They will be restored after the rebase completes successfully."
                 )
 
+            # Include relevant base branch commit details if available
+            commit_details_section = ""
+            if result.base_branch_changes and result.conflicted_files:
+                relevant_commits = await _get_commits_for_conflicted_files(
+                    result.base_branch_changes,
+                    result.conflicted_files,
+                    result.slot_path,
+                )
+                if relevant_commits:
+                    formatted_commits = _format_commit_details(relevant_commits)
+                    commit_details_section = (
+                        f"\n\n**Base branch commits that touched these files:**\n{formatted_commits}"
+                    )
+
             raise ModelRetry(
                 f"Rebase has conflicts that need to be resolved.\n\n"
-                f"**Conflicted files:**\n{conflict_list}\n\n"
+                f"**Conflicted files:**\n{conflict_list}"
+                f"{commit_details_section}\n\n"
                 f"Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
                 f"then call this tool again to continue the rebase.{stash_note}"
             )

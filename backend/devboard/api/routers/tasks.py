@@ -386,7 +386,7 @@ async def get_task_branch_info(
             commit_hash=entry.hash,
             author=entry.author,
             date=entry.date,
-            message=entry.message,
+            message=entry.subject,
         )
         for entry in commit_entries
     ]

@@ -30,7 +30,8 @@ class GitLogEntry:
     hash: str
     author: str
     date: str
-    message: str
+    subject: str
+    body: str | None = None
 
 
 @dataclass

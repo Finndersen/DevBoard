@@ -75,6 +75,8 @@ class BaseBranchChanges:
     files_changed: list[str]
     additions: int
     deletions: int
+    fork_point: str
+    base_head: str
 
     def format_summary(self, base_branch: str, max_files: int = 20) -> str:
         """Format a human-readable summary of the base branch changes.
@@ -86,7 +88,7 @@ class BaseBranchChanges:
         Returns:
             Formatted markdown summary of the changes
         """
-        commit_list = "\n".join(f"  - {c.hash[:7]}: {c.message}" for c in self.commits)
+        commit_list = "\n".join(f"  - {c.hash[:7]}: {c.subject}" for c in self.commits)
         file_list = "\n".join(f"  - {f}" for f in self.files_changed[:max_files])
         if len(self.files_changed) > max_files:
             file_list += f"\n  - ... and {len(self.files_changed) - max_files} more files"
@@ -543,9 +545,11 @@ class TaskGitService:
                 diff = await git.get_structured_diff(fork_point, base_head_current)
                 base_branch_changes = BaseBranchChanges(
                     commits=commits,
-                    files_changed=[f.path for f in diff.files],
+                    files_changed=[f.file_path for f in diff.files],
                     additions=diff.additions,
                     deletions=diff.deletions,
+                    fork_point=fork_point,
+                    base_head=base_head_current,
                 )
                 logfire.info(
                     f"Base branch {task.base_branch} changed since fork: {len(commits)} commits, "
