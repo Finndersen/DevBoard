@@ -4,14 +4,16 @@ from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
     get_document_repository,
+    get_mcp_server_repository,
     get_project_repository,
     get_task_repository,
 )
-from devboard.db.models import Codebase, Conversation, Document, Project, Task
+from devboard.db.models import Codebase, Conversation, Document, MCPServerConfig, Project, Task
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
+    MCPServerRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -70,3 +72,14 @@ def get_verified_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     return document
+
+
+def get_verified_mcp_server_config(
+    server_id: int,
+    mcp_server_repo: MCPServerRepository = Depends(get_mcp_server_repository),
+) -> MCPServerConfig:
+    """Get an MCP server configuration by ID, raising 404 if not found."""
+    mcp_server_config = mcp_server_repo.get_by_id(server_id)
+    if not mcp_server_config:
+        raise HTTPException(status_code=404, detail="MCP server config not found")
+    return mcp_server_config

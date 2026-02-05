@@ -23,6 +23,7 @@ from .integration import (
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
 )
+from .mcp import MCPToolInfo, VerifyResult
 from .oauth import (
     MCPServerConfigCreate,
     MCPServerConfigResponse,
@@ -135,10 +136,13 @@ __all__ = [
     "TaskResponse",
     "TaskUpdate",
     "WorkflowActionInfo",
-    # OAuth
+    # MCP
     "MCPServerConfigCreate",
     "MCPServerConfigResponse",
     "MCPServerConfigUpdate",
+    "MCPToolInfo",
+    "VerifyResult",
+    # OAuth
     "OAuthCallbackError",
     "OAuthCallbackQueryParams",
     "OAuthCallbackResponse",
