@@ -9,7 +9,9 @@ from devboard.api.schemas import (
     MCPServerConfigCreate,
     MCPServerConfigResponse,
     MCPServerConfigUpdate,
-    VerifyResult,
+    MCPServerDetailResponse,
+    MCPToolResponse,
+    MCPToolUpdate,
 )
 from devboard.db.models import MCPServerConfig
 from devboard.services.mcp_service import MCPService
@@ -25,13 +27,17 @@ async def list_mcp_servers(
     return mcp_service.get_all()
 
 
-@router.get("/{server_id}", response_model=MCPServerConfigResponse)
+@router.get("/{server_id}", response_model=MCPServerDetailResponse)
 async def get_mcp_server(
     server_id: int,
     mcp_server: MCPServerConfig = Depends(get_verified_mcp_server_config),
-) -> MCPServerConfig:
-    """Get a specific MCP server configuration."""
-    return mcp_server
+    mcp_service: MCPService = Depends(get_mcp_service),
+) -> MCPServerDetailResponse:
+    """Get a specific MCP server configuration with tools and verification status."""
+    server = mcp_service.get_server_detail(server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    return MCPServerDetailResponse.model_validate(server)
 
 
 @router.post("/", response_model=MCPServerConfigResponse)
@@ -70,11 +76,26 @@ async def delete_mcp_server(
     return DeleteResponse(message="MCP server deleted successfully", success=True)
 
 
-@router.post("/{server_id}/verify", response_model=VerifyResult)
+@router.post("/{server_id}/verify", response_model=MCPServerDetailResponse)
 async def verify_mcp_server(
     server_id: int,
     mcp_server: MCPServerConfig = Depends(get_verified_mcp_server_config),
     mcp_service: MCPService = Depends(get_mcp_service),
-) -> VerifyResult:
-    """Verify connectivity to an MCP server and list available tools."""
+) -> MCPServerDetailResponse:
+    """Verify connectivity to an MCP server, sync tools, and return server detail."""
     return await mcp_service.verify(server_id)
+
+
+@router.put("/{server_id}/tools/{tool_id}", response_model=MCPToolResponse)
+async def update_mcp_tool(
+    server_id: int,
+    tool_id: int,
+    data: MCPToolUpdate,
+    mcp_server: MCPServerConfig = Depends(get_verified_mcp_server_config),
+    mcp_service: MCPService = Depends(get_mcp_service),
+) -> MCPToolResponse:
+    """Update an MCP tool's description."""
+    tool = mcp_service.update_tool(server_id, tool_id, data)
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    return MCPToolResponse.model_validate(tool)
