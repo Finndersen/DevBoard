@@ -187,7 +187,7 @@ class TestMCPServiceVerify:
         mock_list_result.tools = [mock_tool]
         mock_session.list_tools.return_value = mock_list_result
 
-        with patch("devboard.services.mcp_service.create_mcp_lifecycle_manager") as mock_create_lifecycle:
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
             mock_lifecycle = AsyncMock()
             mock_lifecycle.__aenter__.return_value = mock_session
             mock_lifecycle.__aexit__.return_value = None
@@ -208,7 +208,7 @@ class TestMCPServiceVerify:
         """Test verification when connection fails."""
         mock_repository.get_by_id.return_value = sample_stdio_config
 
-        with patch("devboard.services.mcp_service.create_mcp_lifecycle_manager") as mock_create_lifecycle:
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
             mock_lifecycle = AsyncMock()
             mock_lifecycle.__aenter__.side_effect = ConnectionError("Failed to connect")
             mock_create_lifecycle.return_value = mock_lifecycle

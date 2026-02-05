@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import Enum, String, Text
+from sqlalchemy import JSON, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -47,15 +47,12 @@ class MCPServerConfig(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     server_type: Mapped[MCPServerType] = mapped_column(Enum(MCPServerType))
-    config_json: Mapped[str] = mapped_column(Text)  # JSON validated against Pydantic models
+    config_json: Mapped[dict] = mapped_column(JSON)
 
     @property
     def config(self) -> StdioMCPConfig | HttpMCPConfig:
-        """Parse and return the typed configuration based on server_type."""
-        import json
-
-        data = json.loads(self.config_json)
+        """Return the typed configuration based on server_type."""
         if self.server_type == MCPServerType.STDIO:
-            return StdioMCPConfig.model_validate(data)
+            return StdioMCPConfig.model_validate(self.config_json)
         else:
-            return HttpMCPConfig.model_validate(data)
+            return HttpMCPConfig.model_validate(self.config_json)

@@ -8,7 +8,7 @@ from devboard.api.schemas.mcp import MCPToolInfo, VerifyResult
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
 from devboard.db.models import MCPServerConfig
 from devboard.db.repositories.mcp_server import MCPServerRepository
-from devboard.services.mcp_lifecycle import create_mcp_lifecycle_manager
+from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 
 
 class MCPService:
@@ -30,7 +30,7 @@ class MCPService:
         config = MCPServerConfig(
             name=data.name,
             server_type=data.server_type,
-            config_json=data.config_json.model_dump_json(),
+            config_json=data.config_json.model_dump(),
         )
         return self.repository.create(config)
 
@@ -44,7 +44,7 @@ class MCPService:
         if data.server_type is not None:
             existing.server_type = data.server_type
         if data.config_json is not None:
-            existing.config_json = data.config_json.model_dump_json()
+            existing.config_json = data.config_json.model_dump()
         return self.repository.update(existing)
 
     def delete(self, server_id: int) -> bool:
@@ -58,7 +58,7 @@ class MCPService:
             return VerifyResult(success=False, error="Server not found")
 
         try:
-            lifecycle = create_mcp_lifecycle_manager(config)
+            lifecycle = MCPLifecycleManager(config)
             async with lifecycle as session:
                 result = await session.list_tools()
                 tools = [

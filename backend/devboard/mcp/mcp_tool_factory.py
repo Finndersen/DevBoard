@@ -10,7 +10,7 @@ from mcp import ClientSession
 from pydantic_ai import Tool
 
 from devboard.db.models import MCPServerConfig
-from devboard.services.mcp_lifecycle import MCPLifecycleManager, create_mcp_lifecycle_manager
+from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 
 
 class MCPToolFactory:
@@ -23,7 +23,7 @@ class MCPToolFactory:
     ):
         """Initialize the factory.
 
-        Args:
+        Arg
             server_configs: MCP server configurations to initialize.
             tool_names: Optional list of tool names to include. If None, includes all tools.
         """
@@ -35,7 +35,7 @@ class MCPToolFactory:
     async def __aenter__(self) -> "MCPToolFactory":
         """Set up MCP connections and create tool wrappers."""
         for config in self._server_configs:
-            lifecycle = create_mcp_lifecycle_manager(config)
+            lifecycle = MCPLifecycleManager(config)
             session = await lifecycle.setup()
             self._lifecycle_managers.append(lifecycle)
 

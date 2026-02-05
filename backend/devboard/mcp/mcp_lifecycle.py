@@ -9,6 +9,7 @@ import asyncio
 from typing import Any
 
 import httpx
+import logfire
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
@@ -27,18 +28,50 @@ class MCPLifecycleManager:
     e.g., setup in one tool call task, teardown later by agent context exit.
     """
 
-    def __init__(self, mcp_client_factory: Any):
-        """Initialize with an MCP client context manager factory.
+    def __init__(self, server_config: MCPServerConfig):
+        """Initialize with an MCP server configuration.
 
         Args:
-            mcp_client_factory: Return value of stdio_client() or streamable_http_client()
+            server_config: The MCP server configuration.
+
+        Raises:
+            ValueError: If the server config type is unknown.
         """
-        self._mcp_client_factory = mcp_client_factory
+        self._server_config = server_config
+        self._mcp_client_factory = self._create_client_factory()
         self._mcp_session: ClientSession | None = None
         self._teardown_event = asyncio.Event()
         self._session_initialised_event = asyncio.Event()
         self._lifecycle_task: asyncio.Task[None] | None = None
         self._lifecycle_error: Exception | None = None
+
+    @property
+    def server_name(self) -> str:
+        """Get the server name for logging."""
+        return self._server_config.name
+
+    def _create_client_factory(self) -> Any:
+        """Create the MCP client factory based on server config type."""
+        typed_config = self._server_config.config
+
+        if isinstance(typed_config, StdioMCPConfig):
+            return stdio_client(
+                StdioServerParameters(
+                    command=typed_config.command,
+                    args=typed_config.args or [],
+                    env=typed_config.env,
+                )
+            )
+
+        if isinstance(typed_config, HttpMCPConfig):
+            headers: dict[str, str] = {}
+            if typed_config.auth_type == "bearer" and typed_config.bearer_token:
+                headers["Authorization"] = f"Bearer {typed_config.bearer_token}"
+
+            http_client = httpx.AsyncClient(headers=headers) if headers else None
+            return streamable_http_client(typed_config.url, http_client=http_client)
+
+        raise ValueError(f"Unknown config type: {type(typed_config)}")
 
     @property
     def active(self) -> bool:
@@ -85,29 +118,41 @@ class MCPLifecycleManager:
             Exception: If the session fails to initialize.
         """
         if self.active:
+            logfire.debug("MCP server already active", server_name=self.server_name)
             return self._mcp_session  # type: ignore[return-value]
 
-        self._teardown_event.clear()
-        self._session_initialised_event.clear()
-        self._lifecycle_task = asyncio.create_task(self._run_lifecycle())
-        await self._session_initialised_event.wait()
+        with logfire.span("MCP server setup", server_name=self.server_name):
+            self._teardown_event.clear()
+            self._session_initialised_event.clear()
+            self._lifecycle_task = asyncio.create_task(self._run_lifecycle())
+            await self._session_initialised_event.wait()
 
-        if self._lifecycle_error:
-            raise self._lifecycle_error
+            if self._lifecycle_error:
+                logfire.error(
+                    "MCP server setup failed",
+                    server_name=self.server_name,
+                    error=str(self._lifecycle_error),
+                )
+                raise self._lifecycle_error
 
-        if not self.active:
-            if self._lifecycle_task:
-                await self._lifecycle_task
-            raise RuntimeError("MCP session failed to initialize")
+            if not self.active:
+                if self._lifecycle_task:
+                    await self._lifecycle_task
+                logfire.error("MCP server failed to initialize", server_name=self.server_name)
+                raise RuntimeError("MCP session failed to initialize")
 
-        return self._mcp_session  # type: ignore[return-value]
+            logfire.info("MCP server setup complete", server_name=self.server_name)
+            return self._mcp_session  # type: ignore[return-value]
 
     async def teardown(self) -> None:
         """Exit MCP client and session context."""
         if not self._lifecycle_task or self._lifecycle_task.done():
             return
+
+        logfire.info("MCP server teardown started", server_name=self.server_name)
         self._teardown_event.set()
         await self._lifecycle_task
+        logfire.info("MCP server teardown complete", server_name=self.server_name)
 
     async def __aenter__(self) -> ClientSession:
         """Async context manager entry."""
@@ -121,42 +166,3 @@ class MCPLifecycleManager:
     ) -> None:
         """Async context manager exit."""
         await self.teardown()
-
-
-def create_mcp_lifecycle_manager(server_config: MCPServerConfig) -> MCPLifecycleManager:
-    """Create an MCPLifecycleManager from a server configuration.
-
-    Routes to the appropriate transport (STDIO or HTTP) based on config.
-
-    Args:
-        server_config: The MCP server configuration.
-
-    Returns:
-        An MCPLifecycleManager configured for the server.
-
-    Raises:
-        ValueError: If the server type is unknown.
-    """
-    typed_config = server_config.config
-
-    if isinstance(typed_config, StdioMCPConfig):
-        mcp_client = stdio_client(
-            StdioServerParameters(
-                command=typed_config.command,
-                args=typed_config.args or [],
-                env=typed_config.env,
-            )
-        )
-        return MCPLifecycleManager(mcp_client)
-
-    elif isinstance(typed_config, HttpMCPConfig):
-        headers: dict[str, str] = {}
-        if typed_config.auth_type == "bearer" and typed_config.bearer_token:
-            headers["Authorization"] = f"Bearer {typed_config.bearer_token}"
-
-        http_client = httpx.AsyncClient(headers=headers) if headers else None
-        mcp_client = streamable_http_client(typed_config.url, http_client=http_client)
-        return MCPLifecycleManager(mcp_client)
-
-    else:
-        raise ValueError(f"Unknown config type: {type(typed_config)}")
