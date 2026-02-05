@@ -9,6 +9,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
 from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
@@ -18,6 +19,7 @@ from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ToolApprovals,
 )
+from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import DeleteResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
@@ -144,6 +146,28 @@ async def clear_conversation_messages(
         message="Cleared conversation history.",
         success=True,
     )
+
+
+@router.get("/{conversation_id}/todos", response_model=list[TodoItem])
+async def get_conversation_todos(
+    conversation: Conversation = Depends(get_verified_conversation),
+) -> list[TodoItem]:
+    """Get todo list for a Claude Code conversation.
+
+    Returns the main session's todo list for Claude Code conversations.
+    Returns empty list for non-Claude Code conversations or if no todos exist yet.
+    """
+    if conversation.engine != AgentEngine.CLAUDE_CODE:
+        return []
+
+    if not conversation.external_session_id:
+        return []
+
+    session_service = ClaudeCodeSessionService()
+    try:
+        return session_service.load_todo_list(conversation.external_session_id)
+    except FileNotFoundError:
+        return []
 
 
 @router.put("/{conversation_id}/model")

@@ -153,6 +153,7 @@ const AgentChat = ({
               onInitialMessageSent={onInitialMessageSent}
               codebaseLocalPath={codebaseLocalPath}
               isDisabled={isDisabled}
+              engine={conversation?.engine}
             />
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">

@@ -426,6 +426,17 @@ export interface ConversationResponse {
   created_at: string
 }
 
+// Todo list types for Claude Code conversations
+export type TodoStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface TodoItem {
+  content: string
+  status: TodoStatus
+  active_form: string | null
+  priority: string | null
+  id: string | null
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -604,6 +615,10 @@ export class ApiClient {
     return this.request<{ message: string; success: boolean }>(`/api/conversations/${conversationId}/messages`, {
       method: 'DELETE',
     })
+  }
+
+  async getConversationTodos(conversationId: number | string): Promise<TodoItem[]> {
+    return this.request<TodoItem[]>(`/api/conversations/${conversationId}/todos`)
   }
 
   async *streamWorkflowAction(

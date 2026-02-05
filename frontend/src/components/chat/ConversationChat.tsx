@@ -10,6 +10,7 @@ import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { createConversationApprovalKey, createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
+import TodoPanel from './TodoPanel'
 import { useUIStore } from '../../stores/uiStore'
 
 interface ConversationChatProps {
@@ -23,6 +24,7 @@ interface ConversationChatProps {
   onInitialMessageSent?: () => void
   codebaseLocalPath?: string
   isDisabled?: boolean
+  engine?: string
 }
 
 const ConversationChat = ({
@@ -35,7 +37,8 @@ const ConversationChat = ({
   initialMessage,
   onInitialMessageSent,
   codebaseLocalPath,
-  isDisabled = false
+  isDisabled = false,
+  engine
 }: ConversationChatProps) => {
   // Track conversationId changes for debugging
   const prevConversationIdRef = useRef(conversationId)
@@ -466,6 +469,9 @@ const ConversationChat = ({
 
   return (
     <div className="flex flex-col h-full">
+      {engine && (
+        <TodoPanel conversationId={conversationId} engine={engine} />
+      )}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
         <ConversationMessageList
           messages={messages}
