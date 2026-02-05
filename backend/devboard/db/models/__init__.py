@@ -10,6 +10,7 @@ from .mcp_server import (
     HttpMCPConfig,
     MCPServerConfig,
     MCPServerType,
+    MCPTool,
     StdioMCPConfig,
 )
 from .messages import ConversationMessage, MessageType
@@ -39,6 +40,7 @@ __all__ = [
     "HttpMCPConfig",
     "MCPServerConfig",
     "MCPServerType",
+    "MCPTool",
     "MergeMethod",
     "MergeStrategy",  # Deprecated alias for MergeMethod
     "MessageType",
