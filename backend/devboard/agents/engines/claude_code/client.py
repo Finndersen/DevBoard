@@ -1,6 +1,7 @@
 """Claude Code client using claude-agent-sdk for Claude Code CLI integration."""
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, TypedDict
@@ -393,23 +394,73 @@ class ClaudeClient:
             Message objects (UserMessage, AssistantMessage, SystemMessage, ResultMessage)
             as they are received from Claude Code
         """
-        with logfire.span(
-            "claude_client.stream",
-            session_id=self.session_id,
-            model=self.options.model,
-            system_prompt=self.options.system_prompt,
-        ):
-            async with ClaudeSDKClient(options=self.options) as client:
-                # Send the query
-                with logfire.span("claude_client.send_query", query=user_query):
-                    await client.query(user_query)
+        # We use a queue-based approach to decouple the SDK client lifecycle from the
+        # generator consumer. This is necessary because:
+        #
+        # 1. The ClaudeSDKClient uses anyio TaskGroups internally which enforce that
+        #    async context managers must be entered and exited in the SAME asyncio task
+        #
+        # 2. When this async generator yields, control returns to the consumer. If the
+        #    consumer stops iterating (e.g., client disconnects, request cancelled),
+        #    Python sends GeneratorExit to clean up the generator
+        #
+        # 3. This cleanup may run in a DIFFERENT task than the one that entered the
+        #    async context manager, causing: "RuntimeError: Attempted to exit cancel
+        #    scope in a different task than it was entered in"
+        #
+        # By running the SDK client in its own dedicated task (_consume_sdk), we ensure
+        # the same task always handles both __aenter__ and __aexit__, regardless of what
+        # happens to the consumer.
+        queue: asyncio.Queue[Message | BaseException | None] = asyncio.Queue()
 
-                async for message in client.receive_response():
-                    message_desc = describe_message(message)
-                    logfire.info(f"Received message: {message_desc}", message=message)
-                    await self._start_running_any_mcp_tools(message)
+        async def _consume_sdk() -> None:
+            """Background task that owns the SDK client lifecycle.
 
-                    yield message
+            This task is responsible for:
+            - Entering and exiting the ClaudeSDKClient context (same task guarantee)
+            - Receiving messages and pushing them to the queue
+            - Signaling completion or errors to the consumer via the queue
+            """
+            try:
+                with logfire.span(
+                    "claude_client.stream",
+                    session_id=self.session_id,
+                    model=self.options.model,
+                    system_prompt=self.options.system_prompt,
+                ):
+                    async with ClaudeSDKClient(options=self.options) as client:
+                        with logfire.span("claude_client.send_query", query=user_query):
+                            await client.query(user_query)
+
+                        async for message in client.receive_response():
+                            message_desc = describe_message(message)
+                            logfire.info(f"Received message: {message_desc}", message=message)
+                            await self._start_running_any_mcp_tools(message)
+                            await queue.put(message)
+            except Exception as e:
+                # Propagate exceptions to the consumer via the queue
+                await queue.put(e)
+            finally:
+                # Signal completion (None sentinel) so consumer knows to stop
+                await queue.put(None)
+
+        task = asyncio.create_task(_consume_sdk())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    # SDK task completed normally
+                    break
+                if isinstance(item, BaseException):
+                    # SDK task encountered an error - re-raise in consumer context
+                    raise item
+                yield item
+        finally:
+            # If consumer stops early (e.g., client disconnect), cancel the SDK task.
+            # The SDK task will handle its own cleanup in its own task context.
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     async def _start_running_any_mcp_tools(self, message: Message):
         # Launch concurrent tool executions if enabled

@@ -1,7 +1,6 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
 import datetime
-import re
 from collections.abc import AsyncIterator, Generator
 
 import logfire
@@ -50,8 +49,31 @@ from devboard.api.schemas.agent_conversation import (
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
-# Regex pattern to detect API 500 errors in ResultMessage
-API_500_ERROR_PATTERN = re.compile(r"API Error: 500")
+
+
+def _should_retry_error_result(result: str | None) -> bool:
+    """Check if an API error result should trigger a retry.
+
+    Retryable errors include:
+    - API 500 errors (server errors)
+    - API 400 errors with duplicate tool_use IDs
+    - API 400 errors due to tool use concurrency issues
+    """
+    if not result:
+        return False
+
+    if "API Error: 500" in result:
+        return True
+
+    if "API Error: 400" in result:
+        if "tool_use ids must be unique" in result:
+            return True
+        if "tool use concurrency issues" in result:
+            return True
+
+    return False
+
+
 CLAUDE_COMPACTION_PROMPT = "Your context window will be automatically compacted as it approaches its limit, allowing you to continue working indefinitely from where you left off. Therefore, do not stop tasks early due to token budget concerns. Always be as persistent and autonomous as possible and complete tasks fully, even if the end of your budget is approaching. Never artificially stop any task early regardless of the context remaining."
 
 
@@ -264,41 +286,41 @@ class ClaudeCodeAgent(BaseAgent):
         # Create fresh client with current system prompt, document state, and session ID
         client = await self._create_client()
 
-        # Track API 500 retry attempts separately from validation error retries
-        api_500_retry_count = 0
+        # Track API error retry attempts separately from validation error retries
+        api_error_retry_count = 0
 
         # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
             # Capture the stream generator to ensure proper cleanup on exception
             stream_generator = client.stream(user_query=current_message)
-            should_retry_api_500 = False
+            should_retry_api_error = False
             try:
                 # Stream messages from the client
                 async for message in stream_generator:
                     if isinstance(message, ResultMessage):
-                        # Check for API 500 error that should trigger retry
+                        # Check for retryable API error
                         if (
                             message.is_error
-                            and API_500_ERROR_PATTERN.search(message.result or "")
-                            and api_500_retry_count < MAX_RETRY_ATTEMPTS
+                            and _should_retry_error_result(message.result)
+                            and api_error_retry_count < MAX_RETRY_ATTEMPTS
                         ):
-                            api_500_retry_count += 1
+                            api_error_retry_count += 1
                             # Yield SystemEvent to notify about retry
                             yield SystemEvent(
                                 type=SystemEventType.API_ERROR_RETRY,
                                 data={
-                                    "attempt": api_500_retry_count,
+                                    "attempt": api_error_retry_count,
                                     "max_attempts": MAX_RETRY_ATTEMPTS,
                                     "error": message.result[:200] if message.result else "Unknown error",
                                 },
                                 timestamp=datetime.datetime.now(datetime.UTC),
                             )
                             logfire.warning(
-                                f"API 500 error detected, retrying (attempt {api_500_retry_count}/{MAX_RETRY_ATTEMPTS})",
+                                f"Retryable API error detected, retrying (attempt {api_error_retry_count}/{MAX_RETRY_ATTEMPTS})",
                                 error=message.result[:200] if message.result else None,
                             )
                             # Set flag to retry with "continue" message
-                            should_retry_api_500 = True
+                            should_retry_api_error = True
                         # ResultMessage is always last - break to check retry flag or exit loop
                         break
 
@@ -313,8 +335,8 @@ class ClaudeCodeAgent(BaseAgent):
                     for conv_event in self._convert_claude_message_to_events(message):
                         yield conv_event
 
-                # Check if we need to retry due to API 500 error
-                if should_retry_api_500:
+                # Check if we need to retry due to API error
+                if should_retry_api_error:
                     current_message = "continue"
                     continue
 
