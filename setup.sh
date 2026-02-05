@@ -34,17 +34,13 @@ check_command() {
 # Check prerequisites
 info "Checking prerequisites..."
 
-check_command python3
 check_command node
 check_command pnpm
 check_command uv
 
-# Check Python version
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-REQUIRED_VERSION="3.12"
-if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
-    error "Python $REQUIRED_VERSION+ is required, but $PYTHON_VERSION is installed"
-fi
+# Ensure uv has Python 3.12+ available (will download if needed)
+info "Ensuring Python 3.12+ is available via uv..."
+uv python install 3.12 --quiet || error "Failed to install Python 3.12 via uv"
 
 info "All prerequisites satisfied"
 
