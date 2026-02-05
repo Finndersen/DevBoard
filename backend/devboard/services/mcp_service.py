@@ -4,9 +4,11 @@ Provides business logic for managing MCP server configurations including
 CRUD operations and connectivity verification.
 """
 
-from devboard.api.schemas.mcp import MCPToolInfo, VerifyResult
+from datetime import UTC, datetime
+
+from devboard.api.schemas.mcp import MCPServerDetailResponse, MCPToolInfo, MCPToolUpdate, VerifyResult
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
-from devboard.db.models import MCPServerConfig
+from devboard.db.models import MCPServerConfig, MCPTool
 from devboard.db.repositories.mcp_server import MCPServerRepository
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 
@@ -24,6 +26,10 @@ class MCPService:
     def get_by_id(self, server_id: int) -> MCPServerConfig | None:
         """Get an MCP server configuration by ID."""
         return self.repository.get_by_id(server_id)
+
+    def get_server_detail(self, server_id: int) -> MCPServerConfig | None:
+        """Get an MCP server configuration with tools loaded."""
+        return self.repository.get_by_id_with_tools(server_id)
 
     def create(self, data: MCPServerConfigCreate) -> MCPServerConfig:
         """Create a new MCP server configuration."""
@@ -51,8 +57,88 @@ class MCPService:
         """Delete an MCP server configuration."""
         return self.repository.delete(server_id)
 
-    async def verify(self, server_id: int) -> VerifyResult:
-        """Verify connectivity to an MCP server by connecting and listing tools."""
+    def update_tool(self, server_id: int, tool_id: int, data: MCPToolUpdate) -> MCPTool | None:
+        """Update a tool's description."""
+        tool = self.repository.get_tool_by_id(tool_id)
+        if not tool or tool.server_id != server_id:
+            return None
+        if data.description is not None:
+            tool.description = data.description
+        return self.repository.update_tool(tool)
+
+    def _sync_tools(self, server: MCPServerConfig, server_tools: list[MCPToolInfo]) -> None:
+        """Sync tools from server response to database cache.
+
+        - New tools (name not in cache): Create with description and input_schema from server
+        - Existing tools (name already cached): Skip entirely - do not update any fields
+        - Stale tools (cached but not returned by server): Delete from cache
+        """
+        # Get current cached tools
+        cached_tools = self.repository.get_tools_by_server_id(server.id)
+        cached_tool_names = {tool.name for tool in cached_tools}
+        server_tool_names = {tool.name for tool in server_tools}
+
+        # Find stale tools to delete
+        stale_tool_ids = [tool.id for tool in cached_tools if tool.name not in server_tool_names]
+        if stale_tool_ids:
+            self.repository.delete_tools_by_ids(stale_tool_ids)
+
+        # Create new tools (skip existing ones entirely)
+        for server_tool in server_tools:
+            if server_tool.name not in cached_tool_names:
+                new_tool = MCPTool(
+                    server_id=server.id,
+                    name=server_tool.name,
+                    description=server_tool.description,
+                    input_schema=server_tool.input_schema,
+                )
+                self.repository.create_tool(new_tool)
+
+    async def verify(self, server_id: int) -> MCPServerDetailResponse:
+        """Verify connectivity to an MCP server, sync tools, and return server detail."""
+        config = self.repository.get_by_id(server_id)
+        if not config:
+            raise ValueError("Server not found")
+
+        now = datetime.now(UTC)
+
+        try:
+            lifecycle = MCPLifecycleManager(config)
+            async with lifecycle as session:
+                result = await session.list_tools()
+                tools = [
+                    MCPToolInfo(
+                        name=tool.name,
+                        description=tool.description,
+                        input_schema=tool.inputSchema,
+                    )
+                    for tool in result.tools
+                ]
+
+                # Sync tools to database
+                self._sync_tools(config, tools)
+
+                # Update verification status on success
+                config.last_verified_at = now
+                config.last_verified_success = True
+                config.last_verified_error = None
+                self.repository.update(config)
+
+                # Return server detail with refreshed tools
+                return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
+
+        except Exception as e:
+            # Update verification status on failure
+            config.last_verified_at = now
+            config.last_verified_success = False
+            config.last_verified_error = str(e)
+            self.repository.update(config)
+
+            # Return server detail (with existing cached tools)
+            return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
+
+    async def verify_legacy(self, server_id: int) -> VerifyResult:
+        """Verify connectivity to an MCP server (legacy response format)."""
         config = self.repository.get_by_id(server_id)
         if not config:
             return VerifyResult(success=False, error="Server not found")
