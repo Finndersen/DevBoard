@@ -4,6 +4,7 @@ import Home from '../../views/Home'
 import TaskDetail from '../../views/TaskDetail'
 import ProjectDetail from '../../views/ProjectDetail'
 import CodebaseDetail from '../../views/CodebaseDetail'
+import MCPServersView from '../../views/MCPServers'
 import Settings from '../../views/Settings'
 import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 
@@ -59,6 +60,7 @@ export default function TabContentContainer() {
             </ConversationEventHandlerProvider>
           )}
           {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
+          {tab.type === 'mcp-servers' && <MCPServersView />}
           {tab.type === 'settings' && <Settings />}
         </div>
       )

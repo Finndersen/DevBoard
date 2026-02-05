@@ -48,6 +48,11 @@ export function useURLSync() {
       return { type: 'settings', entityId: 'main', title: 'Settings' }
     }
 
+    // MCP Servers
+    if (pathname === '/mcp-servers') {
+      return { type: 'mcp-servers', entityId: 'main', title: 'MCP Servers' }
+    }
+
     return null
   }
 
@@ -98,6 +103,9 @@ export function useURLSync() {
         break
       case 'settings':
         targetPath = '/settings'
+        break
+      case 'mcp-servers':
+        targetPath = '/mcp-servers'
         break
     }
 

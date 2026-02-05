@@ -414,6 +414,56 @@ export interface UpdateConversationModelRequest {
   model_id: string | null
 }
 
+// MCP Server Configuration types
+export type MCPServerType = 'stdio' | 'http'
+
+export interface StdioMCPConfig {
+  command: string
+  args?: string[]
+  env?: Record<string, string> | null
+}
+
+export type HttpAuthType = 'none' | 'bearer' | 'oauth'
+
+export interface HttpMCPConfig {
+  url: string
+  auth_type?: HttpAuthType
+  bearer_token?: string | null
+}
+
+export type MCPConfigJson = StdioMCPConfig | HttpMCPConfig
+
+export interface MCPServerConfig {
+  id: number
+  name: string
+  server_type: MCPServerType
+  config_json: MCPConfigJson
+}
+
+export interface MCPServerConfigCreate {
+  name: string
+  server_type: MCPServerType
+  config_json: MCPConfigJson
+}
+
+export interface MCPServerConfigUpdate {
+  name?: string | null
+  server_type?: MCPServerType | null
+  config_json?: MCPConfigJson | null
+}
+
+export interface MCPToolInfo {
+  name: string
+  description: string | null
+  input_schema: Record<string, unknown> | null
+}
+
+export interface VerifyResult {
+  success: boolean
+  tools: MCPToolInfo[] | null
+  error: string | null
+}
+
 export interface ConversationResponse {
   id: number
   parent_entity_type: string
@@ -842,6 +892,41 @@ export class ApiClient {
 
   async checkoutTaskToMain(taskId: number | string): Promise<CheckoutToMainResponse> {
     return this.request<CheckoutToMainResponse>(`/api/tasks/${taskId}/checkout-to-main`, {
+      method: 'POST',
+    })
+  }
+
+  // MCP Servers
+  async listMCPServers(): Promise<MCPServerConfig[]> {
+    return this.request<MCPServerConfig[]>('/api/mcp-servers')
+  }
+
+  async getMCPServer(id: number | string): Promise<MCPServerConfig> {
+    return this.request<MCPServerConfig>(`/api/mcp-servers/${id}`)
+  }
+
+  async createMCPServer(data: MCPServerConfigCreate): Promise<MCPServerConfig> {
+    return this.request<MCPServerConfig>('/api/mcp-servers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateMCPServer(id: number | string, data: MCPServerConfigUpdate): Promise<MCPServerConfig> {
+    return this.request<MCPServerConfig>(`/api/mcp-servers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteMCPServer(id: number | string): Promise<void> {
+    return this.request<void>(`/api/mcp-servers/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async verifyMCPServer(id: number | string): Promise<VerifyResult> {
+    return this.request<VerifyResult>(`/api/mcp-servers/${id}/verify`, {
       method: 'POST',
     })
   }
