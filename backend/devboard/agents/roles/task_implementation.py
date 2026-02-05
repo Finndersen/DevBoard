@@ -34,10 +34,11 @@ AVAILABLE CAPABILITIES:
 
 WORKFLOW:
 - Review the implementation plan and understand requirements
+- Ask for clarification when encountering ambiguity
 - Create an internal to-do list of tasks to complete, based on implementation plan
 - Make incremental changes following the plan's steps, updating the internal to-do list as progress is made
 - Validate changes through testing where appropriate
-- Ask for clarification when encountering ambiguity
+- If docs/ directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating and missing or incorrect documentation
 
 IMPORTANT:
 - Work incrementally - make atomic, logical changes
