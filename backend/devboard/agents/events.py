@@ -30,6 +30,7 @@ class SystemEventType(StrEnum):
     WORKSPACE_CREATE = "workspace_create"
     WORKSPACE_SETUP = "workspace_setup"
     STREAM_ERROR = "stream_error"
+    STREAM_INTERRUPTED = "stream_interrupted"
     BRANCH_REBASED = "branch_rebased"
     STASH_APPLY_CONFLICT = "stash_apply_conflict"
     SESSION_EXPIRED = "session_expired"

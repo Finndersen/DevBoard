@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
@@ -69,6 +69,7 @@ async def get_conversation_messages(
 
 @router.post("/{conversation_id}/messages/stream")
 async def stream_conversation_message(
+    http_request: Request,
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
@@ -93,11 +94,12 @@ async def stream_conversation_message(
             task=conversation_parent, agent_stream=agent_event_stream
         )
 
-    return stream_conversation_events(agent_event_stream)
+    return stream_conversation_events(agent_event_stream, http_request)
 
 
 @router.post("/{conversation_id}/approve-tools/stream")
 async def stream_approve_conversation_tools(
+    http_request: Request,
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
@@ -122,7 +124,7 @@ async def stream_approve_conversation_tools(
             task=conversation_parent, agent_stream=agent_event_stream
         )
 
-    return stream_conversation_events(agent_event_stream)
+    return stream_conversation_events(agent_event_stream, http_request)
 
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)

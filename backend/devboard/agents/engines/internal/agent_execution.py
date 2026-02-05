@@ -1,5 +1,6 @@
 """PydanticAI agent execution service implementation."""
 
+import asyncio
 from collections.abc import AsyncIterator
 
 import logfire
@@ -73,12 +74,16 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             agent = self._get_agent(conversation_history=message_history)
 
             # Stream events from agent execution
-            async for event in agent.stream_events(message_or_approvals):
-                yield event
+            try:
+                async for event in agent.stream_events(message_or_approvals):
+                    yield event
 
-            # Persist new messages after streaming completes
-            new_messages = agent.get_new_messages()
-            self._store_new_messages(new_messages=new_messages)
+                # Persist new messages after streaming completes
+                new_messages = agent.get_new_messages()
+                self._store_new_messages(new_messages=new_messages)
+            except asyncio.CancelledError:
+                logfire.info(f"PydanticAI agent execution cancelled for conversation {self.conversation.id}")
+                raise
 
     def _get_agent(self, conversation_history: list[ModelMessage]) -> InternalAgent:
         """Create and return an agent instance.

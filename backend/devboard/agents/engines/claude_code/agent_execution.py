@@ -1,5 +1,6 @@
 """Claude Code agent execution service implementation."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -78,6 +79,9 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                         )
 
                     yield event
+            except asyncio.CancelledError:
+                logfire.info(f"Claude Code agent execution cancelled for conversation {self.conversation.id}")
+                raise
             except FileNotFoundError:
                 # Session file was cleaned up - reset session ID and notify user
                 logfire.info(
