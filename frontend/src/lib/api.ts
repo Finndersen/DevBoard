@@ -93,7 +93,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
 
-export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired'
+export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired' | 'compacting_conversation'
 
 export interface ConversationMessage {
   event_type: 'message'

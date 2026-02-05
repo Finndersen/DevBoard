@@ -27,6 +27,8 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
       return null // Don't show conversation_updated events
     case 'stream_error':
       return `Error: ${(data?.message as string) ?? 'Unknown error'}`
+    case 'compacting_conversation':
+      return 'Compacting conversation...'
     default:
       return null
   }

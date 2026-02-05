@@ -479,6 +479,21 @@ describe('ConversationMessage', () => {
       expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
     })
 
+    it('renders compacting_conversation event as system badge', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'compacting_conversation',
+        data: null,
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={systemEvent} />)
+
+      expect(screen.getByText('Compacting conversation...')).toBeInTheDocument()
+      const badge = screen.getByText('Compacting conversation...').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
+    })
+
     it('does not render unknown system event types', () => {
       const systemEvent = {
         event_type: 'system',

@@ -34,6 +34,7 @@ class SystemEventType(StrEnum):
     STASH_APPLY_CONFLICT = "stash_apply_conflict"
     SESSION_EXPIRED = "session_expired"
     API_ERROR_RETRY = "api_error_retry"
+    COMPACTING_CONVERSATION = "compacting_conversation"
 
 
 class TextMessage(BaseModel):

@@ -326,9 +326,15 @@ class ClaudeCodeAgent(BaseAgent):
 
                     if isinstance(message, SystemMessage):
                         # Set session_id from SystemMessage
-                        # TODO: Instead of doing this, convert to a SystemEvent which indicates that session_id has changed, and cna be handled in both ConversationService and frontend UI
+                        # TODO: Instead of doing this, convert to a SystemEvent which indicates that session_id has changed, and can be handled in both ConversationService and frontend UI
                         if not self.session_id:
                             self.session_id = message.data["session_id"]
+                        # Emit compaction event when conversation is being compacted
+                        if message.subtype == "status" and message.data.get("status") == "compacting":
+                            yield SystemEvent(
+                                type=SystemEventType.COMPACTING_CONVERSATION,
+                                timestamp=datetime.datetime.now(datetime.UTC),
+                            )
                         continue
 
                     # Convert normal Message events to ConversationEvent
