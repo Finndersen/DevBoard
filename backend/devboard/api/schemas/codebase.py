@@ -16,6 +16,7 @@ class CodebaseBase(BaseModel):
     merge_method: MergeMethod
     branch_handling: BranchHandling
     max_worktrees: int | None = None
+    setup_command: str | None = None
 
 
 class CodebaseCreate(BaseModel):
@@ -28,6 +29,7 @@ class CodebaseCreate(BaseModel):
     merge_method: MergeMethod | None = None  # Defaults to SQUASH
     branch_handling: BranchHandling | None = None  # Auto-determined based on repository_url if not provided
     max_worktrees: int | None = None
+    setup_command: str | None = None
 
 
 class CodebaseUpdate(BaseModel):
@@ -41,6 +43,7 @@ class CodebaseUpdate(BaseModel):
     merge_method: MergeMethod | None = None
     branch_handling: BranchHandling | None = None
     max_worktrees: int | None = None
+    setup_command: str | None = None
 
 
 class CodebaseResponse(CodebaseBase):

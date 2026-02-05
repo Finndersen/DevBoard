@@ -47,6 +47,7 @@ def sample_codebase():
     codebase.local_path = "/projects/test-repo"
     codebase.name = "Test Repo"
     codebase.max_worktrees = None  # Default: unlimited worktrees
+    codebase.setup_command = None  # No setup command by default
     return codebase
 
 
@@ -1359,3 +1360,213 @@ async def test_migrate_claude_session_if_needed_handles_file_not_found(service, 
 
         # Verify: Session migration was attempted
         mock_session_service.migrate_session_to_directory.assert_called_once()
+
+
+# =============================================================================
+# Setup Command Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_run_setup_command_success(service, mock_repos, sample_task, sample_slot, sample_codebase):
+    """Test _run_setup_command executes setup command successfully."""
+    sample_codebase.setup_command = "npm install"
+
+    with patch(
+        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+    ) as mock_exec:
+        from devboard.integrations.shell import ShellCommandResult
+
+        mock_exec.return_value = ShellCommandResult(stdout="Success", stderr="", returncode=0)
+
+        # Should not raise
+        await service._run_setup_command(sample_slot, sample_codebase, sample_task)
+
+        mock_exec.assert_called_once_with(
+            command=["bash", "-c", "npm install"],
+            working_dir=sample_slot.path,
+            timeout=300.0,
+            raise_on_error=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_setup_command_failure(service, mock_repos, sample_task, sample_slot, sample_codebase):
+    """Test _run_setup_command raises SetupCommandError on failure."""
+    from devboard.services.workspace_allocation_service import SetupCommandError
+
+    sample_codebase.setup_command = "npm install"
+
+    with patch(
+        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+    ) as mock_exec:
+        from devboard.integrations.shell import ShellCommandResult
+
+        mock_exec.return_value = ShellCommandResult(stdout="", stderr="npm ERR! code ENOENT", returncode=1)
+
+        with pytest.raises(SetupCommandError) as exc_info:
+            await service._run_setup_command(sample_slot, sample_codebase, sample_task)
+
+        assert "npm ERR! code ENOENT" in exc_info.value.message
+        assert exc_info.value.command == "npm install"
+        assert exc_info.value.returncode == 1
+
+
+@pytest.mark.asyncio
+async def test_run_setup_command_no_command_configured(service, mock_repos, sample_task, sample_slot, sample_codebase):
+    """Test _run_setup_command does nothing when no setup command is configured."""
+    sample_codebase.setup_command = None
+
+    with patch(
+        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+    ) as mock_exec:
+        # Should not raise
+        await service._run_setup_command(sample_slot, sample_codebase, sample_task)
+
+        mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_runs_setup_command(service, mock_repos, sample_task, sample_slot):
+    """Test that run_task_agent_in_workspace runs setup command after branch checkout."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Configure setup command
+    sample_task.codebase.setup_command = "npm install"
+
+    # Setup: Available slot
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+    ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+        mock_git.return_value.checkout_branch = AsyncMock()
+        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
+
+        # Setup command succeeds (returns None, no exception)
+        mock_setup.return_value = None
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: WORKSPACE_SETUP event was emitted
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
+    assert len(setup_events) == 1
+    assert setup_events[0].data["task_id"] == sample_task.id
+    assert setup_events[0].data["codebase_id"] == sample_task.codebase.id
+    assert setup_events[0].data["setup_command"] == "npm install"
+
+    # Verify: Setup command was called
+    mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_setup_failure_yields_error(service, mock_repos, sample_task, sample_slot):
+    """Test that run_task_agent_in_workspace yields error when setup fails."""
+    from devboard.services.workspace_allocation_service import SetupCommandError
+
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Configure setup command
+    sample_task.codebase.setup_command = "npm install"
+
+    # Setup: Available slot
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+    ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+        mock_git.return_value.checkout_branch = AsyncMock()
+        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
+
+        # Setup command fails by raising exception
+        mock_setup.side_effect = SetupCommandError(
+            message="npm ERR! missing package.json",
+            command="npm install",
+            returncode=1,
+        )
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: STREAM_ERROR event was emitted
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    error_events = [e for e in system_events if e.type == SystemEventType.STREAM_ERROR]
+    assert len(error_events) == 1
+    assert error_events[0].data["error_code"] == "SETUP_COMMAND_FAILED"
+    assert "npm ERR! missing package.json" in error_events[0].data["message"]
+
+    # Verify: Agent stream was NOT consumed (no message events)
+    message_events = [e for e in events if not isinstance(e, SystemEvent)]
+    assert len(message_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_skips_setup_when_not_configured(
+    service, mock_repos, sample_task, sample_slot
+):
+    """Test that run_task_agent_in_workspace skips setup when no setup command configured."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # No setup command configured
+    sample_task.codebase.setup_command = None
+
+    # Setup: Available slot
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+    ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+        mock_git.return_value.checkout_branch = AsyncMock()
+        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: No WORKSPACE_SETUP event was emitted
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
+    assert len(setup_events) == 0
+
+    # Verify: Setup command was NOT called
+    mock_setup.assert_not_called()

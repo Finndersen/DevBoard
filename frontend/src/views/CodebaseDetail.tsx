@@ -1,5 +1,5 @@
 import { useEffect, useCallback, memo, useRef, useState } from 'react'
-import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon } from '@heroicons/react/24/outline'
+import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon, CommandLineIcon } from '@heroicons/react/24/outline'
 import type { Codebase, MergeMethod, BranchHandling } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -86,6 +86,12 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
 
   const saveDefaultBranchField = useCallback(
     (value: string) => updateCodebase({ id: id!, codebase: { default_branch: value } }),
+    [updateCodebase, id]
+  )
+
+  const saveSetupCommandField = useCallback(
+    (value: string) =>
+      updateCodebase({ id: id!, codebase: { setup_command: value || null } }),
     [updateCodebase, id]
   )
 
@@ -187,6 +193,10 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   const defaultBranchField = useEditableField(
     codebase?.default_branch || '',
     saveDefaultBranchField
+  )
+  const setupCommandField = useEditableField(
+    codebase?.setup_command || '',
+    saveSetupCommandField
   )
 
   // Loading state
@@ -781,6 +791,74 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             {maxWorktreesError && <ErrorMessage message={maxWorktreesError} />}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Controls worktree slot allocation: empty = unlimited, 0 = main repo only, N = max N worktrees
+            </p>
+          </div>
+
+          {/* Setup Command */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <CommandLineIcon className="h-4 w-4" />
+              Setup Command
+            </label>
+            {setupCommandField.isEditing ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={setupCommandField.editedValue}
+                  onChange={(e) => setupCommandField.setEditedValue(e.target.value)}
+                  placeholder="e.g., npm install, pip install -e ., ./scripts/setup.sh"
+                  rows={3}
+                  className="font-mono text-sm"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={setupCommandField.save}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400"
+                    loading={setupCommandField.saving}
+                  >
+                    <CheckIcon className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    onClick={setupCommandField.cancelEditing}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                  >
+                    <XMarkIcon className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-start gap-2">
+                  {codebase.setup_command ? (
+                    <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
+                      {codebase.setup_command}
+                    </code>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic flex-1">
+                      No setup command configured
+                    </span>
+                  )}
+                  <Button
+                    onClick={setupCommandField.startEditing}
+                    variant="ghost"
+                    size="sm"
+                    className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit setup command"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {setupCommandField.error && <ErrorMessage message={setupCommandField.error} />}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Shell command to run when a workspace is allocated (e.g., install dependencies). Should be fast and idempotent.
             </p>
           </div>
         </div>

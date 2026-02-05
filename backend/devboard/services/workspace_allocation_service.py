@@ -23,8 +23,21 @@ from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
-from devboard.integrations.shell import ShellCommandExecutionError
+from devboard.integrations.shell import ShellCommandExecutionError, execute_shell_command
 from devboard.services.task_git_service import TaskGitService
+
+# Timeout for setup commands (5 minutes)
+SETUP_COMMAND_TIMEOUT = 300.0
+
+
+class SetupCommandError(Exception):
+    """Raised when a codebase setup command fails."""
+
+    def __init__(self, message: str, command: str, returncode: int | None = None):
+        super().__init__(message)
+        self.message = message
+        self.command = command
+        self.returncode = returncode
 
 
 @dataclass
@@ -531,6 +544,45 @@ class WorkspaceAllocationService:
         worktree_count = total_slots - 1 if total_slots > 0 else 0  # subtract main repo slot
         return worktree_count < max_worktrees
 
+    async def _run_setup_command(
+        self,
+        slot: WorktreeSlot,
+        codebase: Codebase,
+        task: Task,
+    ) -> None:
+        """Run the codebase setup command in the worktree slot.
+
+        Args:
+            slot: WorktreeSlot where setup will run
+            codebase: Codebase with setup_command configuration
+            task: Task for logging context
+
+        Raises:
+            SetupCommandError: If the setup command fails
+        """
+        if not codebase.setup_command:
+            return
+
+        logfire.info(f"Running setup command for task {task.id} in {slot.path}: {codebase.setup_command}")
+
+        result = await execute_shell_command(
+            command=["bash", "-c", codebase.setup_command],
+            working_dir=slot.path,
+            timeout=SETUP_COMMAND_TIMEOUT,
+            raise_on_error=False,
+        )
+
+        if not result.success:
+            error_output = result.stderr.strip() or result.stdout.strip() or "Setup command failed"
+            logfire.error(f"Setup command failed for task {task.id} (exit code {result.returncode}): {error_output}")
+            raise SetupCommandError(
+                message=error_output,
+                command=codebase.setup_command,
+                returncode=result.returncode,
+            )
+
+        logfire.info(f"Setup command completed successfully for task {task.id}")
+
     async def run_task_agent_in_workspace(
         self,
         task: Task,
@@ -621,6 +673,31 @@ class WorkspaceAllocationService:
                     data={"task_id": task.id, "branch": task.branch_name},
                     timestamp=datetime.datetime.now(datetime.UTC),
                 )
+
+            # Run setup command if configured
+            if task.codebase.setup_command:
+                yield SystemEvent(
+                    type=SystemEventType.WORKSPACE_SETUP,
+                    data={
+                        "task_id": task.id,
+                        "codebase_id": task.codebase.id,
+                        "setup_command": task.codebase.setup_command,
+                    },
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+
+                try:
+                    await self._run_setup_command(slot, task.codebase, task)
+                except SetupCommandError as e:
+                    yield SystemEvent(
+                        type=SystemEventType.STREAM_ERROR,
+                        data={
+                            "error_code": "SETUP_COMMAND_FAILED",
+                            "message": f"Workspace setup command failed: {e.message}",
+                        },
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    )
+                    return
 
             # Yield the workspace path for use
             logfire.info(f"Allocated workspace {slot.path} for task {task.id}")

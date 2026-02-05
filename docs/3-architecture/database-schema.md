@@ -46,7 +46,14 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 
 **Purpose**: Local or remote code repositories
 
-**Key Fields**: `id`, `name`, `description`, `local_path`, `repository_url`, `created_at`
+**Key Fields**: `id`, `name`, `description`, `local_path`, `repository_url`, `default_branch`, `merge_method`, `branch_handling`, `max_worktrees`, `setup_command`, `created_at`
+
+**Configuration Fields**:
+- `default_branch`: Base branch for task branches (e.g., "origin/main")
+- `merge_method`: How commits are combined during merge (squash, rebase, merge_commit)
+- `branch_handling`: Where feature branches are finalized (local_merge, github_pr, manual)
+- `max_worktrees`: Maximum worktree slots (null = unlimited, 0 = main repo only)
+- `setup_command`: Shell command to run when workspace is allocated (e.g., "npm install")
 
 **Relationships**:
 - `projects`: Many-to-many with Project

@@ -28,6 +28,7 @@ class SystemEventType(StrEnum):
     WORKSPACE_ALLOCATE = "workspace_allocate"
     WORKSPACE_BRANCH_CHECKOUT = "workspace_branch_checkout"
     WORKSPACE_CREATE = "workspace_create"
+    WORKSPACE_SETUP = "workspace_setup"
     STREAM_ERROR = "stream_error"
     BRANCH_REBASED = "branch_rebased"
     STASH_APPLY_CONFLICT = "stash_apply_conflict"

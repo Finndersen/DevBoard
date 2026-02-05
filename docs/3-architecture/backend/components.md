@@ -88,6 +88,12 @@ Manages worktree slot allocation for task implementation. Handles intelligent sl
 
 **Session Migration**: Automatically migrates Claude Code sessions when task moves between directories.
 
+**Workspace Setup**: When a codebase has a `setup_command` configured:
+1. After branch checkout, before agent execution begins
+2. Emits `WORKSPACE_SETUP` system event to show progress
+3. Runs setup command in worktree directory (5 minute timeout)
+4. On failure, emits `STREAM_ERROR` and aborts agent execution
+
 ### Task Git Service
 
 **File**: `task_git_service.py`
