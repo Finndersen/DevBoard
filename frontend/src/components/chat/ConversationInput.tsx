@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { PaperAirplaneIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, StopIcon } from '@heroicons/react/24/outline'
 import { standardChatInputClasses } from '../../styles/inputStyles'
 
 const MAX_TEXTAREA_ROWS = 10
@@ -8,12 +8,16 @@ interface ConversationInputProps {
   onSendMessage: (text: string) => void
   disabled?: boolean
   placeholder?: string
+  isStreaming?: boolean
+  onStopStream?: () => void
 }
 
 export default function ConversationInput({
   onSendMessage,
   disabled = false,
-  placeholder = "Ask a question..."
+  placeholder = "Ask a question...",
+  isStreaming = false,
+  onStopStream
 }: ConversationInputProps) {
   const [newMessage, setNewMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -111,14 +115,25 @@ export default function ConversationInput({
         className={`flex-1 resize-none overflow-y-auto ${standardChatInputClasses}`}
         rows={1}
       />
-      <button
-        type="submit"
-        disabled={isButtonDisabled}
-        aria-label="Send message"
-        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-      >
-        <PaperAirplaneIcon className="w-4 h-4" />
-      </button>
+      {isStreaming && onStopStream ? (
+        <button
+          type="button"
+          onClick={onStopStream}
+          aria-label="Stop streaming"
+          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 flex-shrink-0"
+        >
+          <StopIcon className="w-4 h-4" />
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={isButtonDisabled}
+          aria-label="Send message"
+          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          <PaperAirplaneIcon className="w-4 h-4" />
+        </button>
+      )}
     </form>
   )
 }

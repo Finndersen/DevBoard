@@ -283,8 +283,10 @@ describe('ConversationChat', () => {
     await user.type(input, 'Test message')
     await user.click(sendButton)
 
-    // Send button should be disabled during loading (empty input after submit)
-    expect(sendButton).toBeDisabled()
+    // Stop button should appear during streaming (replaces send button)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop streaming/i })).toBeInTheDocument()
+    })
 
     // Should show user message immediately (may be in pending state)
     await waitFor(() => {
@@ -292,9 +294,10 @@ describe('ConversationChat', () => {
       expect(messages.length).toBeGreaterThan(0)
     })
 
-    // Wait for response and button to be enabled again
+    // Wait for response and send button to reappear
     await waitFor(() => {
       expect(screen.getByText('AI response')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 

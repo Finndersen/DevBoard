@@ -545,6 +545,8 @@ const ConversationChat = ({
               onSendMessage={handleSendMessage}
               disabled={isInputDisabled}
               placeholder={placeholder}
+              isStreaming={isStreaming}
+              onStopStream={() => stopStream(conversationId)}
             />
 
             {pendingApprovals.length > 0 && (
