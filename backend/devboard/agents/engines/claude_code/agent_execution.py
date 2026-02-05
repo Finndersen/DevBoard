@@ -68,6 +68,14 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                         )
                         self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
                         self.conversation_repo.commit()
+                        yield SystemEvent(
+                            type=SystemEventType.CONVERSATION_UPDATED,
+                            data={
+                                "conversation_id": self.conversation.id,
+                                "updated_fields": {"external_session_id": agent.session_id},
+                            },
+                            timestamp=datetime.now(UTC),
+                        )
 
                     yield event
             except FileNotFoundError:

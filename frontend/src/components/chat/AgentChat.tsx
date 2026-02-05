@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import ConversationChat from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
@@ -13,6 +13,8 @@ import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { useApprovalActions } from '../../stores/approvalsStore'
 import { createConversationPendingKey, createConversationApprovalKey } from '../../utils/approvalKeys'
 import { useModal, useAsyncOperation } from '../../hooks'
+import { useSystemEventHandler } from '../../hooks/useConversationEventHandlers'
+import type { SystemEvent } from '../../lib/api'
 import { formatAgentRoleDisplayName } from '../../utils/agentRoles'
 
 interface AgentChatProps {
@@ -52,6 +54,25 @@ const AgentChat = ({
   const sessionIdModal = useModal()
   const { clearConversationMessages } = usePendingMessages()
   const { clearApprovals } = useApprovalActions()
+
+  // Handle session ID updates from system events
+  const sessionEventHandler = useCallback((event: SystemEvent) => {
+    // Handle session_expired - clear session ID
+    if (event.type === 'session_expired') {
+      setConversation(prev => prev ? { ...prev, external_session_id: null } : null)
+      return
+    }
+
+    // Handle conversation_updated with external_session_id change
+    if (event.type === 'conversation_updated' &&
+        event.data?.conversation_id === conversationId &&
+        'external_session_id' in (event.data?.updated_fields ?? {})) {
+      const newSessionId = event.data?.updated_fields?.external_session_id
+      setConversation(prev => prev ? { ...prev, external_session_id: newSessionId } : null)
+    }
+  }, [conversationId])
+
+  useSystemEventHandler(sessionEventHandler)
 
   // Fetch conversation details to get agent role
   useEffect(() => {
