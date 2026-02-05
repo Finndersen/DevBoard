@@ -118,6 +118,9 @@ class MCPService:
                 # Sync tools to database
                 self._sync_tools(config, tools)
 
+                # Expire config to force fresh load of tools relationship
+                self.repository.expire(config)
+
                 # Update verification status on success
                 config.last_verified_at = now
                 config.last_verified_success = True

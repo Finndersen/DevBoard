@@ -6,6 +6,22 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Parse arguments
+SKIP_MIGRATIONS=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-migrations)
+            SKIP_MIGRATIONS=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--skip-migrations]"
+            exit 1
+            ;;
+    esac
+done
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -38,10 +54,6 @@ check_command node
 check_command pnpm
 check_command uv
 
-# Ensure uv has Python 3.12+ available (will download if needed)
-info "Ensuring Python 3.12+ is available via uv..."
-uv python install 3.12 --quiet || error "Failed to install Python 3.12 via uv"
-
 info "All prerequisites satisfied"
 
 # Backend setup
@@ -51,8 +63,12 @@ cd "$SCRIPT_DIR/backend"
 info "Installing backend dependencies..."
 make install
 
-info "Running database migrations..."
-make migrate
+if [ "$SKIP_MIGRATIONS" = false ]; then
+    info "Running database migrations..."
+    make migrate
+else
+    warn "Skipping database migrations (--skip-migrations flag set)"
+fi
 
 info "Backend setup complete"
 

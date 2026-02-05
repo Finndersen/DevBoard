@@ -73,3 +73,7 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
             self.db.delete(tool)
         self.db.flush()
         return len(tools)
+
+    def expire(self, config: MCPServerConfig) -> None:
+        """Expire cached state to force fresh load from database."""
+        self.db.expire(config)

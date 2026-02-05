@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   PencilIcon,
   TrashIcon,
@@ -6,9 +6,7 @@ import {
   CheckIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon
+  ChevronDownIcon
 } from '@heroicons/react/24/outline'
 import { Button, ConfirmDialog } from '../ui'
 import { textColors } from '../../styles/designSystem'
@@ -25,10 +23,172 @@ interface MCPServerDetailProps {
   verifying: boolean
 }
 
-function formatDateTime(isoString: string | null): string {
-  if (!isoString) return 'Never'
+interface JsonSchemaProperty {
+  type?: string
+  description?: string
+  enum?: unknown[]
+  items?: { type?: string }
+}
+
+interface JsonSchema {
+  type?: string
+  properties?: Record<string, JsonSchemaProperty>
+  required?: string[]
+}
+
+function formatRelativeTime(isoString: string): string {
   const date = new Date(isoString)
-  return date.toLocaleString()
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffSecs = Math.floor(diffMs / 1000)
+  const diffMins = Math.floor(diffSecs / 60)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffSecs < 60) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
+function formatParameterType(prop: JsonSchemaProperty): string {
+  if (prop.enum) return 'enum'
+  if (prop.type === 'array' && prop.items?.type) return `${prop.items.type}[]`
+  return prop.type || 'any'
+}
+
+function ToolParameterList({ inputSchema }: { inputSchema: Record<string, unknown> | null }) {
+  if (!inputSchema) {
+    return <p className={`text-xs ${textColors.secondary} italic`}>No schema available</p>
+  }
+
+  const schema = inputSchema as JsonSchema
+  const properties = schema.properties || {}
+  const required = new Set(schema.required || [])
+  const entries = Object.entries(properties)
+
+  if (entries.length === 0) {
+    return <p className={`text-xs ${textColors.secondary} italic`}>No parameters</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      {entries.map(([name, prop]) => (
+        <div key={name} className="text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{name}</span>
+            <span className="text-gray-500 dark:text-gray-400">{formatParameterType(prop)}</span>
+            {required.has(name) ? (
+              <span className="text-red-500 dark:text-red-400 text-[10px]">required</span>
+            ) : (
+              <span className="text-gray-400 dark:text-gray-500 text-[10px]">optional</span>
+            )}
+          </div>
+          {prop.description && (
+            <p className="text-gray-500 dark:text-gray-400 mt-0.5 pl-2">{prop.description}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ToolParameterPopover({
+  tool,
+  isOpen,
+  onToggle
+}: {
+  tool: MCPTool
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        onToggle()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen, onToggle])
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        onClick={onToggle}
+        className={`text-xs flex items-center gap-0.5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors ${textColors.secondary}`}
+      >
+        {tool.parameter_count} param{tool.parameter_count !== 1 ? 's' : ''}
+        <ChevronDownIcon className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div
+          ref={popoverRef}
+          className="absolute right-0 top-full mt-1 z-10 w-72 max-h-64 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3"
+        >
+          <ToolParameterList inputSchema={tool.input_schema} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScrollableToolList({ children }: { children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [showTopGradient, setShowTopGradient] = useState(false)
+  const [showBottomGradient, setShowBottomGradient] = useState(false)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    function updateGradients() {
+      if (!container) return
+      const { scrollTop, scrollHeight, clientHeight } = container
+      setShowTopGradient(scrollTop > 0)
+      setShowBottomGradient(scrollTop + clientHeight < scrollHeight - 1)
+    }
+
+    updateGradients()
+    container.addEventListener('scroll', updateGradients)
+    const resizeObserver = new ResizeObserver(updateGradients)
+    resizeObserver.observe(container)
+
+    return () => {
+      container.removeEventListener('scroll', updateGradients)
+      resizeObserver.disconnect()
+    }
+  }, [children])
+
+  return (
+    <div className="relative">
+      {showTopGradient && (
+        <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-white dark:from-gray-900 to-transparent pointer-events-none z-10" />
+      )}
+      <div
+        ref={containerRef}
+        className="space-y-2 max-h-[32rem] overflow-y-auto"
+      >
+        {children}
+      </div>
+      {showBottomGradient && (
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none z-10" />
+      )}
+    </div>
+  )
 }
 
 function ToolDescriptionEditor({
@@ -105,6 +265,71 @@ function ToolDescriptionEditor({
   )
 }
 
+function ToolCard({
+  tool,
+  serverId,
+  onToolUpdate
+}: {
+  tool: MCPTool
+  serverId: number
+  onToolUpdate: (tool: MCPTool) => void
+}) {
+  const [showParams, setShowParams] = useState(false)
+
+  return (
+    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between">
+        <h4 className={`font-mono font-medium ${textColors.primary}`}>
+          {tool.name}
+        </h4>
+        <ToolParameterPopover
+          tool={tool}
+          isOpen={showParams}
+          onToggle={() => setShowParams(!showParams)}
+        />
+      </div>
+      <ToolDescriptionEditor
+        tool={tool}
+        serverId={serverId}
+        onUpdate={onToolUpdate}
+      />
+    </div>
+  )
+}
+
+function VerificationStatusIndicator({ server }: { server: MCPServerDetailType }) {
+  if (!server.last_verified_at) {
+    return (
+      <span className={`text-xs ${textColors.secondary}`}>
+        Not verified
+      </span>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {server.last_verified_success ? (
+        <>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-xs text-green-600 dark:text-green-400 font-medium">Connected</span>
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="text-xs text-red-600 dark:text-red-400 font-medium">Failed</span>
+          </span>
+        </>
+      )}
+      <span className={`text-xs ${textColors.secondary}`}>
+        {formatRelativeTime(server.last_verified_at)}
+      </span>
+    </div>
+  )
+}
+
 export function MCPServerDetail({
   server,
   onEdit,
@@ -117,12 +342,15 @@ export function MCPServerDetail({
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header with server info and actions */}
+      {/* Header with server info, status, and actions */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className={`text-xl font-semibold ${textColors.primary}`}>
-            {server.name}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className={`text-xl font-semibold ${textColors.primary}`}>
+              {server.name}
+            </h2>
+            <VerificationStatusIndicator server={server} />
+          </div>
           <p className={`text-sm ${textColors.secondary} mt-1`}>
             Type: <span className="font-mono uppercase">{server.server_type}</span>
           </p>
@@ -167,42 +395,14 @@ export function MCPServerDetail({
         </div>
       </div>
 
-      {/* Verification status */}
-      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <h3 className={`text-sm font-medium ${textColors.primary} mb-2`}>
-          Verification Status
-        </h3>
-        {server.last_verified_at ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              {server.last_verified_success ? (
-                <>
-                  <CheckCircleIcon className="w-5 h-5 text-green-500" />
-                  <span className="text-green-600 dark:text-green-400 font-medium">Connected</span>
-                </>
-              ) : (
-                <>
-                  <XCircleIcon className="w-5 h-5 text-red-500" />
-                  <span className="text-red-600 dark:text-red-400 font-medium">Failed</span>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <ClockIcon className="w-4 h-4" />
-              <span>Last verified: {formatDateTime(server.last_verified_at)}</span>
-            </div>
-            {server.last_verified_error && (
-              <p className="text-sm text-red-600 dark:text-red-400 font-mono bg-red-50 dark:bg-red-900/20 p-2 rounded">
-                {server.last_verified_error}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className={`text-sm ${textColors.secondary}`}>
-            Not yet verified. Click Verify to fetch tools.
+      {/* Error message (only shown on failure) */}
+      {server.last_verified_error && (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <p className="text-sm text-red-600 dark:text-red-400 font-mono">
+            {server.last_verified_error}
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Tools list */}
       <div>
@@ -221,28 +421,16 @@ export function MCPServerDetail({
             </p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <ScrollableToolList>
             {server.tools.map(tool => (
-              <div
+              <ToolCard
                 key={tool.id}
-                className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className={`font-mono font-medium ${textColors.primary}`}>
-                    {tool.name}
-                  </h4>
-                  <span className={`text-xs ${textColors.secondary}`}>
-                    {tool.parameter_count} parameter{tool.parameter_count !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <ToolDescriptionEditor
-                  tool={tool}
-                  serverId={server.id}
-                  onUpdate={onToolUpdate}
-                />
-              </div>
+                tool={tool}
+                serverId={server.id}
+                onToolUpdate={onToolUpdate}
+              />
             ))}
-          </div>
+          </ScrollableToolList>
         )}
       </div>
 
