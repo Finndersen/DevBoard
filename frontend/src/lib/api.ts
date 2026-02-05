@@ -459,6 +459,29 @@ export interface MCPToolInfo {
   input_schema: Record<string, unknown> | null
 }
 
+export interface MCPTool {
+  id: number
+  name: string
+  description: string | null
+  input_schema: Record<string, unknown> | null
+  parameter_count: number
+}
+
+export interface MCPToolUpdate {
+  description: string | null
+}
+
+export interface MCPServerDetail {
+  id: number
+  name: string
+  server_type: MCPServerType
+  config_json: MCPConfigJson
+  last_verified_at: string | null
+  last_verified_success: boolean | null
+  last_verified_error: string | null
+  tools: MCPTool[]
+}
+
 export interface VerifyResult {
   success: boolean
   tools: MCPToolInfo[] | null
@@ -902,8 +925,8 @@ export class ApiClient {
     return this.request<MCPServerConfig[]>('/api/mcp-servers')
   }
 
-  async getMCPServer(id: number | string): Promise<MCPServerConfig> {
-    return this.request<MCPServerConfig>(`/api/mcp-servers/${id}`)
+  async getMCPServerDetail(id: number | string): Promise<MCPServerDetail> {
+    return this.request<MCPServerDetail>(`/api/mcp-servers/${id}`)
   }
 
   async createMCPServer(data: MCPServerConfigCreate): Promise<MCPServerConfig> {
@@ -926,9 +949,16 @@ export class ApiClient {
     })
   }
 
-  async verifyMCPServer(id: number | string): Promise<VerifyResult> {
-    return this.request<VerifyResult>(`/api/mcp-servers/${id}/verify`, {
+  async verifyMCPServer(id: number | string): Promise<MCPServerDetail> {
+    return this.request<MCPServerDetail>(`/api/mcp-servers/${id}/verify`, {
       method: 'POST',
+    })
+  }
+
+  async updateMCPTool(serverId: number | string, toolId: number | string, data: MCPToolUpdate): Promise<MCPTool> {
+    return this.request<MCPTool>(`/api/mcp-servers/${serverId}/tools/${toolId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     })
   }
 }
