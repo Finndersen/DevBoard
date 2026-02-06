@@ -1,5 +1,6 @@
 """Tests for task query tools."""
 
+import json
 from datetime import UTC, datetime
 from unittest.mock import Mock
 
@@ -440,7 +441,7 @@ class TestCreateCreateTaskTool:
 
     @pytest.mark.asyncio
     async def test_create_task_basic(self, mock_project, mock_task_service, mock_task):
-        """Creates a task with required fields."""
+        """Creates a task with required fields and returns JSON."""
         mock_task_service.create_task.return_value = mock_task
         mock_task.branch_name = "feature/implement-feature-x"
         mock_task.base_branch = "main"
@@ -461,13 +462,19 @@ class TestCreateCreateTaskTool:
             branch_name=None,
             custom_fields=None,
         )
-        assert "Task created successfully" in result
-        assert "**Task #1:**" in result
-        assert "Implement feature X" in result
+        result_data = json.loads(result)
+        assert result_data == {
+            "task_id": 1,
+            "title": "Implement feature X",
+            "status": "planning",
+            "branch_name": "feature/implement-feature-x",
+            "base_branch": "main",
+            "codebase_name": "backend",
+        }
 
     @pytest.mark.asyncio
     async def test_create_task_with_all_options(self, mock_project, mock_task_service, mock_codebase, mock_task):
-        """Creates a task with all optional fields."""
+        """Creates a task with all optional fields and returns JSON."""
         mock_codebase.default_branch = "develop"
         mock_task_service.create_task.return_value = mock_task
         mock_task.branch_name = "feature/my-branch"
@@ -494,7 +501,10 @@ class TestCreateCreateTaskTool:
             branch_name="feature/my-branch",
             custom_fields={"priority": "high"},
         )
-        assert "Task created successfully" in result
+        result_data = json.loads(result)
+        assert result_data["task_id"] == 1
+        assert result_data["branch_name"] == "feature/my-branch"
+        assert result_data["codebase_name"] == "backend"
 
     @pytest.mark.asyncio
     async def test_create_task_codebase_not_found(self, mock_project, mock_task_service):

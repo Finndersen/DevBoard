@@ -1,5 +1,6 @@
 """Tools for querying and creating tasks within a project."""
 
+import json
 from datetime import datetime
 from itertools import groupby
 from typing import Any, Literal
@@ -271,12 +272,15 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
                 branch_name=branch_name,
                 custom_fields=custom_fields,
             )
-            return (
-                f"✓ Task created successfully!\n\n"
-                f"**Task #{task.id}:** {task.title}\n"
-                f"**Status:** {task.status.value}\n"
-                f"**Branch:** {task.branch_name}\n"
-                f"**Base Branch:** {task.base_branch}"
+            return json.dumps(
+                {
+                    "task_id": task.id,
+                    "title": task.title,
+                    "status": task.status.value,
+                    "branch_name": task.branch_name,
+                    "base_branch": task.base_branch,
+                    "codebase_name": codebase.name,
+                }
             )
         except Exception as e:
             raise ModelRetry(f"Failed to create task: {e}") from e
