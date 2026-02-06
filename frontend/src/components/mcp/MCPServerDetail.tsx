@@ -13,6 +13,7 @@ import { textColors } from '../../styles/designSystem'
 import { useEditableField } from '../../hooks/useEditableField'
 import { apiClient } from '../../lib/api'
 import type { MCPServerDetail as MCPServerDetailType, MCPTool } from '../../lib/api'
+import { ToolTestModal } from './ToolTestModal'
 
 interface MCPServerDetailProps {
   server: MCPServerDetailType
@@ -268,16 +269,21 @@ function ToolDescriptionEditor({
 function ToolCard({
   tool,
   serverId,
-  onToolUpdate
+  onToolUpdate,
+  onSelect
 }: {
   tool: MCPTool
   serverId: number
   onToolUpdate: (tool: MCPTool) => void
+  onSelect: () => void
 }) {
   const [showParams, setShowParams] = useState(false)
 
   return (
-    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div
+      className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+      onClick={onSelect}
+    >
       <div className="flex items-center justify-between">
         <h4 className={`font-mono font-medium ${textColors.primary}`}>
           {tool.name}
@@ -339,6 +345,7 @@ export function MCPServerDetail({
   verifying
 }: MCPServerDetailProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null)
 
   return (
     <div className="p-6 space-y-6">
@@ -428,6 +435,7 @@ export function MCPServerDetail({
                 tool={tool}
                 serverId={server.id}
                 onToolUpdate={onToolUpdate}
+                onSelect={() => setSelectedTool(tool)}
               />
             ))}
           </ScrollableToolList>
@@ -443,6 +451,15 @@ export function MCPServerDetail({
         confirmText="Delete"
         variant="danger"
       />
+
+      {selectedTool && (
+        <ToolTestModal
+          isOpen={true}
+          onClose={() => setSelectedTool(null)}
+          tool={selectedTool}
+          serverId={server.id}
+        />
+      )}
     </div>
   )
 }

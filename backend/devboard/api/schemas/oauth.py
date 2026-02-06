@@ -30,6 +30,9 @@ class MCPServerConfigResponse(BaseModel):
     name: str
     server_type: MCPServerType
     config_json: StdioMCPConfig | HttpMCPConfig
+    last_verified_at: str | None = None
+    last_verified_success: bool | None = None
+    last_verified_error: str | None = None
 
     model_config = {"from_attributes": True}
 

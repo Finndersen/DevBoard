@@ -23,7 +23,15 @@ from .integration import (
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
 )
-from .mcp import MCPServerDetailResponse, MCPToolInfo, MCPToolResponse, MCPToolUpdate, VerifyResult
+from .mcp import (
+    MCPServerDetailResponse,
+    MCPToolInfo,
+    MCPToolResponse,
+    MCPToolRunRequest,
+    MCPToolRunResponse,
+    MCPToolUpdate,
+    VerifyResult,
+)
 from .oauth import (
     MCPServerConfigCreate,
     MCPServerConfigResponse,
@@ -143,6 +151,8 @@ __all__ = [
     "MCPServerDetailResponse",
     "MCPToolInfo",
     "MCPToolResponse",
+    "MCPToolRunRequest",
+    "MCPToolRunResponse",
     "MCPToolUpdate",
     "VerifyResult",
     # OAuth

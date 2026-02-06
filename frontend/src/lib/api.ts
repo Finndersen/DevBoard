@@ -439,6 +439,9 @@ export interface MCPServerConfig {
   name: string
   server_type: MCPServerType
   config_json: MCPConfigJson
+  last_verified_at: string | null
+  last_verified_success: boolean | null
+  last_verified_error: string | null
 }
 
 export interface MCPServerConfigCreate {
@@ -486,6 +489,16 @@ export interface VerifyResult {
   success: boolean
   tools: MCPToolInfo[] | null
   error: string | null
+}
+
+export interface MCPToolRunRequest {
+  arguments?: Record<string, unknown>
+}
+
+export interface MCPToolRunResponse {
+  success: boolean
+  result?: string
+  error?: string
 }
 
 export interface ConversationResponse {
@@ -958,6 +971,13 @@ export class ApiClient {
   async updateMCPTool(serverId: number | string, toolId: number | string, data: MCPToolUpdate): Promise<MCPTool> {
     return this.request<MCPTool>(`/api/mcp-servers/${serverId}/tools/${toolId}`, {
       method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async runMCPTool(serverId: number | string, toolId: number | string, data: MCPToolRunRequest): Promise<MCPToolRunResponse> {
+    return this.request<MCPToolRunResponse>(`/api/mcp-servers/${serverId}/tools/${toolId}/run`, {
+      method: 'POST',
       body: JSON.stringify(data),
     })
   }

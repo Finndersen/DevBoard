@@ -5,8 +5,14 @@ CRUD operations and connectivity verification.
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
-from devboard.api.schemas.mcp import MCPServerDetailResponse, MCPToolInfo, MCPToolUpdate, VerifyResult
+from devboard.api.schemas.mcp import (
+    MCPServerDetailResponse,
+    MCPToolInfo,
+    MCPToolUpdate,
+    VerifyResult,
+)
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
 from devboard.db.models import MCPServerConfig, MCPTool
 from devboard.db.repositories.mcp_server import MCPServerRepository
@@ -161,3 +167,29 @@ class MCPService:
                 return VerifyResult(success=True, tools=tools)
         except Exception as e:
             return VerifyResult(success=False, error=str(e))
+
+    async def run_tool(self, server_id: int, tool_id: int, arguments: dict[str, Any] | None) -> str:
+        """Execute an MCP tool with provided arguments.
+
+        Returns the tool result as text.
+        Raises ValueError if server or tool not found.
+        """
+        config = self.repository.get_by_id(server_id)
+        if not config:
+            raise ValueError("Server not found")
+
+        tool = self.repository.get_tool_by_id(tool_id)
+        if not tool or tool.server_id != server_id:
+            raise ValueError("Tool not found")
+
+        lifecycle = MCPLifecycleManager(config)
+        async with lifecycle as session:
+            result = await session.call_tool(tool.name, arguments=arguments or {})
+            # Extract text content from result
+            if result.content:
+                text_parts: list[str] = []
+                for content in result.content:
+                    if hasattr(content, "text"):
+                        text_parts.append(content.text)  # type: ignore[union-attr]
+                return "\n".join(text_parts)
+            return ""

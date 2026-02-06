@@ -11,6 +11,8 @@ from devboard.api.schemas import (
     MCPServerConfigUpdate,
     MCPServerDetailResponse,
     MCPToolResponse,
+    MCPToolRunRequest,
+    MCPToolRunResponse,
     MCPToolUpdate,
 )
 from devboard.db.models import MCPServerConfig
@@ -99,3 +101,21 @@ async def update_mcp_tool(
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
     return MCPToolResponse.model_validate(tool)
+
+
+@router.post("/{server_id}/tools/{tool_id}/run", response_model=MCPToolRunResponse)
+async def run_mcp_tool(
+    server_id: int,
+    tool_id: int,
+    data: MCPToolRunRequest,
+    mcp_server: MCPServerConfig = Depends(get_verified_mcp_server_config),
+    mcp_service: MCPService = Depends(get_mcp_service),
+) -> MCPToolRunResponse:
+    """Execute an MCP tool with provided arguments."""
+    try:
+        result = await mcp_service.run_tool(server_id, tool_id, data.arguments)
+        return MCPToolRunResponse(success=True, result=result)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        return MCPToolRunResponse(success=False, error=str(e))

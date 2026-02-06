@@ -62,3 +62,17 @@ class VerifyResult(BaseModel):
     success: bool
     tools: list[MCPToolInfo] | None = None
     error: str | None = None
+
+
+class MCPToolRunRequest(BaseModel):
+    """Request schema for running an MCP tool."""
+
+    arguments: dict[str, Any] | None = None
+
+
+class MCPToolRunResponse(BaseModel):
+    """Response schema for MCP tool execution result."""
+
+    success: bool
+    result: str | None = None
+    error: str | None = None

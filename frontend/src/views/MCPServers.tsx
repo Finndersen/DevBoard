@@ -96,7 +96,12 @@ export default function MCPServersView() {
       setServerDetail(result)
       // Update server in list with new verification status
       setServers(prev => prev.map(s =>
-        s.id === result.id ? { ...s, last_verified_success: result.last_verified_success } as MCPServerConfig : s
+        s.id === result.id ? {
+          ...s,
+          last_verified_at: result.last_verified_at,
+          last_verified_success: result.last_verified_success,
+          last_verified_error: result.last_verified_error
+        } : s
       ))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed')
@@ -114,6 +119,7 @@ export default function MCPServersView() {
   }
 
   const handleFormSubmit = async (data: MCPServerConfig) => {
+    const isNewServer = !editingServer
     if (editingServer) {
       setServers(prev => prev.map(s => s.id === data.id ? data : s))
       // Refresh detail if this is the selected server
@@ -126,6 +132,27 @@ export default function MCPServersView() {
     }
     setIsFormOpen(false)
     setEditingServer(null)
+
+    // Auto-verify new servers to populate tools list
+    if (isNewServer) {
+      try {
+        setVerifying(true)
+        const result = await apiClient.verifyMCPServer(data.id)
+        setServerDetail(result)
+        setServers(prev => prev.map(s =>
+          s.id === result.id ? {
+            ...s,
+            last_verified_at: result.last_verified_at,
+            last_verified_success: result.last_verified_success,
+            last_verified_error: result.last_verified_error
+          } : s
+        ))
+      } catch {
+        // Verification failure is not critical - user can retry manually
+      } finally {
+        setVerifying(false)
+      }
+    }
   }
 
   const handleFormClose = () => {

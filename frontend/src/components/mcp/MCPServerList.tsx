@@ -8,12 +8,10 @@ interface MCPServerListProps {
   onSelect: (server: MCPServerConfig) => void
 }
 
-function getStatusIndicator(server: MCPServerConfig & { last_verified_success?: boolean | null }) {
-  const verifiedSuccess = 'last_verified_success' in server ? server.last_verified_success : null
-
-  if (verifiedSuccess === true) {
+function getStatusIndicator(server: MCPServerConfig) {
+  if (server.last_verified_success === true) {
     return <span className="w-2 h-2 rounded-full bg-green-500" title="Verified" />
-  } else if (verifiedSuccess === false) {
+  } else if (server.last_verified_success === false) {
     return <span className="w-2 h-2 rounded-full bg-red-500" title="Verification failed" />
   }
   return <span className="w-2 h-2 rounded-full bg-gray-400" title="Not verified" />

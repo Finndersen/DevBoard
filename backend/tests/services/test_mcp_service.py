@@ -419,3 +419,148 @@ class TestMCPServiceToolUpdate:
 
         assert result is None
         mock_repository.update_tool.assert_not_called()
+
+
+class TestMCPServiceRunTool:
+    """Tests for MCPService run_tool operation."""
+
+    @pytest.mark.asyncio
+    async def test_run_tool_server_not_found(self, mcp_service, mock_repository):
+        """Test running a tool when server doesn't exist raises ValueError."""
+        mock_repository.get_by_id.return_value = None
+
+        with pytest.raises(ValueError, match="Server not found"):
+            await mcp_service.run_tool(999, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_tool_not_found(self, mcp_service, mock_repository, sample_stdio_config):
+        """Test running a tool that doesn't exist raises ValueError."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = None
+
+        with pytest.raises(ValueError, match="Tool not found"):
+            await mcp_service.run_tool(1, 999, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_wrong_server(self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool):
+        """Test running a tool that belongs to a different server raises ValueError."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        sample_mcp_tool.server_id = 2  # Tool belongs to different server
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        with pytest.raises(ValueError, match="Tool not found"):
+            await mcp_service.run_tool(1, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_success_with_text_content(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test successful tool execution returning text content."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_text_content = Mock()
+        mock_text_content.text = "Tool result text"
+
+        mock_call_result = Mock()
+        mock_call_result.content = [mock_text_content]
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.run_tool(1, 1, {"param": "value"})
+
+        assert result == "Tool result text"
+        mock_session.call_tool.assert_called_once_with("test_tool", arguments={"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_success_with_multiple_text_parts(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test successful tool execution returning multiple text parts."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_text_content1 = Mock()
+        mock_text_content1.text = "Part 1"
+        mock_text_content2 = Mock()
+        mock_text_content2.text = "Part 2"
+
+        mock_call_result = Mock()
+        mock_call_result.content = [mock_text_content1, mock_text_content2]
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.run_tool(1, 1, None)
+
+        assert result == "Part 1\nPart 2"
+        mock_session.call_tool.assert_called_once_with("test_tool", arguments={})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_success_empty_content(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test successful tool execution with empty content."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_call_result = Mock()
+        mock_call_result.content = []
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.run_tool(1, 1, None)
+
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_run_tool_connection_error(self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool):
+        """Test tool execution when connection fails propagates the exception."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.side_effect = ConnectionError("Failed to connect")
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            with pytest.raises(ConnectionError, match="Failed to connect"):
+                await mcp_service.run_tool(1, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_execution_error(self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool):
+        """Test tool execution when the tool call fails propagates the exception."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.side_effect = RuntimeError("Tool execution failed")
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            with pytest.raises(RuntimeError, match="Tool execution failed"):
+                await mcp_service.run_tool(1, 1, {"param": "value"})
