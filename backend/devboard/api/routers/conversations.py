@@ -11,6 +11,7 @@ from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
+from devboard.api.dependencies import resolve_dependency
 from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
@@ -26,7 +27,6 @@ from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import Conversation, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 router = APIRouter()
 
@@ -67,13 +67,38 @@ async def get_conversation_messages(
     return await history_service.get_conversation_messages()
 
 
+async def _stream_agent_response(
+    http_request: Request,
+    conversation: Conversation,
+    agent_execution_service: AgentExecutionService,
+    message_or_approvals: str | ToolApprovals,
+) -> StreamingResponse:
+    """Stream agent response events for a conversation.
+
+    Handles both new messages and tool approval continuations.
+    For Task conversations, wraps the stream with workspace allocation.
+    """
+    conversation_parent = conversation.get_parent_entity()
+    if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
+        raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
+
+    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(message_or_approvals)
+
+    if isinstance(conversation_parent, Task):
+        workspace_allocation_service = await resolve_dependency(get_workspace_allocation_service, request=http_request)
+        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
+            task=conversation_parent, agent_stream=agent_event_stream
+        )
+
+    return stream_conversation_events(agent_event_stream, http_request)
+
+
 @router.post("/{conversation_id}/messages/stream")
 async def stream_conversation_message(
     http_request: Request,
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream conversation events as they are generated.
 
@@ -83,18 +108,7 @@ async def stream_conversation_message(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    # Check if parent task is complete - chat is disabled for completed tasks
-    conversation_parent = conversation.get_parent_entity()
-    if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
-        raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
-
-    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(request.message)
-    if isinstance(conversation_parent, Task):
-        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
-            task=conversation_parent, agent_stream=agent_event_stream
-        )
-
-    return stream_conversation_events(agent_event_stream, http_request)
+    return await _stream_agent_response(http_request, conversation, agent_execution_service, request.message)
 
 
 @router.post("/{conversation_id}/approve-tools/stream")
@@ -103,7 +117,6 @@ async def stream_approve_conversation_tools(
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream tool approval events as they are generated.
 
@@ -113,18 +126,7 @@ async def stream_approve_conversation_tools(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    # Check if parent task is complete - chat is disabled for completed tasks
-    conversation_parent = conversation.get_parent_entity()
-    if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
-        raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
-
-    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(request)
-    if isinstance(conversation_parent, Task):
-        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
-            task=conversation_parent, agent_stream=agent_event_stream
-        )
-
-    return stream_conversation_events(agent_event_stream, http_request)
+    return await _stream_agent_response(http_request, conversation, agent_execution_service, request)
 
 
 @router.delete("/{conversation_id}/messages", response_model=DeleteResponse)
