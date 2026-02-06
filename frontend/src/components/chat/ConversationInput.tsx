@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { PaperAirplaneIcon, StopIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import { standardChatInputClasses } from '../../styles/inputStyles'
 
 const MAX_TEXTAREA_ROWS = 10
+const STREAMING_PLACEHOLDER = "Type a message and press Enter to queue (sends when agent finishes)..."
 
 interface ConversationInputProps {
   value: string
@@ -28,6 +29,7 @@ export default function ConversationInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const cachedLineHeightRef = useRef<number | null>(null)
   const heightAdjustmentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [needsScroll, setNeedsScroll] = useState(false)
 
   const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current
@@ -45,6 +47,8 @@ export default function ConversationInput({
     const scrollHeight = textarea.scrollHeight
     const newHeight = Math.min(scrollHeight, maxHeight)
     textarea.style.height = `${newHeight}px`
+
+    setNeedsScroll(scrollHeight > maxHeight)
   }, [])
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export default function ConversationInput({
       textareaRef.current.style.height = 'auto'
     }
     cachedLineHeightRef.current = null
+    setNeedsScroll(false)
     textareaRef.current?.focus()
   }, [onChange])
 
@@ -98,16 +103,18 @@ export default function ConversationInput({
 
   const hasText = value.trim().length > 0
 
+  const effectivePlaceholder = isStreaming && !isQueued ? STREAMING_PLACEHOLDER : placeholder
+
   return (
     <form onSubmit={handleSendMessage} className="flex space-x-2 items-end">
-      <div className="flex-1 relative">
+      <div className="flex-1 relative flex items-end">
         <textarea
           ref={textareaRef}
           value={value}
           onChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
-          placeholder={placeholder}
-          className={`w-full resize-none overflow-y-auto ${standardChatInputClasses} ${hasText ? 'pr-8' : ''}`}
+          placeholder={effectivePlaceholder}
+          className={`w-full resize-none ${needsScroll ? 'overflow-y-auto' : 'overflow-hidden'} ${standardChatInputClasses} ${hasText ? 'pr-8' : ''}`}
           rows={1}
         />
         {hasText && (
@@ -115,7 +122,7 @@ export default function ConversationInput({
             type="button"
             onClick={handleClear}
             aria-label="Clear input"
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+            className="absolute right-2 bottom-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
           >
             <XMarkIcon className="w-4 h-4" />
           </button>

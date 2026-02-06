@@ -124,6 +124,7 @@ class ClaudeClient:
             if invalid_tools:
                 raise ValueError(f"Invalid builtin tool names: {invalid_tools}. Valid tools: {CLAUDE_BUILTIN_TOOLS}")
 
+        # Both allowed_tools and disallowed_tools are required to both allow needed tools, but also hide remaining tools
         # Calculate disallowed tools (all builtin tools minus allowed ones)
         # Custom MCP tools are always allowed - they are not part of the disallowed calculation
         allowed_set: set[str] = set(allowed_builtin_tools) if allowed_builtin_tools else set()

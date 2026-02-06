@@ -416,6 +416,13 @@ const ConversationChat = ({
     setQueued(conversationId, false)
   }, [conversationId, setQueued])
 
+  // Clear queue state when input is cleared while queued
+  useEffect(() => {
+    if (isQueued && !inputMessage.trim()) {
+      setQueued(conversationId, false)
+    }
+  }, [inputMessage, isQueued, conversationId, setQueued])
+
   // Auto-send queued message when stream completes successfully
   useStreamCompleteHandler(useCallback(() => {
     // Get current queue state from store (not from stale closure)
