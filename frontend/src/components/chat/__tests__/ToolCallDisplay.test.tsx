@@ -1,11 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { render } from '../../../test/utils'
+import { render, mockNavigate } from '../../../test/utils'
 import ToolCallDisplay from '../ToolCallDisplay'
 import type { ToolCall, ToolResult } from '../../../lib/api'
 
 describe('ToolCallDisplay', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear()
+  })
+
   const mockToolCall: ToolCall = {
     event_type: 'tool_call',
     tool_call_id: 'call_123',
@@ -560,6 +564,108 @@ describe('ToolCallDisplay', () => {
 
       // Should still work correctly
       expect(screen.getByText('search_codebase')).toBeInTheDocument()
+    })
+  })
+
+  describe('Rich Result Renderers', () => {
+    const createTaskToolCall: ToolCall = {
+      event_type: 'tool_call',
+      tool_call_id: 'call_create_task',
+      tool_name: 'create_task',
+      tool_args: {
+        title: 'New Feature',
+        codebase_name: 'backend',
+      },
+      timestamp: '2024-01-01T10:00:00Z',
+    }
+
+    const createTaskResult: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_create_task',
+      result_content: JSON.stringify({
+        task_id: 42,
+        title: 'New Feature',
+        status: 'planning',
+        branch_name: 'feature/new-feature',
+        base_branch: 'main',
+        codebase_name: 'backend',
+      }),
+      is_error: false,
+      timestamp: '2024-01-01T10:00:05Z',
+    }
+
+    it('renders create_task result with rich display when expanded', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={createTaskToolCall} toolResult={createTaskResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Task created successfully')).toBeInTheDocument()
+      expect(screen.getByText('New Feature')).toBeInTheDocument()
+      expect(screen.getByText('planning')).toBeInTheDocument()
+      expect(screen.getByText('feature/new-feature')).toBeInTheDocument()
+      expect(screen.getByText('backend')).toBeInTheDocument()
+      expect(screen.getByText('Open Task #42')).toBeInTheDocument()
+    })
+
+    it('navigates to task when clicking Open Task button', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={createTaskToolCall} toolResult={createTaskResult} />)
+
+      await user.click(screen.getByRole('button'))
+      await user.click(screen.getByText('Open Task #42'))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/tasks/42')
+    })
+
+    it('falls back to plain text for create_task with invalid JSON', async () => {
+      const user = userEvent.setup()
+      const invalidResult: ToolResult = {
+        ...createTaskResult,
+        result_content: 'Not valid JSON',
+      }
+
+      render(<ToolCallDisplay toolCall={createTaskToolCall} toolResult={invalidResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Not valid JSON')).toBeInTheDocument()
+      expect(screen.queryByText('Task created successfully')).not.toBeInTheDocument()
+    })
+
+    it('falls back to plain text for error results even with valid JSON', async () => {
+      const user = userEvent.setup()
+      const errorResult: ToolResult = {
+        ...createTaskResult,
+        is_error: true,
+        result_content: JSON.stringify({ error: 'Something went wrong' }),
+      }
+
+      render(<ToolCallDisplay toolCall={createTaskToolCall} toolResult={errorResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Error:')).toBeInTheDocument()
+      expect(screen.queryByText('Task created successfully')).not.toBeInTheDocument()
+    })
+
+    it('renders unknown tools as plain text', async () => {
+      const user = userEvent.setup()
+      const unknownToolCall: ToolCall = {
+        ...createTaskToolCall,
+        tool_name: 'unknown_tool',
+      }
+
+      const jsonResult: ToolResult = {
+        ...createTaskResult,
+        result_content: JSON.stringify({ some: 'data' }),
+      }
+
+      render(<ToolCallDisplay toolCall={unknownToolCall} toolResult={jsonResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('{"some":"data"}')).toBeInTheDocument()
     })
   })
 })

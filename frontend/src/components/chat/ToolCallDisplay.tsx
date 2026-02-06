@@ -1,7 +1,10 @@
 import { useState, useMemo } from 'react'
+
 import type { ToolCall, ToolResult } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
+
+import { getRichResultRenderer, tryParseToolResult } from './toolResultRenderers'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
@@ -128,6 +131,10 @@ export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPat
                 const endTime = new Date(toolResult.timestamp).getTime()
                 const duration = endTime - startTime
 
+                // Try to render with a rich renderer if available
+                const RichRenderer = !isError ? getRichResultRenderer(toolCall.tool_name) : null
+                const parsedData = RichRenderer ? tryParseToolResult(toolResult.result_content) : null
+
                 return (
                   <div className={`px-3 py-2 border-t min-w-0 ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30'}`}>
                     <div className="flex justify-between items-center mb-1.5 min-w-0">
@@ -138,9 +145,13 @@ export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPat
                         {formatDuration(duration)}
                       </div>
                     </div>
-                    <div className={`text-xs ${isError ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-300'} whitespace-pre-wrap font-mono max-h-96 overflow-y-auto overflow-x-auto select-text cursor-text min-w-0`}>
-                      {toolResult.result_content}
-                    </div>
+                    {RichRenderer && parsedData !== null ? (
+                      <RichRenderer data={parsedData} toolCall={toolCall} />
+                    ) : (
+                      <div className={`text-xs ${isError ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-300'} whitespace-pre-wrap font-mono max-h-96 overflow-y-auto overflow-x-auto select-text cursor-text min-w-0`}>
+                        {toolResult.result_content}
+                      </div>
+                    )}
                   </div>
                 )
               })()}
