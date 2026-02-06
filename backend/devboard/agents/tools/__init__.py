@@ -15,11 +15,18 @@ from .task_completion_tools import (
     create_complete_task_with_local_merge_tool,
     create_merge_pr_and_complete_task_tool,
 )
+from .task_query_tools import (
+    create_create_task_tool,
+    create_list_tasks_tool,
+    create_view_task_details_tool,
+)
 
 __all__ = [
     "create_code_structure_search_tool",
     "create_complete_task_with_local_merge_tool",
+    "create_create_task_tool",
     "create_get_pr_feedback_tool",
+    "create_list_tasks_tool",
     "create_merge_pr_and_complete_task_tool",
     "create_github_pr_tool",
     "create_multi_codebase_investigation_tool",
@@ -30,4 +37,5 @@ __all__ = [
     "create_set_document_content_tool",
     "create_text_search_tool",
     "create_file_read_tool",
+    "create_view_task_details_tool",
 ]
