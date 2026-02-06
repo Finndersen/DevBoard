@@ -581,3 +581,135 @@ class TestClaudeCodeSessionService:
         with patch("pathlib.Path.open", mock_open(read_data="")):
             with pytest.raises(ValueError, match="No 'cwd' entry found in session file"):
                 service._extract_cwd_from_session_file(session_file)
+
+
+@pytest.mark.asyncio
+class TestMigrateSessionToDirectory:
+    """Test suite for migrate_session_to_directory method."""
+
+    @pytest.fixture
+    def service(self):
+        """Create service instance."""
+        return ClaudeCodeSessionService()
+
+    async def test_migrate_session_replaces_paths_in_content(self, service, tmp_path):
+        """Test that migrating a session file replaces paths inside the content."""
+        old_working_dir = "/Users/test/projects/OldProject"
+        new_working_dir = "/Users/test/projects/NewProject"
+        session_id = "test-session-abc123"
+
+        # Set up directory structure
+        old_encoded = service.encode_path_for_claude_projects(old_working_dir)
+        new_encoded = service.encode_path_for_claude_projects(new_working_dir)
+        old_project_dir = tmp_path / old_encoded
+        new_project_dir = tmp_path / new_encoded
+        old_project_dir.mkdir(parents=True)
+
+        # Create session file with paths pointing to old directory
+        session_file = old_project_dir / f"{session_id}.jsonl"
+        jsonl_entries = [
+            {
+                "type": "user",
+                "uuid": "u1",
+                "timestamp": "2025-10-08T15:10:00.000Z",
+                "isSidechain": False,
+                "cwd": old_working_dir,
+                "sessionId": session_id,
+                "message": {"role": "user", "content": "Hello"},
+            },
+            {
+                "type": "assistant",
+                "uuid": "a1",
+                "timestamp": "2025-10-08T15:10:01.000Z",
+                "isSidechain": False,
+                "cwd": old_working_dir,
+                "sessionId": session_id,
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": f"Working in {old_working_dir}"}],
+                },
+            },
+        ]
+        session_file.write_text("\n".join(json.dumps(entry) for entry in jsonl_entries))
+
+        # Override service's claude_projects_dir to use tmp_path
+        service.claude_projects_dir = tmp_path
+
+        # Migrate the session
+        result = await service.migrate_session_to_directory(session_id, new_working_dir)
+
+        # Verify file was moved
+        assert result == new_project_dir / f"{session_id}.jsonl"
+        assert result.exists()
+        assert not session_file.exists()
+
+        # Verify paths were replaced in content
+        content = result.read_text()
+        assert old_working_dir not in content
+        assert new_working_dir in content
+
+        # Parse and verify entries
+        lines = content.strip().split("\n")
+        for line in lines:
+            entry = json.loads(line)
+            assert entry["cwd"] == new_working_dir
+
+    async def test_migrate_session_skips_when_already_in_correct_location(self, service, tmp_path):
+        """Test that migration returns None when file is already in correct location."""
+        working_dir = "/Users/test/projects/Project"
+        session_id = "test-session-xyz"
+
+        # Set up directory structure
+        encoded = service.encode_path_for_claude_projects(working_dir)
+        project_dir = tmp_path / encoded
+        project_dir.mkdir(parents=True)
+
+        # Create session file
+        session_file = project_dir / f"{session_id}.jsonl"
+        session_file.write_text('{"type": "user", "cwd": "/Users/test/projects/Project"}')
+
+        # Override service's claude_projects_dir
+        service.claude_projects_dir = tmp_path
+
+        # Migrate to same directory
+        result = await service.migrate_session_to_directory(session_id, working_dir)
+
+        # Should return None (no migration needed)
+        assert result is None
+        assert session_file.exists()
+
+    async def test_migrate_session_moves_session_directory(self, service, tmp_path):
+        """Test that the session directory (containing tool-results) is also moved."""
+        old_working_dir = "/Users/test/projects/Old"
+        new_working_dir = "/Users/test/projects/New"
+        session_id = "session-with-dir"
+
+        # Set up directory structure
+        old_encoded = service.encode_path_for_claude_projects(old_working_dir)
+        old_project_dir = tmp_path / old_encoded
+        old_project_dir.mkdir(parents=True)
+
+        # Create session file
+        session_file = old_project_dir / f"{session_id}.jsonl"
+        session_file.write_text(f'{{"type": "user", "cwd": "{old_working_dir}"}}')
+
+        # Create session directory with a tool result file
+        old_session_dir = old_project_dir / session_id
+        old_session_dir.mkdir()
+        tool_result_file = old_session_dir / "tool-result.txt"
+        tool_result_file.write_text("some tool output")
+
+        # Override service's claude_projects_dir
+        service.claude_projects_dir = tmp_path
+
+        # Migrate the session
+        new_encoded = service.encode_path_for_claude_projects(new_working_dir)
+        new_project_dir = tmp_path / new_encoded
+
+        await service.migrate_session_to_directory(session_id, new_working_dir)
+
+        # Verify session directory was moved
+        new_session_dir = new_project_dir / session_id
+        assert new_session_dir.exists()
+        assert (new_session_dir / "tool-result.txt").exists()
+        assert not old_session_dir.exists()

@@ -348,8 +348,8 @@ class ClaudeCodeSessionService:
             shutil.move(str(old_session_dir), str(new_session_dir))
             logfire.info(f"Moved session directory from {old_session_dir} to {new_session_dir}")
 
-        # Extract old working directory from session file content
-        old_working_dir = self._extract_cwd_from_session_file(old_session_file)
+        # Extract old working directory from session file content (read from new location after move)
+        old_working_dir = self._extract_cwd_from_session_file(new_session_file)
         # Perform in-place path replacement using sed
         # Use '|' as delimiter since paths contain '/'
         # macOS sed requires '' after -i, Linux doesn't
