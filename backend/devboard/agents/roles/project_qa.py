@@ -6,8 +6,14 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
+from devboard.agents.tools.task_query_tools import (
+    create_create_task_tool,
+    create_list_tasks_tool,
+    create_view_task_details_tool,
+)
 from devboard.db.models import Project
 from devboard.db.repositories import DocumentRepository
+from devboard.services.task_service import TaskService
 
 PROJECT_QA_ROLE_PROMPT = """
 You are a Project Assistant for DevBoard, an AI-powered developer command center.
@@ -73,6 +79,7 @@ class ProjectQAAgentRole(AgentRole):
         project: Project,
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService,
+        task_service: TaskService,
     ):
         """Initialize project Q&A role.
 
@@ -80,10 +87,12 @@ class ProjectQAAgentRole(AgentRole):
             project: Project instance
             document_repository: Repository for document operations
             agent_config_service: Service for agent configuration
+            task_service: Service for task operations
         """
         self.project = project
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
+        self.task_service = task_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for project Q&A role."""
@@ -93,11 +102,15 @@ class ProjectQAAgentRole(AgentRole):
         """Get tools for project Q&A role.
 
         Returns:
-            List of document editing tools and codebase investigation tool
+            List of document editing tools, task query tools, and codebase investigation tool
         """
-        tools = [
+        tools: list[Tool] = [
             create_set_document_content_tool(self.project.specification, self.document_repository),
             create_document_edit_tool(self.project.specification, self.document_repository),
+            # Task query tools
+            create_list_tasks_tool(self.project, self.task_service),
+            create_view_task_details_tool(self.project, self.task_service),
+            create_create_task_tool(self.project, self.task_service),
         ]
 
         # Add codebase investigation tool if project has codebases

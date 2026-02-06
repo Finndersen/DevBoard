@@ -11,6 +11,7 @@ from devboard.agents.tools import (
     create_rebase_task_branch_tool,
     create_set_document_content_tool,
 )
+from devboard.agents.tools.task_query_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import DocumentRepository
@@ -127,6 +128,9 @@ class TaskImplementationAgentRole(AgentRole):
             # Local merge workflow: complete_task_with_local_merge tool handles change summary + merge
             tools.append(create_complete_task_with_local_merge_tool(self.task, self.task_service))
         # For MANUAL branch handling, no completion tools are provided
+
+        # Add create_task tool for creating related tasks
+        tools.append(create_create_task_tool(self.task.project, self.task_service))
 
         return tools
 

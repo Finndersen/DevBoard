@@ -11,6 +11,7 @@ from devboard.agents.tools import (
     create_get_pr_feedback_tool,
     create_merge_pr_and_complete_task_tool,
 )
+from devboard.agents.tools.task_query_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration, PRStatus
@@ -104,7 +105,8 @@ class TaskPRReviewAgentRole(AgentRole):
         """Get tools for PR review role.
 
         Returns:
-            List of PR reading tools, codebase exploration tools, and task completion tool.
+            List of PR reading tools, codebase exploration tools, task completion tool,
+            and create_task tool.
             Note: Codebase editing tools (Edit/Write) are provided directly by the
             underlying agent (ClaudeCode), not through this role.
         """
@@ -115,6 +117,7 @@ class TaskPRReviewAgentRole(AgentRole):
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
             create_merge_pr_and_complete_task_tool(self.task, self._task_service, self._github_integration),
+            create_create_task_tool(self.task.project, self._task_service),
         ]
 
     async def get_context_content(self) -> str:

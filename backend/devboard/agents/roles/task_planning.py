@@ -8,8 +8,10 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
+from devboard.agents.tools.task_query_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import DocumentRepository
+from devboard.services.task_service import TaskService
 
 PLANNING_ROLE_PROMPT = """
 You are a Task Planning Assistant for DevBoard, helping developers craft task specifications and create implementation plans.
@@ -110,6 +112,7 @@ class TaskPlanningAgentRole(AgentRole):
         task: Task,
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService | None = None,
+        task_service: TaskService | None = None,
     ):
         """Initialize task planning role.
 
@@ -117,10 +120,12 @@ class TaskPlanningAgentRole(AgentRole):
             task: Task instance
             document_repository: Repository for document operations
             agent_config_service: Optional service for agent configuration (required for investigation tool)
+            task_service: Optional service for task operations (required for create_task tool)
         """
         self.task = task
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
+        self.task_service = task_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
@@ -157,7 +162,12 @@ class TaskPlanningAgentRole(AgentRole):
                 )
 
         # Add codebase investigation tool
-        tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
+        if self.agent_config_service:
+            tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
+
+        # Add create_task tool if task_service is available
+        if self.task_service:
+            tools.append(create_create_task_tool(self.task.project, self.task_service))
 
         return tools
 
