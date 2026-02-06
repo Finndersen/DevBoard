@@ -16,6 +16,7 @@ export interface StreamState {
   abortController: AbortController
   startedAt: number
   pendingToolRequests: ToolCallRequest[]
+  isQueued: boolean
 }
 
 /**
@@ -153,6 +154,15 @@ interface ConversationStreamActions {
   clearPendingToolRequests: (conversationId: number) => void
 
   /**
+   * Set the queued state for a conversation.
+   * When true, indicates a message is queued to be sent after the current stream completes.
+   *
+   * @param conversationId - The conversation to set queue state for
+   * @param queued - Whether a message is queued
+   */
+  setQueued: (conversationId: number, queued: boolean) => void
+
+  /**
    * Update the event handler registry for an active stream.
    * This allows event handlers to work after navigation when the component remounts.
    *
@@ -241,7 +251,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           error: null,
           abortController,
           startedAt: Date.now(),
-          pendingToolRequests: []
+          pendingToolRequests: [],
+          isQueued: false
         })
       })
 
@@ -292,11 +303,12 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Abort the fetch request
         stream.abortController.abort()
 
-        // Mark as not streaming
+        // Mark as not streaming and clear queue (user stopped intentionally)
         set((draft) => {
           const streamState = draft.activeStreams.get(conversationId)
           if (streamState) {
             streamState.isStreaming = false
+            streamState.isQueued = false
           }
         })
       }
@@ -388,6 +400,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         if (stream) {
           stream.error = error
           stream.isStreaming = false
+          stream.isQueued = false
         }
       })
     },
@@ -436,6 +449,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       const abortController = new AbortController()
 
       // Create or update stream state for the approval
+      // Preserve existing isQueued state - message should stay queued through approval workflow
+      const existingIsQueued = existingStream?.isQueued ?? false
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           messages: existingMessages,
@@ -443,7 +458,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           error: null,
           abortController,
           startedAt: Date.now(),
-          pendingToolRequests: []
+          pendingToolRequests: [],
+          isQueued: existingIsQueued
         })
       })
 
@@ -512,6 +528,15 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         const stream = draft.activeStreams.get(conversationId)
         if (stream) {
           stream.messages = []
+        }
+      })
+    },
+
+    setQueued: (conversationId, queued) => {
+      set((draft) => {
+        const stream = draft.activeStreams.get(conversationId)
+        if (stream) {
+          stream.isQueued = queued
         }
       })
     },
