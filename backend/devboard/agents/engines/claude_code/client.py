@@ -23,6 +23,30 @@ from pydantic_core import ValidationError
 
 from .utils import describe_message, load_env_from_settings
 
+# All Claude Code builtin tools
+CLAUDE_BUILTIN_TOOLS: set[str] = {
+    # File Operations
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+    "NotebookEdit",
+    # Execution
+    "Bash",
+    "Task",
+    "Skill",
+    # Planning & Task Management
+    "EnterPlanMode",
+    "ExitPlanMode",
+    "TodoWrite",
+    # User Interaction
+    "AskUserQuestion",
+    # Web
+    "WebFetch",
+    "WebSearch",
+}
+
 
 @dataclass
 class ClaudeCodeResult:
@@ -94,17 +118,22 @@ class ClaudeClient:
         self._tool_execution_cache: dict[str, asyncio.Future[ClaudeToolContent]] = {}
         self._tool_execution_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
+        # Validate allowed_builtin_tools
+        if allowed_builtin_tools:
+            invalid_tools = set(allowed_builtin_tools) - CLAUDE_BUILTIN_TOOLS
+            if invalid_tools:
+                raise ValueError(f"Invalid builtin tool names: {invalid_tools}. Valid tools: {CLAUDE_BUILTIN_TOOLS}")
+
+        # Calculate disallowed tools (all builtin tools minus allowed ones)
+        # Custom MCP tools are always allowed - they are not part of the disallowed calculation
+        allowed_set: set[str] = set(allowed_builtin_tools) if allowed_builtin_tools else set()
+        disallowed_tools = list(CLAUDE_BUILTIN_TOOLS - allowed_set)
+
         # Build MCP servers from custom tools if provided
         if tools:
-            mcp_servers, custom_tool_names = self._build_mcp_servers(tools)
+            mcp_servers = self._build_mcp_servers(tools)
         else:
             mcp_servers = None
-            custom_tool_names = []
-
-        # Combine allowed_tools with custom tool names
-        all_allowed_tools = allowed_builtin_tools or []
-        if custom_tool_names:
-            all_allowed_tools += custom_tool_names
 
         # Load environment variables from user settings
         env_vars = load_env_from_settings()
@@ -117,7 +146,7 @@ class ClaudeClient:
         permission_mode: PermissionMode
         if plan_mode:
             permission_mode = "plan"
-        elif "Write" in all_allowed_tools:
+        elif allowed_builtin_tools and "Write" in allowed_builtin_tools:
             permission_mode = "acceptEdits"
         else:
             permission_mode = "default"
@@ -125,7 +154,7 @@ class ClaudeClient:
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
-            allowed_tools=all_allowed_tools,
+            disallowed_tools=disallowed_tools,
             model=model,
             cwd=cwd,
             mcp_servers=mcp_servers,
@@ -150,18 +179,17 @@ class ClaudeClient:
     def _build_mcp_servers(
         self,
         tools: list[Tool],
-    ) -> tuple[dict[str, Any], list[str]]:
+    ) -> dict[str, Any]:
         """Build MCP servers from PydanticAI Tool instances.
 
         Args:
             tools: List of PydanticAI Tool instances
 
         Returns:
-            Tuple of (mcp_servers dict, list of custom tool names)
+            MCP servers dict
         """
         # Wrap tools with SDK's @tool decorator
         sdk_tools = []
-        custom_tool_names = []
         mcp_name = "builtin_tools"
         for pydantic_tool in tools:
             # Extract metadata from PydanticAI Tool's function_schema
@@ -180,7 +208,6 @@ class ClaudeClient:
                 input_schema=pydantic_tool.function_schema.json_schema,
             )(wrapper_func)
             sdk_tools.append(sdk_tool)
-            custom_tool_names.append(f"mcp__{mcp_name}__{tool_name}")
 
         # Create SDK MCP server with custom tools
         mcp_server = create_sdk_mcp_server(
@@ -188,9 +215,7 @@ class ClaudeClient:
             version="1.0.0",
             tools=sdk_tools,
         )
-        mcp_servers = {mcp_name: mcp_server}
-
-        return mcp_servers, custom_tool_names
+        return {mcp_name: mcp_server}
 
     def _create_tool_execution_wrapper(
         self,

@@ -145,7 +145,7 @@ class TaskImplementationAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]
+        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]
 
     @property
     def include_builtin_system_prompt(self) -> bool:
