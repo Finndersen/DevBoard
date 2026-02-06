@@ -36,7 +36,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   // Project codebases hooks
   const { data: projectCodebases, loading: codebasesLoading, refetch: refetchProjectCodebases } = useProjectCodebases(id!)
-  const { data: allCodebases } = useCodebases()
+  const { data: allCodebases, refetch: refetchAllCodebases } = useCodebases()
   const { mutate: linkCodebase, loading: linkingCodebase } = useLinkCodebaseToProject()
   const { mutate: unlinkCodebase, loading: unlinkingCodebase } = useUnlinkCodebaseFromProject()
 
@@ -178,10 +178,11 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     try {
       await linkCodebase({ projectId: id!, codebaseId: codebase.id })
       await refetchProjectCodebases()
+      await refetchAllCodebases()
     } catch (error) {
       console.error('Failed to link newly created codebase:', error)
     }
-  }, [id, linkCodebase, refetchProjectCodebases])
+  }, [id, linkCodebase, refetchProjectCodebases, refetchAllCodebases])
 
   // Only show loading spinner on initial load (when project data doesn't exist yet)
   // Don't show during refetches to avoid UI flash

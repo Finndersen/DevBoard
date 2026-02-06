@@ -3,9 +3,9 @@
  *
  * Examples:
  * - "project" -> "Project Agent"
- * - "task_specification" -> "Task Specification Agent"
  * - "task_planning" -> "Task Planning Agent"
  * - "task_implementation" -> "Task Implementation Agent"
+ * - "task_pr_review" -> "Task Pr Review Agent"
  * - "investigation" -> "Investigation Agent"
  */
 export function formatAgentRoleDisplayName(agentRole: string): string {

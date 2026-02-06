@@ -96,12 +96,12 @@ const TodoPanel = ({ conversationId, engine }: TodoPanelProps) => {
           hasUpdates ? 'animate-pulse bg-blue-50 dark:bg-blue-900/20' : ''
         }`}
       >
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 min-w-0">
           <span className={`text-sm font-medium ${textColors.secondary}`}>
             Tasks: {completedCount}/{totalCount} completed
           </span>
           {inProgressTodo && (
-            <span className="text-xs text-blue-600 dark:text-blue-400 truncate max-w-[200px]">
+            <span className="text-xs text-blue-600 dark:text-blue-400 truncate">
               — {inProgressTodo.active_form || inProgressTodo.content}
             </span>
           )}

@@ -298,12 +298,8 @@ class ClaudeCodeAgent(BaseAgent):
                 # Stream messages from the client
                 async for message in stream_generator:
                     if isinstance(message, ResultMessage):
-                        # Check for retryable API error
-                        if (
-                            message.is_error
-                            and _should_retry_error_result(message.result)
-                            and api_error_retry_count < MAX_RETRY_ATTEMPTS
-                        ):
+                        # Check for retryable API error (check result content regardless of is_error flag)
+                        if _should_retry_error_result(message.result) and api_error_retry_count < MAX_RETRY_ATTEMPTS:
                             api_error_retry_count += 1
                             # Yield SystemEvent to notify about retry
                             yield SystemEvent(

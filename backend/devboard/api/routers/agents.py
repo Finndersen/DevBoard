@@ -29,7 +29,7 @@ async def get_agent_configuration(
     available engines for the role.
 
     Args:
-        agent_role: Agent role (project, task_specification, task_planning, task_implementation, investigation)
+        agent_role: Agent role (project, task_planning, task_implementation, task_pr_review, investigation)
         service: Agent configuration service
 
     Returns:

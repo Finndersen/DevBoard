@@ -39,9 +39,9 @@ export default function Settings() {
 
   const agentTypes = [
     { key: 'project', name: 'Project Q&A Agent', description: 'Answers questions about projects and helps with specifications' },
-    { key: 'task_specification', name: 'Task Specification Agent', description: 'Helps define and refine task requirements' },
     { key: 'task_planning', name: 'Task Planning Agent', description: 'Creates implementation plans for tasks' },
     { key: 'task_implementation', name: 'Task Implementation Agent', description: 'Provides implementation guidance and code suggestions' },
+    { key: 'task_pr_review', name: 'Task PR Review Agent', description: 'Reviews pull requests and provides feedback' },
     { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
   ]
   

@@ -17,7 +17,7 @@ from claude_agent_sdk import (
 )
 from pydantic_ai import Tool
 
-from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent, _should_retry_error_result
 from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
@@ -958,3 +958,246 @@ class TestStreamEventsApi500Retry:
         assert agent_with_virtual_tool.session_id == session_id
         # Should have succeeded after retry
         assert call_count == 2
+
+
+class TestShouldRetryErrorResult:
+    """Tests for _should_retry_error_result() helper function."""
+
+    def test_returns_true_for_api_500_error(self):
+        """Test that API 500 errors are retryable."""
+        result = 'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}'
+        assert _should_retry_error_result(result) is True
+
+    def test_returns_true_for_api_400_duplicate_tool_use_ids(self):
+        """Test that API 400 with duplicate tool_use IDs is retryable."""
+        result = 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.75.content.1: tool_use ids must be unique"}}'
+        assert _should_retry_error_result(result) is True
+
+    def test_returns_true_for_api_400_tool_use_concurrency(self):
+        """Test that API 400 with tool use concurrency issues is retryable."""
+        result = 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"tool use concurrency issues detected"}}'
+        assert _should_retry_error_result(result) is True
+
+    def test_returns_false_for_non_retryable_api_400_error(self):
+        """Test that other API 400 errors are not retryable."""
+        result = 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"invalid parameter value"}}'
+        assert _should_retry_error_result(result) is False
+
+    def test_returns_false_for_api_429_error(self):
+        """Test that API 429 rate limit errors are not retryable."""
+        result = 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}'
+        assert _should_retry_error_result(result) is False
+
+    def test_returns_false_for_api_401_error(self):
+        """Test that API 401 auth errors are not retryable."""
+        result = 'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid API key"}}'
+        assert _should_retry_error_result(result) is False
+
+    def test_returns_false_for_none(self):
+        """Test that None result is not retryable."""
+        assert _should_retry_error_result(None) is False
+
+    def test_returns_false_for_empty_string(self):
+        """Test that empty string is not retryable."""
+        assert _should_retry_error_result("") is False
+
+    def test_returns_false_for_regular_text(self):
+        """Test that regular text is not retryable."""
+        assert _should_retry_error_result("Hello, how can I help you?") is False
+
+
+class TestStreamEventsApi400Retry:
+    """Tests for stream_events() retry logic on API 400 errors with duplicate tool_use IDs."""
+
+    def create_api_400_error_result_message(
+        self, error_message: str = "tool_use ids must be unique", session_id: str = "test-session-123"
+    ) -> ResultMessage:
+        """Helper to create a ResultMessage with API 400 error."""
+        return ResultMessage(
+            subtype="error",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,  # Note: is_error may be False for API 400 errors from Claude CLI
+            num_turns=1,
+            session_id=session_id,
+            total_cost_usd=0.001,
+            result=f'API Error: 400 {{"type":"error","error":{{"type":"invalid_request_error","message":"messages.75.content.1: {error_message}"}},"request_id":"req_011CXoNGDoLWwez3NpZwQL8s"}}',
+        )
+
+    def create_api_400_error_stream(
+        self, error_message: str = "tool_use ids must be unique", session_id: str = "test-session-123"
+    ) -> list:
+        """Helper to create a message stream that ends with API 400 error."""
+        error_text = f'API Error: 400 {{"type":"error","error":{{"type":"invalid_request_error","message":"messages.75.content.1: {error_message}"}}}}'
+        return [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            create_mock_assistant_message_with_text(error_text),
+            self.create_api_400_error_result_message(error_message, session_id),
+        ]
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_400_duplicate_tool_use_ids_triggers_retry(self, mock_client_class, agent_with_virtual_tool):
+        """Test that API 400 with 'tool_use ids must be unique' triggers retry."""
+        call_count = 0
+        call_messages = []
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            call_messages.append(user_query)
+            if call_count == 1:
+                # First call: return API 400 error with duplicate tool_use IDs
+                for message in self.create_api_400_error_stream("tool_use ids must be unique"):
+                    yield message
+            else:
+                # Second call: return success
+                for message in create_mock_text_stream("Successfully recovered!"):
+                    yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream twice (initial + 1 retry)
+        assert call_count == 2
+        # Second call should have "continue" as the message
+        assert call_messages[1] == "continue"
+
+        # Should have SystemEvent for retry and final TextMessage
+        from devboard.agents.events import SystemEvent, SystemEventType
+
+        assert len(events) == 3  # Error text, SystemEvent, and success message
+        # First event is the error text message streamed before ResultMessage
+        assert isinstance(events[0], TextMessage)
+        assert "API Error: 400" in events[0].text_content
+        assert "tool_use ids must be unique" in events[0].text_content
+        # Second event is the retry notification
+        assert isinstance(events[1], SystemEvent)
+        assert events[1].type == SystemEventType.API_ERROR_RETRY
+        assert events[1].data["attempt"] == 1
+        assert events[1].data["max_attempts"] == 3
+        # Third event is the successful response
+        assert isinstance(events[2], TextMessage)
+        assert events[2].text_content == "Successfully recovered!"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_400_retry_works_even_without_is_error_flag(self, mock_client_class, agent_with_virtual_tool):
+        """Test that API 400 retry works even when is_error=False in ResultMessage.
+
+        This is the key fix - the Claude CLI may not set is_error=True for API 400 errors,
+        so we check the result content regardless of the is_error flag.
+        """
+        call_count = 0
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Create error with is_error=False to simulate CLI behavior
+                error_text = 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.75.content.1: tool_use ids must be unique"}}'
+                yield SystemMessage(subtype="session_start", data={"session_id": "test-session"})
+                yield create_mock_assistant_message_with_text(error_text)
+                yield ResultMessage(
+                    subtype="error",
+                    duration_ms=1000,
+                    duration_api_ms=800,
+                    is_error=False,  # Note: is_error is False
+                    num_turns=1,
+                    session_id="test-session",
+                    total_cost_usd=0.001,
+                    result=error_text,
+                )
+            else:
+                for message in create_mock_text_stream("Success!"):
+                    yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have retried even though is_error was False
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_400_max_retries_exceeded_continues_normally(self, mock_client_class, agent_with_virtual_tool):
+        """Test that exceeding max retries for API 400 error continues without raising."""
+        from devboard.agents.events import SystemEvent, SystemEventType
+
+        call_count = 0
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            # Always return API 400 error
+            for message in self.create_api_400_error_stream("tool_use ids must be unique"):
+                yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream 4 times (initial + 3 retries)
+        assert call_count == 4
+
+        # Should have 4 error text messages + 3 retry SystemEvents (no retry on 4th attempt)
+        text_events = [e for e in events if isinstance(e, TextMessage)]
+        system_events = [e for e in events if isinstance(e, SystemEvent)]
+
+        assert len(text_events) == 4  # One error message per attempt
+        assert len(system_events) == 3  # Three retry notifications
+        for i, event in enumerate(system_events):
+            assert event.type == SystemEventType.API_ERROR_RETRY
+            assert event.data["attempt"] == i + 1
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_api_400_non_retryable_error_not_retried(self, mock_client_class, agent_with_virtual_tool):
+        """Test that non-retryable API 400 errors are not retried."""
+        call_count = 0
+
+        def create_non_retryable_400_error_stream():
+            """Create a stream with non-retryable 400 error."""
+            error_text = 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"invalid parameter value"}}'
+            return [
+                SystemMessage(subtype="session_start", data={"session_id": "test-session"}),
+                create_mock_assistant_message_with_text(error_text),
+                ResultMessage(
+                    subtype="error",
+                    duration_ms=1000,
+                    duration_api_ms=800,
+                    is_error=True,
+                    num_turns=1,
+                    session_id="test-session",
+                    total_cost_usd=0.001,
+                    result=error_text,
+                ),
+            ]
+
+        async def mock_stream(user_query):
+            nonlocal call_count
+            call_count += 1
+            for message in create_non_retryable_400_error_stream():
+                yield message
+
+        setup_mock_client_with_callback(mock_client_class, mock_stream)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        # Should have called stream only once (no retry for non-retryable 400)
+        assert call_count == 1
+        # Should only have the error text message
+        assert len(events) == 1
+        assert isinstance(events[0], TextMessage)
+        assert "API Error: 400" in events[0].text_content
+        assert "invalid parameter value" in events[0].text_content

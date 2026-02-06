@@ -65,7 +65,8 @@ class TestClaudeClient:
         agent = ClaudeClient(tools=[tool], load_settings=False)
         assert agent.options.mcp_servers is not None
         assert "builtin_tools" in agent.options.mcp_servers
-        # Custom MCP tools are always allowed - disallowed_tools only contains builtin tools
+        assert len(agent.options.allowed_tools) == 1
+        assert agent.options.allowed_tools[0] == "mcp__builtin_tools__custom_tool"
         assert agent.options.disallowed_tools is not None
 
     @pytest.mark.asyncio

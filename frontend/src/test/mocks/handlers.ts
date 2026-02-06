@@ -295,8 +295,8 @@ export const handlers = [
     const conversationId = Number(params.conversationId)
     // Map conversation IDs to appropriate agent roles
     // conversation_id 1 = project conversation
-    // conversation_id 3 = task conversation (task_specification is the default task role)
-    const agentRole = conversationId === 3 ? 'task_specification' : 'project'
+    // conversation_id 3 = task conversation (task_planning is the default task role)
+    const agentRole = conversationId === 3 ? 'task_planning' : 'project'
 
     return HttpResponse.json({
       id: conversationId,

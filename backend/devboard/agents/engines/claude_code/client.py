@@ -17,7 +17,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from claude_agent_sdk.types import PermissionMode, SystemPromptPreset
+from claude_agent_sdk.types import McpSdkServerConfig, PermissionMode, SystemPromptPreset
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
@@ -129,11 +129,16 @@ class ClaudeClient:
         allowed_set: set[str] = set(allowed_builtin_tools) if allowed_builtin_tools else set()
         disallowed_tools = list(CLAUDE_BUILTIN_TOOLS - allowed_set)
 
-        # Build MCP servers from custom tools if provided
+        # Build MCP server from custom tools if provided
         if tools:
-            mcp_servers = self._build_mcp_servers(tools)
+            mcp_server_config, custom_tool_names = self._build_custom_tools_mcp_server(tools)
+            mcp_servers = {mcp_server_config["name"]: mcp_server_config}
         else:
             mcp_servers = None
+            custom_tool_names = []
+
+        # Combine allowed builtin tools with custom MCP tool names
+        all_allowed_tools = list(allowed_set) + custom_tool_names
 
         # Load environment variables from user settings
         env_vars = load_env_from_settings()
@@ -146,7 +151,7 @@ class ClaudeClient:
         permission_mode: PermissionMode
         if plan_mode:
             permission_mode = "plan"
-        elif allowed_builtin_tools and "Write" in allowed_builtin_tools:
+        elif "Write" in all_allowed_tools:
             permission_mode = "acceptEdits"
         else:
             permission_mode = "default"
@@ -154,6 +159,7 @@ class ClaudeClient:
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
+            allowed_tools=all_allowed_tools,
             disallowed_tools=disallowed_tools,
             model=model,
             cwd=cwd,
@@ -176,20 +182,21 @@ class ClaudeClient:
         else:
             return None
 
-    def _build_mcp_servers(
+    def _build_custom_tools_mcp_server(
         self,
         tools: list[Tool],
-    ) -> dict[str, Any]:
-        """Build MCP servers from PydanticAI Tool instances.
+    ) -> tuple[McpSdkServerConfig, list[str]]:
+        """Build an MCP server from PydanticAI Tool instances.
 
         Args:
             tools: List of PydanticAI Tool instances
 
         Returns:
-            MCP servers dict
+            Tuple of (MCP server config, list of custom tool names for allowed_tools)
         """
         # Wrap tools with SDK's @tool decorator
         sdk_tools = []
+        custom_tool_names = []
         mcp_name = "builtin_tools"
         for pydantic_tool in tools:
             # Extract metadata from PydanticAI Tool's function_schema
@@ -208,14 +215,15 @@ class ClaudeClient:
                 input_schema=pydantic_tool.function_schema.json_schema,
             )(wrapper_func)
             sdk_tools.append(sdk_tool)
+            custom_tool_names.append(f"mcp__{mcp_name}__{tool_name}")
 
         # Create SDK MCP server with custom tools
-        mcp_server = create_sdk_mcp_server(
+        mcp_server_config = create_sdk_mcp_server(
             name=mcp_name,
             version="1.0.0",
             tools=sdk_tools,
         )
-        return {mcp_name: mcp_server}
+        return mcp_server_config, custom_tool_names
 
     def _create_tool_execution_wrapper(
         self,

@@ -42,6 +42,7 @@ IMPORTANT:
 - You can only make ONE virtual tool call at a time
 - Standard build-in tools can be used freely without any special format
 - When making virtual tool calls, your message must consist of JSON content ONLY (NO OTHER TEXT).
+- Virtual tool calls will require user approval so DO NOT assume that they were successfully run until you receive confirmation response
 - Sub-agents cannot make virtual tool calls. DO NOT create sub-agent tasks that require virtual tool calls.
 - For normal messages, respond naturally with plain text. No JSON format needed.
 """
