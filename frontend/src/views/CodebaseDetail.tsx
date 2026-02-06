@@ -230,7 +230,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 h-full overflow-auto">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Codebase Details</h1>

@@ -13,6 +13,7 @@ from devboard.db.models.mcp_server import (
     MCPTool,
     StdioMCPConfig,
 )
+from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.services.mcp_service import MCPService
 
 
@@ -464,6 +465,7 @@ class TestMCPServiceRunTool:
 
         mock_call_result = Mock()
         mock_call_result.content = [mock_text_content]
+        mock_call_result.isError = False
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_call_result
@@ -494,6 +496,7 @@ class TestMCPServiceRunTool:
 
         mock_call_result = Mock()
         mock_call_result.content = [mock_text_content1, mock_text_content2]
+        mock_call_result.isError = False
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_call_result
@@ -519,6 +522,7 @@ class TestMCPServiceRunTool:
 
         mock_call_result = Mock()
         mock_call_result.content = []
+        mock_call_result.isError = False
 
         mock_session = AsyncMock()
         mock_session.call_tool.return_value = mock_call_result
@@ -564,3 +568,82 @@ class TestMCPServiceRunTool:
 
             with pytest.raises(RuntimeError, match="Tool execution failed"):
                 await mcp_service.run_tool(1, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_mcp_error_response(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test that isError flag in MCP response raises MCPToolExecutionError."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_text_content = Mock()
+        mock_text_content.text = "Client must be authenticated to access this resource"
+
+        mock_call_result = Mock()
+        mock_call_result.content = [mock_text_content]
+        mock_call_result.isError = True
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            with pytest.raises(MCPToolExecutionError, match="Client must be authenticated"):
+                await mcp_service.run_tool(1, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_mcp_error_response_empty_content(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test that isError with empty content uses default error message."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_call_result = Mock()
+        mock_call_result.content = []
+        mock_call_result.isError = True
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            with pytest.raises(MCPToolExecutionError, match="MCP tool execution failed"):
+                await mcp_service.run_tool(1, 1, {"param": "value"})
+
+    @pytest.mark.asyncio
+    async def test_run_tool_success_when_not_error(
+        self, mcp_service, mock_repository, sample_stdio_config, sample_mcp_tool
+    ):
+        """Test that isError=False returns content normally."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_tool_by_id.return_value = sample_mcp_tool
+
+        mock_text_content = Mock()
+        mock_text_content.text = "Success result"
+
+        mock_call_result = Mock()
+        mock_call_result.content = [mock_text_content]
+        mock_call_result.isError = False
+
+        mock_session = AsyncMock()
+        mock_session.call_tool.return_value = mock_call_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.run_tool(1, 1, {"param": "value"})
+
+        assert result == "Success result"

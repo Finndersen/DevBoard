@@ -1,10 +1,11 @@
 """Logfire configuration for DevBoard application."""
 
 import os
+from typing import cast
 
 import logfire
 from fastapi import FastAPI
-from logfire import ConsoleOptions
+from logfire import ConsoleOptions, LevelName
 
 from devboard.db.database import engine
 
@@ -43,12 +44,18 @@ def setup_logfire(app: FastAPI) -> None:
     # Check if Logfire token is available in environment
     token = os.getenv("LOGFIRE_TOKEN")
     environment = os.getenv("ENVIRONMENT", "development")
+    log_level: LevelName = cast(LevelName, os.getenv("LOG_LEVEL", "info" if environment == "production" else "debug"))
+
+    # Configure console options for development
+    console_options: ConsoleOptions | bool = False
+    if environment == "development":
+        console_options = ConsoleOptions(verbose=True, min_log_level=log_level)
 
     # Configure Logfire with hardcoded sensible defaults
     logfire.configure(
         service_name="devboard",
         environment=environment,
-        console=ConsoleOptions(verbose=True) if environment == "development" else False,
+        console=console_options,
         # Only send to Logfire if we have a token (production/staging) or in development with explicit token
         send_to_logfire=bool(token),
         scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback),

@@ -16,6 +16,7 @@ from devboard.api.schemas import (
     MCPToolUpdate,
 )
 from devboard.db.models import MCPServerConfig
+from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.services.mcp_service import MCPService
 
 router = APIRouter()
@@ -117,5 +118,7 @@ async def run_mcp_tool(
         return MCPToolRunResponse(success=True, result=result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except MCPToolExecutionError as e:
+        return MCPToolRunResponse(success=False, error=str(e))
     except Exception as e:
         return MCPToolRunResponse(success=False, error=str(e))

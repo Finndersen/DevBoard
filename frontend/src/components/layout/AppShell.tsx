@@ -20,7 +20,7 @@ export default function AppShell({ children }: AppShellProps) {
       <NavigationMenu />
 
       {/* Main Content */}
-      <main className="flex-1 w-full py-4 px-4 sm:px-6 lg:px-8 overflow-auto">
+      <main className="flex-1 w-full py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
         {children}
       </main>
     </div>

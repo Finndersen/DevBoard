@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PlusIcon, ServerStackIcon } from '@heroicons/react/24/outline'
 import { Button, Card } from '../components/ui'
 import { MCPServerList } from '../components/mcp/MCPServerList'
@@ -9,8 +10,8 @@ import { apiClient } from '../lib/api'
 import type { MCPServerConfig, MCPServerDetail as MCPServerDetailType, MCPTool } from '../lib/api'
 
 export default function MCPServersView() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [servers, setServers] = useState<MCPServerConfig[]>([])
-  const [selectedServerId, setSelectedServerId] = useState<number | null>(null)
   const [serverDetail, setServerDetail] = useState<MCPServerDetailType | null>(null)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -19,14 +20,28 @@ export default function MCPServersView() {
   const [editingServer, setEditingServer] = useState<MCPServerConfig | null>(null)
   const [verifying, setVerifying] = useState(false)
 
+  const serverParam = searchParams.get('server')
+  const selectedServerId = serverParam ? parseInt(serverParam, 10) : null
+
+  const setSelectedServerId = useCallback((id: number | null) => {
+    setSearchParams(prev => {
+      if (id !== null) {
+        prev.set('server', String(id))
+      } else {
+        prev.delete('server')
+      }
+      return prev
+    }, { replace: true })
+  }, [setSearchParams])
+
   const loadServers = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       const data = await apiClient.listMCPServers()
       setServers(data)
-      // Auto-select first server if none selected
-      if (data.length > 0 && selectedServerId === null) {
+      // Auto-select first server if none selected via URL
+      if (data.length > 0 && !serverParam) {
         setSelectedServerId(data[0].id)
       }
     } catch (err) {
@@ -34,7 +49,7 @@ export default function MCPServersView() {
     } finally {
       setLoading(false)
     }
-  }, [selectedServerId])
+  }, [serverParam, setSelectedServerId])
 
   const loadServerDetail = useCallback(async (serverId: number) => {
     try {
@@ -201,7 +216,7 @@ export default function MCPServersView() {
         </div>
 
         {/* Right panel - server detail */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {detailLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />

@@ -10,6 +10,7 @@ from mcp import ClientSession
 from pydantic_ai import Tool
 
 from devboard.db.models import MCPServerConfig
+from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 
 
@@ -72,13 +73,18 @@ class MCPToolFactory:
 
         async def call_mcp_tool(**kwargs: Any) -> str:
             result = await session.call_tool(tool_name, arguments=kwargs)
+
+            text_parts: list[str] = []
             if result.content:
-                text_parts: list[str] = []
                 for content in result.content:
                     if hasattr(content, "text"):
                         text_parts.append(content.text)  # type: ignore[union-attr]
-                return "\n".join(text_parts)
-            return ""
+
+            if result.isError:
+                error_message = "\n".join(text_parts) if text_parts else "MCP tool execution failed"
+                raise MCPToolExecutionError(error_message)
+
+            return "\n".join(text_parts)
 
         call_mcp_tool.__name__ = tool_name
         call_mcp_tool.__doc__ = tool_description

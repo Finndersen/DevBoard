@@ -640,7 +640,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-auto">
       {/* Error Display */}
       {updateError && (
         <ErrorMessage error={updateError} className="mb-6" />

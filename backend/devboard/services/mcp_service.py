@@ -16,6 +16,7 @@ from devboard.api.schemas.mcp import (
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
 from devboard.db.models import MCPServerConfig, MCPTool
 from devboard.db.repositories.mcp_server import MCPServerRepository
+from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 
 
@@ -185,11 +186,17 @@ class MCPService:
         lifecycle = MCPLifecycleManager(config)
         async with lifecycle as session:
             result = await session.call_tool(tool.name, arguments=arguments or {})
+
             # Extract text content from result
+            text_parts: list[str] = []
             if result.content:
-                text_parts: list[str] = []
                 for content in result.content:
                     if hasattr(content, "text"):
                         text_parts.append(content.text)  # type: ignore[union-attr]
-                return "\n".join(text_parts)
-            return ""
+
+            # Check for error response from MCP server
+            if result.isError:
+                error_message = "\n".join(text_parts) if text_parts else "MCP tool execution failed"
+                raise MCPToolExecutionError(error_message)
+
+            return "\n".join(text_parts)

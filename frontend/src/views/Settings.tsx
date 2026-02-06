@@ -142,7 +142,7 @@ export default function Settings() {
   }, [activeTab])
 
   return (
-    <div>
+    <div className="h-full overflow-auto">
       {/* Header */}
       <div className="mb-8">
         <h1 className={`text-3xl font-bold ${textColors.primary}`}>Settings</h1>

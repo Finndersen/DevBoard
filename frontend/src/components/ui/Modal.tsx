@@ -5,7 +5,8 @@ interface ModalProps {
   onClose: () => void
   title: string
   children: ReactNode
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '6xl' | '7xl'
+  scrollable?: boolean
 }
 
 const maxWidthClasses = {
@@ -13,15 +14,18 @@ const maxWidthClasses = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
-  '2xl': 'max-w-2xl'
+  '2xl': 'max-w-2xl',
+  '4xl': 'max-w-4xl',
+  '6xl': 'max-w-6xl',
+  '7xl': 'max-w-7xl'
 }
 
-export default function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, maxWidth = 'md', scrollable = true }: ModalProps) {
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className={`bg-white dark:bg-gray-800 rounded-lg ${maxWidthClasses[maxWidth]} w-full p-6`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-lg ${maxWidthClasses[maxWidth]} w-full p-6 max-h-[90vh] flex flex-col`}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">
             {title}
@@ -36,8 +40,10 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'md
             </svg>
           </button>
         </div>
-        
-        {children}
+
+        <div className={`flex-1 min-h-0 ${scrollable ? 'overflow-auto' : 'overflow-hidden flex flex-col'}`}>
+          {children}
+        </div>
       </div>
     </div>
   )

@@ -45,7 +45,9 @@ export default function TabContentContainer() {
             display: 'block',
             visibility: isActive ? 'visible' : 'hidden',
             position: isActive ? 'relative' : 'absolute',
-            pointerEvents: isActive ? 'auto' : 'none'
+            pointerEvents: isActive ? 'auto' : 'none',
+            height: '100%',
+            ...(isActive ? {} : { inset: 0 }),
           }}
         >
           {tab.type === 'home' && <Home />}

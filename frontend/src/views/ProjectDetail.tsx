@@ -209,7 +209,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const statusColumns = ['planning', 'implementing', 'reviewing', 'complete']
 
   return (
-    <div>
+    <div className="h-full overflow-auto">
       {/* Navigation Tabs with Project Name and Actions */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
         <div className="flex items-center justify-between relative">
