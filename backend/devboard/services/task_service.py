@@ -5,6 +5,7 @@ Ensures proper agent configuration and conversation state throughout the task li
 """
 
 import re
+from datetime import datetime
 
 import logfire
 
@@ -353,3 +354,45 @@ class TaskService:
         # Transition to COMPLETE
         self.transition_to_complete(task)
         self.task_repo.commit()
+
+    # Query methods (delegating to repository)
+
+    def get_task_by_id(self, task_id: int, *, with_documents: bool = False) -> Task | None:
+        """Get a task by its ID.
+
+        Args:
+            task_id: The task ID to search for
+            with_documents: If True, eager load document relationships
+
+        Returns:
+            Task instance if found, None otherwise
+        """
+        return self.task_repo.get_by_id(task_id, with_documents=with_documents)
+
+    def get_tasks_filtered(
+        self,
+        project_id: int,
+        status_filter: list[TaskStatus] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        codebase_name: str | None = None,
+    ) -> list[Task]:
+        """Get tasks for a project with optional filtering.
+
+        Args:
+            project_id: The project ID to get tasks for
+            status_filter: Optional list of TaskStatus values to filter by
+            created_after: Optional datetime to filter tasks created after
+            created_before: Optional datetime to filter tasks created before
+            codebase_name: Optional codebase name to filter by
+
+        Returns:
+            List of tasks matching the filters, with codebase eager-loaded
+        """
+        return self.task_repo.get_tasks_filtered(
+            project_id=project_id,
+            status_filter=status_filter,
+            created_after=created_after,
+            created_before=created_before,
+            codebase_name=codebase_name,
+        )
