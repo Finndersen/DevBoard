@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { apiClient } from '../../lib/api'
 import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '../../lib/api'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
-import { useEventHandlerRegistryForStream } from '../../hooks/useConversationEventHandlers'
+import { useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, useApprovalActions, type PendingApprovalWithContext } from '../../stores/approvalsStore'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
@@ -63,6 +63,9 @@ const ConversationChat = ({
   const pendingToolRequests = useConversationStreamStore(
     state => state.activeStreams.get(conversationId)?.pendingToolRequests
   )
+  const isQueued = useConversationStreamStore(
+    state => state.activeStreams.get(conversationId)?.isQueued ?? false
+  )
 
   // Use streamState only when needed (not for subscriptions)
   const streamState = useConversationStreamStore(state => state.activeStreams.get(conversationId))
@@ -74,6 +77,7 @@ const ConversationChat = ({
   const approveTools = useConversationStreamStore(state => state.approveTools)
   const clearPendingToolRequests = useConversationStreamStore(state => state.clearPendingToolRequests)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
+  const setQueued = useConversationStreamStore(state => state.setQueued)
 
   // Get event handler registry for stream processing
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
@@ -97,6 +101,9 @@ const ConversationChat = ({
       allActiveStreams: Array.from(useConversationStreamStore.getState().activeStreams.keys())
     })
   }, [conversationId, streamState, isStreaming, streamMessages, pendingToolRequests])
+
+  // Input state (lifted from ConversationInput for queue functionality)
+  const [inputMessage, setInputMessage] = useState('')
 
   // Local state for non-streaming concerns
   const [messages, setMessages] = useState<ConversationEvent[]>([])
@@ -386,11 +393,45 @@ const ConversationChat = ({
     messages
   ])
 
-  // Public handler for new messages from input (with guards)
-  const handleSendMessage = useCallback(async (messageText: string) => {
-    if (isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction) return
+  // Public handler for new messages from input
+  // If agent is busy (streaming, approvals pending, action running), queue the message
+  // Otherwise, send immediately
+  const handleSendMessage = useCallback(async () => {
+    const messageText = inputMessage.trim()
+    if (!messageText) return
+
+    // If agent is busy, queue the message instead of sending immediately
+    if (isStreaming || pendingApprovals.length > 0 || isRunningAction) {
+      setQueued(conversationId, true)
+      return
+    }
+
+    // Not busy - send immediately and clear input
+    setInputMessage('')
     await sendMessageInternal(messageText)
-  }, [isStreaming, pendingApprovals.length, pendingMessage, isRunningAction, sendMessageInternal])
+  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageInternal])
+
+  // Cancel queue handler - removes queue state but keeps message in input
+  const handleCancelQueue = useCallback(() => {
+    setQueued(conversationId, false)
+  }, [conversationId, setQueued])
+
+  // Auto-send queued message when stream completes successfully
+  useStreamCompleteHandler(useCallback(() => {
+    // Get current queue state from store (not from stale closure)
+    const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
+
+    // Check if there's a queued message to send
+    // Note: isQueued will be cleared by stopStream/setError, so this only fires on success
+    if (currentStreamState?.isQueued && inputMessage.trim()) {
+      const messageToSend = inputMessage.trim()
+      // Clear input and queue state before sending
+      setInputMessage('')
+      setQueued(conversationId, false)
+      // Send the queued message
+      sendMessageInternal(messageToSend)
+    }
+  }, [conversationId, inputMessage, setQueued, sendMessageInternal]))
 
   // Retry handler - bypasses guards, reuses existing pending message
   const handleRetryMessage = useCallback(async (messageId: string) => {
@@ -421,21 +462,16 @@ const ConversationChat = ({
       initialMessageSentRef.current = true
       // Use setTimeout to ensure this runs after render cycle
       setTimeout(() => {
-        handleSendMessage(initialMessage)
+        sendMessageInternal(initialMessage)
         onInitialMessageSent?.()
       }, 0)
     }
-  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, handleSendMessage, onInitialMessageSent])
+  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, sendMessageInternal, onInitialMessageSent])
 
   // Reset initial message sent ref when conversation changes
   useEffect(() => {
     initialMessageSentRef.current = false
   }, [conversationId])
-
-  const isInputDisabled = useMemo(
-    () => isStreaming || pendingApprovals.length > 0 || pendingMessage !== null || isRunningAction,
-    [isStreaming, pendingApprovals.length, pendingMessage, isRunningAction]
-  )
 
   const handleToolApproval = async (approvalRequest: ToolApprovalRequest) => {
     if (pendingApprovals.length === 0) return
@@ -547,18 +583,16 @@ const ConversationChat = ({
         ) : (
           <>
             <ConversationInput
+              value={inputMessage}
+              onChange={setInputMessage}
               onSendMessage={handleSendMessage}
-              disabled={isInputDisabled}
               placeholder={placeholder}
               isStreaming={isStreaming}
               onStopStream={() => stopStream(conversationId)}
+              isQueued={isQueued}
+              onCancelQueue={handleCancelQueue}
             />
 
-            {pendingApprovals.length > 0 && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-                Please review and approve/deny the pending tool requests above before sending another message.
-              </p>
-            )}
             {pendingMessage && pendingMessage.status !== 'failed' && (
               <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
                 Waiting for agent response...
