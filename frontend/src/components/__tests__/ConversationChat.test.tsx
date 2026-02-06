@@ -5,7 +5,6 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
 import ConversationChat from '../chat/ConversationChat'
-import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useApprovalsStore } from '../../stores/approvalsStore'
 
@@ -515,9 +514,8 @@ describe('ConversationChat', () => {
       expect(screen.getByText('Updating project specification')).toBeInTheDocument()
     })
 
-    // Input should be disabled while approval is pending
-    expect(input).toBeDisabled()
-    expect(sendButton).toBeDisabled()
+    // Input is always enabled (users can queue messages while waiting)
+    expect(input).not.toBeDisabled()
 
     // Find and click approve button
     const approveButton = screen.getByRole('button', { name: /approve/i })
@@ -534,7 +532,7 @@ describe('ConversationChat', () => {
     })
   })
 
-  it('prevents sending messages while tool approval is pending', async () => {
+  it('queues messages while tool approval is pending', async () => {
     const user = userEvent.setup()
 
     server.use(
@@ -557,22 +555,26 @@ describe('ConversationChat', () => {
     })
 
     const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
 
     await user.type(input, 'Test message')
-    await user.click(sendButton)
+    await user.click(screen.getByRole('button', { name: /send message/i }))
 
     // Wait for approval to appear
     await waitFor(() => {
       expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
     })
 
-    // Input should be disabled
-    expect(input).toBeDisabled()
-    expect(sendButton).toBeDisabled()
-    
-    // Should show helpful message
-    expect(screen.getByText(/Please review and approve.*pending tool requests/i)).toBeInTheDocument()
+    // Input is always enabled (users can type and queue messages)
+    expect(input).not.toBeDisabled()
+
+    // Type a new message while approval is pending
+    await user.type(input, 'Queued follow-up')
+    await user.click(screen.getByRole('button', { name: /send message/i }))
+
+    // Should show queued indicator
+    await waitFor(() => {
+      expect(screen.getByText(/queued/i)).toBeInTheDocument()
+    })
   })
 
   it('handles empty chat history gracefully', async () => {
@@ -825,14 +827,6 @@ describe('ConversationChat', () => {
   it('passes eventHandlerRegistry to processConversationStream and invokes SystemEvent handlers', async () => {
     const user = userEvent.setup()
 
-    // Mock system event handler
-    const mockSystemEventHandler = vi.fn()
-
-    // Create a wrapper that provides event handler context
-    const TestWrapper = ({ children }: { children: React.ReactNode }) => {
-      return <ConversationEventHandlerProvider>{children}</ConversationEventHandlerProvider>
-    }
-
     // Mock streaming response with SystemEvent
     server.use(
       http.post('*/api/conversations/1/messages/stream', () => {
@@ -860,11 +854,7 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(
-      <TestWrapper>
-        <ConversationChat conversationId={mockConversationId} />
-      </TestWrapper>
-    )
+    render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()

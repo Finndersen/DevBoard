@@ -3,6 +3,7 @@ import { render, type RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { PendingMessagesProvider } from '../contexts/PendingMessagesContext'
 import { DarkModeProvider } from '../contexts/DarkModeContext'
+import ConversationEventHandlerProvider from '../components/chat/ConversationEventHandlerProvider'
 
 // Custom render function with providers
 // eslint-disable-next-line react-refresh/only-export-components
@@ -11,7 +12,9 @@ const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
     <BrowserRouter>
       <DarkModeProvider>
         <PendingMessagesProvider>
-          {children}
+          <ConversationEventHandlerProvider>
+            {children}
+          </ConversationEventHandlerProvider>
         </PendingMessagesProvider>
       </DarkModeProvider>
     </BrowserRouter>
