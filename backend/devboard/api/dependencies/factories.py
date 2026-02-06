@@ -12,7 +12,7 @@ from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
-from devboard.db.models import Conversation, Task
+from devboard.db.models import Conversation, Project, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
@@ -54,6 +54,7 @@ async def create_agent_role_for_conversation(
                 task=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
+                task_service=task_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -81,19 +82,25 @@ async def create_agent_role_for_conversation(
                 status_code=400,
                 detail=f"Unsupported agent role for task: {conversation.agent_role}",
             )
-    else:
+    elif isinstance(parent_entity, Project):
         # Must be a project
         if conversation.agent_role == AgentRoleType.PROJECT:
             return ProjectQAAgentRole(
                 project=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
+                task_service=task_service,
             )
         else:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported agent role for project: {conversation.agent_role}",
             )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported parent entity type: {type(parent_entity).__name__}",
+        )
 
 
 def create_conversation_history_service(

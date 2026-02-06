@@ -19,11 +19,20 @@ from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository, TaskRepository
+from devboard.services.task_service import TaskService
+
+
+@pytest.fixture
+def mock_task_service(db_session):
+    """Create a mock TaskService."""
+    from unittest.mock import Mock
+
+    return Mock(spec=TaskService)
 
 
 @pytest.fixture
 def mock_agent_execution_service(
-    mock_agent, test_conversation, test_project, db_session, mock_agent_config_service, monkeypatch
+    mock_agent, test_conversation, test_project, db_session, mock_agent_config_service, mock_task_service, monkeypatch
 ):
     """Create an execution service with mocked agent."""
     conversation_repo = ConversationRepository(db_session)
@@ -40,6 +49,7 @@ def mock_agent_execution_service(
         project=test_project,
         document_repository=document_repo,
         agent_config_service=mock_agent_config_service,
+        task_service=mock_task_service,
     )
 
     service = PydanticAIAgentExecutionService(

@@ -10,7 +10,10 @@ from devboard.api.dependencies.factories import (
     create_agent_role_for_conversation,
     create_conversation_history_service,
 )
-from devboard.api.dependencies.repositories import get_conversation_repository, get_document_repository
+from devboard.api.dependencies.repositories import (
+    get_conversation_repository,
+    get_document_repository,
+)
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
