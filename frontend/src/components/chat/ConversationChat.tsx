@@ -334,10 +334,14 @@ const ConversationChat = ({
         timestamp: new Date().toISOString()
       }
 
-      // Create stream from API
+      // Create abort controller for stream cancellation
+      const abortController = new AbortController()
+
+      // Create stream from API with abort signal
       const stream = apiClient.streamConversationMessage(
         conversationId,
-        { message: messageText }
+        { message: messageText },
+        abortController.signal
       )
 
       // Start streaming via store
@@ -356,7 +360,8 @@ const ConversationChat = ({
           flushSync(() => {
             setRenderCount(prev => prev + 1)
           })
-        }
+        },
+        abortController
       )
     } catch (error) {
       console.error('Failed to send message:', error)

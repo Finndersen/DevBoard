@@ -95,6 +95,12 @@ class AllSlotsLockedException(Exception):
     pass
 
 
+class BranchInUseException(Exception):
+    """Raised when a task's branch is already checked out in a locked slot."""
+
+    pass
+
+
 class WorkspaceAllocationService:
     """Service for workspace allocation and worktree slot management."""
 
@@ -207,12 +213,19 @@ class WorkspaceAllocationService:
         branch_location = await git.get_checked_out_location(task.branch_name)
 
         if branch_location:
+            normalized_branch_location = str(Path(branch_location).resolve())
             for slot in all_slots_sorted:
-                if slot.path == branch_location and not slot.locked:
-                    logfire.info(
-                        f"Using slot {slot.id} for task {task.id} - branch {task.branch_name} already checked out there"
-                    )
-                    return self.worktree_slot_repo.lock_slot(slot, task)
+                normalized_slot_path = str(Path(slot.path).resolve())
+                if normalized_slot_path == normalized_branch_location:
+                    if not slot.locked:
+                        logfire.info(
+                            f"Using slot {slot.id} for task {task.id} - branch {task.branch_name} already checked out there"
+                        )
+                        return self.worktree_slot_repo.lock_slot(slot, task)
+                    else:
+                        raise BranchInUseException(
+                            f"Branch '{task.branch_name}' is already in use by task {slot.last_used_by_task_id}"
+                        )
 
         # PRIORITY 2: Single pass - find sticky slot and build candidate pool simultaneously
         sticky_slot: WorktreeSlot | None = None
@@ -360,7 +373,7 @@ class WorkspaceAllocationService:
             # Database returns naive datetimes, so add UTC timezone for comparison
             last_used = slot.last_used_at.replace(tzinfo=datetime.UTC)
             age = datetime.datetime.now(datetime.UTC) - last_used
-            if age > datetime.timedelta(hours=1):
+            if age > datetime.timedelta(minutes=30):
                 logfire.warn(
                     f"Releasing very old lock on slot {slot.id} (task {slot.last_used_by_task_id}, "
                     f"last used {age.total_seconds() / 3600:.1f}h ago)"
@@ -622,6 +635,17 @@ class WorkspaceAllocationService:
                         data={"task_id": task.id, "slot_id": slot.id},
                         timestamp=datetime.datetime.now(datetime.UTC),
                     )
+
+            except BranchInUseException as e:
+                yield SystemEvent(
+                    type=SystemEventType.STREAM_ERROR,
+                    data={
+                        "error_code": "BRANCH_IN_USE",
+                        "message": str(e),
+                    },
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+                return
 
             except AllSlotsLockedException:
                 # Check if we can create a new worktree

@@ -36,15 +36,14 @@ const TodoPanel = ({ conversationId, engine }: TodoPanelProps) => {
   }, [fetchTodos])
 
   // Register handler for TodoWrite tool results to trigger refresh
-  useToolResultHandler(
-    (toolName) => toolName === 'TodoWrite',
-    () => {
+  useToolResultHandler((toolName) => {
+    if (toolName === 'TodoWrite') {
       fetchTodos()
       if (isCollapsed) {
         setHasUpdates(true)
       }
     }
-  )
+  })
 
   // Clear update indicator when panel is expanded
   useEffect(() => {

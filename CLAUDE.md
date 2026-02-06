@@ -39,6 +39,7 @@ We are working to develop an application as described in @docs/INDEX.md
 
 ## Patterns
 - Use logfire for logging instead of standard logging module
+- when there is an error in a tool, raise ModelRetry exception instead of returning an error text string
 
 # Frontend Development Guidelines
 

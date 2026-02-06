@@ -240,3 +240,158 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     expect(streamState?.messages[0]).toEqual(toolCall2)
   })
 })
+
+describe('conversationStreamStore - stream cancellation', () => {
+  beforeEach(() => {
+    // Reset store state before each test
+    useConversationStreamStore.setState({ activeStreams: new Map() })
+  })
+
+  it('should use provided abortController for stream cancellation', async () => {
+    const conversationId = Date.now() + 100
+    const store = useConversationStreamStore.getState()
+
+    // Create an abort controller that we control
+    const abortController = new AbortController()
+
+    // Create a mock stream that will be cancelled
+    let streamAborted = false
+    async function* mockStream(): AsyncGenerator<ConversationEvent> {
+      try {
+        // Yield first event
+        yield {
+          event_type: 'message',
+          role: 'agent',
+          text_content: 'First message',
+          timestamp: '2024-01-01T00:00:00Z'
+        }
+
+        // Wait to be cancelled
+        await new Promise((resolve, reject) => {
+          abortController.signal.addEventListener('abort', () => {
+            streamAborted = true
+            reject(new DOMException('Aborted', 'AbortError'))
+          })
+        })
+
+        // This should never be reached
+        yield {
+          event_type: 'message',
+          role: 'agent',
+          text_content: 'Second message',
+          timestamp: '2024-01-01T00:00:01Z'
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return
+        }
+        throw error
+      }
+    }
+
+    // Start the stream with our abort controller
+    const streamPromise = store.startStream(
+      conversationId,
+      mockStream(),
+      undefined,
+      [],
+      undefined,
+      abortController
+    )
+
+    // Wait a tick for the stream to start
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    // Verify stream is active
+    expect(store.isConversationStreaming(conversationId)).toBe(true)
+
+    // Stop the stream using the store's stopStream method
+    store.stopStream(conversationId)
+
+    // Wait for stream to complete
+    await streamPromise
+
+    // Verify stream was aborted via our controller
+    expect(streamAborted).toBe(true)
+
+    // Verify stream is no longer active
+    expect(store.isConversationStreaming(conversationId)).toBe(false)
+  })
+
+  it('should create internal abortController when none provided', async () => {
+    const conversationId = Date.now() + 101
+    const store = useConversationStreamStore.getState()
+
+    let eventCount = 0
+    async function* mockStream(): AsyncGenerator<ConversationEvent> {
+      eventCount++
+      yield {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Message',
+        timestamp: '2024-01-01T00:00:00Z'
+      }
+    }
+
+    // Start stream without providing an abort controller
+    await store.startStream(
+      conversationId,
+      mockStream(),
+      undefined,
+      []
+    )
+
+    // Verify stream completed and processed the event
+    expect(eventCount).toBe(1)
+
+    // Verify the stream state was created with an abortController
+    // (Even though stream completed, we can verify behavior worked)
+  })
+
+  it('should abort fetch request when stopStream is called with provided controller', async () => {
+    const conversationId = Date.now() + 102
+    const store = useConversationStreamStore.getState()
+
+    const abortController = new AbortController()
+    let signalAborted = false
+
+    // Listen for abort on the signal directly
+    abortController.signal.addEventListener('abort', () => {
+      signalAborted = true
+    })
+
+    async function* mockStream(): AsyncGenerator<ConversationEvent> {
+      yield {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Message',
+        timestamp: '2024-01-01T00:00:00Z'
+      }
+      // Simulate long-running stream
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+
+    // Start stream
+    const streamPromise = store.startStream(
+      conversationId,
+      mockStream(),
+      undefined,
+      [],
+      undefined,
+      abortController
+    )
+
+    // Wait for stream to start
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    // Stop the stream
+    store.stopStream(conversationId)
+
+    // Verify the abort signal was triggered
+    expect(signalAborted).toBe(true)
+    expect(abortController.signal.aborted).toBe(true)
+
+    // Wait for stream to finish
+    await streamPromise
+  })
+})

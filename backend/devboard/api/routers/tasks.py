@@ -2,7 +2,7 @@
 
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
@@ -295,6 +295,7 @@ async def get_task_diff(
 @router.post("/{task_id}/workflow-action")
 async def execute_workflow_action(
     task_id: int,
+    http_request: Request,
     request: PromptActionRequest,
     task: Task = Depends(get_verified_task),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
@@ -344,7 +345,7 @@ async def execute_workflow_action(
         raise exc
 
     # Stream events from the action
-    return stream_conversation_events(action.run(), exception_handler=handle_exception)
+    return stream_conversation_events(action.run(), http_request, exception_handler=handle_exception)
 
 
 # Git endpoints

@@ -11,6 +11,7 @@ from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.services.workspace_allocation_service import (
     AllSlotsLockedException,
+    BranchInUseException,
     WorkspaceAllocationService,
 )
 
@@ -171,10 +172,10 @@ async def test_allocate_for_task_branch_location_with_uncommitted_changes(
 
 
 @pytest.mark.asyncio
-async def test_allocate_for_task_branch_location_slot_locked_falls_back(
+async def test_allocate_for_task_branch_location_slot_locked_raises_exception(
     service, mock_repos, sample_task, sample_codebase, sample_slot
 ):
-    """Test that if branch's slot is locked, allocation falls back to stickiness/LRU."""
+    """Test that if branch's slot is locked, allocation raises BranchInUseException."""
     worktree_slot_repo, task_repo, _ = mock_repos
 
     now = datetime.datetime.now(datetime.UTC)
@@ -188,25 +189,27 @@ async def test_allocate_for_task_branch_location_slot_locked_falls_back(
     branch_slot.last_used_by_task_id = 999
     branch_slot.last_used_at = now - timedelta(hours=1)
 
-    # Setup: Another slot available for LRU
+    # Setup: Another slot available for LRU (but should not be used because branch is in locked slot)
     sample_slot.id = 2
+    sample_slot.path = "/projects/test-repo.worktree-2"  # Different path than branch_slot
     sample_slot.locked = False
     sample_slot.last_used_by_task_id = None
     sample_slot.last_used_at = now
 
     worktree_slot_repo.get_by_codebase.return_value = [branch_slot, sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
 
     with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
         # Branch is checked out in locked slot
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=branch_slot.path)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
-        result = await service.allocate_for_task(sample_task)
+        with pytest.raises(BranchInUseException) as exc_info:
+            await service.allocate_for_task(sample_task)
 
-    # Verify: Fell back to LRU since branch's slot is locked
-    assert result.id == sample_slot.id
-    worktree_slot_repo.lock_slot.assert_called_once_with(sample_slot, sample_task)
+    # Verify: Exception message contains branch name and task id
+    assert sample_task.branch_name in str(exc_info.value)
+    assert "999" in str(exc_info.value)
+    # Verify: No slot was locked (allocation failed)
+    worktree_slot_repo.lock_slot.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -370,39 +373,39 @@ async def test_cleanup_stale_locks(service, mock_repos, sample_codebase):
     """Test cleanup of stale locks based on last_used_at age."""
     worktree_slot_repo, task_repo, _ = mock_repos
 
-    # Setup: Locked slot from 2 hours ago (older than 1h threshold)
+    # Setup: Locked slot from 45 minutes ago (older than 30min threshold)
     locked_slot = MagicMock(spec=WorktreeSlot)
     locked_slot.id = 1
     locked_slot.last_used_by_task_id = 1
-    locked_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=2)
+    locked_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(minutes=45)
 
     worktree_slot_repo.get_all_locked.return_value = [locked_slot]
 
     # Execute
     released_count = await service.cleanup_stale_locks(sample_codebase.id)
 
-    # Verify: Lock was released (>1h age threshold)
+    # Verify: Lock was released (>30min age threshold)
     assert released_count == 1
     worktree_slot_repo.unlock_slot.assert_called_once_with(locked_slot)
 
 
 @pytest.mark.asyncio
 async def test_cleanup_stale_locks_does_not_release_recent(service, mock_repos, sample_codebase):
-    """Test that locks within the 1h threshold are not released."""
+    """Test that locks within the 30min threshold are not released."""
     worktree_slot_repo, task_repo, _ = mock_repos
 
-    # Setup: Recently locked slot (30 minutes ago, within 1h threshold)
+    # Setup: Recently locked slot (15 minutes ago, within 30min threshold)
     recent_slot = MagicMock(spec=WorktreeSlot)
     recent_slot.id = 1
     recent_slot.last_used_by_task_id = 1
-    recent_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(minutes=30)
+    recent_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(minutes=15)
 
     worktree_slot_repo.get_all_locked.return_value = [recent_slot]
 
     # Execute
     released_count = await service.cleanup_stale_locks(sample_codebase.id)
 
-    # Verify: Lock was NOT released (within 1h threshold)
+    # Verify: Lock was NOT released (within 30min threshold)
     assert released_count == 0
     worktree_slot_repo.unlock_slot.assert_not_called()
 
@@ -710,6 +713,48 @@ async def test_run_task_agent_yields_stream_error_when_all_slots_locked(
     assert error_event.type == SystemEventType.STREAM_ERROR
     assert error_event.data["error_code"] == "SLOTS_EXHAUSTED"
     assert "workspace slots available" in error_event.data["message"]
+
+    # Verify: Slot was NOT released (never allocated)
+    worktree_slot_repo.unlock_slot.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_task_agent_yields_stream_error_when_branch_in_use(
+    service, mock_repos, sample_task, sample_codebase, sample_slot
+):
+    """Test that run_task_agent_in_workspace yields STREAM_ERROR when branch is checked out in locked slot."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: Slot with branch is locked by another task
+    sample_slot.locked = True
+    sample_slot.last_used_by_task_id = 999  # Different task
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+
+    # Mock git operations
+    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+        # Branch is checked out in the locked slot
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
+
+        # Mock agent stream (should never be reached)
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        # Execute and collect events
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Should have yielded STREAM_ERROR event with BRANCH_IN_USE error code
+    assert len(events) == 1
+    error_event = events[0]
+    assert isinstance(error_event, SystemEvent)
+    assert error_event.type == SystemEventType.STREAM_ERROR
+    assert error_event.data["error_code"] == "BRANCH_IN_USE"
+    assert sample_task.branch_name in error_event.data["message"]
+    assert "999" in error_event.data["message"]
 
     # Verify: Slot was NOT released (never allocated)
     worktree_slot_repo.unlock_slot.assert_not_called()

@@ -421,6 +421,21 @@ describe('ConversationMessage', () => {
       expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
     })
 
+    it('renders workspace_setup event as system badge', () => {
+      const systemEvent: SystemEvent = {
+        event_type: 'system',
+        type: 'workspace_setup',
+        data: { task_id: 123, codebase_id: 1, setup_command: 'npm install' },
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={systemEvent} />)
+
+      expect(screen.getByText('Running workspace setup')).toBeInTheDocument()
+      const badge = screen.getByText('Running workspace setup').closest('.rounded-full')
+      expect(badge).toHaveClass('bg-blue-500/10', 'text-blue-400')
+    })
+
     it('does not render task_updated event (hidden)', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',

@@ -55,13 +55,15 @@ interface ConversationStreamActions {
    * @param eventHandlerRegistry - Optional registry for invoking event handlers
    * @param initialMessages - Optional initial messages to include (e.g., user message)
    * @param onFirstEvent - Optional callback invoked once when first event is received
+   * @param abortController - Optional AbortController for cancelling the stream (if not provided, one is created internally)
    */
   startStream: (
     conversationId: number,
     stream: AsyncGenerator<ConversationEvent>,
     eventHandlerRegistry?: EventHandlerRegistry,
     initialMessages?: ConversationEvent[],
-    onFirstEvent?: () => void | Promise<void>
+    onFirstEvent?: () => void | Promise<void>,
+    abortController?: AbortController
   ) => Promise<void>
 
   /**
@@ -206,9 +208,9 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     activeStreams: new Map(),
 
     // Actions
-    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages, onFirstEvent) => {
-      // Create abort controller for this stream
-      const abortController = new AbortController()
+    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages, onFirstEvent, providedAbortController) => {
+      // Use provided abort controller or create a new one
+      const abortController = providedAbortController ?? new AbortController()
 
       // Create mutable ref for conversation ID in external map (not in Zustand state)
       // Allows closures to see updates after migration (Immer freezes objects in state)

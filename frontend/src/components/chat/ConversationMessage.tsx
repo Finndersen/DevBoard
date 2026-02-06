@@ -15,6 +15,8 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
       return 'Allocating workspace'
     case 'workspace_branch_checkout':
       return 'Checking out branch'
+    case 'workspace_setup':
+      return 'Running workspace setup'
     case 'branch_rebased':
       return data?.message as string ?? 'Branch rebased'
     case 'stash_apply_conflict':
