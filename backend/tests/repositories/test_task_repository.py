@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -204,3 +206,363 @@ class TestTaskRepository:
         db_session.commit()
         assert updated.title == "Updated Task"
         assert updated.status == TaskStatus.COMPLETE
+
+    def test_get_tasks_filtered_no_filters(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered returns all tasks for project when no filters applied."""
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Task 1",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.PLANNING,
+        )
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Task 2",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.COMPLETE,
+        )
+        db_session.flush()
+
+        tasks = repo.get_tasks_filtered(project.id)
+
+        assert len(tasks) == 2
+        task_titles = {t.title for t in tasks}
+        assert task_titles == {"Task 1", "Task 2"}
+
+    def test_get_tasks_filtered_by_status(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered filters by TaskStatus."""
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Planning Task",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.PLANNING,
+        )
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Implementing Task",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.IMPLEMENTING,
+        )
+
+        spec_doc3 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Complete Task",
+            specification=spec_doc3,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.COMPLETE,
+        )
+        db_session.flush()
+
+        # Filter by single status
+        planning_tasks = repo.get_tasks_filtered(project.id, status_filter=[TaskStatus.PLANNING])
+        assert len(planning_tasks) == 1
+        assert planning_tasks[0].title == "Planning Task"
+
+        # Filter by multiple statuses
+        active_tasks = repo.get_tasks_filtered(project.id, status_filter=[TaskStatus.PLANNING, TaskStatus.IMPLEMENTING])
+        assert len(active_tasks) == 2
+        task_titles = {t.title for t in active_tasks}
+        assert task_titles == {"Planning Task", "Implementing Task"}
+
+    def test_get_tasks_filtered_by_created_after(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered filters by created_after date."""
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        task1 = repo.create(
+            project_id=project.id,
+            title="Old Task",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        # Set an older created_at time
+        old_time = datetime.now(UTC) - timedelta(days=10)
+        task1.created_at = old_time
+        db_session.flush()
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="New Task",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        # Filter for tasks created after 5 days ago
+        cutoff = datetime.now(UTC) - timedelta(days=5)
+        tasks = repo.get_tasks_filtered(project.id, created_after=cutoff)
+
+        assert len(tasks) == 1
+        assert tasks[0].title == "New Task"
+
+    def test_get_tasks_filtered_by_created_before(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered filters by created_before date."""
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        task1 = repo.create(
+            project_id=project.id,
+            title="Old Task",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        # Set an older created_at time
+        old_time = datetime.now(UTC) - timedelta(days=10)
+        task1.created_at = old_time
+        db_session.flush()
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="New Task",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        # Filter for tasks created before 5 days ago
+        cutoff = datetime.now(UTC) - timedelta(days=5)
+        tasks = repo.get_tasks_filtered(project.id, created_before=cutoff)
+
+        assert len(tasks) == 1
+        assert tasks[0].title == "Old Task"
+
+    def test_get_tasks_filtered_by_codebase_name(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered filters by codebase name."""
+        # Create a second codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase2 = Codebase(
+            name="Backend Codebase",
+            description="Backend services",
+            local_path="/tmp/backend-codebase",
+        )
+        codebase2 = codebase_repo.create(codebase2)
+        db_session.flush()
+
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Frontend Task",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,  # "Test Codebase"
+        )
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Backend Task",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase2.id,  # "Backend Codebase"
+        )
+        db_session.flush()
+
+        # Filter by codebase name
+        tasks = repo.get_tasks_filtered(project.id, codebase_name="Backend Codebase")
+
+        assert len(tasks) == 1
+        assert tasks[0].title == "Backend Task"
+        assert tasks[0].codebase is not None
+        assert tasks[0].codebase.name == "Backend Codebase"
+
+    def test_get_tasks_filtered_combined_filters(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered with multiple filters combined."""
+        # Create a second codebase
+        codebase_repo = CodebaseRepository(db_session)
+        codebase2 = Codebase(
+            name="Backend Codebase",
+            description="Backend services",
+            local_path="/tmp/backend-codebase",
+        )
+        codebase2 = codebase_repo.create(codebase2)
+        db_session.flush()
+
+        # Create tasks with different combinations of attributes
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        task1 = repo.create(
+            project_id=project.id,
+            title="Old Backend Planning",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase2.id,
+            status=TaskStatus.PLANNING,
+        )
+        db_session.flush()
+        task1.created_at = datetime.now(UTC) - timedelta(days=10)
+        db_session.flush()
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="New Backend Planning",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase2.id,
+            status=TaskStatus.PLANNING,
+        )
+
+        spec_doc3 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="New Backend Complete",
+            specification=spec_doc3,
+            base_branch="main",
+            codebase_id=codebase2.id,
+            status=TaskStatus.COMPLETE,
+        )
+
+        spec_doc4 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="New Frontend Planning",
+            specification=spec_doc4,
+            base_branch="main",
+            codebase_id=codebase.id,
+            status=TaskStatus.PLANNING,
+        )
+        db_session.flush()
+
+        # Filter: Backend codebase + Planning status + created in last 5 days
+        cutoff = datetime.now(UTC) - timedelta(days=5)
+        tasks = repo.get_tasks_filtered(
+            project.id,
+            status_filter=[TaskStatus.PLANNING],
+            created_after=cutoff,
+            codebase_name="Backend Codebase",
+        )
+
+        assert len(tasks) == 1
+        assert tasks[0].title == "New Backend Planning"
+        assert tasks[0].status == TaskStatus.PLANNING
+        assert tasks[0].codebase.name == "Backend Codebase"
+
+    def test_get_tasks_filtered_only_returns_tasks_for_specified_project(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered only returns tasks for the specified project."""
+        # Create a second project
+        project_repo = ProjectRepository(db_session)
+        spec_doc_p2 = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project2 = project_repo.create(name="Project 2", description="", specification=spec_doc_p2)
+        db_session.flush()
+
+        spec_doc1 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Project 1 Task",
+            specification=spec_doc1,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+
+        spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project2.id,
+            title="Project 2 Task",
+            specification=spec_doc2,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        tasks = repo.get_tasks_filtered(project.id)
+
+        assert len(tasks) == 1
+        assert tasks[0].title == "Project 1 Task"
+        assert tasks[0].project_id == project.id
+
+    def test_get_tasks_filtered_eager_loads_codebase(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered eager loads the codebase relationship."""
+        spec_doc = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+        repo.create(
+            project_id=project.id,
+            title="Task with Codebase",
+            specification=spec_doc,
+            base_branch="main",
+            codebase_id=codebase.id,
+        )
+        db_session.flush()
+
+        tasks = repo.get_tasks_filtered(project.id)
+
+        assert len(tasks) == 1
+        # Verify codebase is loaded (accessing it should not trigger additional query)
+        assert tasks[0].codebase is not None
+        assert tasks[0].codebase.name == "Test Codebase"
+        assert tasks[0].codebase.local_path == "/tmp/test-codebase"

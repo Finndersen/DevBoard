@@ -1,11 +1,12 @@
 """Task repository for task data access operations."""
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload
 
-from devboard.db.models import Conversation, Document, ParentEntityType, Task, TaskStatus
+from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Task, TaskStatus
 from devboard.db.models.base import task_context_resource_association
 from devboard.db.repositories.base import BaseRepository
 
@@ -156,3 +157,44 @@ class TaskRepository(BaseRepository[Task]):
             stmt = stmt.where(Task.codebase_id == codebase_id)
 
         return list(self.db.execute(stmt).scalars().all())
+
+    def get_tasks_filtered(
+        self,
+        project_id: int,
+        status_filter: list[TaskStatus] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        codebase_name: str | None = None,
+    ) -> list[Task]:
+        """Get tasks for a project with optional filtering.
+
+        Args:
+            project_id: The project ID to get tasks for
+            status_filter: Optional list of TaskStatus values to filter by
+            created_after: Optional datetime to filter tasks created after
+            created_before: Optional datetime to filter tasks created before
+            codebase_name: Optional codebase name to filter by
+
+        Returns:
+            List of tasks matching the filters, with codebase eager-loaded
+        """
+        stmt = select(Task).where(Task.project_id == project_id)
+
+        # Add status filter
+        if status_filter:
+            stmt = stmt.where(Task.status.in_(status_filter))
+
+        # Add date range filters
+        if created_after:
+            stmt = stmt.where(Task.created_at >= created_after)
+        if created_before:
+            stmt = stmt.where(Task.created_at <= created_before)
+
+        # Add codebase name filter (requires join)
+        if codebase_name:
+            stmt = stmt.join(Codebase, Task.codebase_id == Codebase.id).where(Codebase.name == codebase_name)
+
+        # Eager load codebase for display
+        stmt = stmt.options(joinedload(Task.codebase))
+
+        return list(self.db.execute(stmt).unique().scalars().all())
