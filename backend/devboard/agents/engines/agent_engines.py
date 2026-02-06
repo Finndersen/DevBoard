@@ -70,11 +70,11 @@ ALL_ENGINES: list[AgentEngineDefinition] = [
 
 
 # Engine restrictions by agent role
-# PROJECT and PLANNING require tool approval (PydanticAI only)
+# PROJECT and PLANNING require tool approval (supported via VirtualTool mechanism)
 # IMPLEMENTATION can use any external engine for full capabilities
 # First engine in the list is the recommended one for each role
 ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRoleType, list[AgentEngine]] = {
-    AgentRoleType.PROJECT: [AgentEngine.INTERNAL],
+    AgentRoleType.PROJECT: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.TASK_PLANNING: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.TASK_IMPLEMENTATION: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],
     AgentRoleType.TASK_PR_REVIEW: [AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI],

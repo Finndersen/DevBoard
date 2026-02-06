@@ -142,9 +142,10 @@ class TestAgentConfigService:
         assert project_config.config.model_id is not None
         assert len(project_config.available_engines) > 0
 
-        # PROJECT should only allow INTERNAL engine
-        assert len(project_config.available_engines) == 1
-        assert project_config.available_engines[0].engine == "internal"
+        # PROJECT should allow INTERNAL and CLAUDE_CODE engines
+        assert len(project_config.available_engines) == 2
+        engine_names = {e.engine for e in project_config.available_engines}
+        assert engine_names == {"internal", "claude_code"}
 
         # Test TASK_IMPLEMENTATION role (Claude Code by default)
         task_impl_config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
