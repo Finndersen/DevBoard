@@ -88,7 +88,7 @@ Roles define agent behavior independently of the execution engine, encapsulating
 **ProjectQARole**:
 - Purpose: Answer project questions and edit project specifications
 - Context: Project details, specifications, linked resources
-- Tools: `edit_project_specification`, `search_codebase`, `read_codebase_files`
+- Tools: `edit_project_specification`, `list_tasks`, `view_task_details`, `create_task`, `search_codebase`, `read_codebase_files`
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/project_qa.py`
 
@@ -102,16 +102,23 @@ Roles define agent behavior independently of the execution engine, encapsulating
 **TaskPlanningRole**:
 - Purpose: Create implementation plans during PLANNING phase
 - Context: Task specification, implementation plan document
-- Tools: `edit_implementation_plan`, `set_implementation_plan_content`, `search_codebase`, `read_codebase_files`, `execute_shell_command`
+- Tools: `edit_implementation_plan`, `set_implementation_plan_content`, `create_task`, `search_codebase`, `read_codebase_files`, `execute_shell_command`
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_planning.py`
 
 **TaskImplementationRole**:
 - Purpose: Assist with code implementation during IMPLEMENTATION phase
 - Context: Task specification, implementation plan, codebase structure
-- Tools: `search_codebase`, `read_codebase_files`, `execute_shell_command`
+- Tools: `create_task`, `search_codebase`, `read_codebase_files`, `execute_shell_command`
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_implementation.py`
+
+**TaskPRReviewRole**:
+- Purpose: Manage tasks in PR_OPEN state, handle PR feedback and code changes
+- Context: Task specification, implementation plan, PR status
+- Tools: `create_task`, `get_pr_feedback`, `merge_pr_and_complete_task`
+- Engine Support: CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/task_pr_review.py`
 
 ### Dynamic Role Selection
 
@@ -238,4 +245,9 @@ Workflow actions are reusable, named operations that orchestrate task state tran
 - `backend/devboard/agents/roles/task_specification.py`: Task specification role
 - `backend/devboard/agents/roles/task_planning.py`: Task planning role
 - `backend/devboard/agents/roles/task_implementation.py`: Task implementation role
+- `backend/devboard/agents/roles/task_pr_review.py`: Task PR review role
 - `backend/devboard/agents/roles/types.py`: Role type definitions
+
+**Agent Tools**:
+- `backend/devboard/agents/tools/`: Tool factory functions directory
+- `backend/devboard/agents/tools/task_query_tools.py`: Task listing, viewing, and creation tools

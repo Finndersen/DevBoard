@@ -22,6 +22,14 @@
 
 **edit_project_specification**: Find-and-replace in project spec. Approval required. Params: `old_string`, `new_string`. Used by: ProjectQARole
 
+### Task Query Tools
+
+**list_tasks**: List tasks belonging to the current project with optional filtering. No approval (read-only). Params: `status_filter` (list of status values), `created_after` (ISO date), `created_before` (ISO date), `codebase_name`. Used by: ProjectQARole
+
+**view_task_details**: View detailed information about a specific task including metadata and optional document contents. No approval (read-only). Params: `task_id`, `include_documents` (list: specification, implementation_plan, change_summary). Used by: ProjectQARole
+
+**create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_id`, `specification_content`, `base_branch`, `branch_name`, `remote_task_id`, `custom_fields`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+
 ### Codebase Analysis
 
 **search_codebase**: Semantic search via embeddings. No approval (read-only). Params: `query`, `codebase_id`. Used by: All roles
@@ -91,13 +99,15 @@
 
 ## Tool Registration by Role
 
-**ProjectQARole**: edit_project_specification, search_codebase, read_codebase_files
+**ProjectQARole**: edit_project_specification, list_tasks, view_task_details, create_task, search_codebase, read_codebase_files
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 
-**TaskPlanningRole**: edit_implementation_plan, set_implementation_plan_content, search_codebase, read_codebase_files, execute_shell_command
+**TaskPlanningRole**: edit_implementation_plan, set_implementation_plan_content, create_task, search_codebase, read_codebase_files, execute_shell_command
 
-**TaskImplementationRole**: search_codebase, read_codebase_files, execute_shell_command
+**TaskImplementationRole**: create_task, search_codebase, read_codebase_files, execute_shell_command
+
+**TaskPRReviewRole**: create_task, get_pr_feedback, merge_pr_and_complete_task
 
 ## Files
 
