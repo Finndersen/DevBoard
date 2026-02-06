@@ -21,6 +21,7 @@ def create_mock_result(text_content: str, session_id: str = "test-session") -> R
     mock_result_message = Mock(spec=ResultMessage)
     mock_result_message.session_id = session_id
     mock_result_message.result = text_content  # The text content is in the result attribute
+    mock_result_message.is_error = False
     return mock_result_message
 
 

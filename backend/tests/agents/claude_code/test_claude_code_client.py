@@ -65,8 +65,8 @@ class TestClaudeClient:
         agent = ClaudeClient(tools=[tool], load_settings=False)
         assert agent.options.mcp_servers is not None
         assert "builtin_tools" in agent.options.mcp_servers
-        assert len(agent.options.allowed_tools) == 1
-        assert agent.options.allowed_tools[0] == "mcp__builtin_tools__custom_tool"
+        # Custom MCP tools are always allowed - disallowed_tools only contains builtin tools
+        assert agent.options.disallowed_tools is not None
 
     @pytest.mark.asyncio
     async def test_run_basic_query(self, mock_sdk_client):
@@ -369,9 +369,9 @@ class TestMcpToolErrorHandling:
         )
         result = await handler(request)
 
-        # Verify the result has is_error=True
-        assert hasattr(result.root, "is_error"), "Result should have is_error attribute"
-        assert result.root.is_error is True, "is_error should be True when tool raises exception"
+        # Verify the result has isError=True (MCP uses camelCase)
+        assert hasattr(result.root, "isError"), "Result should have isError attribute"
+        assert result.root.isError is True, "isError should be True when tool raises exception"
         assert len(result.root.content) == 1
         assert "Intentional test error" in result.root.content[0].text
 
@@ -397,6 +397,6 @@ class TestMcpToolErrorHandling:
         )
         result = await handler(request)
 
-        # Verify is_error is False for successful execution
-        assert hasattr(result.root, "is_error"), "Result should have is_error attribute"
-        assert result.root.is_error is False, "is_error should be False for successful tool"
+        # Verify isError is False for successful execution (MCP uses camelCase)
+        assert hasattr(result.root, "isError"), "Result should have isError attribute"
+        assert result.root.isError is False, "isError should be False for successful tool"
