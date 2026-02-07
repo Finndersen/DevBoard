@@ -410,12 +410,27 @@ export interface AgentEngineModelConfig {
 export interface AgentConfigurationResponse {
   agent_role: string
   config: AgentEngineModelConfig
+  custom_instructions: string | null
   available_engines: AgentEngineInfo[]
+  enabled_mcp_tools: MCPToolSummary[]
 }
 
 export interface UpdateAgentConfigurationRequest {
   engine: string
   model_id: string | null
+  custom_instructions?: string | null
+}
+
+export interface MCPToolSummary {
+  tool_id: number
+  tool_name: string
+  server_name: string
+  description: string | null
+}
+
+export interface AgentRoleToolsResponse {
+  role: string
+  tools: MCPToolSummary[]
 }
 
 export interface AvailableModelsByEngineResponse {
@@ -814,6 +829,27 @@ export class ApiClient {
 
   async getAvailableModelsByEngine(): Promise<AvailableModelsByEngineResponse> {
     return this.request<AvailableModelsByEngineResponse>('/api/agents/available-models')
+  }
+
+  async getAgentRoleTools(agentRole: string): Promise<AgentRoleToolsResponse> {
+    return this.request<AgentRoleToolsResponse>(`/api/agents/${agentRole}/tools`)
+  }
+
+  async addAgentRoleTool(agentRole: string, toolId: number): Promise<void> {
+    await this.request<{ status: string }>(`/api/agents/${agentRole}/tools`, {
+      method: 'POST',
+      body: JSON.stringify({ tool_id: toolId }),
+    })
+  }
+
+  async removeAgentRoleTool(agentRole: string, toolId: number): Promise<void> {
+    await this.request<{ status: string }>(`/api/agents/${agentRole}/tools/${toolId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getAvailableMCPTools(): Promise<MCPToolSummary[]> {
+    return this.request<MCPToolSummary[]>('/api/agents/available-mcp-tools')
   }
 
   async updateConversationModel(conversationId: number | string, request: UpdateConversationModelRequest): Promise<{ conversation_id: number; agent_role: string; engine: string; model_id: string; updated_at: string }> {

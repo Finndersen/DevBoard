@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { CogIcon, LinkIcon, CpuChipIcon, TagIcon } from '@heroicons/react/24/outline'
 import { ConfigurationForm } from '../components/configuration/ConfigurationForm'
 import { ConfigurationList } from '../components/configuration/ConfigurationList'
-import { AgentConfigurationSelector } from '../components/configuration/AgentConfigurationSelector'
+import { AgentRoleList } from '../components/configuration/AgentRoleList'
+import { AgentRoleConfigPanel } from '../components/configuration/AgentRoleConfigPanel'
 import { CustomFieldSettings } from '../components/settings/CustomFieldSettings'
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
@@ -46,6 +47,7 @@ export default function Settings() {
   ]
   
   const [selectedConfig, setSelectedConfig] = useState<string | null>(integrationConfigs[0]?.key || null)
+  const [selectedAgentRole, setSelectedAgentRole] = useState<string>(agentTypes[0]?.key || 'project')
   const [configStatuses, setConfigStatuses] = useState<Record<string, { isValid: boolean; errors?: string[] }>>({})
   const [configDetailsCache, setConfigDetailsCache] = useState<Record<string, ConfigurationDetailResponse>>({})
   const [loadingStatuses, setLoadingStatuses] = useState(false)
@@ -239,28 +241,42 @@ export default function Settings() {
       )}
 
       {activeTab === 'agents' && (
-        <div>
-          <Card className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {agentTypes.map((agent) => (
-                <div
-                  key={agent.key}
-                  className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
-                >
-                  <AgentConfigurationSelector
-                    agentRole={agent.key}
-                    agentName={agent.name}
-                    onConfigChange={(agentRole, engine, modelId) => {
-                      console.log(`Agent ${agentRole} config changed to engine: ${engine}, model: ${modelId}`)
-                    }}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Agent Role List */}
+          <div className="md:col-span-1">
+            <Card padding="none">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent Roles</h3>
+                <p className={`text-sm ${textColors.secondary} mt-1`}>
+                  Configure AI agent behavior
+                </p>
+              </div>
+
+              <AgentRoleList
+                roles={agentTypes}
+                selectedRole={selectedAgentRole}
+                onSelectRole={setSelectedAgentRole}
+              />
+            </Card>
+          </div>
+
+          {/* Agent Configuration Panel */}
+          <div className="md:col-span-3">
+            <Card className="p-6">
+              {(() => {
+                const selectedAgent = agentTypes.find(a => a.key === selectedAgentRole)
+                if (!selectedAgent) return null
+                return (
+                  <AgentRoleConfigPanel
+                    key={selectedAgent.key}
+                    agentRole={selectedAgent.key}
+                    agentName={selectedAgent.name}
+                    agentDescription={selectedAgent.description}
                   />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    {agent.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Card>
+                )
+              })()}
+            </Card>
+          </div>
         </div>
       )}
 
