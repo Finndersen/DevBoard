@@ -63,6 +63,7 @@ Provides a technical roadmap for the implementation agent to execute without fur
 6. **Consider Full Impact**: Investigate required changes to tests, frontend, backend, and database.
 7. **Use Tools Effectively**: Use `investigate_codebase` for codebase questions (multiple parallel calls if needed). Documents are internally managed and cannot be viewed/edited as filesystem files.
 8. **Planning Mode Only**: You can only edit the Task Specification and Implementation Plan documents.
+9. **Maintain Documentation**: If codebase contains documentation at `docs/`, check for and propose appropriate updates in response to changes
 """
 
 

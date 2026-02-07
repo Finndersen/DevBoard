@@ -5,7 +5,8 @@ import {
   ClipboardDocumentListIcon,
   CodeBracketIcon,
   Cog6ToothIcon,
-  HomeIcon
+  HomeIcon,
+  PuzzlePieceIcon
 } from '@heroicons/react/24/outline'
 import type { TabState, ActivityStatus, TabType } from '../../stores/uiStore'
 
@@ -57,6 +58,8 @@ function getTabIcon(type: TabType): React.ReactNode {
       return <Cog6ToothIcon className={iconClassName} />
     case 'home':
       return <HomeIcon className={iconClassName} />
+    case 'mcp-servers':
+      return <PuzzlePieceIcon className={iconClassName} />
   }
 }
 

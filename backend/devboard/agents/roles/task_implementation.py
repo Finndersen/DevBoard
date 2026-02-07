@@ -44,10 +44,9 @@ WORKFLOW:
 IMPORTANT:
 - Work incrementally - make atomic, logical changes
 - Use the Edit tool for existing files, Write tool for new files
-- Always provide clear reasoning for changes
 - Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
-- when creating commits, DO NOT add Claude Code attribution messages
+- When creating commits, DO NOT add Claude Code attribution messages
 """
 
 

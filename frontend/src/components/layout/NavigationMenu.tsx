@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { XMarkIcon, HomeIcon, Cog6ToothIcon, ServerStackIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, HomeIcon, Cog6ToothIcon, PuzzlePieceIcon } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
 
 interface NavigationSection {
@@ -10,7 +10,7 @@ interface NavigationSection {
 
 const navigationSections: NavigationSection[] = [
   { icon: HomeIcon, label: 'Home', route: '/' },
-  { icon: ServerStackIcon, label: 'MCP Servers', route: '/mcp-servers' },
+  { icon: PuzzlePieceIcon, label: 'MCP Servers', route: '/mcp-servers' },
   { icon: Cog6ToothIcon, label: 'Settings', route: '/settings' }
 ]
 
