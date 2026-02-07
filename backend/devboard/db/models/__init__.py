@@ -1,5 +1,6 @@
 """Database models package."""
 
+from .agent_role_config import AgentRoleConfig
 from .base import Base
 from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
@@ -26,6 +27,7 @@ from .task import Task, TaskStatus
 from .worktree_slot import WorktreeSlot
 
 __all__ = [
+    "AgentRoleConfig",
     "Base",
     "BranchHandling",
     "Codebase",
