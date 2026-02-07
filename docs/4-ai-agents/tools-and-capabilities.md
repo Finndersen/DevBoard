@@ -109,10 +109,58 @@
 
 **TaskPRReviewRole**: create_task, get_pr_feedback, merge_pr_and_complete_task
 
+## MCP Tool Integration
+
+In addition to built-in tools, agents can use external tools from configured MCP (Model Context Protocol) servers.
+
+### Overview
+
+MCP tools are discovered from configured MCP servers and can be assigned to specific agent roles. This allows extending agent capabilities with external services like GitHub, Jira, Datadog, and custom tools.
+
+### Configuration
+
+1. Configure MCP servers in Settings → Integrations → MCP Servers
+2. Verify server connection to discover available tools
+3. Assign specific tools to agent roles in Settings → Agents
+
+### Runtime Behavior
+
+When an agent using the INTERNAL engine executes:
+
+1. `AgentConfigService.get_enabled_mcp_tools()` retrieves assigned tools
+2. `MCPToolFactory` creates PydanticAI tool instances from MCPTool records
+3. MCP server connections are established as an async context manager
+4. Tools are combined with role-defined tools during execution
+5. Connections are cleaned up after execution completes
+
+### MCPToolFactory
+
+**Location**: `backend/devboard/mcp/mcp_tool_factory.py`
+
+The factory handles:
+- Deduplication of server connections (one connection per unique server)
+- Tool name filtering (only initialize tools that are actually assigned)
+- Async context management for server lifecycle
+- PydanticAI tool wrapper creation with proper schema conversion
+
+### Engine Support
+
+| Engine | MCP Tool Support |
+|--------|------------------|
+| INTERNAL | ✅ Full support |
+| CLAUDE_CODE | ❌ Manages own MCP config |
+| GEMINI_CLI | ❌ Not supported |
+
+### Error Handling
+
+MCP tool errors are converted to `ModelRetry` exceptions, allowing the agent to retry with feedback about what went wrong.
+
 ## Files
 
-**Definitions**: `backend/devboard/agents/tools.py`
+**Built-in Tools**: `backend/devboard/agents/tools.py`
 
 **Virtual System**: `backend/devboard/agents/engines/claude_code/{virtual_tools.py, message_parser.py}`
+
+**MCP Integration**: `backend/devboard/mcp/mcp_tool_factory.py`
 
 **Services**: `backend/devboard/services/{document_editor.py, codebase_search.py, resource_service.py}`

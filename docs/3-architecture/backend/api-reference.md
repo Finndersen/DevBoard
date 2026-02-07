@@ -132,6 +132,29 @@ DELETE /api/configurations/{key}             Delete config
 
 **Key Schemas**: `ConfigurationResponse`, `ConfigurationDetailResponse`, `ConfigurationFieldInfo`
 
+## Agents API
+
+**Base**: `/api/agents`
+**Router**: `backend/devboard/api/routers/agents.py`
+
+```
+GET    /api/agents/{role}/configuration          Get full config including custom instructions and tools
+PUT    /api/agents/{role}/configuration          Update engine, model, and custom_instructions
+GET    /api/agents/{role}/tools                  List assigned MCP tools for role
+POST   /api/agents/{role}/tools                  Add MCP tool to role
+DELETE /api/agents/{role}/tools/{tool_id}        Remove MCP tool from role
+GET    /api/agents/available-models              Get models by engine
+GET    /api/agents/available-mcp-tools           Get all MCP tools from verified servers
+```
+
+**Role Values**: `project`, `task_planning`, `task_implementation`, `task_pr_review`, `investigation`
+
+**Configuration Response**: Returns current config (engine, model_id), custom_instructions, available engines with metadata, and enabled_mcp_tools list.
+
+**MCP Tool Assignment**: Tools are assigned by tool_id (FK to MCPTool). Only tools from verified MCP servers can be assigned.
+
+**Key Schemas**: `AgentConfigurationResponse`, `UpdateAgentConfigurationRequest`, `MCPToolSummary`, `AddMCPToolRequest`
+
 ## Error Handling
 
 **Standard Format**:

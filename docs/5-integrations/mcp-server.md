@@ -252,10 +252,49 @@ Future enhancements should include:
 - Resource access control
 - Audit logging of MCP operations
 
+## MCP Client Integration
+
+In addition to acting as an MCP server, DevBoard can also connect to external MCP servers as a client, allowing its AI agents to use tools provided by those servers.
+
+### Configuring External MCP Servers
+
+1. Navigate to Settings → Integrations → MCP Servers
+2. Add server configuration (name, server type, connection details)
+3. Click "Verify" to test connection and discover available tools
+4. Tools are stored in the database for assignment to agent roles
+
+### Assigning MCP Tools to Agents
+
+1. Navigate to Settings → Agents
+2. Select an agent role (e.g., Project, Task Planning)
+3. In the "Assigned MCP Tools" section, click "Add Tools"
+4. Select tools from available MCP servers
+5. Save configuration
+
+### Runtime Integration
+
+When an agent with assigned MCP tools executes:
+1. `MCPToolFactory` creates tool instances from the assigned `MCPTool` records
+2. Server connections are established as an async context
+3. Tools are available alongside built-in role tools
+4. Connections are cleaned up after execution
+
+**Note**: MCP client integration is only supported for agents using the INTERNAL (PydanticAI) engine. Claude Code manages its own MCP configuration externally.
+
+### Implementation Details
+
+**Location**: `backend/devboard/mcp/mcp_tool_factory.py`
+
+**Key Classes**:
+- `MCPToolFactory`: Creates PydanticAI tools from MCPTool database records
+- `MCPServerConfig`: Database model for server configuration
+- `MCPTool`: Database model for discovered tools
+
 ## Related Sections
 
 - **[Features - Configuration System](../2-features/configuration-system.md)**: Integration configuration
-- **[AI Agents](../4-ai-agents/INDEX.md)**: DevBoard's internal AI agents
+- **[AI Agents - Configuration](../4-ai-agents/configuration.md)**: Agent MCP tool assignment
+- **[AI Agents - Tools](../4-ai-agents/tools-and-capabilities.md)**: Tool system overview
 - **[Architecture - API Structure](../3-architecture/backend/api-structure.md)**: API design patterns
 - **[Development - Testing](../6-development/testing.md)**: Testing strategies
 

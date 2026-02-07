@@ -146,6 +146,18 @@ Tools are defined once in PydanticAI format within Role classes and automaticall
 - **InternalAgent**: Uses PydanticAI tools directly with built-in validation
 - **ClaudeCodeAgent**: Converts to VirtualTools (if `requires_approval=True`) or function tools
 
+### MCP Tool Integration
+
+Agents can also use external tools from configured MCP (Model Context Protocol) servers.
+
+**Configuration**: Tools are assigned to agent roles via Settings → Agents
+
+**Runtime**: `MCPToolFactory` creates PydanticAI tools from `MCPTool` database records and manages MCP server connections during execution
+
+**Engine Support**: MCP tools are only supported by the INTERNAL engine. Claude Code manages its own MCP configuration externally.
+
+**Location**: `backend/devboard/mcp/mcp_tool_factory.py`
+
 ## Agent Construction
 
 Agents are initialized with a Role and optional model configuration:

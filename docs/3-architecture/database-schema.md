@@ -114,11 +114,44 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 **Key Fields**: `key`, `value_json`, `schema_version`, `updated_at`
 
 **Key Examples**:
-- `agent.project.default`: Project agent configuration
 - `llm.openai.api_key`: OpenAI API key
 - `integration.github.token`: GitHub access token
 
 **Multi-Source Resolution**: Environment variables override database, which overrides code defaults
+
+### AgentRoleConfig Model
+
+**Purpose**: Per-role agent configuration with custom instructions and MCP tool assignments
+
+**Key Fields**: `id`, `role` (unique), `engine`, `model_id`, `custom_instructions`
+
+**Role Enum**: PROJECT, TASK_PLANNING, TASK_IMPLEMENTATION, TASK_PR_REVIEW, INVESTIGATION
+
+**Relationships**:
+- `enabled_mcp_tools`: Many-to-many with MCPTool
+
+**Get-or-Create Pattern**: Configuration is created with defaults on first access, ensuring every role always has a configuration record.
+
+### MCPServerConfig Model
+
+**Purpose**: MCP server connection configuration
+
+**Key Fields**: `id`, `name`, `server_type`, `config_json`, `last_verified_at`, `last_verified_success`, `last_verified_error`
+
+**Server Types**: STDIO, HTTP
+
+**Relationships**:
+- `tools`: One-to-many with MCPTool
+
+### MCPTool Model
+
+**Purpose**: Individual tools discovered from MCP servers
+
+**Key Fields**: `id`, `server_id`, `name`, `description`, `input_schema`
+
+**Relationships**:
+- `server`: Many-to-one with MCPServerConfig
+- `agent_role_configs`: Many-to-many with AgentRoleConfig
 
 ### ContextProviderResource Model
 
@@ -147,6 +180,14 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 ### task_resource_association
 
 **Columns**: `task_id`, `resource_id` (composite primary key)
+
+### agent_role_config_mcp_tools
+
+**Columns**: `agent_role_config_id`, `mcp_tool_id` (composite primary key)
+
+**Purpose**: Associates MCP tools with agent role configurations
+
+**Cascade**: Deletes propagate from both AgentRoleConfig and MCPTool
 
 ## Entity Relationships Summary
 
@@ -178,6 +219,16 @@ Conversation
 ContextProviderResource
   ├── linked by many Projects (M:M)
   └── linked by many Tasks (M:M)
+
+AgentRoleConfig
+  └── links to many MCPTools (M:M)
+
+MCPServerConfig
+  └── has many MCPTools
+
+MCPTool
+  ├── belongs to one MCPServerConfig
+  └── linked by many AgentRoleConfigs (M:M)
 ```
 
 ## Database Patterns
