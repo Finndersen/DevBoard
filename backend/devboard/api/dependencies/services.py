@@ -6,6 +6,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
 from devboard.agents.language_models import llm_registry
 from devboard.api.dependencies.repositories import (
+    get_agent_role_config_repository,
     get_configuration_repository,
     get_context_provider_resource_repository,
     get_conversation_repository,
@@ -18,6 +19,7 @@ from devboard.api.dependencies.repositories import (
 )
 from devboard.context_providers.registry import context_provider_registry
 from devboard.db.repositories import (
+    AgentRoleConfigRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
@@ -74,10 +76,12 @@ def get_integration_service(
 
 
 def get_agent_config_service(
+    agent_role_config_repo: AgentRoleConfigRepository = Depends(get_agent_role_config_repository),
     config_service: ConfigService = Depends(get_config_service),
 ) -> AgentConfigService:
     """Get AgentConfigService instance."""
     return AgentConfigService(
+        agent_role_config_repo=agent_role_config_repo,
         config_service=config_service,
         llm_registry=llm_registry,
         engine_registry=agent_engine_registry,

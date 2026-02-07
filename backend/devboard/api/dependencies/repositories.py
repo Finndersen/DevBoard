@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from devboard.db.database import get_db
 from devboard.db.repositories import (
+    AgentRoleConfigRepository,
     CodebaseRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
@@ -76,3 +77,8 @@ def get_mcp_server_repository(db: Session = Depends(get_db)) -> MCPServerReposit
 def get_custom_field_repository(db: Session = Depends(get_db)) -> CustomFieldRepository:
     """Get CustomFieldRepository instance."""
     return CustomFieldRepository(db)
+
+
+def get_agent_role_config_repository(db: Session = Depends(get_db)) -> AgentRoleConfigRepository:
+    """Get AgentRoleConfigRepository instance."""
+    return AgentRoleConfigRepository(db)

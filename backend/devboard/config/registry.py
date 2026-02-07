@@ -1,11 +1,5 @@
 """Registry for configuration schemas."""
 
-from devboard.config.agent_config import (
-    InvestigationAgentConfig,
-    ProjectAgentConfig,
-    TaskImplementationAgentConfig,
-    TaskPlanningAgentConfig,
-)
 from devboard.config.base import BaseConfig
 from devboard.config.integration_configs import (
     GitHubIntegrationConfig,
@@ -30,11 +24,6 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
         OpenAIProviderConfig,
         AnthropicProviderConfig,
         GoogleProviderConfig,
-        # Agent configurations
-        ProjectAgentConfig,
-        TaskPlanningAgentConfig,
-        TaskImplementationAgentConfig,
-        InvestigationAgentConfig,
     ],
     key_attr="config_key",
 )

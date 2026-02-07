@@ -1,7 +1,5 @@
 """Service for managing agent engine and model configuration."""
 
-from typing import cast
-
 from pydantic import BaseModel
 
 from devboard.agents.config_types import AgentEngineInfo, AgentEngineModelConfig, ModelInfo
@@ -15,8 +13,9 @@ from devboard.agents.language_models import (
     LLMRegistry,
 )
 from devboard.agents.roles import AgentRoleType
-from devboard.config.agent_config import AgentConfig
-from devboard.config.base import ConfigValidationResult
+from devboard.api.schemas.agents import MCPToolSummary
+from devboard.db.models import MCPTool
+from devboard.db.repositories import AgentRoleConfigRepository
 from devboard.services.config_service import ConfigService
 
 
@@ -26,12 +25,16 @@ class AgentConfiguration(BaseModel):
     Attributes:
         agent_role: The agent role this configuration applies to
         config: Current effective engine and model configuration
+        custom_instructions: User-defined instructions appended to system prompt
         available_engines: List of engines available for this agent role
+        enabled_mcp_tools: List of MCP tools assigned to this agent role
     """
 
     agent_role: AgentRoleType
     config: AgentEngineModelConfig
+    custom_instructions: str | None = None
     available_engines: list[AgentEngineInfo]
+    enabled_mcp_tools: list[MCPToolSummary] = []
 
 
 class AvailableModelsByEngine(BaseModel):
@@ -49,12 +52,13 @@ class AgentConfigService:
 
     This service handles the configuration hierarchy:
     - Agent Role → Agent Engine → Model
-    - Role-level defaults (stored in AgentConfig)
-    - Conversation-level snapshots (stored on Conversation model)
+    - Role-level defaults (stored in AgentRoleConfig)
+    - Custom instructions and MCP tool assignments
     """
 
     def __init__(
         self,
+        agent_role_config_repo: AgentRoleConfigRepository,
         config_service: ConfigService,
         llm_registry: LLMRegistry,
         engine_registry: AgentEngineRegistry,
@@ -62,13 +66,15 @@ class AgentConfigService:
         """Initialize AgentConfigService.
 
         Args:
-            config_service: Service for accessing configuration
+            agent_role_config_repo: Repository for agent role configuration
+            config_service: Service for accessing LLM provider configuration
             llm_registry: Registry for LLM/model information
             engine_registry: Registry for agent engine information
         """
-        self.config_service = config_service
-        self.llm_registry = llm_registry
-        self.engine_registry = engine_registry
+        self._agent_role_config_repo = agent_role_config_repo
+        self._config_service = config_service
+        self._llm_registry = llm_registry
+        self._engine_registry = engine_registry
 
     def get_agent_configuration(self, agent_role: AgentRoleType) -> AgentConfiguration:
         """Get role-level configuration with effective config and available engines.
@@ -82,9 +88,13 @@ class AgentConfigService:
         # Get effective configuration
         effective_config = self.get_effective_config(agent_role)
 
+        # Get custom instructions from role config
+        role_config = self._agent_role_config_repo.get_or_create(agent_role)
+        custom_instructions = role_config.custom_instructions
+
         # Get available engines for this role, including availability status
         available_engines = []
-        for defn in self.engine_registry.get_available_engines_for_agent_role(agent_role):
+        for defn in self._engine_registry.get_available_engines_for_agent_role(agent_role):
             is_available, unavailable_reason = self._check_engine_availability(defn.engine)
             available_engines.append(
                 AgentEngineInfo(
@@ -97,10 +107,24 @@ class AgentConfigService:
                 )
             )
 
+        # Get enabled MCP tools for this role
+        mcp_tools = self._agent_role_config_repo.get_enabled_tools(agent_role)
+        enabled_mcp_tools = [
+            MCPToolSummary(
+                tool_id=tool.id,
+                tool_name=tool.name,
+                server_name=tool.server.name,
+                description=tool.description,
+            )
+            for tool in mcp_tools
+        ]
+
         return AgentConfiguration(
             agent_role=agent_role,
             config=effective_config,
+            custom_instructions=custom_instructions,
             available_engines=available_engines,
+            enabled_mcp_tools=enabled_mcp_tools,
         )
 
     def get_available_models_by_engine(self) -> AvailableModelsByEngine:
@@ -111,7 +135,7 @@ class AgentConfigService:
         """
         models_by_engine: dict[str, list[ModelInfo]] = {}
 
-        for engine_def in self.engine_registry.get_all_engines():
+        for engine_def in self._engine_registry.get_all_engines():
             # Get models available for this engine
             engine_models = self._get_available_models_for_engine(engine_def.engine)
 
@@ -134,6 +158,7 @@ class AgentConfigService:
         self,
         agent_role: AgentRoleType,
         config: AgentEngineModelConfig,
+        custom_instructions: str | None = None,
     ) -> AgentConfiguration:
         """Update role-level configuration.
 
@@ -144,6 +169,7 @@ class AgentConfigService:
         Args:
             agent_role: The agent role to update configuration for
             config: The new engine and model configuration
+            custom_instructions: Optional custom instructions to set
 
         Returns:
             Updated AgentConfiguration
@@ -152,8 +178,8 @@ class AgentConfigService:
             ValueError: If engine not allowed for role or model not available for engine
         """
         # Validate engine allowed for role
-        if not self.engine_registry.validate_engine_for_agent_role(config.engine, agent_role):
-            allowed_engines = self.engine_registry.get_available_engines_for_agent_role(agent_role)
+        if not self._engine_registry.validate_engine_for_agent_role(config.engine, agent_role):
+            allowed_engines = self._engine_registry.get_available_engines_for_agent_role(agent_role)
             allowed_names = [e.engine.value for e in allowed_engines]
             raise ValueError(
                 f"Engine '{config.engine.value}' not allowed for role '{agent_role.value}'. "
@@ -161,7 +187,7 @@ class AgentConfigService:
             )
 
         # Get engine definition to check if model selection is required
-        engine_def = self.engine_registry.get(config.engine)
+        engine_def = self._engine_registry.get(config.engine)
         if engine_def is None:
             raise ValueError(f"Invalid engine: {config.engine}")
 
@@ -182,15 +208,64 @@ class AgentConfigService:
                     f"Ensure the provider is configured."
                 )
 
-        # Update AgentConfig
-        config_key = f"agent.{agent_role.value}.default"
-        config_data = {
-            "selected_engine": config.engine.value,
-            "selected_model": config.model_id,
-        }
-        self.config_service.update_configuration(config_key, config_data)
+        # Update engine and model
+        role_config = self._agent_role_config_repo.get_or_create(agent_role)
+        role_config.engine = config.engine
+        role_config.model_id = config.model_id
+        role_config.custom_instructions = custom_instructions
+        self._agent_role_config_repo.update(role_config)
 
         return self.get_agent_configuration(agent_role)
+
+    def update_custom_instructions(
+        self,
+        agent_role: AgentRoleType,
+        custom_instructions: str | None,
+    ) -> AgentConfiguration:
+        """Update custom instructions for a role.
+
+        Args:
+            agent_role: The agent role to update
+            custom_instructions: Custom instructions text (None to clear)
+
+        Returns:
+            Updated AgentConfiguration
+        """
+        role_config = self._agent_role_config_repo.get_or_create(agent_role)
+        role_config.custom_instructions = custom_instructions
+        self._agent_role_config_repo.update(role_config)
+        return self.get_agent_configuration(agent_role)
+
+    def get_enabled_mcp_tools(self, agent_role: AgentRoleType) -> list[MCPTool]:
+        """Get enabled MCP tools for a role.
+
+        Args:
+            agent_role: The agent role to get tools for
+
+        Returns:
+            List of enabled MCPTool instances
+        """
+        return self._agent_role_config_repo.get_enabled_tools(agent_role)
+
+    def add_mcp_tool(self, agent_role: AgentRoleType, tool_id: int) -> None:
+        """Add an MCP tool to a role's enabled tools.
+
+        Args:
+            agent_role: The agent role to add the tool to
+            tool_id: The ID of the MCP tool to add
+        """
+        config = self._agent_role_config_repo.get_or_create(agent_role)
+        self._agent_role_config_repo.add_mcp_tool(config.id, tool_id)
+
+    def remove_mcp_tool(self, agent_role: AgentRoleType, tool_id: int) -> None:
+        """Remove an MCP tool from a role's enabled tools.
+
+        Args:
+            agent_role: The agent role to remove the tool from
+            tool_id: The ID of the MCP tool to remove
+        """
+        config = self._agent_role_config_repo.get_or_create(agent_role)
+        self._agent_role_config_repo.remove_mcp_tool(config.id, tool_id)
 
     def get_effective_config(self, agent_role: AgentRoleType) -> AgentEngineModelConfig:
         """Resolve effective engine and model from stored config or defaults.
@@ -201,25 +276,20 @@ class AgentConfigService:
         Returns:
             Effective configuration with resolved engine and model
         """
-        # Get stored configuration
-        config_key = f"agent.{agent_role.value}.default"
-        config_result = cast(
-            ConfigValidationResult[AgentConfig],
-            self.config_service.validate_config_by_key(config_key),
-        )
-        config = config_result.config if config_result.success else None
+        # Get stored configuration from AgentRoleConfig
+        role_config = self._agent_role_config_repo.get_or_create(agent_role)
 
         # Resolve engine (selected or default)
         effective_engine = (
-            config.selected_engine
-            if config and config.selected_engine
-            else self.engine_registry.get_default_engine_for_agent_role(agent_role)
+            role_config.engine
+            if role_config.engine
+            else self._engine_registry.get_default_engine_for_agent_role(agent_role)
         )
 
         # Resolve model (selected or default for agent role + engine)
         effective_model = (
-            config.selected_model
-            if config and config.selected_model
+            role_config.model_id
+            if role_config.model_id
             else self._get_default_model_for_agent_role_and_engine(agent_role, effective_engine)
         )
 
@@ -250,17 +320,17 @@ class AgentConfigService:
             return self._get_all_available_internal_models()
         else:
             # Get engine's supported provider
-            engine_def = self.engine_registry.get(engine)
+            engine_def = self._engine_registry.get(engine)
             if engine_def is None:
                 raise ValueError(f"Invalid engine: {engine}")
             # For external engines, return all models from the specific provider
             # (no API key filtering - these engines manage auth themselves)
             if engine_def.available_provider is None:
                 # Engine supports all providers (unlikely for external engines)
-                return self.llm_registry.get_all_models()
+                return self._llm_registry.get_all_models()
             else:
                 # Return models from the specific provider
-                return self.llm_registry.get_models_for_provider(engine_def.available_provider)
+                return self._llm_registry.get_models_for_provider(engine_def.available_provider)
 
     def _get_all_available_internal_models(self) -> list[LanguageModel]:
         """Get all models from configured providers for the internal engine.
@@ -272,11 +342,11 @@ class AgentConfigService:
         working_providers: set[LLMProvider] = set()
         for provider_type in LLMProvider:
             config_key = f"llm.{provider_type.value}.main"
-            if self.config_service.validate_config_by_key(config_key).success:
+            if self._config_service.validate_config_by_key(config_key).success:
                 working_providers.add(provider_type)
 
         # Return models from working providers
-        return [model for model in self.llm_registry.get_all_models() if model.provider in working_providers]
+        return [model for model in self._llm_registry.get_all_models() if model.provider in working_providers]
 
     def _check_engine_availability(self, engine: AgentEngine) -> tuple[bool, str | None]:
         """Check if an engine is available for use.
@@ -312,7 +382,7 @@ class AgentConfigService:
             ValueError: If no models are available for an engine that requires selection
         """
         # Get engine definition to check if model selection is required
-        engine_def = self.engine_registry.get(engine)
+        engine_def = self._engine_registry.get(engine)
         if engine_def is None:
             raise ValueError(f"Invalid engine: {engine}")
 
@@ -328,7 +398,7 @@ class AgentConfigService:
             )
 
         # Get recommended model type for this agent role
-        recommended_type = self.llm_registry.get_recommended_model_type_for_agent(agent_role)
+        recommended_type = self._llm_registry.get_recommended_model_type_for_agent(agent_role)
 
         # Try to find a model of the recommended type
         for model in available:
