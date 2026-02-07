@@ -698,8 +698,8 @@ class WorkspaceAllocationService:
                     timestamp=datetime.datetime.now(datetime.UTC),
                 )
 
-            # Run setup command if configured
-            if task.codebase.setup_command:
+            # Run setup command if configured and checkout was performed
+            if checkout_performed and task.codebase.setup_command:
                 yield SystemEvent(
                     type=SystemEventType.WORKSPACE_SETUP,
                     data={

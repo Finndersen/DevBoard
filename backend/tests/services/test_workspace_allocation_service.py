@@ -1574,6 +1574,54 @@ async def test_run_task_agent_in_workspace_setup_failure_yields_error(service, m
 
 
 @pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_skips_setup_when_no_checkout(service, mock_repos, sample_task, sample_slot):
+    """Test that run_task_agent_in_workspace skips setup when slot already on correct branch."""
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Configure setup command
+    sample_task.codebase.setup_command = "npm install"
+
+    # Setup: Available slot
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with (
+        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+    ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        # Slot already on correct branch - checkout returns False
+        mock_checkout.return_value = False
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: No WORKSPACE_SETUP event was emitted
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
+    assert len(setup_events) == 0
+
+    # Verify: No WORKSPACE_BRANCH_CHECKOUT event (no checkout occurred)
+    checkout_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT]
+    assert len(checkout_events) == 0
+
+    # Verify: Setup command was NOT called
+    mock_setup.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_run_task_agent_in_workspace_skips_setup_when_not_configured(
     service, mock_repos, sample_task, sample_slot
 ):
