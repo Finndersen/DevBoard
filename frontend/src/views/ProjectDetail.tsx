@@ -4,7 +4,7 @@ import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMa
 import AgentChat from '../components/chat/AgentChat'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
-import { Button, Card, Textarea, Markdown } from '../components/ui'
+import { Button, Card, Textarea, Markdown, Input } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Task, Codebase } from '../lib/api'
@@ -73,6 +73,16 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       await refetchSpecification()
     }
   )
+
+  const saveDescriptionField = useCallback(
+    async (value: string) => {
+      await apiClient.updateProject(id!, { description: value })
+      refetchProject()
+    },
+    [id, refetchProject]
+  )
+
+  const descriptionField = useEditableField(project?.description || '', saveDescriptionField)
 
   // Update URL when tab changes
   const handleTabChange = (tab: 'board' | 'editor' | 'settings') => {
@@ -246,11 +256,76 @@ function ProjectDetail({ id }: ProjectDetailProps) {
             ))}
           </nav>
           
-          {/* Center: Project Name */}
-          <div className="absolute left-1/2 transform -translate-x-1/2">
+          {/* Center: Project Name and Description */}
+          <div className="absolute left-1/2 transform -translate-x-1/2 text-center">
             <h1 className={`text-xl font-bold ${textColors.primary}`}>
               {project?.name}
             </h1>
+
+            {/* Description - View Mode */}
+            {!descriptionField.isEditing ? (
+              <div
+                className="flex items-center justify-center gap-1 group cursor-pointer mt-0.5"
+                onClick={descriptionField.startEditing}
+              >
+                {project?.description ? (
+                  <p className={`text-sm ${textColors.secondary} truncate max-w-md`}>
+                    {project.description}
+                  </p>
+                ) : (
+                  <p className={`text-sm ${textColors.secondary} italic opacity-60`}>
+                    Add a description...
+                  </p>
+                )}
+                <Button
+                  onClick={(e) => { e.stopPropagation(); descriptionField.startEditing() }}
+                  variant="ghost"
+                  size="sm"
+                  className="p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Edit description"
+                >
+                  <PencilIcon className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              /* Edit Mode */
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <Input
+                  value={descriptionField.editedValue}
+                  onChange={(e) => descriptionField.setEditedValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') descriptionField.save()
+                    if (e.key === 'Escape') descriptionField.cancelEditing()
+                  }}
+                  placeholder="Enter project description..."
+                  className="text-sm w-80"
+                  maxLength={300}
+                  autoFocus
+                />
+                <Button
+                  onClick={descriptionField.save}
+                  variant="secondary"
+                  size="sm"
+                  className="p-1.5 min-w-[28px] h-7 border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  title="Save (Enter)"
+                  loading={descriptionField.saving}
+                >
+                  <CheckIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                  onClick={descriptionField.cancelEditing}
+                  variant="secondary"
+                  size="sm"
+                  className="p-1.5 min-w-[28px] h-7 border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400"
+                  title="Cancel (Escape)"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+            {descriptionField.error && (
+              <p className="text-xs text-red-500 mt-1">{descriptionField.error}</p>
+            )}
           </div>
           
           {/* Right: Actions */}
