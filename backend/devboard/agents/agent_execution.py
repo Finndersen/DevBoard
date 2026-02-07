@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import logfire
 from pydantic_ai import Tool
@@ -12,14 +13,18 @@ from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
+from devboard.mcp.mcp_tool_factory import MCPToolFactory
+
+if TYPE_CHECKING:
+    from devboard.agents.agent_config_service import AgentConfigService
 
 
 class AgentExecutionService(ABC):
     """Abstract base class for agent execution services.
 
-    This interface handles agent execution operations, including sending messages
-    and processing tool approvals. It composes a ConversationHistoryService for
-    retrieving conversation history when needed.
+    This class uses the template method pattern for agent execution:
+    - `stream_events_for_message_or_approval()` handles MCP tool lifecycle
+    - `_stream_events_impl()` is implemented by subclasses for engine-specific execution
 
     Implementations should handle:
     - Agent initialization and configuration
@@ -32,6 +37,7 @@ class AgentExecutionService(ABC):
         role: The Role defining agent behavior
         conversation_repo: Repository for conversation operations
         additional_tools: Extra tools beyond those defined by the role
+        agent_config_service: Service for loading agent configuration (custom instructions, MCP tools)
     """
 
     def __init__(
@@ -40,6 +46,7 @@ class AgentExecutionService(ABC):
         role: AgentRole,
         conversation_repository: ConversationRepository,
         history_service: ConversationHistoryService,
+        agent_config_service: "AgentConfigService",
         additional_tools: list[Tool] | None = None,
     ):
         """Initialize the agent execution service.
@@ -49,6 +56,7 @@ class AgentExecutionService(ABC):
             role: The Role defining agent behavior
             conversation_repository: Repository for conversation operations
             history_service: Service for retrieving conversation history
+            agent_config_service: Service for loading agent configuration
             additional_tools: Optional list of additional tools to provide to the agent,
                 beyond those defined by the role. Used for workflow-action-specific tools.
         """
@@ -56,7 +64,13 @@ class AgentExecutionService(ABC):
         self.role = role
         self.conversation_repo = conversation_repository
         self._history_service = history_service
+        self._agent_config_service = agent_config_service
         self.additional_tools = additional_tools or []
+
+    def get_custom_instructions(self) -> str | None:
+        """Get custom instructions for this agent role from config service."""
+        config = self._agent_config_service.get_agent_configuration(self.conversation.agent_role)
+        return config.custom_instructions
 
     async def send_message_or_approval(
         self,
@@ -85,15 +99,48 @@ class AgentExecutionService(ABC):
                 events.append(event)
             return events
 
-    @abstractmethod
     async def stream_events_for_message_or_approval(
         self,
         message_or_approvals: str | ToolApprovals,
     ) -> AsyncIterator[ConversationEvent]:
         """Stream conversation events from agent execution.
 
+        This method handles MCP tool lifecycle (connecting/disconnecting to MCP servers)
+        and delegates to `_stream_events_impl()` for engine-specific execution.
+
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
+
+        Yields:
+            ConversationEvent instances as they are generated during agent execution
+        """
+        is_approval = isinstance(message_or_approvals, ToolApprovals)
+
+        with logfire.span(
+            "agent_execution.stream_events",
+            conversation_id=self.conversation.id,
+            engine=self.conversation.engine.value,
+            is_approval=is_approval,
+        ):
+            mcp_tools = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
+            async with MCPToolFactory(mcp_tools) as mcp_factory:
+                async for event in self._stream_events_impl(message_or_approvals, mcp_factory.get_tools()):
+                    yield event
+
+    @abstractmethod
+    async def _stream_events_impl(
+        self,
+        message_or_approvals: str | ToolApprovals,
+        mcp_tools: list[Tool],
+    ) -> AsyncIterator[ConversationEvent]:
+        """Engine-specific implementation of event streaming.
+
+        Subclasses implement this method to handle the actual agent execution.
+        MCP tool lifecycle is managed by the parent `stream_events_for_message_or_approval()`.
+
+        Args:
+            message_or_approvals: Either a user message string or ToolApprovals model
+            mcp_tools: PydanticAI Tool instances from enabled MCP servers
 
         Yields:
             ConversationEvent instances as they are generated during agent execution

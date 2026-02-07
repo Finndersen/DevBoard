@@ -93,6 +93,7 @@ def get_agent_execution_service(
     conversation: Conversation = Depends(get_verified_conversation),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     role: AgentRole = Depends(get_agent_role_for_conversation),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> AgentExecutionService:
     """Get agent execution service instance.
 
@@ -103,6 +104,7 @@ def get_agent_execution_service(
         conversation: Verified conversation instance
         conversation_repo: Conversation repository
         role: Role instance for the conversation
+        agent_config_service: Service for retrieving agent configuration
 
     Returns:
         AgentExecutionService instance (PydanticAI or Claude Code implementation)
@@ -114,4 +116,5 @@ def get_agent_execution_service(
         conversation=conversation,
         role=role,
         conversation_repo=conversation_repo,
+        agent_config_service=agent_config_service,
     )

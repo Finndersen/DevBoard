@@ -142,6 +142,7 @@ def create_agent_execution_service(
     conversation: Conversation,
     role: AgentRole,
     conversation_repo: ConversationRepository,
+    agent_config_service: AgentConfigService,
     additional_tools: list[Tool] | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
@@ -153,6 +154,7 @@ def create_agent_execution_service(
         conversation: The conversation instance
         role: The role defining agent behavior
         conversation_repo: Repository for conversation operations
+        agent_config_service: Service for loading agent configuration
         additional_tools: Optional extra tools beyond those defined by the role
 
     Returns:
@@ -171,6 +173,7 @@ def create_agent_execution_service(
             role=role,
             conversation_repository=conversation_repo,
             history_service=history_service,
+            agent_config_service=agent_config_service,
             additional_tools=additional_tools,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
@@ -179,6 +182,7 @@ def create_agent_execution_service(
             role=role,
             conversation_repository=conversation_repo,
             history_service=history_service,
+            agent_config_service=agent_config_service,
             additional_tools=additional_tools,
         )
     else:

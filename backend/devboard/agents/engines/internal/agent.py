@@ -66,6 +66,7 @@ class InternalAgent(BaseAgent):
         model: LanguageModel,
         conversation_history: list[ModelMessage] | None = None,
         additional_tools: list[Tool] | None = None,
+        custom_instructions: str | None = None,
     ):
         """Initialize internal agent with role.
 
@@ -74,8 +75,9 @@ class InternalAgent(BaseAgent):
             model: Language model to use
             conversation_history: Previous conversation messages
             additional_tools: Extra tools to add beyond those defined by the role
+            custom_instructions: User-defined instructions to append to the base system prompt
         """
-        super().__init__(role, model, additional_tools)
+        super().__init__(role, model, additional_tools, custom_instructions)
         self.conversation_history = conversation_history or []
         self.last_run_result: AgentRunResult | None = None
 
@@ -83,7 +85,7 @@ class InternalAgent(BaseAgent):
         """Create PydanticAI agent using role's configuration."""
         agent = Agent(
             self._get_model(),
-            system_prompt=self.role.get_system_prompt(),
+            system_prompt=self.get_full_system_prompt(),
             tools=self.get_tools(),
             output_type=DeferredToolRequests | str,
         )
@@ -105,7 +107,7 @@ class InternalAgent(BaseAgent):
         """
         context_content = await self.role.get_context_content()
         parts: list[ModelRequestPart] = [
-            SystemPromptPart(content=self.role.get_system_prompt()),
+            SystemPromptPart(content=self.get_full_system_prompt()),
             UserPromptPart(content="CURRENT STATE AND CONTEXT:\n" + context_content),
         ]
 

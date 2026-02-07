@@ -102,11 +102,12 @@ class TaskWorkflowAction(ABC):
             task_git_service=self.task_git_service,
         )
 
-        # Create service with role and any additional tools
+        # Create service with role and additional tools
         return create_agent_execution_service(
             conversation=conversation,
             role=role,
             conversation_repo=self.conversation_repo,
+            agent_config_service=self.agent_config_service,
             additional_tools=additional_tools,
         )
 

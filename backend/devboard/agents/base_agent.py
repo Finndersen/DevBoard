@@ -10,6 +10,8 @@ from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 
+CUSTOM_INSTRUCTIONS_SEPARATOR = "\n\n## Additional Instructions\n\n"
+
 
 class BaseAgent(ABC):
     """Abstract base class for all agent implementations.
@@ -23,6 +25,7 @@ class BaseAgent(ABC):
         role: AgentRole,
         model: LanguageModel | None,
         additional_tools: list[Tool] | None = None,
+        custom_instructions: str | None = None,
     ):
         """Initialize base agent with role and model.
 
@@ -30,14 +33,30 @@ class BaseAgent(ABC):
             role: Role defining agent behavior (prompts, tools, context)
             model: Language model instance, or None to use Claude Code's default model
             additional_tools: Extra tools to add beyond those defined by the role
+            custom_instructions: User-defined instructions to append to the base system prompt
         """
         self.role = role
         self.model = model
         self.additional_tools = additional_tools or []
+        self.custom_instructions = custom_instructions
 
     def get_tools(self) -> list[Tool]:
         """Get all tools for this agent (role tools + additional tools)."""
         return self.role.get_tools() + self.additional_tools
+
+    def get_full_system_prompt(self) -> str:
+        """Get the complete system prompt including custom instructions.
+
+        Combines the role's base system prompt with user-defined custom instructions
+        (if any) using a clear separator.
+
+        Returns:
+            Complete system prompt string
+        """
+        base_prompt = self.role.get_system_prompt()
+        if self.custom_instructions:
+            return base_prompt + CUSTOM_INSTRUCTIONS_SEPARATOR + self.custom_instructions
+        return base_prompt
 
     async def run(self, prompt_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
         """Execute agent with either a user message or tool approval results.

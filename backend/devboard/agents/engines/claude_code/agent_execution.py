@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import logfire
+from pydantic_ai import Tool
 
 from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
@@ -23,6 +24,9 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
     Note: Claude Code manages its own session files. This service does NOT
     store messages in the database - it reads from session files as needed.
 
+    MCP tools are supported and passed to ClaudeCodeAgent as additional_tools.
+    These are converted to function tools that Claude Code can invoke.
+
     Attributes:
         conversation: The conversation instance (from base class)
         role: The Role defining agent behavior
@@ -34,69 +38,71 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
 
-    async def stream_events_for_message_or_approval(
+    async def _stream_events_impl(
         self,
         message_or_approvals: str | ToolApprovals,
+        mcp_tools: list[Tool],
     ) -> AsyncIterator[ConversationEvent]:
-        """Stream conversation events from agent execution.
+        """Engine-specific implementation of event streaming.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
+            mcp_tools: PydanticAI Tool instances from enabled MCP servers
 
         Yields:
             ConversationEvent instances as they are generated during agent execution
         """
-        is_approval = isinstance(message_or_approvals, ToolApprovals)
+        # Check session ID for approvals
+        if isinstance(message_or_approvals, ToolApprovals) and not self.session_id:
+            raise ValueError("No session ID available - cannot process tool approvals")
 
-        with logfire.span(
-            "claude_code_execution.stream_events_for_message_or_approval",
-            conversation_id=self.conversation.id,
-            is_approval=is_approval,
-        ):
-            # Check session ID for approvals
-            if is_approval and not self.session_id:
-                raise ValueError("No session ID available - cannot process tool approvals")
+        agent = self._get_agent(mcp_tools=mcp_tools)
 
-            agent = self._get_agent()
+        # Stream events from agent execution
+        try:
+            async for event in agent.stream_events(message_or_approvals):
+                # Update session_id if changed
+                if agent.session_id != self.conversation.external_session_id:
+                    logfire.info(
+                        f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
+                    )
+                    self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
+                    self.conversation_repo.commit()
+                    yield SystemEvent(
+                        type=SystemEventType.CONVERSATION_UPDATED,
+                        data={
+                            "conversation_id": self.conversation.id,
+                            "updated_fields": {"external_session_id": agent.session_id},
+                        },
+                        timestamp=datetime.now(UTC),
+                    )
 
-            # Stream events from agent execution
-            try:
-                async for event in agent.stream_events(message_or_approvals):
-                    # Update session_id if changed
-                    if agent.session_id != self.conversation.external_session_id:
-                        logfire.info(
-                            f"Updating conversation {self.conversation.id} Session ID from {self.conversation.external_session_id} to {agent.session_id}"
-                        )
-                        self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
-                        self.conversation_repo.commit()
-                        yield SystemEvent(
-                            type=SystemEventType.CONVERSATION_UPDATED,
-                            data={
-                                "conversation_id": self.conversation.id,
-                                "updated_fields": {"external_session_id": agent.session_id},
-                            },
-                            timestamp=datetime.now(UTC),
-                        )
+                yield event
+        except asyncio.CancelledError:
+            logfire.info(f"Claude Code agent execution cancelled for conversation {self.conversation.id}")
+            raise
+        except FileNotFoundError:
+            # Session file was cleaned up - reset session ID and notify user
+            logfire.info(
+                f"Session file not found during streaming for conversation {self.conversation.id}, resetting session ID"
+            )
+            self.conversation_repo.update_external_session_id(self.conversation, None)
+            self.conversation_repo.commit()
+            yield SystemEvent(
+                type=SystemEventType.SESSION_EXPIRED,
+                data={"message": "Claude session was cleaned up, starting new conversation"},
+                timestamp=datetime.now(UTC),
+            )
 
-                    yield event
-            except asyncio.CancelledError:
-                logfire.info(f"Claude Code agent execution cancelled for conversation {self.conversation.id}")
-                raise
-            except FileNotFoundError:
-                # Session file was cleaned up - reset session ID and notify user
-                logfire.info(
-                    f"Session file not found during streaming for conversation {self.conversation.id}, resetting session ID"
-                )
-                self.conversation_repo.update_external_session_id(self.conversation, None)
-                self.conversation_repo.commit()
-                yield SystemEvent(
-                    type=SystemEventType.SESSION_EXPIRED,
-                    data={"message": "Claude session was cleaned up, starting new conversation"},
-                    timestamp=datetime.now(UTC),
-                )
+    def _get_agent(self, mcp_tools: list[Tool] | None = None) -> ClaudeCodeAgent:
+        """Create agent with session_id and optional MCP tools.
 
-    def _get_agent(self) -> ClaudeCodeAgent:
-        """Create agent with session_id"""
+        Args:
+            mcp_tools: Optional MCP tools to include as additional tools
+
+        Returns:
+            ClaudeCodeAgent instance configured with role, model, and tools
+        """
         model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
         conversation_parent = self.conversation.get_parent_entity()
         if isinstance(conversation_parent, Task):
@@ -106,10 +112,14 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         else:
             codebase_path = None
 
+        # Combine additional_tools with MCP tools
+        all_additional_tools = self.additional_tools + (mcp_tools or [])
+
         return ClaudeCodeAgent(
             role=self.role,
             model=model,
             session_id=self.conversation.external_session_id,
             working_dir=codebase_path,
-            additional_tools=self.additional_tools,
+            additional_tools=all_additional_tools,
+            custom_instructions=self.get_custom_instructions(),
         )

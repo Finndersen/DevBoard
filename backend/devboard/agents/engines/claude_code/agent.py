@@ -109,6 +109,7 @@ class ClaudeCodeAgent(BaseAgent):
         session_id: str | None = None,
         working_dir: str | None = None,
         additional_tools: list[Tool] | None = None,
+        custom_instructions: str | None = None,
     ):
         """Initialize Claude Code agent with role.
 
@@ -118,11 +119,12 @@ class ClaudeCodeAgent(BaseAgent):
             session_id: Optional session ID to resume previous conversation
             working_dir: Optional path to codebase directory
             additional_tools: Extra tools to add beyond those defined by the role
+            custom_instructions: User-defined instructions to append to the base system prompt
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
 
-        super().__init__(role, model, additional_tools)
+        super().__init__(role, model, additional_tools, custom_instructions)
 
         self.session_id = session_id
         self.working_dir = working_dir
@@ -178,10 +180,10 @@ class ClaudeCodeAgent(BaseAgent):
     async def _build_system_prompt(self) -> str:
         """Build the system prompt from role.
 
-        Combines role description, tool schemas, and state/context data.
+        Combines role description (with custom instructions), tool schemas, and state/context data.
         """
-        # Get system prompt from role
-        role_prompt = self.role.get_system_prompt()
+        # Get full system prompt (role prompt + custom instructions)
+        role_prompt = self.get_full_system_prompt()
 
         # Build tool schemas from virtual tools
         virtual_tool_prompt = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
