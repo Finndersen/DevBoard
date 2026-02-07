@@ -97,6 +97,35 @@ class ConversationService:
             external_session_id=None,
         )
 
+    def reset_conversation(self, conversation: Conversation) -> Conversation:
+        """Reset a conversation by deleting it and creating a new one with fresh config.
+
+        This operation:
+        1. Extracts parent entity info from the existing conversation
+        2. Deletes the conversation (messages cascade delete)
+        3. Creates a new conversation with the same agent role, re-evaluating agent config
+
+        Args:
+            conversation: The conversation to reset
+
+        Returns:
+            The newly created Conversation instance
+        """
+        # Extract parent entity info before deletion
+        parent_entity_type = conversation.parent_entity_type
+        parent_entity_id = conversation.parent_entity_id
+        agent_role = conversation.agent_role
+
+        # Delete the existing conversation (messages deleted via repository method)
+        self.conversation_repo.delete_by_id(conversation.id)
+
+        # Create new conversation with fresh config
+        return self.create_initial_conversation_for_parent_entity(
+            parent_entity_type=parent_entity_type,
+            parent_entity_id=parent_entity_id,
+            agent_role=agent_role,
+        )
+
     def delete_conversations_for_parent(self, parent: Task | Project | Codebase) -> int:
         """Delete all conversations for a parent entity.
 

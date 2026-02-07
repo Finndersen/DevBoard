@@ -8,3 +8,10 @@ class DeleteResponse(BaseModel):
 
     message: str
     success: bool = True
+
+
+class ResetConversationResponse(BaseModel):
+    """Response schema for conversation reset endpoint."""
+
+    new_conversation_id: int
+    message: str

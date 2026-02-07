@@ -13,6 +13,7 @@ import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
+import { useConversationStreamStore } from '../stores/conversationStreamStore'
 
 interface ProjectDetailProps {
   id: string
@@ -22,6 +23,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()
+  const migrateStream = useConversationStreamStore(state => state.migrateStream)
 
   // Update tab title when project data is loaded
   useTabTitle('project', id)
@@ -106,6 +108,15 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }, [refetchSpecification])
 
   useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
+
+  // Handle conversation reset from AgentChat (when user clears chat history)
+  const handleConversationReset = useCallback((newConversationId: number) => {
+    const oldConversationId = project?.default_conversation_id
+    if (oldConversationId && oldConversationId !== newConversationId) {
+      migrateStream(oldConversationId, newConversationId)
+    }
+    refetchProject()
+  }, [project?.default_conversation_id, migrateStream, refetchProject])
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -354,6 +365,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
             placeholder="Ask a question about this project..."
             emptyStateMessage="Ask me anything about this project!"
             className="h-full flex flex-col overflow-hidden"
+            onConversationReset={handleConversationReset}
           />
         </div>
       )}

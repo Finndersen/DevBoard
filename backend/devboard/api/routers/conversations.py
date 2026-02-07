@@ -15,18 +15,23 @@ from devboard.api.dependencies import resolve_dependency
 from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
-from devboard.api.dependencies.services import get_agent_config_service, get_workspace_allocation_service
+from devboard.api.dependencies.services import (
+    get_agent_config_service,
+    get_conversation_service,
+    get_workspace_allocation_service,
+)
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ToolApprovals,
 )
 from devboard.api.schemas.claude_code_todo import TodoItem
-from devboard.api.schemas.common import DeleteResponse
+from devboard.api.schemas.common import ResetConversationResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.api.streaming import stream_conversation_events
-from devboard.db.models import Conversation, Task, TaskStatus
+from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
+from devboard.services.conversation_service import ConversationService
 
 router = APIRouter()
 
@@ -129,26 +134,37 @@ async def stream_approve_conversation_tools(
     return await _stream_agent_response(http_request, conversation, agent_execution_service, request)
 
 
-@router.delete("/{conversation_id}/messages", response_model=DeleteResponse)
-async def clear_conversation_messages(
+@router.post("/{conversation_id}/reset", response_model=ResetConversationResponse)
+async def reset_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-) -> DeleteResponse:
-    """Clear all messages for a conversation.
+    conversation_service: ConversationService = Depends(get_conversation_service),
+) -> ResetConversationResponse:
+    """Reset a conversation by deleting it and creating a new one.
 
-    For INTERNAL engine conversations: Deletes messages from database.
-    For Claude Code conversations: Resets external_session_id to start new session.
+    This endpoint:
+    1. Deletes the existing conversation (messages cascade delete)
+    2. Creates a new conversation for the same parent entity
+    3. Re-evaluates agent configuration, allowing updated settings to take effect
+
+    Returns the new conversation ID so the frontend can update its state.
     """
-    if conversation.engine == AgentEngine.CLAUDE_CODE:
-        # Reset session ID for Claude Code conversations
-        conversation_repo.update_external_session_id(conversation, None)
-    else:
-        # Delete database messages for INTERNAL engine
-        conversation_repo.delete_messages(conversation.id)
+    # Get parent entity and entity type before resetting
+    parent_entity = conversation.get_parent_entity()
+    parent_entity_type = conversation.parent_entity_type
 
-    return DeleteResponse(
-        message="Cleared conversation history.",
-        success=True,
+    new_conversation = conversation_service.reset_conversation(conversation)
+
+    # Update the parent entity's conversation reference
+    if parent_entity_type == ParentEntityType.TASK:
+        parent_entity.conversation_id = new_conversation.id  # type: ignore[union-attr]
+    elif parent_entity_type == ParentEntityType.PROJECT:
+        parent_entity.default_conversation_id = new_conversation.id  # type: ignore[union-attr]
+    elif parent_entity_type == ParentEntityType.CODEBASE:
+        parent_entity.default_conversation_id = new_conversation.id  # type: ignore[union-attr]
+
+    return ResetConversationResponse(
+        new_conversation_id=new_conversation.id,
+        message="Conversation reset successfully.",
     )
 
 

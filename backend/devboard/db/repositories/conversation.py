@@ -202,6 +202,24 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]
 
+    def delete_by_id(self, conversation_id: int) -> bool:
+        """Delete a conversation and its messages by ID.
+
+        Args:
+            conversation_id: ID of the conversation to delete
+
+        Returns:
+            True if conversation was deleted, False if not found
+        """
+        # Delete messages first (SQL delete bypasses cascade)
+        self.delete_messages(conversation_id)
+
+        # Delete the conversation record
+        stmt = delete(Conversation).where(Conversation.id == conversation_id)
+        result = self.db.execute(stmt)
+
+        return result.rowcount > 0  # type: ignore[attr-defined]
+
     def delete_by_parent(self, parent_entity_type: ParentEntityType, parent_entity_id: int) -> int:
         """Hard-delete all conversations and their messages for a parent entity.
 

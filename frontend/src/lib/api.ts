@@ -698,9 +698,9 @@ export class ApiClient {
     )
   }
 
-  async clearConversationMessages(conversationId: number | string): Promise<{ message: string; success: boolean }> {
-    return this.request<{ message: string; success: boolean }>(`/api/conversations/${conversationId}/messages`, {
-      method: 'DELETE',
+  async resetConversation(conversationId: number | string): Promise<{ new_conversation_id: number; message: string }> {
+    return this.request<{ new_conversation_id: number; message: string }>(`/api/conversations/${conversationId}/reset`, {
+      method: 'POST',
     })
   }
 

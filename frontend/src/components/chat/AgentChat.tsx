@@ -30,6 +30,7 @@ interface AgentChatProps {
   onInitialMessageSent?: () => void
   codebaseLocalPath?: string
   isDisabled?: boolean
+  onConversationReset?: (newConversationId: number) => void
 }
 
 const AgentChat = ({
@@ -44,7 +45,8 @@ const AgentChat = ({
   initialMessage,
   onInitialMessageSent,
   codebaseLocalPath,
-  isDisabled = false
+  isDisabled = false,
+  onConversationReset
 }: AgentChatProps) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [loadingConversation, setLoadingConversation] = useState(false)
@@ -102,16 +104,16 @@ const AgentChat = ({
     async () => {
       if (!conversationId) return
 
-      await apiClient.clearConversationMessages(conversationId)
-      // Also clear pending messages
+      const result = await apiClient.resetConversation(conversationId)
+      // Clear pending messages for old conversation
       const pendingKey = createConversationPendingKey(conversationId)
       clearConversationMessages(pendingKey)
-      // Clear pending tool approvals
+      // Clear pending tool approvals for old conversation
       const approvalKey = createConversationApprovalKey(conversationId)
       clearApprovals(approvalKey)
       clearChatModal.close()
-      // Force refresh the conversation chat component
-      window.location.reload() // Simple approach - could be optimized to just refresh the chat
+      // Notify parent of the new conversation ID
+      onConversationReset?.(result.new_conversation_id)
     }
   )
 

@@ -473,6 +473,16 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   useStreamCompleteHandler(streamCompleteHandler)
 
+  // Handle conversation reset from AgentChat (when user clears chat history)
+  const handleConversationReset = useCallback((newConversationId: number) => {
+    const oldConversationId = task?.conversation_id
+    if (oldConversationId && oldConversationId !== newConversationId) {
+      migrateStream(oldConversationId, newConversationId)
+      setStreamingMessage('')
+    }
+    refetch()
+  }, [task?.conversation_id, migrateStream, refetch])
+
   // Cleanup diff refresh timeout on unmount
   useEffect(() => {
     return () => {
@@ -1008,6 +1018,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             onInitialMessageSent={() => setPendingInitialMessage(null)}
             codebaseLocalPath={selectedCodebase?.local_path}
             isDisabled={task.status === 'complete'}
+            onConversationReset={handleConversationReset}
           />
         </div>
       </div>

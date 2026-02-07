@@ -82,8 +82,8 @@ describe('AgentChat', () => {
           }
         ])
       }),
-      http.post('*/api/conversations/1/clear-messages', () => {
-        return HttpResponse.json({ status: 'success' })
+      http.post('*/api/conversations/1/reset', () => {
+        return HttpResponse.json({ new_conversation_id: 2, message: 'Conversation reset successfully.' })
       })
     )
   })

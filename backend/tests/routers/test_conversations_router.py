@@ -266,75 +266,89 @@ class TestConversationsRouter:
         assert events[1]["tool_name"] == "edit_document"
         assert events[1]["tool_call_id"] == "test_call_1"
 
-    def test_clear_conversation_messages_success(self, client, db_session, test_conversation):
-        """Test clearing all messages from a conversation."""
+    def test_reset_conversation_success(self, client, db_session, test_conversation, test_project):
+        """Test resetting a conversation creates a new one and clears messages."""
         conversation_repo = ConversationRepository(db_session)
 
         # Create test messages
         user_msg = ModelRequest(parts=[UserPromptPart(content="Message 1")])
         agent_msg = ModelResponse(parts=[TextPart(content="Response 1")])
-        user_msg2 = ModelRequest(parts=[UserPromptPart(content="Message 2")])
 
         conversation_repo.create_message(test_conversation.id, user_msg)
         conversation_repo.create_message(test_conversation.id, agent_msg)
-        conversation_repo.create_message(test_conversation.id, user_msg2)
         db_session.commit()
 
         # Verify messages exist
         messages = conversation_repo.get_messages(test_conversation.id)
-        assert len(messages) == 3
+        assert len(messages) == 2
 
-        # Clear messages
-        response = client.delete(f"/api/conversations/{test_conversation.id}/messages")
+        # Reset conversation
+        response = client.post(f"/api/conversations/{test_conversation.id}/reset")
         assert response.status_code == 200
 
-        delete_response = response.json()
-        assert delete_response["success"] is True
-        assert delete_response["message"] == "Cleared conversation history."
+        reset_response = response.json()
+        assert "new_conversation_id" in reset_response
+        assert reset_response["message"] == "Conversation reset successfully."
+        new_conversation_id = reset_response["new_conversation_id"]
 
-        # Verify messages are deleted
-        messages = conversation_repo.get_messages(test_conversation.id)
+        # Verify new conversation exists with correct config
+        new_conversation = conversation_repo.get_by_id(new_conversation_id)
+        assert new_conversation is not None
+        assert new_conversation.parent_entity_type == ParentEntityType.PROJECT
+        assert new_conversation.parent_entity_id == test_project.id
+        assert new_conversation.is_active is True
+
+        # Verify new conversation has no messages (key validation: messages were cleared)
+        messages = conversation_repo.get_messages(new_conversation_id)
         assert len(messages) == 0
 
-    def test_clear_conversation_messages_empty(self, client, test_conversation):
-        """Test clearing messages from a conversation with no messages."""
-        response = client.delete(f"/api/conversations/{test_conversation.id}/messages")
+    def test_reset_conversation_empty(self, client, db_session, test_conversation):
+        """Test resetting a conversation with no messages."""
+        response = client.post(f"/api/conversations/{test_conversation.id}/reset")
         assert response.status_code == 200
 
-        delete_response = response.json()
-        assert delete_response["success"] is True
-        assert delete_response["message"] == "Cleared conversation history."
+        reset_response = response.json()
+        assert "new_conversation_id" in reset_response
+        assert reset_response["message"] == "Conversation reset successfully."
+        new_conversation_id = reset_response["new_conversation_id"]
 
-    def test_clear_claude_code_conversation_resets_session_id(self, client, db_session, test_project):
-        """Test that clearing a Claude Code conversation resets the session ID."""
+        # Verify new conversation exists
+        conversation_repo = ConversationRepository(db_session)
+        new_conversation = conversation_repo.get_by_id(new_conversation_id)
+        assert new_conversation is not None
+        assert new_conversation.is_active is True
+
+    def test_reset_conversation_updates_parent_entity(self, client, db_session, test_project):
+        """Test that resetting a conversation updates the parent entity's conversation reference."""
         conversation_repo = ConversationRepository(db_session)
 
-        # Create a Claude Code conversation with a session ID
+        # Create a project conversation and link it to the project
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=test_project.id,
-            agent_role=AgentRoleType.TASK_PLANNING,
-            engine=AgentEngine.CLAUDE_CODE,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
             model_id="anthropic:claude-sonnet-4.5",
             is_active=True,
         )
-        conversation_repo.update_external_session_id(conversation, "test-session-123")
+        test_project.default_conversation_id = conversation.id
         db_session.commit()
 
-        # Verify session ID is set
-        assert conversation.external_session_id == "test-session-123"
-
-        # Clear conversation
-        response = client.delete(f"/api/conversations/{conversation.id}/messages")
+        # Reset conversation
+        response = client.post(f"/api/conversations/{conversation.id}/reset")
         assert response.status_code == 200
 
-        delete_response = response.json()
-        assert delete_response["success"] is True
-        assert delete_response["message"] == "Cleared conversation history."
+        reset_response = response.json()
+        new_conversation_id = reset_response["new_conversation_id"]
 
-        # Verify session ID was reset
-        db_session.refresh(conversation)
-        assert conversation.external_session_id is None
+        # Verify parent entity now references new conversation
+        db_session.refresh(test_project)
+        assert test_project.default_conversation_id == new_conversation_id
+
+        # Verify new conversation is valid
+        new_conversation = conversation_repo.get_by_id(new_conversation_id)
+        assert new_conversation is not None
+        assert new_conversation.parent_entity_id == test_project.id
 
     def test_stream_conversation_message(self, client_with_mock_agent, test_conversation, mock_agent):
         """Test streaming a message to a conversation."""
