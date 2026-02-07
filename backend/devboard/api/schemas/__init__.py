@@ -1,5 +1,11 @@
 """Pydantic schemas package."""
 
+from .agents import (
+    AddMCPToolRequest,
+    AgentRoleToolsResponse,
+    MCPToolSummary,
+    UpdateAgentConfigurationRequestFull,
+)
 from .codebase import (
     CodebaseBase,
     CodebaseCreate,
@@ -81,6 +87,11 @@ from .worktree import (
 )
 
 __all__ = [
+    # Agents
+    "AddMCPToolRequest",
+    "AgentRoleToolsResponse",
+    "MCPToolSummary",
+    "UpdateAgentConfigurationRequestFull",
     # Codebase
     "CodebaseBase",
     "CodebaseCreate",
