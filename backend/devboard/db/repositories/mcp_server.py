@@ -77,3 +77,18 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
     def expire(self, config: MCPServerConfig) -> None:
         """Expire cached state to force fresh load from database."""
         self.db.expire(config)
+
+    def get_all_tools_from_verified_servers(self) -> list[MCPTool]:
+        """Get all tools from MCP servers that have been successfully verified.
+
+        Returns:
+            List of MCPTool instances from servers where last_verified_success is True.
+        """
+        stmt = (
+            select(MCPTool)
+            .join(MCPServerConfig)
+            .where(MCPServerConfig.last_verified_success.is_(True))
+            .options(joinedload(MCPTool.server))
+            .order_by(MCPServerConfig.name, MCPTool.name)
+        )
+        return list(self.db.execute(stmt).scalars().unique().all())
