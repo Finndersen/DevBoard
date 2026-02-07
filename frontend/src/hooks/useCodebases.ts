@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api'
-import type { Codebase } from '../lib/api'
+import type { Codebase, CodebaseCreate } from '../lib/api'
 import { useApi, useMutation } from './useApi'
 
 export function useCodebases() {
@@ -11,7 +11,7 @@ export function useCodebase(id: number | string) {
 }
 
 export function useCreateCodebase() {
-  return useMutation((codebase: Omit<Codebase, 'id' | 'repository_url'>) => 
+  return useMutation((codebase: CodebaseCreate) =>
     apiClient.createCodebase(codebase)
   )
 }

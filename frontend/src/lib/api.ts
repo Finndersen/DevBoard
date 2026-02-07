@@ -224,6 +224,17 @@ export interface Codebase {
   setup_command: string | null
 }
 
+export interface CodebaseCreate {
+  name: string
+  description: string
+  local_path: string
+  default_branch?: string | null
+  merge_method?: MergeMethod | null
+  branch_handling?: BranchHandling | null
+  max_worktrees?: number | null
+  setup_command?: string | null
+}
+
 // Git and Worktree Management
 export interface TaskGitStatus {
   branch_name: string
@@ -817,7 +828,7 @@ export class ApiClient {
     return this.request<Codebase[]>('/api/codebases')
   }
 
-  async createCodebase(codebase: Omit<Codebase, 'id' | 'repository_url'>): Promise<Codebase> {
+  async createCodebase(codebase: CodebaseCreate): Promise<Codebase> {
     return this.request<Codebase>('/api/codebases', {
       method: 'POST',
       body: JSON.stringify(codebase),
