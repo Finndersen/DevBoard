@@ -57,10 +57,11 @@ def mock_agent_execution_service(
         role=role,
         conversation_repository=conversation_repo,
         history_service=history_service,
+        agent_config_service=mock_agent_config_service,
     )
 
-    # Patch the _get_agent method to return our mock (accept conversation_history arg)
-    monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent)
+    # Patch the _get_agent method to return our mock (accept conversation_history and mcp_tools args)
+    monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent)
 
     return service
 

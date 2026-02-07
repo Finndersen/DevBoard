@@ -70,13 +70,14 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         )
 
     @pytest.fixture
-    def execution_service(self, mock_role, conversation_repo, conversation, history_service):
+    def execution_service(self, mock_role, conversation_repo, conversation, history_service, mock_agent_config_service):
         """Create ClaudeCodeAgentExecutionService instance."""
         return ClaudeCodeAgentExecutionService(
             conversation=conversation,
             role=mock_role,
             conversation_repository=conversation_repo,
             history_service=history_service,
+            agent_config_service=mock_agent_config_service,
         )
 
     @pytest.mark.asyncio
@@ -150,7 +151,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(execution_service, "_get_agent", lambda: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda mcp_tools=None: mock_agent)
 
         # Collect all streamed events
         events = []
@@ -191,7 +192,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf_immediate
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(execution_service, "_get_agent", lambda: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda mcp_tools=None: mock_agent)
 
         # Collect all streamed events
         events = []

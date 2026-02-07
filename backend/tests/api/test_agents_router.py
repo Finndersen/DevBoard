@@ -17,10 +17,13 @@ class TestAgentsRouter:
         assert "model_id" in data["config"]
         assert "available_engines" in data
         assert len(data["available_engines"]) > 0
+        assert "enabled_mcp_tools" in data
+        assert data["enabled_mcp_tools"] == []  # Empty by default
 
-        # PROJECT should only allow INTERNAL engine
-        assert len(data["available_engines"]) == 1
-        assert data["available_engines"][0]["engine"] == "internal"
+        # PROJECT should allow INTERNAL and CLAUDE_CODE engines
+        assert len(data["available_engines"]) == 2
+        engine_names = {e["engine"] for e in data["available_engines"]}
+        assert engine_names == {"internal", "claude_code"}
 
     def test_get_agent_configuration_task_implementation(self, client):
         """TASK_IMPLEMENTATION should allow multiple engines."""
@@ -82,12 +85,12 @@ class TestAgentsRouter:
 
     def test_update_agent_configuration_invalid_engine_for_role(self, client):
         """Should reject engine not allowed for role."""
-        # Try to use Claude Code for PROJECT role (only allows INTERNAL)
+        # Try to use Gemini CLI for PROJECT role (only allows INTERNAL and CLAUDE_CODE)
         response = client.put(
             "/api/agents/project/configuration",
             json={
-                "engine": "claude_code",
-                "model_id": "default",
+                "engine": "gemini_cli",
+                "model_id": None,
             },
         )
         assert response.status_code == 400
@@ -152,3 +155,65 @@ class TestAgentsRouter:
         # Verify key Google models are present
         assert "google:gemini-2.5-pro" in gemini_model_ids
         assert "google:gemini-2.5-flash" in gemini_model_ids
+
+    def test_get_available_mcp_tools_empty(self, client):
+        """GET /agents/available-mcp-tools returns empty list when no verified servers exist."""
+        response = client.get("/api/agents/available-mcp-tools")
+        assert response.status_code == 200
+        data = response.json()
+        assert data == []
+
+    def test_get_agent_role_tools_empty(self, client):
+        """GET /agents/{role}/tools returns empty list by default."""
+        response = client.get("/api/agents/project/tools")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "project"
+        assert data["tools"] == []
+
+    def test_update_agent_configuration_with_custom_instructions(self, client):
+        """PUT /agents/{role}/configuration can set custom instructions."""
+        response = client.put(
+            "/api/agents/project/configuration",
+            json={
+                "engine": "internal",
+                "model_id": "openai:gpt-4.1",
+                "custom_instructions": "Always be helpful and concise.",
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["custom_instructions"] == "Always be helpful and concise."
+
+        # Verify persisted
+        response = client.get("/api/agents/project/configuration")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["custom_instructions"] == "Always be helpful and concise."
+
+    def test_update_agent_configuration_clear_custom_instructions(self, client):
+        """Setting custom_instructions to null clears them."""
+        # First set instructions
+        client.put(
+            "/api/agents/project/configuration",
+            json={
+                "engine": "internal",
+                "model_id": "openai:gpt-4.1",
+                "custom_instructions": "Some instructions",
+            },
+        )
+
+        # Then clear them
+        response = client.put(
+            "/api/agents/project/configuration",
+            json={
+                "engine": "internal",
+                "model_id": "openai:gpt-4.1",
+                "custom_instructions": None,
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["custom_instructions"] is None

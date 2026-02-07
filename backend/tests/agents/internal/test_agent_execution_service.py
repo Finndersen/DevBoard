@@ -75,13 +75,14 @@ class TestPydanticAIAgentExecutionService:
         )
 
     @pytest.fixture
-    def service(self, mock_role, conversation_repo, conversation, history_service):
+    def service(self, mock_role, conversation_repo, conversation, history_service, mock_agent_config_service):
         """Create PydanticAIAgentExecutionService instance."""
         return PydanticAIAgentExecutionService(
             conversation=conversation,
             role=mock_role,
             conversation_repository=conversation_repo,
             history_service=history_service,
+            agent_config_service=mock_agent_config_service,
         )
 
     @pytest.mark.asyncio
@@ -115,7 +116,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
 
         events = await service.send_message_or_approval(message_or_approvals="Test message")
 
@@ -166,7 +167,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
 
         events = await service.send_message_or_approval(message_or_approvals="Edit this")
 
@@ -214,7 +215,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
 
         # Process approvals
         approvals = {"tool_123": ToolApprovalDecision(approved=True)}

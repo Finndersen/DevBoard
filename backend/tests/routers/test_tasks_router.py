@@ -95,10 +95,11 @@ def mock_agent_execution_service_for_workflow(mock_agent, db_session, mock_agent
             role=role,
             conversation_repository=conversation_repo,
             history_service=history_service,
+            agent_config_service=mock_agent_config_service,
         )
 
         # Patch the _get_agent method to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history: mock_agent)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent)
 
         return service
 
@@ -836,7 +837,9 @@ class TestWorkflowActions:
         from devboard.agents.engines.internal.agent_execution import PydanticAIAgentExecutionService
 
         monkeypatch.setattr(
-            PydanticAIAgentExecutionService, "_get_agent", lambda self, conversation_history: mock_agent
+            PydanticAIAgentExecutionService,
+            "_get_agent",
+            lambda self, conversation_history, mcp_tools=None: mock_agent,
         )
 
         prompt_action_request = {"action_key": "task.create_implementation_plan"}

@@ -15,9 +15,10 @@ class TestAgentConfigService:
     """Tests for AgentConfigService."""
 
     @pytest.fixture
-    def agent_config_service(self, config_service):
+    def agent_config_service(self, agent_role_config_repository, config_service):
         """Create AgentConfigService instance for testing."""
         return AgentConfigService(
+            agent_role_config_repo=agent_role_config_repository,
             config_service=config_service,
             llm_registry=llm_registry,
             engine_registry=agent_engine_registry,
@@ -100,7 +101,7 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
         # Verify it's a REASONING model
-        model = agent_config_service.llm_registry.get(project_default)
+        model = agent_config_service._llm_registry.get(project_default)
         assert model is not None
         assert model.type == ModelType.REASONING
 
@@ -111,7 +112,7 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in investigation_default
         # Verify it's a FAST model
-        model = agent_config_service.llm_registry.get(investigation_default)
+        model = agent_config_service._llm_registry.get(investigation_default)
         assert model is not None
         assert model.type == ModelType.FAST
 
@@ -266,7 +267,7 @@ class TestAgentConfigService:
                 assert engine_info.is_available is True
                 assert engine_info.unavailable_reason is None
 
-    def test_check_engine_availability_internal_without_providers(self):
+    def test_check_engine_availability_internal_without_providers(self, agent_role_config_repository):
         """INTERNAL engine should be unavailable when no LLM providers are configured."""
         mock_config_service = Mock()
         # All provider validation calls return failure (no providers configured)
@@ -277,6 +278,7 @@ class TestAgentConfigService:
         )
 
         service = AgentConfigService(
+            agent_role_config_repo=agent_role_config_repository,
             config_service=mock_config_service,
             llm_registry=llm_registry,
             engine_registry=agent_engine_registry,

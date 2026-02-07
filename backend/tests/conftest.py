@@ -19,6 +19,7 @@ from devboard.db.models import Base, Codebase, Document, Project, Task
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
+    AgentRoleConfigRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
@@ -151,6 +152,12 @@ def conversation_repository(db_session):
     return ConversationRepository(db_session)
 
 
+@fixture
+def agent_role_config_repository(db_session):
+    """AgentRoleConfigRepository instance for testing."""
+    return AgentRoleConfigRepository(db_session)
+
+
 # Test data fixtures
 @fixture
 def test_codebase(db_session, tmp_path):
@@ -269,6 +276,9 @@ def mock_agent_config_service():
     # Return an AgentEngineModelConfig with model_id
     default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model_id="openai:gpt-4")
     mock_service.get_effective_config.return_value = default_config
+    # Mock methods for custom instructions and MCP tools
+    mock_service.get_custom_instructions.return_value = None
+    mock_service.get_enabled_mcp_tools.return_value = []
     return mock_service
 
 
