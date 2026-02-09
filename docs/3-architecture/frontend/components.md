@@ -20,7 +20,10 @@ Standard primitives with consistent theming and variants:
 - **Textarea** (`Textarea.tsx`): Multi-line input matching Input theming
 - **Modal** (`Modal.tsx`): Sizes (sm, md, lg, xl), escape/click-outside handling, focus trap, ARIA attributes
 - **StatusBadge** (`StatusBadge.tsx`): Semantic colors (default, success, warning, error, info)
-- **Markdown** (`Markdown.tsx`): Markdown rendering with syntax highlighting
+- **Markdown** (`Markdown.tsx`): Markdown rendering with syntax highlighting for code blocks and Mermaid diagram rendering
+- **CodeBlock** (`CodeBlock.tsx`): Syntax-highlighted code blocks using react-syntax-highlighter with theme support
+- **MermaidDiagram** (`MermaidDiagram.tsx`): Renders Mermaid diagrams with dark mode support, error handling, and click-to-expand functionality
+- **MermaidDiagramModal** (`MermaidDiagramModal.tsx`): Modal for expanded Mermaid diagram view with source code and copy functionality
 - **ErrorBoundary** (`ErrorBoundary.tsx`): React error boundary with fallback UI
 - **ErrorMessage** (`ErrorMessage.tsx`): Standardized error display with retry actions
 
