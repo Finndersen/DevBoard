@@ -166,11 +166,11 @@ class TestBuildTaskPlanningContext:
         assert "This is a test project specification." in context
 
         # Check task specification is included
-        assert "TASK SPECIFICATION DOCUMENT:" in context
+        assert "TASK SPECIFICATION:" in context
         assert "Implement feature X" in context
 
         # Implementation plan should NOT be included
-        assert "TASK IMPLEMENTATION PLAN DOCUMENT:" not in context
+        assert "IMPLEMENTATION PLAN:" not in context
 
     def test_handles_empty_documents(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
         """Test that empty documents show <EMPTY>."""
@@ -254,7 +254,7 @@ class TestBuildTaskPlanningContext:
 
         assert "<EMPTY>" in context
         # Implementation plan section should not be present (no plan exists)
-        assert "TASK IMPLEMENTATION PLAN DOCUMENT:" not in context
+        assert "IMPLEMENTATION PLAN:" not in context
 
     def test_handles_empty_project_specification(self, db_session, sample_codebase: Codebase):
         """Test that empty project specification shows <EMPTY>."""

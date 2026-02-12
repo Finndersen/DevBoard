@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from devboard.agents.agent_config_service import (
     AgentConfigService,
     AgentConfiguration,
-    AgentEngineModelConfig,
     AvailableModelsByEngine,
 )
+from devboard.agents.config_types import AgentEngineModelInput
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 from devboard.api.dependencies.repositories import get_mcp_server_repository
@@ -64,7 +64,7 @@ async def update_agent_configuration(
     role = _parse_agent_role(agent_role)
 
     try:
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine(request.engine),
             model_id=request.model_id,
         )

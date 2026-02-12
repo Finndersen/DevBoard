@@ -14,7 +14,7 @@ from devboard.db.models import (
     OAuthProviderType,
 )
 from devboard.db.repositories import MCPServerRepository, OAuthRepository
-from devboard.services.mcp_oauth_adapter import MCPTokenStorageAdapter
+from devboard.mcp.mcp_oauth_adapter import MCPTokenStorageAdapter
 from devboard.services.oauth_service import OAuthService, TokenData
 
 

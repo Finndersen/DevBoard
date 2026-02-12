@@ -4,7 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from devboard.agents.agent_config_service import AgentConfigService, AgentEngineModelConfig
+from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.config_types import AgentEngineModelInput
 from devboard.agents.engines import AgentEngine, agent_engine_registry
 from devboard.agents.language_models import ModelType, llm_registry
 from devboard.agents.roles import AgentRoleType
@@ -119,7 +120,7 @@ class TestAgentConfigService:
     def test_update_agent_configuration_validates_model(self, agent_config_service):
         """update_agent_configuration should validate model is available for engine."""
         # Should allow valid Anthropic model for Claude Code
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine.CLAUDE_CODE,
             model_id="anthropic:claude-sonnet-4.5",
         )
@@ -127,7 +128,7 @@ class TestAgentConfigService:
         assert result.config.model_id == "anthropic:claude-sonnet-4.5"
 
         # Should reject model from unsupported provider for engine
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine.CLAUDE_CODE,
             model_id="google:gemini-2.5-pro",  # Google model for Anthropic-only engine
         )
@@ -194,7 +195,7 @@ class TestAgentConfigService:
 
     def test_update_config_with_none_model_for_claude_code(self, agent_config_service):
         """Update configuration with None model_id for Claude Code should succeed."""
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine.CLAUDE_CODE,
             model_id=None,
         )
@@ -204,7 +205,7 @@ class TestAgentConfigService:
 
     def test_update_config_with_none_model_for_internal_fails(self, agent_config_service):
         """Update configuration with None model_id for INTERNAL should fail validation."""
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine.INTERNAL,
             model_id=None,
         )
@@ -227,15 +228,16 @@ class TestAgentConfigService:
     def test_get_effective_config_returns_none_for_claude_code_default(self, agent_config_service):
         """get_effective_config should return None model_id for Claude Code when not explicitly set."""
         # Set engine to Claude Code without selecting a model
-        config = AgentEngineModelConfig(
+        config = AgentEngineModelInput(
             engine=AgentEngine.CLAUDE_CODE,
             model_id=None,
         )
         agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
 
-        # Get effective config should return None model_id
+        # Get effective config should return None model and model_id
         effective_config = agent_config_service.get_effective_config(AgentRoleType.TASK_IMPLEMENTATION)
         assert effective_config.engine == AgentEngine.CLAUDE_CODE
+        assert effective_config.model is None
         assert effective_config.model_id is None
 
     def test_check_engine_availability_internal_with_configured_providers(self, agent_config_service):

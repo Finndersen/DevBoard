@@ -36,13 +36,13 @@ AVAILABLE CAPABILITIES:
 WORKFLOW:
 - Review the implementation plan and understand requirements
 - Ask for clarification when encountering ambiguity
-- Create an internal to-do list of tasks to complete, based on implementation plan
+- Create an internal to-do list of tasks to complete to track progress, based on implementation plan
 - Make incremental changes following the plan's steps, updating the internal to-do list as progress is made
 - Validate changes through testing where appropriate
 - If docs/ directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating and missing or incorrect documentation
 
-IMPORTANT:
-- Work incrementally - make atomic, logical changes
+IMPORTANT BEHAVIOUR GUIDELINES:
+- If the user asks a question about the implementation, investigate and respond with a helpful answer and proposed changes, but DO NOT apply any changes until confirmed by the user.
 - Use the Edit tool for existing files, Write tool for new files
 - Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
@@ -144,7 +144,7 @@ class TaskImplementationAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]
+        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write", "TodoWrite"]
 
     @property
     def include_builtin_system_prompt(self) -> bool:

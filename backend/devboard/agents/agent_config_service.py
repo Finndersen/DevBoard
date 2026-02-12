@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from devboard.agents.config_types import AgentEngineInfo, AgentEngineModelConfig, ModelInfo
+from devboard.agents.config_types import AgentEngineInfo, AgentEngineModelConfig, AgentEngineModelInput, ModelInfo
 from devboard.agents.engines.agent_engines import (
     AgentEngine,
     AgentEngineRegistry,
@@ -157,7 +157,7 @@ class AgentConfigService:
     def update_agent_configuration(
         self,
         agent_role: AgentRoleType,
-        config: AgentEngineModelConfig,
+        config: AgentEngineModelInput,
         custom_instructions: str | None = None,
     ) -> AgentConfiguration:
         """Update role-level configuration.
@@ -286,16 +286,19 @@ class AgentConfigService:
             else self._engine_registry.get_default_engine_for_agent_role(agent_role)
         )
 
-        # Resolve model (selected or default for agent role + engine)
-        effective_model = (
+        # Resolve model ID (selected or default for agent role + engine)
+        effective_model_id = (
             role_config.model_id
             if role_config.model_id
             else self._get_default_model_for_agent_role_and_engine(agent_role, effective_engine)
         )
 
+        # Resolve LanguageModel from registry
+        resolved_model = self._llm_registry.get(effective_model_id) if effective_model_id else None
+
         return AgentEngineModelConfig(
             engine=effective_engine,
-            model_id=effective_model,
+            model=resolved_model,
         )
 
     def _get_available_models_for_engine(self, engine: AgentEngine) -> list[LanguageModel]:

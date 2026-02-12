@@ -88,8 +88,6 @@ def create_multi_codebase_investigation_tool(
         # Get investigation agent configuration
         config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
 
-        language_model = agent_config_service.llm_registry.get(config.model_id) if config.model_id else None
-
         # Create investigation role with selected codebase
         investigation_role = CodebaseInvestigationAgentRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
 
@@ -98,13 +96,13 @@ def create_multi_codebase_investigation_tool(
             # Lazy import to avoid circular dependency
             from devboard.agents.engines.internal.agent import InternalAgent
 
-            if language_model is None:
+            if config.model is None:
                 raise ValueError(
                     f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
                 )
             investigation_agent = InternalAgent(
                 role=investigation_role,
-                model=language_model,
+                model=config.model,
             )
         elif config.engine == AgentEngine.CLAUDE_CODE:
             # Lazy import to avoid circular dependency
@@ -112,7 +110,7 @@ def create_multi_codebase_investigation_tool(
 
             investigation_agent = ClaudeCodeAgent(
                 role=investigation_role,
-                model=language_model,
+                model=config.model,
                 working_dir=working_dir,
             )
         else:

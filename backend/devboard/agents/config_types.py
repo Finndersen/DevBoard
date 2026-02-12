@@ -4,18 +4,16 @@ This module contains type definitions that are used across the agent system,
 separated to avoid circular import issues.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.language_models import LLMProvider, ModelType
+from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 
 
-class AgentEngineModelConfig(BaseModel):
-    """Combined engine and model configuration.
+class AgentEngineModelInput(BaseModel):
+    """Input type for setting engine and model configuration.
 
-    This structure is used throughout the system to represent an agent's
-    execution engine and the model it uses. Engine and model form a cohesive
-    unit that must be validated together.
+    Used when creating or updating agent configuration via API or service calls.
 
     Attributes:
         engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
@@ -25,6 +23,29 @@ class AgentEngineModelConfig(BaseModel):
 
     engine: AgentEngine
     model_id: str | None
+
+
+class AgentEngineModelConfig(BaseModel):
+    """Resolved engine and model configuration.
+
+    Returned by get_effective_config() with the model already resolved from
+    the registry. Consumers can access the full LanguageModel directly.
+
+    Attributes:
+        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
+        model: Resolved LanguageModel instance, or None for engines that
+               don't require model selection
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    engine: AgentEngine
+    model: LanguageModel | None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model_id(self) -> str | None:
+        return self.model.id if self.model else None
 
 
 class ModelInfo(BaseModel):
