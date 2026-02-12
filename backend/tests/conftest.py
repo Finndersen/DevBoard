@@ -10,9 +10,10 @@ from sqlalchemy import Connection, Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from devboard.agents.agent_config_service import AgentEngineModelConfig
+from devboard.agents.config_types import AgentEngineModelConfig
 from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
+from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base, Codebase, Document, Project, Task
@@ -273,8 +274,9 @@ def integration_service(configuration_repository):
 def mock_agent_config_service():
     """Mock AgentConfigService to avoid database dependencies."""
     mock_service = Mock()
-    # Return an AgentEngineModelConfig with model_id
-    default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model_id="openai:gpt-4")
+    # Return an AgentEngineModelConfig with a resolved LanguageModel
+    mock_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.REASONING)
+    default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model=mock_model)
     mock_service.get_effective_config.return_value = default_config
     # Mock methods for custom instructions and MCP tools
     mock_service.get_custom_instructions.return_value = None
@@ -401,6 +403,10 @@ def create_mock_task(
     project.id = task_id * 1000
     project.codebases = [codebase]
     task.project = project
+
+    # Mock additional attributes accessed by context builders
+    task.github_pr_number = None
+    task.custom_fields = None
 
     # Mock workspace directory method
     task.get_current_workspace_dir = Mock(return_value=codebase_path)
