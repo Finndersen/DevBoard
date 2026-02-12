@@ -24,10 +24,9 @@ class TaskRepository(BaseRepository[Task]):
         specification: "Document",
         base_branch: str,
         codebase_id: int,
+        branch_name: str,
         implementation_plan: "Document | None" = None,
         status: TaskStatus = TaskStatus.PLANNING,
-        remote_task_id: str | None = None,
-        branch_name: str | None = None,
         custom_fields: dict[str, Any] | None = None,
     ) -> Task:
         """Create a new task.
@@ -40,8 +39,7 @@ class TaskRepository(BaseRepository[Task]):
             codebase_id: Codebase ID
             implementation_plan: Optional implementation plan document instance
             status: Initial task status (defaults to PLANNING)
-            remote_task_id: Optional remote task identifier
-            branch_name: Optional git branch name
+            branch_name: Git branch name
             custom_fields: Optional custom field values as a JSON-compatible dict
 
         Returns:
@@ -54,7 +52,6 @@ class TaskRepository(BaseRepository[Task]):
             implementation_plan_id=implementation_plan.id if implementation_plan else None,
             status=status,
             codebase_id=codebase_id,
-            remote_task_id=remote_task_id,
             branch_name=branch_name,
             base_branch=base_branch,
             custom_fields=custom_fields,

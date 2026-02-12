@@ -29,7 +29,7 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 
 **Purpose**: Discrete units of work with lifecycle states
 
-**Key Fields**: `id`, `title`, `description`, `project_id`, `state`, `external_id`, timestamps
+**Key Fields**: `id`, `title`, `description`, `project_id`, `state`, `branch_name`, timestamps
 
 **State Enum**: DEFINING, DESIGNING, PLANNING, IMPLEMENTING, IN_REVIEW, COMPLETE
 

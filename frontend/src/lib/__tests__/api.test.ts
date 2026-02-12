@@ -163,7 +163,6 @@ describe('ApiClient', () => {
         title: 'Test Task 1',
         status: 'Pending',
         codebase_id: null,
-        remote_task_id: null,
         conversation_id: 1,
         created_at: '2024-01-01T00:00:00Z',
         specification: {
@@ -189,7 +188,6 @@ describe('ApiClient', () => {
         title: 'Test Task 2',
         status: 'Planning',
         codebase_id: null,
-        remote_task_id: null,
         conversation_id: 2,
         created_at: '2024-01-02T00:00:00Z',
         specification: {
@@ -226,7 +224,6 @@ describe('ApiClient', () => {
       const newTaskRequest = {
         title: 'New Task',
         codebase_id: null,
-        remote_task_id: null,
         specification_content: 'New task specification',
       }
 
@@ -236,7 +233,6 @@ describe('ApiClient', () => {
         title: 'New Task',
         status: 'defining',
         codebase_id: null,
-        remote_task_id: null,
         conversation_id: 5,
         specification: {
           id: 10,
@@ -748,7 +744,6 @@ describe('ApiClient', () => {
         status: 'Planning',
         project_id: 1,
         codebase_id: 2,
-        remote_task_id: 'PROJ-123',
         conversation_id: 3,
         specification: {
           id: 1,
@@ -770,7 +765,6 @@ describe('ApiClient', () => {
       }
 
       expect(fullTask.codebase_id).toBe(2)
-      expect(fullTask.remote_task_id).toBe('PROJ-123')
       expect(fullTask.conversation_id).toBe(3)
       expect(fullTask.implementation_plan).toBeTruthy()
       expect(fullTask.implementation_plan?.content).toBe('Implementation details')
@@ -783,7 +777,6 @@ describe('ApiClient', () => {
         status: 'Pending',
         project_id: 1,
         codebase_id: null,
-        remote_task_id: null,
         conversation_id: 4,
         specification: {
           id: 3,
@@ -798,7 +791,6 @@ describe('ApiClient', () => {
       }
 
       expect(minimalTask.codebase_id).toBeNull()
-      expect(minimalTask.remote_task_id).toBeNull()
       expect(minimalTask.implementation_plan).toBeNull()
     })
   })

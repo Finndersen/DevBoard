@@ -50,8 +50,7 @@ def mock_task(mock_codebase):
     task.status = TaskStatus.PLANNING
     task.created_at = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
     task.codebase = mock_codebase
-    task.remote_task_id = None
-    task.branch_name = None
+    task.branch_name = "implement-feature-x"
     task.base_branch = "main"
     task.github_pr_number = None
     task.custom_fields = {"priority": "high"}
@@ -68,7 +67,6 @@ def mock_task_with_details(mock_codebase):
     task.status = TaskStatus.IMPLEMENTING
     task.created_at = datetime(2024, 1, 20, 14, 30, 0, tzinfo=UTC)
     task.codebase = mock_codebase
-    task.remote_task_id = "PROJ-123"
     task.branch_name = "feature/fix-bug-y"
     task.base_branch = "develop"
     task.github_pr_number = 42
@@ -105,7 +103,7 @@ class TestTaskToToonRecord:
             "status": "planning",
             "created_at": "2024-01-15T10:00:00+00:00",
             "codebase": "backend",
-            "branch": "",
+            "branch": "implement-feature-x",
             "custom_fields": '{"priority": "high"}',
         }
 
@@ -143,7 +141,7 @@ class TestFormatTasksAsToon:
         task1.status = TaskStatus.PLANNING
         task1.created_at = datetime(2024, 1, 10, tzinfo=UTC)
         task1.codebase = mock_codebase
-        task1.branch_name = None
+        task1.branch_name = "feature/task-1"
         task1.custom_fields = {}
 
         task2 = Mock(spec=Task)
@@ -164,7 +162,7 @@ class TestFormatTasksAsToon:
         assert parsed[0]["title"] == "Task 1"
         assert parsed[0]["status"] == "planning"
         assert parsed[0]["codebase"] == "backend"
-        assert parsed[0]["branch"] == ""
+        assert parsed[0]["branch"] == "feature/task-1"
         assert parsed[1]["id"] == 2
         assert parsed[1]["title"] == "Task 2"
         assert parsed[1]["status"] == "implementing"
@@ -178,7 +176,7 @@ class TestFormatTasksAsToon:
         task.status = TaskStatus.PLANNING
         task.created_at = datetime(2024, 1, 10, tzinfo=UTC)
         task.codebase = mock_codebase
-        task.branch_name = None
+        task.branch_name = "feature/task"
         task.custom_fields = {}
 
         result = _format_tasks_as_toon([task], 25)
@@ -314,8 +312,7 @@ class TestCreateListTasksTool:
             task.status = TaskStatus.PLANNING
             task.created_at = datetime(2024, 1, i + 1, tzinfo=UTC)
             task.codebase = mock_codebase
-            task.remote_task_id = None
-            task.branch_name = None
+            task.branch_name = f"feature/task-{i}"
             task.custom_fields = {}
             tasks.append(task)
 
@@ -364,6 +361,8 @@ class TestCreateViewTaskDetailsTool:
         assert "# Task #1: Implement feature X" in result
         assert "**Status:** planning" in result
         assert "**Codebase:** backend" in result
+        assert "**Branch:** implement-feature-x" in result
+        assert "**Base Branch:** main" in result
 
     @pytest.mark.asyncio
     async def test_view_task_details_with_all_fields(self, mock_project, mock_task_service, mock_task_with_details):
@@ -375,7 +374,6 @@ class TestCreateViewTaskDetailsTool:
         result = await tool.function(task_id=2)
 
         assert "# Task #2: Fix bug Y" in result
-        assert "**Remote Task ID:** PROJ-123" in result
         assert "**Branch:** feature/fix-bug-y" in result
         assert "**Base Branch:** develop" in result
         assert "**GitHub PR:** #42" in result
@@ -487,7 +485,6 @@ class TestCreateCreateTaskTool:
             title="Implement feature X",
             base_branch="main",
             codebase_id=10,
-            remote_task_id=None,
             specification_content="",
             branch_name=None,
             custom_fields=None,
@@ -517,7 +514,6 @@ class TestCreateCreateTaskTool:
             specification_content="Task specification here",
             base_branch="develop",
             branch_name="feature/my-branch",
-            remote_task_id="PROJ-456",
             custom_fields={"priority": "high"},
         )
 
@@ -526,7 +522,6 @@ class TestCreateCreateTaskTool:
             title="Implement feature X",
             base_branch="develop",
             codebase_id=10,
-            remote_task_id="PROJ-456",
             specification_content="Task specification here",
             branch_name="feature/my-branch",
             custom_fields={"priority": "high"},
@@ -720,11 +715,6 @@ class TestToolSchemas:
         # branch_name parameter (optional, uses anyOf)
         assert "branch_name" in props
         assert "anyOf" in props["branch_name"]
-
-        # remote_task_id parameter (optional, uses anyOf)
-        assert "remote_task_id" in props
-        assert "anyOf" in props["remote_task_id"]
-        assert "jira" in props["remote_task_id"]["description"].lower()
 
         # custom_fields parameter (optional, uses anyOf)
         assert "custom_fields" in props

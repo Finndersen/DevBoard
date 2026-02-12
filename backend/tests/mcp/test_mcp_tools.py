@@ -38,7 +38,6 @@ def mock_tasks():
     task1.status = TaskStatus.PLANNING
     task1.project_id = 1
     task1.codebase_id = None
-    task1.remote_task_id = None
     task1.created_at = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
 
     task2 = Mock(spec=Task)
@@ -47,7 +46,6 @@ def mock_tasks():
     task2.status = TaskStatus.PLANNING
     task2.project_id = 1
     task2.codebase_id = 1
-    task2.remote_task_id = "JIRA-123"
     task2.created_at = datetime.datetime(2024, 1, 2, tzinfo=datetime.UTC)
 
     task3 = Mock(spec=Task)
@@ -56,7 +54,6 @@ def mock_tasks():
     task3.status = TaskStatus.IMPLEMENTING
     task3.project_id = 2
     task3.codebase_id = 1
-    task3.remote_task_id = None
     task3.created_at = datetime.datetime(2024, 1, 3, tzinfo=datetime.UTC)
 
     return [task1, task2, task3]

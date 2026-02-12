@@ -28,7 +28,7 @@
 
 **view_task_details**: View detailed information about a specific task including metadata and optional document contents. No approval (read-only). Params: `task_id`, `include_documents` (list: specification, implementation_plan, change_summary). Used by: ProjectQARole
 
-**create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_id`, `specification_content`, `base_branch`, `branch_name`, `remote_task_id`, `custom_fields`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+**create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_name`, `specification_content`, `base_branch`, `branch_name`, `custom_fields`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
 
 ### Codebase Analysis
 

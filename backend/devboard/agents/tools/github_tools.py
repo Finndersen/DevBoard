@@ -55,10 +55,6 @@ def create_github_pr_tool(
         Raises:
             ModelRetry: If validation fails or PR creation fails.
         """
-        # Validate task has a branch
-        if not task.branch_name:
-            raise ModelRetry("Task has no branch configured. Cannot create PR.")
-
         # Validate codebase has GitHub remote
         if not task.codebase.repository_url:
             raise ModelRetry("Codebase has no GitHub remote configured. Cannot create PR.")

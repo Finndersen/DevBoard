@@ -62,7 +62,6 @@ class TaskService:
         title: str,
         base_branch: str,
         codebase_id: int,
-        remote_task_id: str | None = None,
         specification_content: str = "",
         branch_name: str | None = None,
         custom_fields: dict | None = None,
@@ -80,7 +79,6 @@ class TaskService:
             title: Task title
             base_branch: Base branch for git operations
             codebase_id: Codebase ID
-            remote_task_id: Optional remote task identifier (e.g., Jira issue key)
             specification_content: Initial content for the specification document (defaults to empty string)
             branch_name: Optional git branch name (auto-generated if not provided)
             custom_fields: Optional custom field values as a JSON-compatible dict
@@ -104,7 +102,6 @@ class TaskService:
             implementation_plan=None,
             status=TaskStatus.PLANNING,
             codebase_id=codebase_id,
-            remote_task_id=remote_task_id,
             branch_name=branch_name,
             base_branch=base_branch,
             custom_fields=custom_fields,
@@ -203,7 +200,7 @@ class TaskService:
 
         # 4. Delete git branch if requested
         task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
-        if delete_branch and task.branch_name:
+        if delete_branch:
             try:
                 await task_git_service.delete_task_branch(task, force=True)
             except Exception as e:
@@ -291,9 +288,6 @@ class TaskService:
                 or merge fails (conflict/error)
             InvalidStatusTransitionError: If task cannot transition to COMPLETE
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch configured")
-
         # Create change_summary document
         if not task.change_summary:
             doc = self.document_repo.create(DocumentType.CHANGE_SUMMARY, change_summary)
@@ -343,13 +337,12 @@ class TaskService:
             self.document_repo.update_content(task.change_summary, change_summary)
 
         # Delete local feature branch
-        if task.branch_name:
-            git = GitRepoIntegration(task.codebase.local_path)
-            try:
-                await git.delete_branch(task.branch_name, force=True)
-                logfire.info(f"Deleted local branch {task.branch_name} for task {task.id}")
-            except Exception as e:
-                logfire.warning(f"Failed to delete local branch {task.branch_name}: {e}")
+        git = GitRepoIntegration(task.codebase.local_path)
+        try:
+            await git.delete_branch(task.branch_name, force=True)
+            logfire.info(f"Deleted local branch {task.branch_name} for task {task.id}")
+        except Exception as e:
+            logfire.warning(f"Failed to delete local branch {task.branch_name}: {e}")
 
         # Transition to COMPLETE
         self.transition_to_complete(task)

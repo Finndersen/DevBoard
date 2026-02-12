@@ -20,7 +20,6 @@ export interface Task {
   status: string
   project_id: number
   codebase_id: number
-  remote_task_id: string | null
   conversation_id: number
   created_at: string
   specification_document_id: number
@@ -43,7 +42,6 @@ export interface GitHubPRStatusResponse {
 export interface TaskCreate {
   title: string
   codebase_id: number
-  remote_task_id: string | null
   specification_content: string | null
   branch_name?: string  // Optional - auto-generated if not provided
   base_branch?: string  // Optional - defaults to "main"

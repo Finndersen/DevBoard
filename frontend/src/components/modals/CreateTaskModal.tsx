@@ -20,7 +20,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   const [newTask, setNewTask] = useState({
     title: '',
     codebase_id: null as number | null,
-    remote_task_id: null as string | null,
     working_branch: '',
     base_branch: '',
     initial_message: ''
@@ -64,7 +63,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       setNewTask({
         title: '',
         codebase_id: null,
-        remote_task_id: null,
         working_branch: '',
         base_branch: '',
         initial_message: ''
@@ -142,7 +140,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       const taskData: any = {
         title: newTask.title,
         codebase_id: newTask.codebase_id,
-        remote_task_id: newTask.remote_task_id,
         specification_content: null,  // Always empty, initial message is sent via chat
         custom_fields: Object.keys(customFields).length > 0 ? customFields : null
       }
@@ -170,7 +167,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       setNewTask({
         title: '',
         codebase_id: null,
-        remote_task_id: null,
         working_branch: '',
         base_branch: '',
         initial_message: ''

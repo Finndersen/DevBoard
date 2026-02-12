@@ -41,7 +41,6 @@ class TaskInfo(TypedDict):
     status: str
     project_id: int
     codebase_id: int | None
-    remote_task_id: str | None
     created_at: str
 
 
@@ -113,7 +112,7 @@ async def get_tasks(project_id: int) -> list[TaskInfo]:
     Returns:
         List of tasks with their details.
         Each task includes: id, title, status, project_id, codebase_id,
-        remote_task_id, created_at.
+        created_at.
     """
     with get_mcp_db_session() as db:
         tasks = TaskRepository(db).get_for_project(project_id)
@@ -125,7 +124,6 @@ async def get_tasks(project_id: int) -> list[TaskInfo]:
                 "status": task.status.value,
                 "project_id": task.project_id,
                 "codebase_id": task.codebase_id,
-                "remote_task_id": task.remote_task_id,
                 "created_at": task.created_at.isoformat(),
             }
             for task in tasks

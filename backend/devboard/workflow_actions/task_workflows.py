@@ -185,7 +185,7 @@ Please briefly review these changes and note if any are relevant to the current 
 
         Available when: task has feature branch and status is PLANNING or IMPLEMENTING.
         """
-        return task.status in (TaskStatus.PLANNING, TaskStatus.IMPLEMENTING) and task.branch_name is not None
+        return task.status in (TaskStatus.PLANNING, TaskStatus.IMPLEMENTING)
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
         """Execute the action: rebase task branch onto base branch.
@@ -314,9 +314,7 @@ Please do the following:
         and branch handling is LOCAL_MERGE.
         """
         return (
-            task.status == TaskStatus.IMPLEMENTING
-            and task.branch_name is not None
-            and task.codebase.branch_handling == BranchHandling.LOCAL_MERGE.value
+            task.status == TaskStatus.IMPLEMENTING and task.codebase.branch_handling == BranchHandling.LOCAL_MERGE.value
         )
 
     async def run(self) -> AsyncIterator[ConversationEvent]:
@@ -373,7 +371,6 @@ The PR will be created against the base branch and the task will transition to P
         """
         return (
             task.status == TaskStatus.IMPLEMENTING
-            and task.branch_name is not None
             and task.codebase.repository_url is not None
             and task.codebase.branch_handling == BranchHandling.GITHUB_PR.value
         )

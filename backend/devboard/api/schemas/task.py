@@ -15,7 +15,6 @@ class TaskBase(BaseModel):
     project_id: int
     codebase_id: int
     status: TaskStatus = TaskStatus.PLANNING
-    remote_task_id: str | None = None
 
 
 class TaskCreate(BaseModel):
@@ -25,7 +24,6 @@ class TaskCreate(BaseModel):
     project_id: int
     codebase_id: int
     status: TaskStatus = TaskStatus.PLANNING
-    remote_task_id: str | None = None
 
 
 class TaskCreateNested(BaseModel):
@@ -33,7 +31,6 @@ class TaskCreateNested(BaseModel):
 
     title: str
     codebase_id: int
-    remote_task_id: str | None = None
     specification_content: str | None = None
     branch_name: str | None = None
     base_branch: str | None = None
@@ -46,7 +43,6 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     status: TaskStatus | None = None
     codebase_id: int | None = None
-    remote_task_id: str | None = None
     conversation_id: str | None = None
     specification: str | None = None
     implementation_plan: str | None = None
@@ -133,7 +129,7 @@ class TaskDiffResponse(BaseModel):
 class TaskGitStatusResponse(BaseModel):
     """Schema for task git status response."""
 
-    branch_name: str | None
+    branch_name: str
     branch_exists: bool
     base_branch: str
     commits_ahead: int

@@ -180,12 +180,8 @@ class WorkspaceAllocationService:
         - This ensures main repo slot assignment only happens through explicit manual action (unless max_worktrees=0)
 
         Raises:
-            ValueError: If task has invalid configuration
             AllSlotsLockedException: If no suitable slots are available
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch configured")
-
         # Clean up any stale locks before attempting allocation
         await self.cleanup_stale_locks(codebase_id=task.codebase.id)
 
@@ -464,8 +460,7 @@ class WorkspaceAllocationService:
         """
         logfire.warn(f"Creating worktree for slot {slot.id} at {slot.path}")
         git = GitRepoIntegration(task.codebase.local_path)
-        branch_for_worktree = task.branch_name or task.base_branch
-        await git.create_worktree(slot.path, branch_for_worktree)
+        await git.create_worktree(slot.path, task.branch_name)
 
     async def get_pool_status_for_codebase(self, codebase: Codebase) -> PoolStatus:
         """Get status of all worktree slots for a codebase.
@@ -610,9 +605,6 @@ class WorkspaceAllocationService:
         """
         slot: WorktreeSlot | None = None
         try:
-            # Task must have branch_name set at creation time
-            assert task.branch_name, f"Task {task.id} must have branch_name set"
-
             # Ensure git branch exists (create if needed)
             await self.task_git_service.ensure_task_branch(task)
 
@@ -753,9 +745,6 @@ class WorkspaceAllocationService:
         Raises:
             ValueError: If task has no branch name, main repo is dirty, or operation fails
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
         main_git = GitRepoIntegration(task.codebase.local_path)
 
         # Check main repo is clean

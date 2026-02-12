@@ -96,7 +96,6 @@ async def get_task(
         project_id=task.project_id,
         codebase_id=task.codebase_id,
         status=task.status,
-        remote_task_id=task.remote_task_id,
         conversation_id=conversation.id,
         created_at=task.created_at,
         specification_document_id=task.specification.id,
@@ -152,7 +151,6 @@ async def update_task(
         project_id=updated_task.project_id,
         codebase_id=updated_task.codebase_id,
         status=updated_task.status,
-        remote_task_id=updated_task.remote_task_id,
         conversation_id=conversation.id,
         created_at=updated_task.created_at,
         specification_document_id=updated_task.specification.id,
@@ -445,9 +443,6 @@ async def merge_task_branch(
     Raises:
         HTTPException: 404 if task not found, 400 if merge fails
     """
-    if not task.branch_name:
-        raise HTTPException(status_code=400, detail="Task has no branch configured")
-
     try:
         merge_commit = await task_git_service.merge_task_branch(
             task,
@@ -482,9 +477,6 @@ async def delete_task_branch(
     Raises:
         HTTPException: 404 if task not found, 400 if deletion fails
     """
-    if not task.branch_name:
-        raise HTTPException(status_code=400, detail="Task has no branch configured")
-
     try:
         await task_git_service.delete_task_branch(task, force=force)
         return DeleteResponse(
@@ -512,9 +504,6 @@ async def abort_task_rebase(
     Raises:
         HTTPException: 400 if task has no branch, no rebase in progress, or abort fails
     """
-    if not task.branch_name:
-        raise HTTPException(status_code=400, detail="Task has no branch configured")
-
     try:
         await task_git_service.abort_rebase(task)
         return DeleteResponse(
@@ -548,9 +537,6 @@ async def checkout_task_to_main(
         HTTPException: 400 if task has no branch, main repo has uncommitted changes,
                        or git operation fails
     """
-    if not task.branch_name:
-        raise HTTPException(status_code=400, detail="Task has no branch configured")
-
     try:
         await workspace_allocation_service.checkout_task_to_main_repo(task)
         return CheckoutToMainResponse(

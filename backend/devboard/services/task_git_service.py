@@ -140,12 +140,7 @@ class TaskGitService:
         Returns:
             The branch name
 
-        Raises:
-            ValueError: If task.branch_name is not set
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} must have branch_name set")
-
         branch_name = task.branch_name
 
         # Create branch if it doesn't exist
@@ -170,12 +165,7 @@ class TaskGitService:
         Returns:
             List of GitLogEntry objects for commits in the task branch
 
-        Raises:
-            ValueError: If task has no branch configured
         """
-        if not task.branch_name:
-            return []
-
         git = GitRepoIntegration(task.codebase.local_path)
 
         # Get fork point to find where task branch diverged from base
@@ -227,21 +217,6 @@ class TaskGitService:
         if worktree_slot_path:
             worktree_git = GitRepoIntegration(worktree_slot_path)
             rebase_in_progress = worktree_git.is_rebase_in_progress()
-
-        if not task.branch_name:
-            return {
-                "branch_name": None,
-                "branch_exists": False,
-                "base_branch": task.base_branch,
-                "commits_ahead": 0,
-                "commits_behind": 0,
-                "can_merge": False,
-                "has_conflicts": False,
-                "worktree_slot_path": worktree_slot_path,
-                "main_repo_is_clean": main_repo_is_clean,
-                "main_repo_current_branch": main_repo_current_branch,
-                "rebase_in_progress": rebase_in_progress,
-            }
 
         git = GitRepoIntegration(task.codebase.local_path)
 
@@ -297,11 +272,8 @@ class TaskGitService:
             Commit hash of the merge commit
 
         Raises:
-            ValueError: If merge fails or task has no branch name
+            ValueError: If merge fails
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
         git = GitRepoIntegration(task.codebase.local_path)
 
         # Use task's base_branch if target not specified
@@ -326,11 +298,8 @@ class TaskGitService:
             force: Force deletion even if not fully merged
 
         Raises:
-            ValueError: If deletion fails or task has no branch name
+            ValueError: If deletion fails
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
         git = GitRepoIntegration(task.codebase.local_path)
 
         await git.delete_branch(task.branch_name, force=force)
@@ -358,14 +327,12 @@ class TaskGitService:
             await git.stage_untracked_files_intent()
             # Get fork point - use task.branch_name for reflog lookup, not "HEAD"
             # The reflog "branch: Created from" entry is on the branch, not on HEAD
-            feature_branch = task.branch_name if task.branch_name else "HEAD"
-            fork_point = await git.get_fork_point(task.base_branch, feature_branch)
+            fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
             if not fork_point:
                 return StructuredDiff(files=[], additions=0, deletions=0)
             # Get all changes from fork point to working directory (includes uncommitted)
             return await git.get_structured_diff(commit1=fork_point)
         else:
-            assert task.branch_name is not None
             git = GitRepoIntegration(task.codebase.local_path)
             # Get fork point - works correctly even after branch has been merged
             fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
@@ -475,12 +442,7 @@ class TaskGitService:
         Returns:
             RebaseResult with outcome, new HEAD (if successful), and conflict info (if applicable)
 
-        Raises:
-            ValueError: If task has no branch name configured
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
         # Use the worktree slot path if available, otherwise main repo
         last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
@@ -640,11 +602,8 @@ class TaskGitService:
             MergeResult with outcome and relevant details
 
         Raises:
-            ValueError: If task has no branch, or if merge method is invalid
+            ValueError: If merge method is invalid
         """
-        if not task.branch_name:
-            raise ValueError("Task has no branch name configured")
-
         merge_method = MergeMethod(task.codebase.merge_method)
         codebase = task.codebase
 
@@ -905,11 +864,8 @@ class TaskGitService:
             task: Task instance
 
         Raises:
-            ValueError: If task has no branch or no rebase is in progress
+            ValueError: If no rebase is in progress
         """
-        if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
-
         # Use the worktree slot path if available, otherwise main repo
         last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path

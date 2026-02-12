@@ -38,10 +38,8 @@ class Task(Base):
 
     title: Mapped[str] = mapped_column(String(255))
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.PLANNING)
-    remote_task_id: Mapped[str | None] = mapped_column(String(100))
-
     # Git branch configuration
-    branch_name: Mapped[str | None] = mapped_column(String(255))
+    branch_name: Mapped[str] = mapped_column(String(255))
     base_branch: Mapped[str] = mapped_column(String(255))
 
     # GitHub PR number (set when PR is created)

@@ -21,7 +21,7 @@ def _task_to_toon_record(task: Task) -> dict[str, Any]:
         "status": task.status.value,
         "created_at": task.created_at.isoformat(),
         "codebase": task.codebase.name,
-        "branch": task.branch_name or "",
+        "branch": task.branch_name,
         "custom_fields": json.dumps(task.custom_fields or {}),
     }
 
@@ -162,12 +162,8 @@ def create_view_task_details_tool(project: Project, task_service: TaskService) -
             f"**Codebase:** {task.codebase.name}",
         ]
 
-        if task.remote_task_id:
-            lines.append(f"**Remote Task ID:** {task.remote_task_id}")
-        if task.branch_name:
-            lines.append(f"**Branch:** {task.branch_name}")
-        if task.base_branch:
-            lines.append(f"**Base Branch:** {task.base_branch}")
+        lines.append(f"**Branch:** {task.branch_name}")
+        lines.append(f"**Base Branch:** {task.base_branch}")
         if task.github_pr_number:
             lines.append(f"**GitHub PR:** #{task.github_pr_number}")
         if task.custom_fields:
@@ -220,7 +216,6 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
         specification_content: str | None = None,
         base_branch: str | None = None,
         branch_name: str | None = None,
-        remote_task_id: str | None = None,
         custom_fields: dict[str, Any] | None = None,
     ) -> str:
         """Create a new task within the current project.
@@ -233,7 +228,6 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
             specification_content: Optional initial content for the task specification document
             base_branch: Optional branch to base work off (defaults to codebase default branch)
             branch_name: Optional working branch name (auto-generated from title if not provided)
-            remote_task_id: Optional external reference (e.g., Jira ticket ID like 'PROJ-123')
             custom_fields: Optional additional metadata as a dictionary
 
         Returns:
@@ -253,7 +247,6 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
                 title=title,
                 base_branch=resolved_base_branch,
                 codebase_id=codebase.id,
-                remote_task_id=remote_task_id,
                 specification_content=specification_content or "",
                 branch_name=branch_name,
                 custom_fields=custom_fields,

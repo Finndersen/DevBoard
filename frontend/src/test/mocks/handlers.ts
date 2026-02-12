@@ -80,7 +80,6 @@ const mockTasks: Task[] = [
     title: 'Test Task',
     status: 'Designing',
     codebase_id: null,
-    remote_task_id: null,
     conversation_id: 3,
     specification_document_id: 3,
     implementation_plan_document_id: null, // No implementation plan for early-stage task
@@ -92,7 +91,6 @@ const mockTasks: Task[] = [
     title: 'Another Task',
     status: 'Planning',
     codebase_id: null,
-    remote_task_id: 'PROJ-123',
     conversation_id: 4,
     specification_document_id: 5,
     implementation_plan_document_id: 6,
