@@ -77,7 +77,7 @@ export default function MermaidDiagram({ code, onExpandClick, className = '' }: 
       onKeyDown={onExpandClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onExpandClick() } : undefined}
     >
       <div
-        className="flex justify-center [&>svg]:max-w-full"
+        className="flex justify-center items-center h-full [&>svg]:max-w-full"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
     </div>

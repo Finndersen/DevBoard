@@ -233,9 +233,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     <div className="h-full overflow-auto">
       {/* Navigation Tabs with Project Name and Actions */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
-        <div className="flex items-center justify-between relative">
+        <div className="flex items-center justify-between">
           {/* Left: Navigation Tabs */}
-          <nav className="-mb-px flex space-x-8">
+          <nav className="-mb-px flex space-x-8 shrink-0">
             {[
               { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
               { id: 'board' as const, name: 'Tasks', icon: null },
@@ -255,10 +255,10 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               </button>
             ))}
           </nav>
-          
+
           {/* Center: Project Name and Description */}
-          <div className="absolute left-1/2 transform -translate-x-1/2 text-center">
-            <h1 className={`text-xl font-bold ${textColors.primary}`}>
+          <div className="flex-1 min-w-0 text-center py-1">
+            <h1 className={`text-xl font-bold ${textColors.primary} truncate`}>
               {project?.name}
             </h1>
 
@@ -269,7 +269,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                 onClick={descriptionField.startEditing}
               >
                 {project?.description ? (
-                  <p className={`text-sm ${textColors.secondary} truncate max-w-md`}>
+                  <p className={`text-sm ${textColors.secondary} truncate`}>
                     {project.description}
                   </p>
                 ) : (
@@ -281,7 +281,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                   onClick={(e) => { e.stopPropagation(); descriptionField.startEditing() }}
                   variant="ghost"
                   size="sm"
-                  className="p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                   title="Edit description"
                 >
                   <PencilIcon className="w-3 h-3" />
@@ -327,9 +327,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               <p className="text-xs text-red-500 mt-1">{descriptionField.error}</p>
             )}
           </div>
-          
+
           {/* Right: Actions */}
-          <div className="flex items-center">
+          <div className="flex items-center shrink-0">
             <Button onClick={createTaskModal.open} size="sm">
               <PlusIcon className="w-4 h-4 mr-2" />
               New Task

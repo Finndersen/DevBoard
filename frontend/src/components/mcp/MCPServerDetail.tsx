@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   TrashIcon,
   PlayIcon,
   PencilIcon,
   WrenchScrewdriverIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
 import { Button, ConfirmDialog } from '../ui'
 import { textColors } from '../../styles/designSystem'
@@ -144,9 +145,20 @@ export function MCPServerDetail({
   verifying
 }: MCPServerDetailProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null)
+  const [selectedToolId, setSelectedToolId] = useState<number | null>(null)
+  const [toolSearch, setToolSearch] = useState('')
 
-  const maxToolNameLength = server.tools.reduce((max, t) => Math.max(max, t.name.length), 0)
+  const selectedTool = selectedToolId !== null
+    ? server.tools.find(t => t.id === selectedToolId) ?? null
+    : null
+
+  const filteredTools = useMemo(() => {
+    if (!toolSearch) return server.tools
+    const query = toolSearch.toLowerCase()
+    return server.tools.filter(t => t.name.toLowerCase().includes(query))
+  }, [server.tools, toolSearch])
+
+  const maxToolNameLength = filteredTools.reduce((max, t) => Math.max(max, t.name.length), 0)
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -240,16 +252,28 @@ export function MCPServerDetail({
             </p>
           </div>
         ) : (
-          <ScrollableToolList>
-            {server.tools.map(tool => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                nameWidth={maxToolNameLength}
-                onSelect={() => setSelectedTool(tool)}
+          <>
+            <div className="relative mb-2 shrink-0">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Filter tools..."
+                value={toolSearch}
+                onChange={(e) => setToolSearch(e.target.value)}
+                className={`w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 ${textColors.primary} placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
               />
-            ))}
-          </ScrollableToolList>
+            </div>
+            <ScrollableToolList>
+              {filteredTools.map(tool => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  nameWidth={maxToolNameLength}
+                  onSelect={() => setSelectedToolId(tool.id)}
+                />
+              ))}
+            </ScrollableToolList>
+          </>
         )}
       </div>
 
@@ -266,7 +290,7 @@ export function MCPServerDetail({
       {selectedTool && (
         <ToolTestModal
           isOpen={true}
-          onClose={() => setSelectedTool(null)}
+          onClose={() => setSelectedToolId(null)}
           tool={selectedTool}
           serverId={server.id}
           onToolUpdate={onToolUpdate}

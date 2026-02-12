@@ -268,9 +268,8 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                 type="button"
                 onClick={() => setIsEngineOpen(!isEngineOpen)}
                 disabled={saving}
-                className={`relative w-48 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
-                  saving ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                className={`relative w-48 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
               >
                 <span className="block truncate">
                   {selectedEngineInfo ? getEngineDisplayName(selectedEngineInfo) : selectedEngine}
@@ -294,15 +293,13 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                         type="button"
                         onClick={() => handleEngineChange(engine.engine)}
                         disabled={isUnavailable}
-                        className={`w-full text-left px-3 py-2 ${
-                          isUnavailable
+                        className={`w-full text-left px-3 py-2 ${isUnavailable
                             ? 'opacity-50 cursor-not-allowed'
                             : 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer'
-                        } ${
-                          selectedEngine === engine.engine && !isUnavailable
+                          } ${selectedEngine === engine.engine && !isUnavailable
                             ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                             : 'text-gray-900 dark:text-gray-100'
-                        }`}
+                          }`}
                       >
                         <div>
                           <div className="font-medium">
@@ -333,9 +330,8 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                 type="button"
                 onClick={() => setIsModelOpen(!isModelOpen)}
                 disabled={saving}
-                className={`relative w-64 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
-                  saving ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                className={`relative w-64 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
               >
                 <span className="block truncate">
                   {getModelDisplayText()}
@@ -355,11 +351,10 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                     <button
                       type="button"
                       onClick={() => handleModelChange(null)}
-                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                        selectedModel === null
+                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${selectedModel === null
                           ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                           : 'text-gray-900 dark:text-gray-100'
-                      }`}
+                        }`}
                     >
                       <div>
                         <div className="font-medium">Default</div>
@@ -374,11 +369,10 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                       key={model.id}
                       type="button"
                       onClick={() => handleModelChange(model.id)}
-                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                        selectedModel === model.id
+                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${selectedModel === model.id
                           ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                           : 'text-gray-900 dark:text-gray-100'
-                      }`}
+                        }`}
                     >
                       <div>
                         <div className="font-medium">{getModelDisplayName(model)}</div>
@@ -433,7 +427,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
           <div>
             <h4 className="text-sm font-medium text-gray-900 dark:text-white">Assigned MCP Tools</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              External tools available to this agent (Internal engine only)
+              External tools available to this agent
             </p>
           </div>
           <button
