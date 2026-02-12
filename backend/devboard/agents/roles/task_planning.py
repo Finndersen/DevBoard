@@ -40,8 +40,7 @@ A specification defines an atomic piece of work (feature, bug fix, or improvemen
 Provides a technical roadmap for the implementation agent to execute without further investigation. Captures WHAT needs to be done with required context, not the full specifics of HOW. Reference the Task Specification instead of duplicating content.
 
 **Include:**
-- Analysis Summary: Technical analysis and architecture understanding
-- Current Implementation: Relevant files, functions, classes, types (if not in specification)
+- Context: Relevant context (if not already in the Task Specification) and high level overview of changes required.
 - Implementation Steps: Concise steps with specific files/components to modify. Indicate parallel execution where applicable.
 - Code Changes: High-level descriptions (e.g., "Update function X in file Y to...")
 - Data/Schema Changes: Migrations, model updates if applicable

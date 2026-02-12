@@ -9,7 +9,7 @@ import datetime
 import json
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -25,7 +25,7 @@ class TextResponse:
     content: str
 
 
-class ToolCallOutcome(str, Enum):
+class ToolCallOutcome(StrEnum):
     """Enum for tool call outcomes."""
 
     SUCCESS = "success"

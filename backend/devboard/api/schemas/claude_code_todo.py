@@ -4,12 +4,12 @@ Claude Code maintains todo lists in JSON files at ~/.claude/todos/ to track
 task progress during agent execution.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
 
-class TodoStatus(str, Enum):
+class TodoStatus(StrEnum):
     """Status of a todo item."""
 
     PENDING = "pending"
@@ -17,7 +17,7 @@ class TodoStatus(str, Enum):
     COMPLETED = "completed"
 
 
-class TodoPriority(str, Enum):
+class TodoPriority(StrEnum):
     """Priority level of a todo item."""
 
     HIGH = "high"

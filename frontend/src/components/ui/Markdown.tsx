@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
@@ -51,7 +51,7 @@ export default function Markdown({
 
   const combinedClassName = `text-left ${getCompactProseClasses()} ${className}`.trim()
 
-  const components: Components = {
+  const components: Components = useMemo(() => ({
     code({ className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || '')
       const language = match ? match[1] : undefined
@@ -83,7 +83,7 @@ export default function Markdown({
       // Return children directly since CodeBlock/MermaidDiagram handle their own wrapping
       return <>{children}</>
     }
-  }
+  }), [])
 
   return (
     <>

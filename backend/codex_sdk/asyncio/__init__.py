@@ -19,10 +19,11 @@ from ..types import (
     ThreadItem,
     TodoListItem,
     Usage,
+    UserInput,
     WebSearchItem,
 )
 from .codex import AsyncCodex
-from .thread import AsyncThread, Input, RunResult, RunStreamedResult, Turn, UserInput
+from .thread import AsyncThread, Input, RunResult, RunStreamedResult, Turn
 
 __all__ = [
     "AbortController",

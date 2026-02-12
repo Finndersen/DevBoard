@@ -162,13 +162,3 @@ app.mount("/mcp", ss_mcp.app)
 async def root():
     """Health check endpoint."""
     return {"message": "DevBoard API is running"}
-
-
-@app.get("/health")
-async def health():
-    """Detailed health check."""
-    return {
-        "status": "healthy",
-        "version": "0.1.0",
-        "database": "connected",  # TODO: Add actual database health check
-    }

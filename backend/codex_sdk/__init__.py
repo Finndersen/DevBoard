@@ -9,7 +9,7 @@ from .options import (
     ThreadOptions,
     TurnOptions,
 )
-from .thread import Input, RunResult, RunStreamedResult, Thread, Turn, UserInput
+from .thread import Input, RunResult, RunStreamedResult, Thread, Turn
 from .types import (
     AgentMessageItem,
     CommandExecutionItem,
@@ -21,6 +21,7 @@ from .types import (
     ThreadItem,
     TodoListItem,
     Usage,
+    UserInput,
     WebSearchItem,
 )
 

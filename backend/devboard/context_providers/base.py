@@ -1,11 +1,11 @@
 """Base context provider class and common patterns."""
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 from typing import Any, ClassVar
 
 
-class ContextStrategy(str, Enum):
+class ContextStrategy(StrEnum):
     """Strategy for context retrieval from a resource."""
 
     EAGER = "EAGER"

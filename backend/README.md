@@ -14,6 +14,11 @@ Run the application:
 make start
 ```
 
+Update lock file for newly added/updated dependencies:
+```bash
+make lock
+```
+
 ## Code Quality
 
 Format, lint, and type check:

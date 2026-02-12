@@ -57,11 +57,19 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
     setTranslate({ x: 0, y: 0 })
   }
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-    setScale(prev => Math.min(Math.max(prev + delta, MIN_ZOOM), MAX_ZOOM))
-  }, [])
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport || !isOpen) return
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+      setScale(prev => Math.min(Math.max(prev + delta, MIN_ZOOM), MAX_ZOOM))
+    }
+
+    viewport.addEventListener('wheel', onWheel, { passive: false })
+    return () => viewport.removeEventListener('wheel', onWheel)
+  }, [isOpen])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
@@ -122,8 +130,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
 
         <div
           ref={viewportRef}
-          className={`flex-1 min-h-0 border-x border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
-          onWheel={handleWheel}
+          className={`flex-1 min-h-0 border-x border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
