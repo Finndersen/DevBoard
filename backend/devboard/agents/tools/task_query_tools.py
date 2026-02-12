@@ -2,9 +2,9 @@
 
 import json
 from datetime import datetime
-from itertools import groupby
 from typing import Any, Literal
 
+import toons
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models import Codebase, Project, Task, TaskStatus
@@ -13,45 +13,31 @@ from devboard.services.task_service import TaskService
 MAX_TASKS_LIMIT = 20
 
 
-def _format_task_summary(task: Task) -> str:
-    """Format a single task as a summary string."""
-    lines = [
-        f"- **Task #{task.id}**: {task.title}",
-        f"  - Status: {task.status.value}",
-        f"  - Created: {task.created_at.isoformat()}",
-        f"  - Codebase: {task.codebase.name}",
-    ]
-    if task.remote_task_id:
-        lines.append(f"  - Remote ID: {task.remote_task_id}")
-    if task.branch_name:
-        lines.append(f"  - Branch: {task.branch_name}")
-    return "\n".join(lines)
+def _task_to_toon_record(task: Task) -> dict[str, Any]:
+    """Convert a Task to a dict for TOON encoding."""
+    return {
+        "id": task.id,
+        "title": task.title,
+        "status": task.status.value,
+        "created_at": task.created_at.isoformat(),
+        "codebase": task.codebase.name,
+        "branch": task.branch_name or "",
+        "custom_fields": json.dumps(task.custom_fields or {}),
+    }
 
 
-def _group_and_format_tasks(tasks: list[Task], total_count: int) -> str:
-    """Group tasks by status and format as output string."""
+def _format_tasks_as_toon(tasks: list[Task], total_count: int) -> str:
+    """Format tasks as TOON-encoded output string."""
     if not tasks:
         return "No tasks found matching the filters."
 
-    # Sort by status order, then by created_at descending within each group
-    status_order = {s: i for i, s in enumerate(TaskStatus)}
-    sorted_tasks = sorted(tasks, key=lambda t: (status_order[t.status], -t.created_at.timestamp()))
+    task_records = [_task_to_toon_record(task) for task in tasks]
+    toon_output = toons.dumps(task_records)
 
-    lines = []
-    if total_count > MAX_TASKS_LIMIT:
-        lines.append(f"**Showing {len(tasks)} of {total_count} tasks.** Add filter conditions to refine results.\n")
-    else:
-        lines.append(f"**Found {len(tasks)} tasks:**\n")
+    if total_count > len(tasks):
+        return f"Showing {len(tasks)} of {total_count} tasks (limit reached):\n{toon_output}"
 
-    # Group by status
-    for status, group_tasks in groupby(sorted_tasks, key=lambda t: t.status):
-        group_list = list(group_tasks)
-        lines.append(f"### {status.value.upper()} ({len(group_list)})\n")
-        for task in group_list:
-            lines.append(_format_task_summary(task))
-        lines.append("")
-
-    return "\n".join(lines)
+    return toon_output
 
 
 def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
@@ -82,8 +68,8 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
             codebase_name: Filter by codebase name. Choose from the available codebases.
 
         Returns:
-            Formatted list of task summaries grouped by status,
-            or a message indicating no tasks match the filters.
+            TOON-encoded list of tasks with fields: id, title, status, created_at, codebase, branch, custom_fields.
+            Returns a message if no tasks match the filters.
         """
         # Parse status filter
         parsed_statuses: list[TaskStatus] | None = None
@@ -118,7 +104,7 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
         total_count = len(tasks)
         limited_tasks = tasks[:MAX_TASKS_LIMIT]
 
-        return _group_and_format_tasks(limited_tasks, total_count)
+        return _format_tasks_as_toon(limited_tasks, total_count)
 
     # Dynamically set the Literal annotation for codebase_name parameter if codebases exist
     if codebase_names:

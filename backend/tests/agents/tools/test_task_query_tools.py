@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
+import toons
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.tools.task_query_tools import (
     MAX_TASKS_LIMIT,
-    _format_task_summary,
-    _group_and_format_tasks,
+    _format_tasks_as_toon,
+    _task_to_toon_record,
     create_create_task_tool,
     create_list_tasks_tool,
     create_view_task_details_tool,
@@ -53,7 +54,7 @@ def mock_task(mock_codebase):
     task.branch_name = None
     task.base_branch = "main"
     task.github_pr_number = None
-    task.custom_fields = None
+    task.custom_fields = {"priority": "high"}
     return task
 
 
@@ -91,55 +92,59 @@ def mock_task_service():
     return service
 
 
-class TestFormatTaskSummary:
-    """Tests for _format_task_summary helper function."""
+class TestTaskToToonRecord:
+    """Tests for _task_to_toon_record helper function."""
 
-    def test_formats_basic_task(self, mock_task):
-        """Formats task with minimal fields."""
-        result = _format_task_summary(mock_task)
+    def test_converts_task_to_dict(self, mock_task):
+        """Converts task to dict with all required fields."""
+        result = _task_to_toon_record(mock_task)
 
-        assert "**Task #1**" in result
-        assert "Implement feature X" in result
-        assert "Status: planning" in result
-        assert "Created: 2024-01-15T10:00:00+00:00" in result
-        assert "Codebase: backend" in result
-
-    def test_includes_remote_id_when_present(self, mock_task):
-        """Includes remote task ID when present."""
-        mock_task.remote_task_id = "JIRA-456"
-
-        result = _format_task_summary(mock_task)
-
-        assert "Remote ID: JIRA-456" in result
+        assert result == {
+            "id": 1,
+            "title": "Implement feature X",
+            "status": "planning",
+            "created_at": "2024-01-15T10:00:00+00:00",
+            "codebase": "backend",
+            "branch": "",
+            "custom_fields": '{"priority": "high"}',
+        }
 
     def test_includes_branch_when_present(self, mock_task):
         """Includes branch name when present."""
         mock_task.branch_name = "feature/my-branch"
 
-        result = _format_task_summary(mock_task)
+        result = _task_to_toon_record(mock_task)
 
-        assert "Branch: feature/my-branch" in result
+        assert result["branch"] == "feature/my-branch"
+
+    def test_empty_custom_fields_serializes_to_empty_object(self, mock_task):
+        """Empty custom_fields serializes to empty JSON object."""
+        mock_task.custom_fields = None
+
+        result = _task_to_toon_record(mock_task)
+
+        assert result["custom_fields"] == "{}"
 
 
-class TestGroupAndFormatTasks:
-    """Tests for _group_and_format_tasks helper function."""
+class TestFormatTasksAsToon:
+    """Tests for _format_tasks_as_toon helper function."""
 
     def test_returns_no_tasks_message_when_empty(self):
         """Returns appropriate message when no tasks."""
-        result = _group_and_format_tasks([], 0)
+        result = _format_tasks_as_toon([], 0)
 
         assert result == "No tasks found matching the filters."
 
-    def test_groups_tasks_by_status(self, mock_codebase):
-        """Groups tasks by status with headers."""
+    def test_formats_tasks_as_toon(self, mock_codebase):
+        """Formats tasks as TOON-encoded string."""
         task1 = Mock(spec=Task)
         task1.id = 1
         task1.title = "Task 1"
         task1.status = TaskStatus.PLANNING
         task1.created_at = datetime(2024, 1, 10, tzinfo=UTC)
         task1.codebase = mock_codebase
-        task1.remote_task_id = None
         task1.branch_name = None
+        task1.custom_fields = {}
 
         task2 = Mock(spec=Task)
         task2.id = 2
@@ -147,32 +152,43 @@ class TestGroupAndFormatTasks:
         task2.status = TaskStatus.IMPLEMENTING
         task2.created_at = datetime(2024, 1, 15, tzinfo=UTC)
         task2.codebase = mock_codebase
-        task2.remote_task_id = None
-        task2.branch_name = None
+        task2.branch_name = "feature/task-2"
+        task2.custom_fields = {"priority": "high"}
 
-        result = _group_and_format_tasks([task1, task2], 2)
+        result = _format_tasks_as_toon([task1, task2], 2)
 
-        assert "**Found 2 tasks:**" in result
-        assert "### PLANNING (1)" in result
-        assert "### IMPLEMENTING (1)" in result
-        assert "Task 1" in result
-        assert "Task 2" in result
+        # Parse the TOON output and verify structure
+        parsed = toons.loads(result)
+        assert len(parsed) == 2
+        assert parsed[0]["id"] == 1
+        assert parsed[0]["title"] == "Task 1"
+        assert parsed[0]["status"] == "planning"
+        assert parsed[0]["codebase"] == "backend"
+        assert parsed[0]["branch"] == ""
+        assert parsed[1]["id"] == 2
+        assert parsed[1]["title"] == "Task 2"
+        assert parsed[1]["status"] == "implementing"
+        assert parsed[1]["branch"] == "feature/task-2"
 
     def test_shows_truncation_message_when_exceeds_limit(self, mock_codebase):
-        """Shows truncation message when total exceeds limit."""
+        """Shows truncation message when total exceeds displayed count."""
         task = Mock(spec=Task)
         task.id = 1
         task.title = "Task"
         task.status = TaskStatus.PLANNING
         task.created_at = datetime(2024, 1, 10, tzinfo=UTC)
         task.codebase = mock_codebase
-        task.remote_task_id = None
         task.branch_name = None
+        task.custom_fields = {}
 
-        result = _group_and_format_tasks([task], 25)
+        result = _format_tasks_as_toon([task], 25)
 
-        assert "**Showing 1 of 25 tasks.**" in result
-        assert "Add filter conditions" in result
+        assert "Showing 1 of 25 tasks (limit reached):" in result
+        # Verify the TOON data is still present after the message
+        toon_data = result.split("\n", 1)[1]
+        parsed = toons.loads(toon_data)
+        assert len(parsed) == 1
+        assert parsed[0]["id"] == 1
 
 
 class TestCreateListTasksTool:
@@ -201,8 +217,14 @@ class TestCreateListTasksTool:
             created_before=None,
             codebase_name=None,
         )
-        assert "Found 1 tasks" in result
-        assert "Implement feature X" in result
+        # Parse TOON output and verify task data
+        parsed = toons.loads(result)
+        assert len(parsed) == 1
+        assert parsed[0]["id"] == 1
+        assert parsed[0]["title"] == "Implement feature X"
+        assert parsed[0]["status"] == "planning"
+        assert parsed[0]["codebase"] == "backend"
+        assert parsed[0]["custom_fields"] == '{"priority": "high"}'
 
     @pytest.mark.asyncio
     async def test_list_tasks_with_status_filter(self, mock_project, mock_task_service, mock_task):
@@ -219,7 +241,8 @@ class TestCreateListTasksTool:
             created_before=None,
             codebase_name=None,
         )
-        assert "Implement feature X" in result
+        parsed = toons.loads(result)
+        assert parsed[0]["title"] == "Implement feature X"
 
     @pytest.mark.asyncio
     async def test_list_tasks_with_invalid_status(self, mock_project, mock_task_service):
@@ -247,7 +270,8 @@ class TestCreateListTasksTool:
         call_args = mock_task_service.get_tasks_filtered.call_args
         assert call_args.kwargs["created_after"] == datetime(2024, 1, 1)
         assert call_args.kwargs["created_before"] == datetime(2024, 2, 1)
-        assert "Implement feature X" in result
+        parsed = toons.loads(result)
+        assert parsed[0]["title"] == "Implement feature X"
 
     @pytest.mark.asyncio
     async def test_list_tasks_with_invalid_date(self, mock_project, mock_task_service):
@@ -276,7 +300,8 @@ class TestCreateListTasksTool:
             created_before=None,
             codebase_name="backend",
         )
-        assert "Implement feature X" in result
+        parsed = toons.loads(result)
+        assert parsed[0]["title"] == "Implement feature X"
 
     @pytest.mark.asyncio
     async def test_list_tasks_limits_results(self, mock_project, mock_task_service, mock_codebase):
@@ -291,6 +316,7 @@ class TestCreateListTasksTool:
             task.codebase = mock_codebase
             task.remote_task_id = None
             task.branch_name = None
+            task.custom_fields = {}
             tasks.append(task)
 
         mock_task_service.get_tasks_filtered.return_value = tasks
@@ -298,7 +324,11 @@ class TestCreateListTasksTool:
         tool = create_list_tasks_tool(mock_project, mock_task_service)
         result = await tool.function()
 
-        assert f"**Showing {MAX_TASKS_LIMIT} of 25 tasks.**" in result
+        assert f"Showing {MAX_TASKS_LIMIT} of 25 tasks (limit reached):" in result
+        # Verify the TOON data is still present after the message
+        toon_data = result.split("\n", 1)[1]
+        parsed = toons.loads(toon_data)
+        assert len(parsed) == MAX_TASKS_LIMIT
 
     @pytest.mark.asyncio
     async def test_list_tasks_no_matches(self, mock_project, mock_task_service):
