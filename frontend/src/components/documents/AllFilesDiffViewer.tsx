@@ -1,7 +1,9 @@
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import type { TaskDiffResponse, TaskBranchInfo } from '../../lib/api'
+import { DiffReviewProvider, type CommentSubmitHandler } from '../../contexts/DiffReviewContext'
 import GitDiffViewer from './GitDiffViewer'
+import SubmitAllCommentsButton from './SubmitAllCommentsButton'
 
 interface AllFilesDiffViewerProps {
   branchInfo: TaskBranchInfo | null
@@ -10,15 +12,17 @@ interface AllFilesDiffViewerProps {
   onRefresh: (view: string) => void
   lastUpdated: string | null
   className?: string
+  onSubmitComments?: CommentSubmitHandler
 }
 
-export default function AllFilesDiffViewer({
+function AllFilesDiffViewerContent({
   branchInfo,
   diffResponse,
   loading,
   onRefresh,
   lastUpdated,
-  className = ''
+  className = '',
+  onSubmitComments
 }: AllFilesDiffViewerProps) {
   // Track selected view
   const [selectedView, setSelectedView] = useState<string>('all')
@@ -114,6 +118,8 @@ export default function AllFilesDiffViewer({
             )}
           </div>
           <div className="flex items-center space-x-3">
+            {/* Submit All Comments Button - only visible when there are pending comments */}
+            {onSubmitComments && <SubmitAllCommentsButton />}
             {lastUpdated && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 Last updated: {formatTimestamp(lastUpdated)}
@@ -167,4 +173,18 @@ export default function AllFilesDiffViewer({
       </div>
     </div>
   )
+}
+
+export default function AllFilesDiffViewer(props: AllFilesDiffViewerProps) {
+  // If onSubmitComments is provided, wrap content with DiffReviewProvider to enable comments
+  if (props.onSubmitComments) {
+    return (
+      <DiffReviewProvider onSubmitComments={props.onSubmitComments}>
+        <AllFilesDiffViewerContent {...props} />
+      </DiffReviewProvider>
+    )
+  }
+
+  // Without onSubmitComments, render without provider (comments disabled)
+  return <AllFilesDiffViewerContent {...props} />
 }
