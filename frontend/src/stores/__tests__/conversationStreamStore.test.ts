@@ -294,8 +294,6 @@ describe('conversationStreamStore - stream cancellation', () => {
       conversationId,
       mockStream(),
       undefined,
-      [],
-      undefined,
       abortController
     )
 
@@ -336,9 +334,7 @@ describe('conversationStreamStore - stream cancellation', () => {
     // Start stream without providing an abort controller
     await store.startStream(
       conversationId,
-      mockStream(),
-      undefined,
-      []
+      mockStream()
     )
 
     // Verify stream completed and processed the event
@@ -375,8 +371,6 @@ describe('conversationStreamStore - stream cancellation', () => {
     const streamPromise = store.startStream(
       conversationId,
       mockStream(),
-      undefined,
-      [],
       undefined,
       abortController
     )

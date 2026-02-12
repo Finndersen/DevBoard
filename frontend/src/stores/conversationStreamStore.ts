@@ -7,16 +7,22 @@ import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers
 import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandlers'
 
 /**
- * State for an active conversation stream.
+ * State for an active conversation stream (streaming concerns only).
  */
 export interface StreamState {
-  messages: ConversationEvent[]
   isStreaming: boolean
   error: Error | null
-  abortController: AbortController
-  startedAt: number
+  abortController?: AbortController
+  startedAt?: number
   pendingToolRequests: ToolCallRequest[]
   isQueued: boolean
+}
+
+/**
+ * Conversation messages storage (separate from streaming state).
+ */
+export interface ConversationMessagesState {
+  messages: ConversationEvent[]
 }
 
 /**
@@ -37,10 +43,13 @@ const eventHandlerRegistries = new Map<number, EventHandlerRegistry>()
 const conversationIdRefs = new Map<number, { current: number }>()
 
 /**
- * Store state containing all active conversation streams.
+ * Store state containing streaming state and conversation messages.
  */
 interface ConversationStreamState {
+  /** Streaming state (transient - cleared when stream ends) */
   activeStreams: Map<number, StreamState>
+  /** Conversation messages (persistent during session) */
+  conversationMessages: Map<number, ConversationMessagesState>
 }
 
 /**
@@ -50,19 +59,19 @@ interface ConversationStreamActions {
   /**
    * Start streaming conversation events.
    * The stream runs independently of component lifecycle.
+   * Messages are preserved - streaming only affects streaming state.
+   *
+   * Note: Event handler registry must be registered separately via updateEventHandlerRegistry()
+   * before starting the stream. The registry is looked up from the internal map.
    *
    * @param conversationId - The conversation to stream
    * @param stream - The event stream to process
-   * @param eventHandlerRegistry - Optional registry for invoking event handlers
-   * @param initialMessages - Optional initial messages to include (e.g., user message)
    * @param onFirstEvent - Optional callback invoked once when first event is received
    * @param abortController - Optional AbortController for cancelling the stream (if not provided, one is created internally)
    */
   startStream: (
     conversationId: number,
     stream: AsyncGenerator<ConversationEvent>,
-    eventHandlerRegistry?: EventHandlerRegistry,
-    initialMessages?: ConversationEvent[],
     onFirstEvent?: () => void | Promise<void>,
     abortController?: AbortController
   ) => Promise<void>
@@ -90,6 +99,15 @@ interface ConversationStreamActions {
    * @param event - The event to add
    */
   addEvent: (conversationId: number, event: ConversationEvent) => void
+
+  /**
+   * Set messages for a conversation (e.g., from fetched history).
+   * Creates stream state if it doesn't exist.
+   *
+   * @param conversationId - The conversation to set messages for
+   * @param messages - The messages to set
+   */
+  setMessages: (conversationId: number, messages: ConversationEvent[]) => void
 
   /**
    * Set error state for a stream.
@@ -125,17 +143,16 @@ interface ConversationStreamActions {
   /**
    * Approve tools and continue the conversation stream.
    * This starts a new stream with the approval decisions.
+   * Messages are preserved automatically.
+   *
+   * Note: Event handler registry is looked up from the internal map (registered via updateEventHandlerRegistry).
    *
    * @param conversationId - The conversation to continue
    * @param approvals - The tool approval decisions
-   * @param eventHandlerRegistry - Optional registry for invoking event handlers
-   * @param initialMessages - Optional initial messages to preserve (e.g., from history)
    */
   approveTools: (
     conversationId: number,
-    approvals: Record<string, { approved: boolean; feedback?: string }>,
-    eventHandlerRegistry?: EventHandlerRegistry,
-    initialMessages?: ConversationEvent[]
+    approvals: Record<string, { approved: boolean; feedback?: string }>
   ) => Promise<void>
 
   /**
@@ -207,18 +224,22 @@ type ConversationStreamStore = ConversationStreamState & ConversationStreamActio
  *   state => state.isConversationStreaming(conversationId)
  * )
  *
+ * // Register event handlers first
+ * updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
+ *
  * // Create a stream and start processing
  * const stream = apiClient.streamConversationMessage(conversationId, { message: "Hello" })
- * await startStream(conversationId, stream, eventHandlerRegistry)
+ * await startStream(conversationId, stream)
  * ```
  */
 export const useConversationStreamStore = create<ConversationStreamStore>()(
   immer((set, get) => ({
     // Initial state
     activeStreams: new Map(),
+    conversationMessages: new Map(),
 
     // Actions
-    startStream: async (conversationId, stream, eventHandlerRegistry, initialMessages, onFirstEvent, providedAbortController) => {
+    startStream: async (conversationId, stream, onFirstEvent, providedAbortController) => {
       // Use provided abort controller or create a new one
       const abortController = providedAbortController ?? new AbortController()
 
@@ -227,26 +248,20 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       const conversationIdRef = { current: conversationId }
       conversationIdRefs.set(conversationId, conversationIdRef)
 
-      // Store event handler registry in separate map (not in Zustand state)
-      if (eventHandlerRegistry) {
-        eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
-      }
-
       // Log before setting state to detect if we're overwriting an existing stream
       const existingStream = get().activeStreams.get(conversationId)
+      const existingMessages = get().conversationMessages.get(conversationId)
       console.log('[StreamStore] startStream called:', {
         conversationId,
         hasExistingStream: !!existingStream,
         existingStreamIsStreaming: existingStream?.isStreaming,
-        existingStreamMessageCount: existingStream?.messages?.length ?? 0,
-        initialMessageCount: initialMessages?.length ?? 0,
+        existingMessageCount: existingMessages?.messages?.length ?? 0,
         allActiveStreams: Array.from(get().activeStreams.keys())
       })
 
-      // Initialize stream state with any initial messages (e.g., user message)
+      // Initialize streaming state only (messages are separate and preserved)
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          messages: initialMessages ?? [],
           isStreaming: true,
           error: null,
           abortController,
@@ -257,8 +272,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       console.log('[StreamStore] Stream started:', {
-        conversationId,
-        initialMessageCount: initialMessages?.length ?? 0
+        conversationId
       })
 
       try {
@@ -356,41 +370,49 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     },
 
     addEvent: (conversationId, event) => {
-      // Check stream existence before set() to get accurate state for logging
-      const streamBefore = get().activeStreams.get(conversationId)
+      // Check state before set() for logging
+      const messagesBefore = get().conversationMessages.get(conversationId)
       console.log('[StreamStore] addEvent:', {
         conversationId,
         eventType: event.event_type,
-        streamFound: !!streamBefore,
-        currentMessageCount: streamBefore?.messages?.length ?? 0,
-        allActiveStreams: Array.from(get().activeStreams.keys()),
+        currentMessageCount: messagesBefore?.messages?.length ?? 0,
         ...(event.event_type === 'tool_call' && { toolName: (event as ToolCall).tool_name }),
         ...(event.event_type === 'system' && { systemType: (event as SystemEvent).type })
       })
 
       set((draft) => {
-        const stream = draft.activeStreams.get(conversationId)
-        if (stream) {
-          // Special handling for ToolCallRequest: remove duplicate ToolCall
-          // PydanticAI emits ToolCall first, then ToolCallRequest for the same tool_call_id
-          // We want to remove the initial ToolCall and keep only the approval workflow
-          if (event.event_type === 'tool_call_request') {
-            // Find and remove previous ToolCall with same tool_call_id
-            const index = stream.messages.findIndex(
-              (msg) =>
-                msg.event_type === 'tool_call' &&
-                msg.tool_call_id === event.tool_call_id
-            )
-            if (index !== -1) {
-              stream.messages.splice(index, 1)
-            }
-            // Don't add ToolCallRequest to messages - it stays in approval UI only
-            return
-          }
-
-          // Add all other events to messages normally
-          stream.messages.push(event)
+        // Get or create conversation messages
+        let convMessages = draft.conversationMessages.get(conversationId)
+        if (!convMessages) {
+          convMessages = { messages: [] }
+          draft.conversationMessages.set(conversationId, convMessages)
         }
+
+        // Special handling for ToolCallRequest: remove duplicate ToolCall
+        // PydanticAI emits ToolCall first, then ToolCallRequest for the same tool_call_id
+        // We want to remove the initial ToolCall and keep only the approval workflow
+        if (event.event_type === 'tool_call_request') {
+          // Find and remove previous ToolCall with same tool_call_id
+          const index = convMessages.messages.findIndex(
+            (msg) =>
+              msg.event_type === 'tool_call' &&
+              msg.tool_call_id === event.tool_call_id
+          )
+          if (index !== -1) {
+            convMessages.messages.splice(index, 1)
+          }
+          // Don't add ToolCallRequest to messages - it stays in approval UI only
+          return
+        }
+
+        // Add all other events to messages normally
+        convMessages.messages.push(event)
+      })
+    },
+
+    setMessages: (conversationId, messages) => {
+      set((draft) => {
+        draft.conversationMessages.set(conversationId, { messages })
       })
     },
 
@@ -427,11 +449,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       return streamingConversations
     },
 
-    approveTools: async (conversationId, approvals, eventHandlerRegistry, initialMessages) => {
+    approveTools: async (conversationId, approvals) => {
       const existingStream = get().activeStreams.get(conversationId)
-
-      // Get existing messages to preserve conversation history
-      const existingMessages = existingStream?.messages ?? initialMessages ?? []
 
       // Reuse existing ref if available, otherwise create new one in external map
       let conversationIdRef = conversationIdRefs.get(conversationId)
@@ -440,20 +459,14 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         conversationIdRefs.set(conversationId, conversationIdRef)
       }
 
-      // Store event handler registry in separate map (not in Zustand state)
-      if (eventHandlerRegistry) {
-        eventHandlerRegistries.set(conversationId, eventHandlerRegistry)
-      }
-
       // Create new abort controller for the approval stream
       const abortController = new AbortController()
 
-      // Create or update stream state for the approval
+      // Create or update streaming state (messages are separate and preserved)
       // Preserve existing isQueued state - message should stay queued through approval workflow
       const existingIsQueued = existingStream?.isQueued ?? false
       set((draft) => {
         draft.activeStreams.set(conversationId, {
-          messages: existingMessages,
           isStreaming: true,
           error: null,
           abortController,
@@ -525,10 +538,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     clearMessages: (conversationId) => {
       set((draft) => {
-        const stream = draft.activeStreams.get(conversationId)
-        if (stream) {
-          stream.messages = []
-        }
+        draft.conversationMessages.delete(conversationId)
       })
     },
 
@@ -552,19 +562,21 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     migrateStream: (oldConversationId, newConversationId) => {
       const stream = get().activeStreams.get(oldConversationId)
+      const messages = get().conversationMessages.get(oldConversationId)
       const conversationIdRef = conversationIdRefs.get(oldConversationId)
 
       console.log('[StreamStore] migrateStream called:', {
         from: oldConversationId,
         to: newConversationId,
         streamFound: !!stream,
+        messagesFound: !!messages,
         refFound: !!conversationIdRef,
-        messageCount: stream?.messages.length ?? 0,
+        messageCount: messages?.messages.length ?? 0,
         isStreaming: stream?.isStreaming ?? false,
         allActiveStreams: Array.from(get().activeStreams.keys())
       })
 
-      if (stream && conversationIdRef) {
+      if (conversationIdRef) {
         // Update the mutable ref - now works because ref is in external map (not frozen by Immer)
         // This ensures the closure in processConversationStream sees the new ID immediately
         conversationIdRef.current = newConversationId
@@ -573,28 +585,32 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Migrate ref to new conversation ID in external map
         conversationIdRefs.delete(oldConversationId)
         conversationIdRefs.set(newConversationId, conversationIdRef)
+      }
 
-        set((draft) => {
-          const draftStream = draft.activeStreams.get(oldConversationId)
-          if (draftStream) {
-            // Remove from old conversation ID
-            draft.activeStreams.delete(oldConversationId)
-            // Add to new conversation ID
-            draft.activeStreams.set(newConversationId, draftStream)
-          }
-        })
-
-        // Migrate event handler registry as well
-        const registry = eventHandlerRegistries.get(oldConversationId)
-        if (registry) {
-          eventHandlerRegistries.delete(oldConversationId)
-          eventHandlerRegistries.set(newConversationId, registry)
+      set((draft) => {
+        // Migrate streaming state
+        const draftStream = draft.activeStreams.get(oldConversationId)
+        if (draftStream) {
+          draft.activeStreams.delete(oldConversationId)
+          draft.activeStreams.set(newConversationId, draftStream)
         }
 
-        console.log('[StreamStore] Stream migrated successfully, allActiveStreams:', Array.from(get().activeStreams.keys()))
-      } else {
-        console.warn('[StreamStore] No stream found to migrate')
+        // Migrate conversation messages
+        const draftMessages = draft.conversationMessages.get(oldConversationId)
+        if (draftMessages) {
+          draft.conversationMessages.delete(oldConversationId)
+          draft.conversationMessages.set(newConversationId, draftMessages)
+        }
+      })
+
+      // Migrate event handler registry as well
+      const registry = eventHandlerRegistries.get(oldConversationId)
+      if (registry) {
+        eventHandlerRegistries.delete(oldConversationId)
+        eventHandlerRegistries.set(newConversationId, registry)
       }
+
+      console.log('[StreamStore] Stream migrated successfully, allActiveStreams:', Array.from(get().activeStreams.keys()))
     }
   }))
 )
