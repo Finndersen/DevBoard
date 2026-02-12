@@ -15,12 +15,12 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
 import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo, GitHubPRStatusResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useToolResultHandler, useSystemEventHandler, useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../hooks/useConversationEventHandlers'
+import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
-import AgentChat from '../components/chat/AgentChat'
+import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
@@ -100,15 +100,27 @@ function TaskDetail({ id }: TaskDetailProps) {
     setPendingInitialMessage(null)
   }, [id])
 
-  // Get event handler registry for passing to stream processor
+  // Ref to AgentChat for sending review comments
+  const agentChatRef = useRef<AgentChatHandle>(null)
+
+  // Get event handler registry for stream processing
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
 
   // Get stream store methods for workflow actions
   const startStream = useConversationStreamStore(state => state.startStream)
   const migrateStream = useConversationStreamStore(state => state.migrateStream)
+  const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const isConversationStreaming = useConversationStreamStore(
     state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
   )
+
+  // Register event handler registry for the conversation
+  // This ensures event handlers work for workflow actions and after navigation
+  useEffect(() => {
+    if (task?.conversation_id) {
+      updateEventHandlerRegistry(task.conversation_id, eventHandlerRegistry)
+    }
+  }, [task?.conversation_id, eventHandlerRegistry, updateEventHandlerRegistry])
 
   // Fetch task when id changes (supports both initial mount and tab switching with keep-mounted components)
   useEffect(() => {
@@ -483,6 +495,12 @@ function TaskDetail({ id }: TaskDetailProps) {
     refetch()
   }, [task?.conversation_id, migrateStream, refetch])
 
+  // Handle review comment submission from diff viewer
+  // Uses the AgentChat ref to send through the same flow as regular chat input
+  const handleSubmitReviewComments = useCallback((message: string) => {
+    agentChatRef.current?.sendMessage(message)
+  }, [])
+
   // Cleanup diff refresh timeout on unmount
   useEffect(() => {
     return () => {
@@ -518,20 +536,15 @@ function TaskDetail({ id }: TaskDetailProps) {
 
     setStreamingMessage(message)
     try {
-      // Fetch existing conversation messages to preserve history
-      const existingMessages = await apiClient.getConversationMessages(task.conversation_id)
-      console.log('[TaskDetail] Fetched existing messages:', existingMessages.length)
-
       // Create workflow action stream
       const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
 
       // Use store startStream for unified streaming behavior
-      // Pass existing messages to preserve conversation history
+      // Messages are stored separately and preserved automatically
       // This immediately sets isStreaming=true in the store, which disables buttons
-      // Event handlers are already registered via hooks at component level
-      // Pass eventHandlerRegistry so tool results and system events are processed
+      // Event handlers are registered via updateEventHandlerRegistry effect
       console.log('[TaskDetail] Starting stream with conversation_id:', task.conversation_id)
-      await startStream(task.conversation_id, stream, eventHandlerRegistry, existingMessages)
+      await startStream(task.conversation_id, stream)
       console.log('[TaskDetail] Stream completed')
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
@@ -986,6 +999,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                   loading={diffLoading || branchInfoLoading}
                   onRefresh={handleDiffRefresh}
                   lastUpdated={lastDiffUpdate}
+                  onSubmitComments={handleSubmitReviewComments}
                 />
               </div>
             )}
@@ -1007,6 +1021,7 @@ function TaskDetail({ id }: TaskDetailProps) {
         {/* Right Column: Task Agent Chat */}
         <div className="h-full overflow-hidden">
           <AgentChat
+            ref={agentChatRef}
             conversationId={task.conversation_id}
             placeholder="Ask me to help with task specification or implementation planning..."
             emptyStateMessage="Welcome to the Task Agent!"
