@@ -95,6 +95,7 @@ When expanded, shows full syntax-highlighted diff:
 - **Diff Colors**: Green background for additions, red for deletions
 - **Horizontal Scroll**: Single scrollbar for entire diff, sticky line numbers
 - **Whitespace Preserved**: Indentation and formatting maintained
+- **Inline Comments**: Add review comments on any line (see Inline Review Comments section)
 
 ### Empty State
 
@@ -157,17 +158,39 @@ Falls back to plain text for unknown extensions.
 - Manages expand/collapse state
 - Parses git diff format and tracks line numbers
 - Detects dark mode and switches themes accordingly
+- Renders inline comment buttons and forms
 
 **AllFilesDiffViewer** (`frontend/src/components/documents/AllFilesDiffViewer.tsx`):
 - Container for multiple file diffs
 - Manages refresh state and timestamp
 - Displays aggregate statistics
 - Handles empty state
+- Wraps content with DiffReviewProvider when `onSubmitComments` callback is provided
+
+**DiffReviewContext** (`frontend/src/contexts/DiffReviewContext.tsx`):
+- Manages pending review comments state
+- Accepts `onSubmitComments` callback for submitting formatted comments
+- Formats comments with code context (file path, line numbers, surrounding code)
+
+**DiffLineCommentButton** (`frontend/src/components/documents/DiffLineCommentButton.tsx`):
+- "+" button that appears on hover after line numbers (GitHub-style placement)
+- Shows chat bubble indicator when line has pending comment
+
+**DiffLineCommentForm** (`frontend/src/components/documents/DiffLineCommentForm.tsx`):
+- Inline textarea form for writing comments
+- Auto-tracks comment in batch as user types
+- Send button submits immediately, Cancel removes comment
+- Keyboard shortcuts: Ctrl+Enter (send), Escape (cancel)
+
+**SubmitAllCommentsButton** (`frontend/src/components/documents/SubmitAllCommentsButton.tsx`):
+- Batch submit button for multiple pending comments
+- Shows comment count and clear all option
 
 **Integration** (`frontend/src/views/TaskDetail.tsx`):
 - Adds "Changes" tab to task detail view
 - Fetches diff data when tab first opened
 - Provides manual refresh capability
+- Provides `onSubmitComments` callback that sends review comments to the task's conversation
 
 ### Syntax Highlighting
 
@@ -272,16 +295,64 @@ The File Change Viewer fits into the task implementation workflow:
 - Ensure you're viewing the latest changes
 - Use timestamp to verify freshness
 
+## Inline Review Comments
+
+During task implementation, developers can add inline review comments directly on diff lines. Comments are sent to the implementation agent with full context.
+
+### Adding a Comment
+
+1. **Hover** over any diff line to reveal the "+" button (appears after line numbers)
+2. **Click** the button to open the inline comment form
+3. **Type** your feedback - the comment is automatically tracked as you type
+4. Choose to:
+   - **Send**: Submit this comment immediately to the agent
+   - **Cancel**: Remove the comment entirely
+
+### Comment Format
+
+Comments sent to the agent include:
+- **File Path**: Full path to the file being reviewed
+- **Line Number**: The specific line being commented on (marked with `>>`)
+- **Code Context**: 2 lines above and below the commented line
+- **Comment Text**: Your review feedback
+
+Example message format:
+```markdown
+**Review comment** on `src/components/Button.tsx` at line 42:
+
+\`\`\`typescript
+     40 │ const Button = ({ onClick }: ButtonProps) => {
+     41 │   const handleClick = useCallback(() => {
+>>   42 │     onClick?.(event)
+     43 │   }, [onClick])
+     44 │
+\`\`\`
+
+Consider adding error handling here for edge cases.
+```
+
+### Batch Submission
+
+When reviewing multiple locations:
+- Add comments to multiple lines across files (comments are tracked as you type)
+- A "Submit X Comments" button appears in the header
+- Submit all comments as a single batched message
+- Use "Clear All" to discard all pending comments
+- Lines with pending comments show a chat bubble indicator
+
+### Keyboard Shortcuts
+
+- **Ctrl/Cmd + Enter**: Send comment immediately
+- **Escape**: Cancel and remove comment
+
 ## Limitations
 
 **Current Scope**:
 - Shows all uncommitted changes (doesn't distinguish agent vs manual edits)
 - Read-only view (cannot edit or revert changes directly)
-- No line-by-line commenting (planned for future)
 - Requires git repository (won't work for non-git codebases)
 
 **Future Enhancements**:
-- Comment on specific diff lines
 - Stage/unstage individual files or hunks
 - View commit history for the task
 - Filter changes by agent vs manual
