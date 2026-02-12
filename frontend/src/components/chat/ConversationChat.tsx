@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { flushSync } from 'react-dom'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { apiClient } from '../../lib/api'
 import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest } from '../../lib/api'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useEventHandlerRegistryForStream, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
+import { useSendConversationMessage } from '../../hooks/useSendConversationMessage'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { useApprovals, useApprovalActions, type PendingApprovalWithContext } from '../../stores/approvalsStore'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
@@ -13,13 +13,23 @@ import ConversationInput from './ConversationInput'
 import TodoPanel from './TodoPanel'
 import { useUIStore } from '../../stores/uiStore'
 
+const EMPTY_MESSAGES: ConversationEvent[] = []
+
+/**
+ * Handle exposed by ConversationChat ref for external message submission.
+ * Allows external components to send messages through the same flow as the input field.
+ */
+export interface ConversationChatHandle {
+  /** Send a message as if it was typed into the input and submitted */
+  sendMessage: (message: string) => void
+}
+
 interface ConversationChatProps {
   conversationId: number
   placeholder?: string
   emptyStateMessage?: string
   isRunningAction?: boolean
   actionMessage?: string
-  onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
   codebaseLocalPath?: string
@@ -27,19 +37,18 @@ interface ConversationChatProps {
   engine?: string
 }
 
-const ConversationChat = ({
+const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProps>(({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   isRunningAction = false,
   actionMessage = '',
-  onStreamingStarted,
   initialMessage,
   onInitialMessageSent,
   codebaseLocalPath,
   isDisabled = false,
   engine
-}: ConversationChatProps) => {
+}, ref) => {
   // Track conversationId changes for debugging
   const prevConversationIdRef = useRef(conversationId)
   useEffect(() => {
@@ -52,10 +61,10 @@ const ConversationChat = ({
     }
   }, [conversationId])
 
-  // Subscribe to streaming store state
-  // IMPORTANT: Use stable references to avoid infinite loops
-  const streamMessages = useConversationStreamStore(
-    state => state.activeStreams.get(conversationId)?.messages
+  // Subscribe to store state
+  // Messages are stored separately from streaming state
+  const messages = useConversationStreamStore(
+    state => state.conversationMessages.get(conversationId)?.messages ?? EMPTY_MESSAGES
   )
   const isStreaming = useConversationStreamStore(
     state => state.activeStreams.get(conversationId)?.isStreaming ?? false
@@ -71,13 +80,12 @@ const ConversationChat = ({
   const streamState = useConversationStreamStore(state => state.activeStreams.get(conversationId))
 
   // Store actions
-  const startStream = useConversationStreamStore(state => state.startStream)
   const stopStream = useConversationStreamStore(state => state.stopStream)
-  const addEvent = useConversationStreamStore(state => state.addEvent)
   const approveTools = useConversationStreamStore(state => state.approveTools)
   const clearPendingToolRequests = useConversationStreamStore(state => state.clearPendingToolRequests)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const setQueued = useConversationStreamStore(state => state.setQueued)
+  const setStoreMessages = useConversationStreamStore(state => state.setMessages)
 
   // Get event handler registry for stream processing
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
@@ -96,23 +104,20 @@ const ConversationChat = ({
       conversationId,
       hasStreamState: !!streamState,
       isStreaming,
-      messageCount: streamMessages?.length ?? 0,
+      messageCount: messages.length,
       pendingToolRequestCount: pendingToolRequests?.length ?? 0,
       allActiveStreams: Array.from(useConversationStreamStore.getState().activeStreams.keys())
     })
-  }, [conversationId, streamState, isStreaming, streamMessages, pendingToolRequests])
+  }, [conversationId, streamState, isStreaming, messages, pendingToolRequests])
 
   // Input state (lifted from ConversationInput for queue functionality)
   const [inputMessage, setInputMessage] = useState('')
 
   // Local state for non-streaming concerns
-  const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [approvalError, setApprovalError] = useState<string | null>(null)
   const [fetchHistoryError, setFetchHistoryError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const removedPendingIdsRef = useRef<Set<string>>(new Set())
-  const [renderCount, setRenderCount] = useState(0)
   const lastFetchedConversationIdRef = useRef<number | null>(null)
   const initialMessageSentRef = useRef(false)
 
@@ -122,33 +127,20 @@ const ConversationChat = ({
 
   const { setTabActivityStatus, getActiveTab } = useUIStore()
 
-  const {
-    addPendingMessage,
-    updateMessageStatus,
-    removeMessage,
-    getPendingMessages
-  } = usePendingMessages()
+  const { getPendingMessages } = usePendingMessages()
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
   const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
 
-  const pendingMessage = useMemo(() => {
-    const msg = pendingMessages[0] || null
-    const isRemoved = msg ? removedPendingIdsRef.current.has(msg.id) : false
-    return msg && !isRemoved ? msg : null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingMessages, renderCount])
+  // Use shared hook for sending messages
+  // ConversationChat manages its own queueing (keeping message in input field for editing)
+  // Event handler registry is registered via updateEventHandlerRegistry effect below
+  const { sendMessage: sendMessageViaHook } = useSendConversationMessage({
+    conversationId
+  })
 
-  // Update messages from stream store
-  useEffect(() => {
-    console.log('[ConversationChat] streamMessages effect:', {
-      conversationId,
-      hasStreamMessages: !!streamMessages,
-      messageCount: streamMessages?.length ?? 0
-    })
-    if (streamMessages) {
-      setMessages(streamMessages)
-    }
-  }, [streamMessages, conversationId])
+  const pendingMessage = useMemo(() => {
+    return pendingMessages[0] || null
+  }, [pendingMessages])
 
   // Convert tool requests from store to approval objects
   // Track if we've set approvals to avoid clearing them incorrectly
@@ -213,10 +205,10 @@ const ConversationChat = ({
     })
   }, [messages, pendingMessage, isRunningAction, scrollToBottom])
 
-  // Fetch history when conversation changes (but not if there's an active stream)
+  // Fetch history when conversation changes (but not if store already has messages)
   useEffect(() => {
-    // If there's an active stream with messages, don't fetch - use store messages
-    if (streamMessages && streamMessages.length > 0) {
+    // If store already has messages, don't fetch
+    if (messages.length > 0) {
       lastFetchedConversationIdRef.current = conversationId
       return
     }
@@ -253,9 +245,9 @@ const ConversationChat = ({
           }
         })
 
-        // Set messages (without tool requests)
+        // Set messages in store (without tool requests)
         console.log('[ConversationChat] Setting messages from history, count:', messages.length, 'types:', messages.map(m => m.event_type))
-        setMessages(messages)
+        setStoreMessages(conversationId, messages)
 
         // If there are tool requests from history, convert to approvals
         if (toolRequests.length > 0) {
@@ -294,104 +286,7 @@ const ConversationChat = ({
     }
 
     fetchHistory()
-  }, [conversationId, streamMessages, setApprovals, approvalKey])
-
-  useEffect(() => {
-    const currentIds = new Set(pendingMessages.map(m => m.id))
-    const removed = removedPendingIdsRef.current
-
-    if (removed.size === 0) return
-
-    let changed = false
-    removed.forEach(id => {
-      if (!currentIds.has(id)) {
-        removed.delete(id)
-        changed = true
-      }
-    })
-
-    if (changed) {
-      setRenderCount(prev => prev + 1)
-    }
-  }, [pendingMessages])
-
-  // Internal function that does the actual sending (no guards)
-  // Used by both handleSendMessage (new messages) and handleRetryMessage (retries)
-  const sendMessageInternal = useCallback(async (
-    messageText: string,
-    existingPendingMessageId?: string
-  ) => {
-    // Use existing pending message ID for retry, or create new one
-    const pendingMessageId = existingPendingMessageId ?? addPendingMessage(pendingKey, {
-      conversationId,
-      text_content: messageText
-    })
-
-    try {
-      updateMessageStatus(pendingKey, pendingMessageId, 'sent')
-
-      // Notify streaming started
-      onStreamingStarted?.()
-
-      // Create user message (will be added on first event)
-      const userMessage: ConversationEvent = {
-        event_type: 'message',
-        role: 'user',
-        text_content: messageText,
-        timestamp: new Date().toISOString()
-      }
-
-      // Create abort controller for stream cancellation
-      const abortController = new AbortController()
-
-      // Create stream from API with abort signal
-      const stream = apiClient.streamConversationMessage(
-        conversationId,
-        { message: messageText },
-        abortController.signal
-      )
-
-      // Start streaming via store
-      // User message is added when first event is received (via onFirstEvent)
-      // This prevents duplicate display of pending message + user message
-      await startStream(
-        conversationId,
-        stream,
-        eventHandlerRegistry,
-        messages,
-        () => {
-          // First event received - add user message and remove pending
-          addEvent(conversationId, userMessage)
-          removedPendingIdsRef.current.add(pendingMessageId)
-          removeMessage(pendingKey, pendingMessageId)
-          flushSync(() => {
-            setRenderCount(prev => prev + 1)
-          })
-        },
-        abortController
-      )
-    } catch (error) {
-      console.error('Failed to send message:', error)
-      let errorMessage = 'Failed to send message'
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        errorMessage = 'Unable to connect to server. Please check if the backend is running.'
-      } else if (error instanceof Error) {
-        errorMessage = error.message
-      }
-      updateMessageStatus(pendingKey, pendingMessageId, 'failed', errorMessage)
-    }
-  }, [
-    pendingKey,
-    conversationId,
-    addPendingMessage,
-    updateMessageStatus,
-    removeMessage,
-    onStreamingStarted,
-    startStream,
-    addEvent,
-    eventHandlerRegistry,
-    messages
-  ])
+  }, [conversationId, messages.length, setApprovals, approvalKey, setStoreMessages])
 
   // Public handler for new messages from input
   // If agent is busy (streaming, approvals pending, action running), queue the message
@@ -408,8 +303,8 @@ const ConversationChat = ({
 
     // Not busy - send immediately and clear input
     setInputMessage('')
-    await sendMessageInternal(messageText)
-  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageInternal])
+    await sendMessageViaHook(messageText)
+  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook])
 
   // Cancel queue handler - removes queue state but keeps message in input
   const handleCancelQueue = useCallback(() => {
@@ -436,9 +331,9 @@ const ConversationChat = ({
       setInputMessage('')
       setQueued(conversationId, false)
       // Send the queued message
-      sendMessageInternal(messageToSend)
+      sendMessageViaHook(messageToSend)
     }
-  }, [conversationId, inputMessage, setQueued, sendMessageInternal]))
+  }, [conversationId, inputMessage, setQueued, sendMessageViaHook]))
 
   // Retry handler - bypasses guards, reuses existing pending message
   const handleRetryMessage = useCallback(async (messageId: string) => {
@@ -446,9 +341,34 @@ const ConversationChat = ({
     if (!pendingMsg) return
 
     // Send directly with existing pending message ID
-    // Status will be updated to 'sent' inside sendMessageInternal
-    await sendMessageInternal(pendingMsg.text_content, pendingMsg.id)
-  }, [pendingMessages, sendMessageInternal])
+    // Status will be updated to 'sent' inside the hook
+    await sendMessageViaHook(pendingMsg.text_content, pendingMsg.id)
+  }, [pendingMessages, sendMessageViaHook])
+
+  // Expose sendMessage method via ref for external callers (e.g., review comments)
+  // This goes through the same flow as typing in the input - queueing if busy
+  useImperativeHandle(ref, () => ({
+    sendMessage: (message: string) => {
+      const messageText = message.trim()
+      if (!messageText) return
+
+      // Check current busy state from store (not stale closure)
+      const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
+      const currentIsStreaming = currentStreamState?.isStreaming ?? false
+      const currentIsQueued = currentStreamState?.isQueued ?? false
+
+      // If agent is busy or already has a queued message, queue this one
+      if (currentIsStreaming || pendingApprovals.length > 0 || isRunningAction || currentIsQueued) {
+        // Set the message in input field and mark as queued
+        setInputMessage(messageText)
+        setQueued(conversationId, true)
+        return
+      }
+
+      // Not busy - send immediately
+      sendMessageViaHook(messageText)
+    }
+  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook])
 
   // Auto-send initial message when provided (e.g., from task creation with description)
   useEffect(() => {
@@ -469,11 +389,11 @@ const ConversationChat = ({
       initialMessageSentRef.current = true
       // Use setTimeout to ensure this runs after render cycle
       setTimeout(() => {
-        sendMessageInternal(initialMessage)
+        sendMessageViaHook(initialMessage)
         onInitialMessageSent?.()
       }, 0)
     }
-  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, sendMessageInternal, onInitialMessageSent])
+  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, sendMessageViaHook, onInitialMessageSent])
 
   // Reset initial message sent ref when conversation changes
   useEffect(() => {
@@ -493,10 +413,11 @@ const ConversationChat = ({
       clearPendingToolRequests(conversationId)
 
       // Use store to approve tools and continue streaming
-      // Pass existing messages so they're preserved if we need to create a new stream
+      // Messages are preserved automatically in the store
       // Note: Tool result handlers (useToolResultHandler) in detail views handle refreshes
       // during stream processing, so no post-stream refresh is needed here
-      await approveTools(conversationId, approvalRequest.approvals, eventHandlerRegistry, messages)
+      // Event handler registry is already registered via updateEventHandlerRegistry effect
+      await approveTools(conversationId, approvalRequest.approvals)
     } catch (error) {
       console.error('Failed to process tool approval:', error)
       const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred'
@@ -610,6 +531,8 @@ const ConversationChat = ({
       </div>
     </div>
   )
-}
+})
+
+ConversationChat.displayName = 'ConversationChat'
 
 export default ConversationChat

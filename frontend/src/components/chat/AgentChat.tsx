@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react'
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
-import ConversationChat from './ConversationChat'
+import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -25,7 +25,6 @@ interface AgentChatProps {
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
   isRunningAction?: boolean
   actionMessage?: string
-  onStreamingStarted?: () => void
   initialMessage?: string | null
   onInitialMessageSent?: () => void
   codebaseLocalPath?: string
@@ -33,7 +32,10 @@ interface AgentChatProps {
   onConversationReset?: (newConversationId: number) => void
 }
 
-const AgentChat = ({
+/** Handle exposed by AgentChat ref - same as ConversationChatHandle */
+export type AgentChatHandle = ConversationChatHandle
+
+const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   conversationId,
   placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
@@ -41,14 +43,21 @@ const AgentChat = ({
   padding = "xs",
   isRunningAction = false,
   actionMessage = '',
-  onStreamingStarted,
   initialMessage,
   onInitialMessageSent,
   codebaseLocalPath,
   isDisabled = false,
   onConversationReset
-}: AgentChatProps) => {
+}, ref) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
+  const conversationChatRef = useRef<ConversationChatHandle>(null)
+
+  // Forward the ref to ConversationChat
+  useImperativeHandle(ref, () => ({
+    sendMessage: (message: string) => {
+      conversationChatRef.current?.sendMessage(message)
+    }
+  }), [])
   const [loadingConversation, setLoadingConversation] = useState(false)
 
   // Use new custom hooks to eliminate boilerplate
@@ -166,12 +175,12 @@ const AgentChat = ({
         <div className="flex-1 overflow-hidden">
           {conversationId ? (
             <ConversationChat
+              ref={conversationChatRef}
               conversationId={conversationId}
               placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
               isRunningAction={isRunningAction}
               actionMessage={actionMessage}
-              onStreamingStarted={onStreamingStarted}
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}
               codebaseLocalPath={codebaseLocalPath}
@@ -205,6 +214,8 @@ const AgentChat = ({
       )}
     </>
   )
-}
+})
+
+AgentChat.displayName = 'AgentChat'
 
 export default AgentChat
