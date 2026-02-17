@@ -140,8 +140,11 @@ class AssistantEntry(BaseMessageEntry):
     requestId: str
 
 
-# Union type for all JSONL entry types
-JSONLEntry = SummaryEntry | UserEntry | AssistantEntry
+# Union type for message entries (user/assistant only)
+MessageEntry = UserEntry | AssistantEntry
+
+# Union type for all JSONL entry types (includes non-message entries like summaries)
+JSONLEntry = SummaryEntry | MessageEntry
 
 
 class SessionMessageRole(StrEnum):
@@ -387,16 +390,19 @@ class ClaudeCodeSessionService:
         with session_file.open("r") as f:
             content = f.read()
 
-        # Split into lines and find last non-empty line
+        # Split into lines and walk backwards to find the last actual message,
+        # skipping non-message entries (e.g. queue-operation records)
         lines = content.strip().split("\n")
-        if not lines or not lines[-1].strip():
-            return None
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if not line:
+                continue
 
-        # Parse the last line as JSON
-        entry = json.loads(lines[-1])
+            entry = json.loads(line)
+            if self._is_message_entry(entry):
+                return self._parse_session_message(entry, line_num=i + 1)
 
-        # Convert to SessionMessage with line_num as the last line number
-        return self._parse_session_message(entry, line_num=len(lines))
+        return None
 
     def load_session_messages(self, session_id: str) -> list[SessionMessage]:
         """Load complete session messages from a Claude Code session.
@@ -427,35 +433,33 @@ class ClaudeCodeSessionService:
 
                 try:
                     entry = json.loads(line)
-                    message = self._parse_session_message(entry, line_num=line_num)
-                    if message:
-                        messages.append(message)
+                    if self._is_message_entry(entry):
+                        messages.append(self._parse_session_message(entry, line_num=line_num))
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
                     logfire.warning(f"Skipping malformed JSONL entry at line {line_num}: {e}")
                     continue
 
         return messages
 
-    def _parse_session_message(self, entry: JSONLEntry, line_num: int) -> SessionMessage | None:
-        """Parse a JSONL entry into a SessionMessage with full data.
+    @staticmethod
+    def _is_message_entry(entry: dict[str, Any]) -> bool:
+        """Check if a raw JSONL entry is a user or assistant message."""
+        return entry.get("type") in ("user", "assistant")
+
+    def _parse_session_message(self, entry: MessageEntry, line_num: int) -> SessionMessage:
+        """Parse a message entry into a SessionMessage.
+
+        Callers must verify the entry is a message type using _is_message_entry()
+        before calling this method.
 
         Args:
-            entry: Dictionary parsed from a JSONL line
+            entry: A user or assistant message entry from the JSONL file
             line_num: Line number in the JSONL file (1-indexed)
-
-        Returns:
-            SessionMessage with complete data, or None if not a message type
 
         Raises:
             KeyError: If required fields are missing
             ValueError: If message data has unexpected format
         """
-        msg_type = entry["type"]
-
-        # Only parse user and assistant messages
-        if msg_type not in ("user", "assistant"):
-            return None
-
         # Extract content - required field
         content_raw = entry["message"]["content"]
 
@@ -469,7 +473,7 @@ class ClaudeCodeSessionService:
         return SessionMessage(
             uuid=entry["uuid"],
             timestamp=datetime.fromisoformat(entry["timestamp"]),
-            role=SessionMessageRole.USER if msg_type == "user" else SessionMessageRole.ASSISTANT,
+            role=SessionMessageRole.USER if entry["type"] == "user" else SessionMessageRole.ASSISTANT,
             content=content,
             line_num=line_num,
             is_sidechain=entry["isSidechain"],

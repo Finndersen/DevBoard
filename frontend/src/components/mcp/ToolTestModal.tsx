@@ -144,151 +144,158 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Test: ${tool.name}`}
+      title={tool.name}
       maxWidth="7xl"
       scrollable={false}
     >
-      <div className="flex gap-6 flex-1 min-h-0">
-        <form onSubmit={handleSubmit} className="flex flex-col w-2/5 min-w-0 shrink-0 min-h-0">
-          {/* Description */}
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary}`}>Description</h4>
-              {!isEditingDesc && (
-                <button
-                  onClick={startEditingDesc}
-                  className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
-                  title="Edit description"
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Description — full-width at the top */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary}`}>Description</h4>
+            {!isEditingDesc && (
+              <button
+                onClick={startEditingDesc}
+                className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                title="Edit description"
+              >
+                <PencilIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {isEditingDesc ? (
+            <div>
+              <textarea
+                value={editedDesc}
+                onChange={(e) => setEditedDesc(e.target.value)}
+                className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                rows={Math.min(12, Math.max(2, editedDesc.split('\n').length + 1))}
+                disabled={savingDesc}
+              />
+              {descError && <p className="text-xs text-red-500 mt-1">{descError}</p>}
+              <div className="flex gap-1 mt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={saveDesc}
+                  loading={savingDesc}
+                  icon={<CheckIcon className="w-3 h-3" />}
                 >
-                  <PencilIcon className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            {isEditingDesc ? (
-              <div>
-                <textarea
-                  value={editedDesc}
-                  onChange={(e) => setEditedDesc(e.target.value)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  rows={Math.min(12, Math.max(2, editedDesc.split('\n').length + 1))}
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelEditingDesc}
                   disabled={savingDesc}
-                />
-                {descError && <p className="text-xs text-red-500 mt-1">{descError}</p>}
-                <div className="flex gap-1 mt-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={saveDesc}
-                    loading={savingDesc}
-                    icon={<CheckIcon className="w-3 h-3" />}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={cancelEditingDesc}
-                    disabled={savingDesc}
-                    icon={<XMarkIcon className="w-3 h-3" />}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+                  icon={<XMarkIcon className="w-3 h-3" />}
+                >
+                  Cancel
+                </Button>
               </div>
-            ) : (
-              <p className={`text-sm ${textColors.secondary} whitespace-pre-line`}>
-                {tool.description || <span className="italic">No description</span>}
-              </p>
-            )}
-          </div>
-
-          {/* Parameters */}
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex-1 min-h-0 flex flex-col">
-            <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary} mb-2 shrink-0`}>Parameters</h4>
-            {propertyEntries.length === 0 ? (
-              <p className={`text-sm ${textColors.secondary} italic`}>
-                This tool has no input parameters.
-              </p>
-            ) : (
-              <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
-                {propertyEntries.map(([key, prop]) => {
-                  const inputType = getInputType(prop.type)
-                  const isRequired = requiredFields.has(key)
-
-                  if (inputType === 'checkbox') {
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <input
-                          id={`field-${key}`}
-                          type="checkbox"
-                          checked={formData[key] === 'true'}
-                          onChange={(e) => handleCheckboxChange(key, e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          disabled={loading}
-                        />
-                        <label
-                          htmlFor={`field-${key}`}
-                          className={`text-sm font-medium ${textColors.primary}`}
-                        >
-                          {key}
-                          {isRequired && <span className="text-red-500 ml-1">*</span>}
-                        </label>
-                        {prop.description && (
-                          <span className={`text-sm ${textColors.secondary}`}>
-                            — {prop.description}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <Input
-                      key={key}
-                      label={isRequired ? `${key} *` : key}
-                      type={inputType}
-                      value={formData[key] || ''}
-                      onChange={(e) => handleChange(key, e.target.value)}
-                      helpText={prop.description}
-                      disabled={loading}
-                      required={isRequired}
-                    />
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end pt-4 mt-4 shrink-0">
-            <Button type="submit" loading={loading}>
-              Run
-            </Button>
-          </div>
-        </form>
-
-        <div className="flex-1 min-w-0 border-l border-gray-200 dark:border-gray-700 pl-6">
-          <h4 className={`text-sm font-medium ${textColors.primary} mb-2`}>
-            {error ? 'Error' : 'Result'}
-          </h4>
-          {error ? (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-              <pre className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono">
-                {error}
-              </pre>
-            </div>
-          ) : result !== null ? (
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md max-h-[60vh] overflow-auto">
-              <pre className={`text-sm ${textColors.primary} whitespace-pre-wrap font-mono`}>
-                {result || '(empty response)'}
-              </pre>
             </div>
           ) : (
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
-              <p className={`text-sm ${textColors.secondary} italic`}>
-                Run the tool to see results here
-              </p>
-            </div>
+            <p className={`text-sm ${textColors.secondary} whitespace-pre-line`}>
+              {tool.description || <span className="italic">No description</span>}
+            </p>
           )}
+        </div>
+
+        {/* Test Tool section — parameters + results side-by-side */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex-1 min-h-0 flex flex-col">
+          <h4 className={`text-sm font-medium ${textColors.primary} mb-3 shrink-0`}>Test Tool</h4>
+          <div className="flex gap-6 flex-1 min-h-0">
+            <form onSubmit={handleSubmit} className="flex flex-col w-2/5 min-w-0 shrink-0 min-h-0">
+              {/* Parameters */}
+              <div className="flex-1 min-h-0 flex flex-col">
+                <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary} mb-2 shrink-0`}>Parameters</h4>
+                {propertyEntries.length === 0 ? (
+                  <p className={`text-sm ${textColors.secondary} italic`}>
+                    This tool has no input parameters.
+                  </p>
+                ) : (
+                  <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
+                    {propertyEntries.map(([key, prop]) => {
+                      const inputType = getInputType(prop.type)
+                      const isRequired = requiredFields.has(key)
+
+                      if (inputType === 'checkbox') {
+                        return (
+                          <div key={key} className="flex items-center gap-3">
+                            <input
+                              id={`field-${key}`}
+                              type="checkbox"
+                              checked={formData[key] === 'true'}
+                              onChange={(e) => handleCheckboxChange(key, e.target.checked)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              disabled={loading}
+                            />
+                            <label
+                              htmlFor={`field-${key}`}
+                              className={`text-sm font-medium ${textColors.primary}`}
+                            >
+                              {key}
+                              {isRequired && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {prop.description && (
+                              <span className={`text-sm ${textColors.secondary}`}>
+                                — {prop.description}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <Input
+                          key={key}
+                          label={isRequired ? `${key} *` : key}
+                          type={inputType}
+                          value={formData[key] || ''}
+                          onChange={(e) => handleChange(key, e.target.value)}
+                          helpText={prop.description}
+                          disabled={loading}
+                          required={isRequired}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-4 mt-4 shrink-0">
+                <Button type="submit" loading={loading}>
+                  Run
+                </Button>
+              </div>
+            </form>
+
+            {/* Result */}
+            <div className="flex-1 min-w-0 border-l border-gray-200 dark:border-gray-700 pl-6">
+              <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary} mb-2`}>
+                {error ? 'Error' : 'Result'}
+              </h4>
+              {error ? (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                  <pre className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono">
+                    {error}
+                  </pre>
+                </div>
+              ) : result !== null ? (
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md max-h-[60vh] overflow-auto">
+                  <pre className={`text-sm ${textColors.primary} whitespace-pre-wrap font-mono`}>
+                    {result || '(empty response)'}
+                  </pre>
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
+                  <p className={`text-sm ${textColors.secondary} italic`}>
+                    Run the tool to see results here
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </Modal>

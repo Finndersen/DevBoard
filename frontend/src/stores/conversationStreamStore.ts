@@ -330,9 +330,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     completeStream: (conversationId) => {
       const stream = get().activeStreams.get(conversationId)
+      const convMessages = get().conversationMessages.get(conversationId)
       console.log('[StreamStore] Stream completed:', {
         conversationId,
-        messageCount: stream?.messages.length ?? 0
+        messageCount: convMessages?.messages?.length ?? 0
       })
 
       set((draft) => {

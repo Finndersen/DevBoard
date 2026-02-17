@@ -60,7 +60,7 @@ Provides a technical roadmap for the implementation agent to execute without fur
 4. **No Duplication**: Never repeat content between documents or in responses. When updating documents, provide only a brief summary of changes.
 5. **Complete Context for Implementation**: Include all details the implementation agent needs—it has no access to this conversation.
 6. **Consider Full Impact**: Investigate required changes to tests, frontend, backend, and database.
-7. **Use Tools Effectively**: Use `investigate_codebase` for codebase questions (multiple parallel calls if needed). Documents are internally managed and cannot be viewed/edited as filesystem files.
+7. **Use Tools Effectively**: Use `investigate_codebase` for codebase questions (multiple parallel calls if needed). Task Documents are internally managed and cannot be viewed/edited as filesystem files.
 8. **Planning Mode Only**: You can only edit the Task Specification and Implementation Plan documents.
 9. **Maintain Documentation**: If codebase contains documentation at `docs/`, check for and propose appropriate updates in response to changes
 """
@@ -82,17 +82,10 @@ class TaskPlanningAgentRole(AgentRole):
         self,
         task: Task,
         document_repository: DocumentRepository,
-        agent_config_service: AgentConfigService | None = None,
-        task_service: TaskService | None = None,
+        agent_config_service: AgentConfigService,
+        task_service: TaskService,
     ):
-        """Initialize task planning role.
-
-        Args:
-            task: Task instance
-            document_repository: Repository for document operations
-            agent_config_service: Optional service for agent configuration (required for investigation tool)
-            task_service: Optional service for task operations (required for create_task tool)
-        """
+        """Initialize task planning role."""
         self.task = task
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
@@ -133,12 +126,10 @@ class TaskPlanningAgentRole(AgentRole):
                 )
 
         # Add codebase investigation tool
-        if self.agent_config_service:
-            tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
+        tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
 
-        # Add create_task tool if task_service is available
-        if self.task_service:
-            tools.append(create_create_task_tool(self.task.project, self.task_service))
+        # Add create_task tool
+        tools.append(create_create_task_tool(self.task.project, self.task_service))
 
         return tools
 
@@ -153,4 +144,4 @@ class TaskPlanningAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["WebFetch", "WebSearch", "Task"]
+        return ["WebFetch", "WebSearch", "Read"]

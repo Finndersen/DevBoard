@@ -23,6 +23,9 @@ def temp_codebase_with_docs(tmp_path):
     index_file = docs_dir / "INDEX.md"
     index_file.write_text("# Documentation Index\n\nThis is the main index.")
 
+    # Create README.md
+    (codebase_path / "README.md").write_text("# Test Codebase\n\nThis is the README.")
+
     # Create some source files
     (codebase_path / "main.py").write_text("def main():\n    pass")
 
@@ -105,8 +108,18 @@ class TestCodebaseInvestigationRole:
         assert "This is the main index" in content
 
     @pytest.mark.asyncio
-    async def test_context_handles_missing_docs_index(self, tmp_path):
-        """Test context handles missing docs/INDEX.md gracefully."""
+    async def test_context_includes_readme(self, mock_codebase):
+        """Test context content includes README.md when it exists."""
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
+
+        content = await role.get_context_content()
+
+        assert "README (README.md)" in content
+        assert "This is the README" in content
+
+    @pytest.mark.asyncio
+    async def test_context_handles_missing_docs_and_readme(self, tmp_path):
+        """Test context handles missing docs/INDEX.md and README.md gracefully."""
         codebase_path = tmp_path / "test_codebase_no_docs"
         codebase_path.mkdir()
         (codebase_path / ".git").mkdir()
@@ -118,8 +131,9 @@ class TestCodebaseInvestigationRole:
 
         role = CodebaseInvestigationAgentRole(codebase=codebase)
 
-        # Should not raise an error even without docs/INDEX.md
         content = await role.get_context_content()
 
         assert "CODEBASE INFORMATION" in content
         assert "TestCodebase" in content
+        assert "README" not in content
+        assert "DOCUMENTATION INDEX" not in content

@@ -71,7 +71,9 @@ def mock_task_service_for_workflow():
 
 
 @pytest.fixture
-def mock_agent_execution_service_for_workflow(mock_agent, db_session, mock_agent_config_service, monkeypatch):
+def mock_agent_execution_service_for_workflow(
+    mock_agent, db_session, mock_agent_config_service, mock_task_service_for_workflow, monkeypatch
+):
     """Create an execution service with mocked agent for workflow tests."""
 
     def _create_service(conversation, task, document_repo):
@@ -88,6 +90,7 @@ def mock_agent_execution_service_for_workflow(mock_agent, db_session, mock_agent
             task=task,
             document_repository=document_repo,
             agent_config_service=mock_agent_config_service,
+            task_service=mock_task_service_for_workflow,
         )
 
         service = PydanticAIAgentExecutionService(

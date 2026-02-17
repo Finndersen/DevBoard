@@ -21,6 +21,15 @@ from devboard.db.models.mcp_server import (
 )
 
 
+def _unwrap_exception_group(exc: BaseException) -> Exception:
+    """Extract root cause from single-exception ExceptionGroups."""
+    while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
+        exc = exc.exceptions[0]
+    if isinstance(exc, Exception):
+        return exc
+    return RuntimeError(str(exc))
+
+
 class MCPLifecycleManager:
     """Manages async lifecycle of an MCP client and session.
 
@@ -102,8 +111,8 @@ class MCPLifecycleManager:
                     await session.initialize()
                     self._session_initialised_event.set()
                     await self._teardown_event.wait()
-        except Exception as e:
-            self._lifecycle_error = e
+        except BaseException as e:
+            self._lifecycle_error = _unwrap_exception_group(e)
             self._session_initialised_event.set()
         finally:
             self._mcp_session = None

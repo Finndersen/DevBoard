@@ -93,10 +93,8 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   // Update the event handler registry for active streams when component mounts
   // This ensures event handlers work after navigation
   useEffect(() => {
-    if (streamState) {
-      updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
-    }
-  }, [conversationId, streamState, eventHandlerRegistry, updateEventHandlerRegistry])
+    updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
+  }, [conversationId, eventHandlerRegistry, updateEventHandlerRegistry])
 
   // Debug: Log subscription state changes
   useEffect(() => {
@@ -320,17 +318,18 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
   // Auto-send queued message when stream completes successfully
   useStreamCompleteHandler(useCallback(() => {
-    // Get current queue state from store (not from stale closure)
     const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
 
-    // Check if there's a queued message to send
-    // Note: isQueued will be cleared by stopStream/setError, so this only fires on success
-    if (currentStreamState?.isQueued && inputMessage.trim()) {
+    // Only send queued message when the agent's entire turn is complete
+    // (no pending tool requests that need approval first)
+    if (
+      currentStreamState?.isQueued &&
+      inputMessage.trim() &&
+      (!currentStreamState.pendingToolRequests || currentStreamState.pendingToolRequests.length === 0)
+    ) {
       const messageToSend = inputMessage.trim()
-      // Clear input and queue state before sending
       setInputMessage('')
       setQueued(conversationId, false)
-      // Send the queued message
       sendMessageViaHook(messageToSend)
     }
   }, [conversationId, inputMessage, setQueued, sendMessageViaHook]))

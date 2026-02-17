@@ -133,16 +133,13 @@ class TestClaudeCodeSessionService:
         assert len(session_msg.tool_calls) == 1
         assert session_msg.line_num == 5
 
-    def test_parse_summary_filtered(self, service):
-        """Test that summary messages are filtered out."""
-        entry = {
-            "type": "summary",
-            "summary": "Some conversation summary",
-            "leafUuid": "uuid-123",
-        }
-
-        session_msg = service._parse_session_message(entry, line_num=6)
-        assert session_msg is None
+    def test_is_message_entry_filters_non_messages(self, service):
+        """Test that non-message entries are filtered out by _is_message_entry."""
+        assert not service._is_message_entry({"type": "summary", "summary": "text", "leafUuid": "uuid-123"})
+        assert not service._is_message_entry({"type": "queue-operation", "operation": "dequeue"})
+        assert not service._is_message_entry({})
+        assert service._is_message_entry({"type": "user"})
+        assert service._is_message_entry({"type": "assistant"})
 
     def test_parse_tool_result(self, service):
         """Test parsing tool result messages."""
@@ -223,6 +220,43 @@ class TestClaudeCodeSessionService:
         assert session_messages[3].role == SessionMessageRole.ASSISTANT
         assert session_messages[3].text_content == "I'm doing well!"
         assert session_messages[3].line_num == 5
+
+    def test_get_last_session_message_skips_non_message_entries(self, service):
+        """Test that get_last_session_message skips non-message entries like queue-operation."""
+        jsonl_data = [
+            {
+                "type": "user",
+                "uuid": "u1",
+                "timestamp": "2025-10-08T15:10:00.000Z",
+                "isSidechain": False,
+                "message": {"role": "user", "content": "Hello"},
+            },
+            {
+                "type": "assistant",
+                "uuid": "a1",
+                "timestamp": "2025-10-08T15:10:01.000Z",
+                "isSidechain": False,
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]},
+            },
+            {
+                "type": "queue-operation",
+                "operation": "dequeue",
+                "timestamp": "2025-10-08T15:10:02.000Z",
+                "sessionId": "test-session",
+            },
+        ]
+
+        jsonl_content = "\n".join(json.dumps(entry) for entry in jsonl_data)
+        session_file = Path("/home/user/.claude/projects/project1/test-session.jsonl")
+
+        with patch.object(service, "find_session_file", return_value=session_file):
+            with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
+                message = service.get_last_session_message("test-session")
+
+        assert message is not None
+        assert message.role == SessionMessageRole.ASSISTANT
+        assert message.text_content == "Hi there!"
+        assert message.line_num == 2
 
     def test_load_conversation_file_not_found(self, service):
         """Test error handling when session file doesn't exist."""

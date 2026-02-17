@@ -82,7 +82,10 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
 
   const parseArgs = (argsString: string): string[] => {
     if (!argsString.trim()) return []
-    return argsString.split(',').map(s => s.trim()).filter(Boolean)
+    if (argsString.includes(',')) {
+      return argsString.split(',').map(s => s.trim()).filter(Boolean)
+    }
+    return argsString.trim().split(/\s+/)
   }
 
   const parseEnv = (envString: string): Record<string, string> | null => {
@@ -207,11 +210,11 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
             />
 
             <Input
-              label="Arguments (comma-separated)"
+              label="Arguments"
               value={formData.args}
               onChange={(e) => handleChange('args', e.target.value)}
-              placeholder="/path/to/project, --flag"
-              helpText="Separate multiple arguments with commas"
+              placeholder="--directory /path/to/project --flag"
+              helpText="Space-separated or comma-separated"
             />
 
             <div>

@@ -122,6 +122,18 @@ DIRECTORY STRUCTURE (depth=3):
 ```
 """
 
+        # Add README if it exists
+        readme_path = Path(self._working_dir) / "README.md"
+        if readme_path.exists():
+            readme_content = await self._codebase_integration.read_file("README.md")
+            base_context += f"""
+
+README (README.md):
+```markdown
+{readme_content}
+```
+"""
+
         # Add docs/INDEX.md if it exists
         # TODO: Abstract this away into some kind of codebase docs service?
         docs_index_path = Path(self._working_dir) / "docs" / "INDEX.md"

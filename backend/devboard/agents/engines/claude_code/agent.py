@@ -384,7 +384,7 @@ class ClaudeCodeAgent(BaseAgent):
         # Get last message from session to parse tool call
         last_message = session_service.get_last_session_message(self.session_id)
         if not last_message:
-            raise ValueError("No messages in session - cannot process tool approvals")
+            raise ValueError(f"No messages in session {self.session_id} - cannot process tool approvals")
 
         # Parse virtual tool call from message text content using centralized parser
         tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)
