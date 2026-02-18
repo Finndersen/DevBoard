@@ -12,6 +12,7 @@ from devboard.api.dependencies.factories import (
 )
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
+    get_custom_field_repository,
     get_document_repository,
 )
 from devboard.api.dependencies.services import (
@@ -21,7 +22,7 @@ from devboard.api.dependencies.services import (
     get_task_service,
 )
 from devboard.db.models import Conversation
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import ConversationRepository, CustomFieldRepository, DocumentRepository
 from devboard.services.integration_service import IntegrationService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
@@ -34,26 +35,10 @@ async def get_agent_role_for_conversation(
     integration_service: IntegrationService = Depends(get_integration_service),
     task_service: TaskService = Depends(get_task_service),
     task_git_service: TaskGitService = Depends(get_task_git_service),
+    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ) -> AgentRole:
-    """Get agent role for a conversation.
-
-    FastAPI dependency that creates the appropriate role based on the conversation's
-    configuration and parent entity.
-
-    Args:
-        conversation: Verified conversation instance
-        document_repo: Document repository
-        agent_config_service: Agent configuration service
-        integration_service: Service for resolving integrations
-        task_service: Service for task operations
-        task_git_service: Service for task git operations
-
-    Returns:
-        Role instance for the conversation
-
-    Raises:
-        HTTPException: 400 if unsupported agent role for entity type, 404 if parent entity not found
-    """
+    """Get agent role for a conversation."""
+    custom_field_definitions = custom_field_repo.get_all()
     return await create_agent_role_for_conversation(
         conversation,
         document_repo,
@@ -61,6 +46,7 @@ async def get_agent_role_for_conversation(
         integration_service=integration_service,
         task_service=task_service,
         task_git_service=task_git_service,
+        custom_field_definitions=custom_field_definitions,
     )
 
 

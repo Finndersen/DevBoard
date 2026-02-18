@@ -7,7 +7,7 @@ from typing import Any, Literal
 import toons
 from pydantic_ai import ModelRetry, Tool
 
-from devboard.db.models import Codebase, Project, Task, TaskStatus
+from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Project, Task, TaskStatus
 from devboard.services.task_service import TaskService
 
 MAX_TASKS_LIMIT = 20
@@ -199,14 +199,120 @@ def create_view_task_details_tool(project: Project, task_service: TaskService) -
     return Tool(function=view_task_details, name="view_task_details")
 
 
-def create_create_task_tool(project: Project, task_service: TaskService) -> Tool:
+def _build_codebase_name_schema(codebase_names: tuple[str, ...]) -> dict[str, Any]:
+    """Build JSON schema for the codebase_name parameter."""
+    schema: dict[str, Any] = {
+        "type": "string",
+        "description": "The name of the codebase for this task (required)",
+    }
+    if len(codebase_names) == 1:
+        schema["const"] = codebase_names[0]
+    elif len(codebase_names) > 1:
+        schema["enum"] = list(codebase_names)
+    return schema
+
+
+def _build_custom_fields_schema(
+    custom_field_definitions: list[CustomFieldDefinition],
+) -> dict[str, Any] | None:
+    """Build JSON schema for the custom_fields parameter based on field definitions.
+
+    Returns None if no definitions exist (custom_fields will be omitted from schema).
+    """
+    if not custom_field_definitions:
+        return None
+
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+
+    for field_def in custom_field_definitions:
+        field_schema: dict[str, Any] = {}
+
+        if field_def.type == CustomFieldType.TEXT:
+            field_schema["type"] = "string"
+        elif field_def.type == CustomFieldType.BOOLEAN:
+            field_schema["type"] = "boolean"
+        elif field_def.type == CustomFieldType.ENUM:
+            field_schema["type"] = "string"
+            if field_def.options:
+                field_schema["enum"] = field_def.options
+
+        if field_def.description:
+            field_schema["description"] = field_def.description
+
+        properties[field_def.name] = field_schema
+
+        if field_def.mandatory:
+            required.append(field_def.name)
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+    if required:
+        schema["required"] = required
+
+    return schema
+
+
+def _build_create_task_json_schema(
+    codebase_names: tuple[str, ...],
+    custom_field_definitions: list[CustomFieldDefinition],
+) -> dict[str, Any]:
+    """Build the full JSON schema for the create_task tool."""
+    properties: dict[str, Any] = {
+        "title": {
+            "type": "string",
+            "description": "The task title (required)",
+        },
+        "codebase_name": _build_codebase_name_schema(codebase_names),
+        "specification_content": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Optional initial content for the task specification document",
+            "default": None,
+        },
+        "base_branch": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Optional branch to base work off (defaults to codebase default branch)",
+            "default": None,
+        },
+        "branch_name": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Optional working branch name (auto-generated from title if not provided)",
+            "default": None,
+        },
+    }
+
+    custom_fields_schema = _build_custom_fields_schema(custom_field_definitions)
+    if custom_fields_schema:
+        properties["custom_fields"] = {
+            "anyOf": [custom_fields_schema, {"type": "null"}],
+            "description": "Optional additional metadata as a dictionary",
+            "default": None,
+        }
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": ["title", "codebase_name"],
+        "additionalProperties": False,
+    }
+
+
+def create_create_task_tool(
+    project: Project,
+    task_service: TaskService,
+    custom_field_definitions: list[CustomFieldDefinition] | None = None,
+) -> Tool:
     """Create a tool for creating new tasks within a project.
 
     Args:
         project: The project to create tasks in
         task_service: Service for task creation
+        custom_field_definitions: Custom field definitions to expose in the tool schema
     """
-    # Build codebase name -> Codebase mapping for lookup and Literal type
+    # Build codebase name -> Codebase mapping for lookup
     codebase_map: dict[str, Codebase] = {cb.name: cb for cb in project.codebases} if project.codebases else {}
     codebase_names = tuple(codebase_map.keys())
 
@@ -221,17 +327,6 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
         """Create a new task within the current project.
 
         Use this tool to create a new task for tracking work to be done.
-
-        Args:
-            title: The task title (required)
-            codebase_name: The name of the codebase for this task (required)
-            specification_content: Optional initial content for the task specification document
-            base_branch: Optional branch to base work off (defaults to codebase default branch)
-            branch_name: Optional working branch name (auto-generated from title if not provided)
-            custom_fields: Optional additional metadata as a dictionary
-
-        Returns:
-            Confirmation message with the new task ID, title, and status.
         """
         # Look up codebase from the pre-built map
         codebase = codebase_map.get(codebase_name)
@@ -264,8 +359,11 @@ def create_create_task_tool(project: Project, task_service: TaskService) -> Tool
         except Exception as e:
             raise ModelRetry(f"Failed to create task: {e}") from e
 
-    # Dynamically set the Literal annotation for codebase_name parameter if codebases exist
-    if codebase_names:
-        create_task.__annotations__["codebase_name"] = Literal[codebase_names]
+    json_schema = _build_create_task_json_schema(codebase_names, custom_field_definitions or [])
 
-    return Tool(function=create_task, name="create_task")
+    return Tool.from_schema(
+        function=create_task,
+        name="create_task",
+        description="Create a new task within the current project. Use this tool to create a new task for tracking work to be done.",
+        json_schema=json_schema,
+    )

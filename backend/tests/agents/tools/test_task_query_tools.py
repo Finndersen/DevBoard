@@ -16,7 +16,7 @@ from devboard.agents.tools.task_query_tools import (
     create_list_tasks_tool,
     create_view_task_details_tool,
 )
-from devboard.db.models import Codebase, Document, Project, Task, TaskStatus
+from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Document, Project, Task, TaskStatus
 from devboard.services.task_service import TaskService
 
 
@@ -681,8 +681,8 @@ class TestToolSchemas:
         assert "implementation_plan" in description
         assert "change_summary" in description
 
-    def test_create_task_tool_schema(self, mock_project, mock_task_service):
-        """Verifies create_task tool schema has correct parameters and descriptions."""
+    def test_create_task_tool_schema_no_custom_fields(self, mock_project, mock_task_service):
+        """Verifies create_task tool schema omits custom_fields when no definitions exist."""
         tool = create_create_task_tool(mock_project, mock_task_service)
         schema = tool.tool_def.parameters_json_schema
 
@@ -716,12 +716,85 @@ class TestToolSchemas:
         assert "branch_name" in props
         assert "anyOf" in props["branch_name"]
 
-        # custom_fields parameter (optional, uses anyOf)
+        # custom_fields should be omitted when no definitions exist
+        assert "custom_fields" not in props
+
+    def test_create_task_tool_schema_with_custom_fields(self, mock_project, mock_task_service):
+        """Verifies custom_fields schema exposes typed properties from definitions."""
+        priority_def = Mock(spec=CustomFieldDefinition)
+        priority_def.name = "priority"
+        priority_def.type = CustomFieldType.ENUM
+        priority_def.options = ["low", "medium", "high"]
+        priority_def.description = "Task priority level"
+        priority_def.mandatory = True
+
+        notes_def = Mock(spec=CustomFieldDefinition)
+        notes_def.name = "notes"
+        notes_def.type = CustomFieldType.TEXT
+        notes_def.options = None
+        notes_def.description = "Additional notes"
+        notes_def.mandatory = False
+
+        is_urgent_def = Mock(spec=CustomFieldDefinition)
+        is_urgent_def.name = "is_urgent"
+        is_urgent_def.type = CustomFieldType.BOOLEAN
+        is_urgent_def.options = None
+        is_urgent_def.description = None
+        is_urgent_def.mandatory = False
+
+        definitions = [priority_def, notes_def, is_urgent_def]
+
+        tool = create_create_task_tool(mock_project, mock_task_service, custom_field_definitions=definitions)
+        schema = tool.tool_def.parameters_json_schema
+        props = schema["properties"]
+
+        # custom_fields should be present with anyOf (object or null)
         assert "custom_fields" in props
         assert "anyOf" in props["custom_fields"]
-        # Should have object type in anyOf
-        object_types = [t for t in props["custom_fields"]["anyOf"] if t.get("type") == "object"]
-        assert len(object_types) == 1
+        object_schemas = [s for s in props["custom_fields"]["anyOf"] if s.get("type") == "object"]
+        assert len(object_schemas) == 1
+
+        cf_schema = object_schemas[0]
+        cf_props = cf_schema["properties"]
+
+        # priority: enum field with options and description, mandatory
+        assert cf_props["priority"] == {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Task priority level",
+        }
+
+        # notes: text field with description, not mandatory
+        assert cf_props["notes"] == {
+            "type": "string",
+            "description": "Additional notes",
+        }
+
+        # is_urgent: boolean field without description, not mandatory
+        assert cf_props["is_urgent"] == {"type": "boolean"}
+
+        # Only mandatory fields in required
+        assert cf_schema["required"] == ["priority"]
+        assert cf_schema["additionalProperties"] is False
+
+    def test_create_task_tool_schema_custom_fields_no_mandatory(self, mock_project, mock_task_service):
+        """Verifies custom_fields schema has no required array when no mandatory fields."""
+        team_def = Mock(spec=CustomFieldDefinition)
+        team_def.name = "team"
+        team_def.type = CustomFieldType.TEXT
+        team_def.options = None
+        team_def.description = None
+        team_def.mandatory = False
+
+        definitions = [team_def]
+
+        tool = create_create_task_tool(mock_project, mock_task_service, custom_field_definitions=definitions)
+        schema = tool.tool_def.parameters_json_schema
+        cf_anyof = schema["properties"]["custom_fields"]["anyOf"]
+        cf_schema = [s for s in cf_anyof if s.get("type") == "object"][0]
+
+        assert "required" not in cf_schema
+        assert cf_schema["properties"]["team"] == {"type": "string"}
 
     def test_create_task_tool_schema_multiple_codebases(self, mock_task_service):
         """Verifies codebase_name enum includes all project codebases."""
