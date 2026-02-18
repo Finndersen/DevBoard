@@ -7,7 +7,49 @@ from devboard.db.models.codebase import BranchHandling
 from devboard.db.models.conversation import AgentRoleType
 from devboard.db.models.task import TaskStatus
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.task_git_service import TaskGitService
 from devboard.workflow_actions.base import TaskWorkflowAction
+
+
+async def _get_task_changes_prompt_context(task_git_service: TaskGitService, task: Task) -> str:
+    """Build a prompt context string describing the current state of changes on the task branch.
+
+    Returns a string with commit history and uncommitted change details that can be
+    inserted into finalisation action prompts.
+    """
+    # Check if a worktree slot exists
+    last_used_slot = task_git_service.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+
+    if not last_used_slot:
+        # No worktree slot — fall back to manual discovery
+        return (
+            "Check if there are any uncommitted changes in the workspace. "
+            "If there are uncommitted changes, create appropriate commit(s) with clear commit messages before proceeding."
+        )
+
+    # Fetch commit history and uncommitted changes
+    commits = await task_git_service.get_task_commit_metadata(task)
+    uncommitted = await task_git_service.get_task_uncommitted_changes(task)
+
+    parts: list[str] = []
+
+    # Commit history
+    if commits:
+        commit_list = "\n".join(f"  - {c.hash[:7]}: {c.subject}" for c in commits)
+        parts.append(f"**Commits on task branch** ({len(commits)}):\n{commit_list}")
+    else:
+        parts.append("No commits on task branch yet.")
+
+    # Uncommitted changes
+    if uncommitted.files:
+        parts.append(f"**Uncommitted changes:**\n{uncommitted.format_summary()}")
+        parts.append(
+            "Create appropriate commit(s) with clear commit messages for these uncommitted changes before proceeding."
+        )
+    else:
+        parts.append("All changes are committed. Proceed directly to the finalisation tool.")
+
+    return "\n\n".join(parts)
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
@@ -293,16 +335,15 @@ class ApproveAndMergeAction(TaskWorkflowAction):
     """
 
     KEY = "task.approve_and_merge"
-    PROMPT = """Finalize this task for local merge.
+    PROMPT_TEMPLATE = """Finalize this task for local merge.
 
-Please do the following:
-1. Review any uncommitted changes in the workspace
-2. If there are uncommitted changes, create appropriate commit(s) with clear commit messages
-3. Once all changes are committed, use the complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
-   - A brief overview of what was implemented
-   - Key files that were added or modified
-   - Any notable implementation decisions or trade-offs
-   - Testing considerations or known limitations"""
+{changes_context}
+
+Once all changes are committed, use the complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
+- A brief overview of what was implemented
+- Key files that were added or modified
+- Any notable implementation decisions or trade-offs
+- Testing considerations or known limitations"""
 
     DESCRIPTION = "Approve changes and merge locally"
 
@@ -323,9 +364,11 @@ Please do the following:
         Yields:
             ConversationEvent objects from agent interaction
         """
-        # Stream agent response - agent uses role's complete_task_with_local_merge tool
+        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, self.PROMPT):
+        async for event in self._stream_agent_response(conversation, prompt):
             yield event
 
 
@@ -343,12 +386,11 @@ class ApproveAndCreatePRAction(TaskWorkflowAction):
     """
 
     KEY = "task.approve_and_create_pr"
-    PROMPT = """Finalize and create a pull request for this task.
+    PROMPT_TEMPLATE = """Finalize and create a pull request for this task.
 
-Please do the following:
-1. Review any uncommitted changes in the workspace
-2. If there are uncommitted changes, create appropriate atomic commit(s) with clear & concise commit messages
-3. Once all changes are committed, use the create_pull_request tool to create a GitHub PR
+{changes_context}
+
+Once all changes are committed, use the create_pull_request tool to create a GitHub PR.
 
 When creating the PR:
 - Use a clear, descriptive title that summarizes what this task accomplishes
@@ -396,9 +438,11 @@ The PR will be created against the base branch and the task will transition to P
             )
             return
 
-        # Stream agent response - agent uses role's create_pull_request tool
+        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, self.PROMPT):
+        async for event in self._stream_agent_response(conversation, prompt):
             yield event
 
 
@@ -417,16 +461,15 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
     """
 
     KEY = "task.merge_and_finalise"
-    PROMPT = """Merge this PR and complete the task.
+    PROMPT_TEMPLATE = """Merge this PR and complete the task.
 
-Please do the following:
-1. Review any uncommitted changes in the workspace
-2. If there are uncommitted changes, create appropriate commit(s) and push them
-3. Once all changes are committed and pushed, use the merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
-   - A brief overview of what was implemented
-   - Key files that were added or modified
-   - Any notable implementation decisions or trade-offs
-   - Testing considerations or known limitations"""
+{changes_context}
+
+Once all changes are committed and pushed, use the merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
+- A brief overview of what was implemented
+- Key files that were added or modified
+- Any notable implementation decisions or trade-offs
+- Testing considerations or known limitations"""
 
     DESCRIPTION = "Merge PR and complete task"
 
@@ -459,9 +502,11 @@ Please do the following:
             )
             return
 
-        # Stream agent response - agent uses role's merge_pr_and_complete_task tool
+        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, self.PROMPT):
+        async for event in self._stream_agent_response(conversation, prompt):
             yield event
 
 

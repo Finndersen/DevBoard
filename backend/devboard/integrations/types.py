@@ -78,6 +78,31 @@ class StructuredDiff:
     additions: int
     deletions: int
 
+    def format_summary(self) -> str:
+        """Format a concise summary of file changes for agent prompts.
+
+        Returns:
+            Formatted summary with per-file stats, e.g.:
+            3 files changed, +45/-12
+              - src/foo.py (+30/-5)
+              - src/bar.py (+15/-7) (new)
+              - src/baz.py (+0/-0) (deleted)
+        """
+        if not self.files:
+            return "No file changes."
+
+        header = f"{len(self.files)} files changed, +{self.additions}/-{self.deletions}"
+        file_lines = []
+        for f in self.files:
+            line = f"  - {f.file_path} (+{f.additions}/-{f.deletions})"
+            if f.is_new_file:
+                line += " (new)"
+            elif f.is_deleted:
+                line += " (deleted)"
+            file_lines.append(line)
+
+        return header + "\n" + "\n".join(file_lines)
+
 
 @dataclass
 class BranchReleaseResult:
