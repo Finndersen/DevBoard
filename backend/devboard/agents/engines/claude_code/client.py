@@ -23,6 +23,9 @@ from pydantic_core import ValidationError
 
 from .utils import describe_message, load_env_from_settings
 
+# MCP server name for internal PydanticAI tools
+BUILTIN_TOOLS_MCP_NAME = "builtin_tools"
+
 # All Claude Code builtin tools
 CLAUDE_BUILTIN_TOOLS: set[str] = {
     # File Operations
@@ -198,7 +201,6 @@ class ClaudeClient:
         # Wrap tools with SDK's @tool decorator
         sdk_tools = []
         custom_tool_names = []
-        mcp_name = "builtin_tools"
         for pydantic_tool in tools:
             # Extract metadata from PydanticAI Tool's function_schema
             tool_name = pydantic_tool.name
@@ -216,11 +218,11 @@ class ClaudeClient:
                 input_schema=pydantic_tool.function_schema.json_schema,
             )(wrapper_func)
             sdk_tools.append(sdk_tool)
-            custom_tool_names.append(f"mcp__{mcp_name}__{tool_name}")
+            custom_tool_names.append(f"mcp__{BUILTIN_TOOLS_MCP_NAME}__{tool_name}")
 
         # Create SDK MCP server with custom tools
         mcp_server_config = create_sdk_mcp_server(
-            name=mcp_name,
+            name=BUILTIN_TOOLS_MCP_NAME,
             version="1.0.0",
             tools=sdk_tools,
         )
@@ -315,7 +317,7 @@ class ClaudeClient:
             Tool instance if found, None otherwise
         """
         # Remove MCP prefix if present (e.g., "mcp__builtin_tools__search" -> "search")
-        clean_name = self._get_original_tool_name_from_mcp_tool(tool_name)
+        clean_name = self.normalize_tool_name(tool_name)
 
         for pydantic_tool in self._tools:
             if pydantic_tool.name == clean_name:
@@ -380,9 +382,7 @@ class ClaudeClient:
 
         # Add to queue for order-based correlation
         # Store (tool_name, tool_use_id) so we can match MCP calls
-        await self._tool_execution_queue.put(
-            (self._get_original_tool_name_from_mcp_tool(tool_block.name), tool_block.id)
-        )
+        await self._tool_execution_queue.put((self.normalize_tool_name(tool_block.name), tool_block.id))
 
     async def run(self, user_query: str) -> ClaudeCodeResult:
         """Execute a query and return a single result.
@@ -507,7 +507,34 @@ class ClaudeClient:
     def _is_mcp_tool(tool_name: str) -> bool:
         return "__" in tool_name and tool_name.split("__")[0] == "mcp"
 
-    @staticmethod
-    def _get_original_tool_name_from_mcp_tool(mcp_tool_name: str) -> str:
-        """Get the original tool name from an MCP tool name."""
-        return mcp_tool_name.split("__")[-1] if "__" in mcp_tool_name else mcp_tool_name
+    @classmethod
+    def normalize_tool_name(cls, tool_name: str) -> str:
+        """Normalize tool name by stripping MCP prefix for internal tools only.
+
+        Only internal PydanticAI tools (prefixed with mcp__builtin_tools__) are normalized.
+        External MCP server tools keep their full prefixed names since the application
+        may not have built-in handling for them.
+
+        Args:
+            tool_name: Raw tool name (possibly with MCP prefix)
+
+        Returns:
+            Normalized tool name with builtin_tools prefix removed if present
+
+        Examples:
+            >>> ClaudeClient.normalize_tool_name("mcp__builtin_tools__render_html")
+            "render_html"
+            >>> ClaudeClient.normalize_tool_name("mcp__builtin_tools__my__custom__tool")
+            "my__custom__tool"
+            >>> ClaudeClient.normalize_tool_name("mcp__github__create_issue")
+            "mcp__github__create_issue"  # External tools keep prefix
+            >>> ClaudeClient.normalize_tool_name("render_html")
+            "render_html"
+        """
+        # Only strip the mcp__builtin_tools__ prefix for internal tools
+        prefix = f"mcp__{BUILTIN_TOOLS_MCP_NAME}__"
+        if tool_name.startswith(prefix):
+            return tool_name.replace(prefix, "", 1)
+
+        # Keep external MCP tools and non-MCP names as-is
+        return tool_name

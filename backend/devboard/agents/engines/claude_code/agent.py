@@ -214,9 +214,12 @@ class ClaudeCodeAgent(BaseAgent):
         if isinstance(message, AssistantMessage):
             for content_block in message.content:
                 if isinstance(content_block, ToolUseBlock):
+                    # Normalize tool name to strip MCP prefix
+                    normalized_tool_name = ClaudeClient.normalize_tool_name(content_block.name)
+
                     yield ToolCall(
                         tool_call_id=content_block.id,
-                        tool_name=content_block.name,
+                        tool_name=normalized_tool_name,
                         tool_args=content_block.input,
                         timestamp=timestamp,
                     )

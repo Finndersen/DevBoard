@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
 
+from devboard.agents.engines.claude_code.client import ClaudeClient
 from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolCallRequest
 
 
@@ -108,9 +109,10 @@ def convert_virtual_tool_call_to_events(
     Returns:
         List of ConversationEvent instances (ConversationMessage and ToolCall/ToolCallRequest)
     """
-    # Import here to avoid circular imports
-
     events: list[ConversationEvent] = []
+
+    # Normalize tool name to strip MCP prefix
+    normalized_tool_name = ClaudeClient.normalize_tool_name(tool_call.tool_name)
 
     # Generate preamble message if present
     if tool_call.preamble:
@@ -126,8 +128,8 @@ def convert_virtual_tool_call_to_events(
     if use_tool_call_request:
         events.append(
             ToolCallRequest(
-                tool_call_id=tool_call.tool_name,  # For virtual tools, tool_name is the ID
-                tool_name=tool_call.tool_name,
+                tool_call_id=normalized_tool_name,  # For virtual tools, tool_name is the ID
+                tool_name=normalized_tool_name,
                 tool_args=tool_call.arguments,
                 timestamp=timestamp,
             )
@@ -135,8 +137,8 @@ def convert_virtual_tool_call_to_events(
     else:
         events.append(
             ToolCall(
-                tool_call_id=tool_call.tool_name,  # Use tool_name as ID for virtual tools
-                tool_name=tool_call.tool_name,
+                tool_call_id=normalized_tool_name,  # Use tool_name as ID for virtual tools
+                tool_name=normalized_tool_name,
                 tool_args=tool_call.arguments,
                 timestamp=timestamp,
             )
