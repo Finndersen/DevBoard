@@ -6,7 +6,8 @@ from different async tasks.
 """
 
 import asyncio
-from typing import Any
+import tempfile
+from typing import IO, Any
 
 import httpx
 import logfire
@@ -37,16 +38,21 @@ class MCPLifecycleManager:
     e.g., setup in one tool call task, teardown later by agent context exit.
     """
 
-    def __init__(self, server_config: MCPServerConfig):
+    def __init__(self, server_config: MCPServerConfig, *, capture_stderr: bool = False):
         """Initialize with an MCP server configuration.
 
         Args:
             server_config: The MCP server configuration.
+            capture_stderr: If True, capture stderr output from stdio servers
+                instead of forwarding to sys.stderr.
 
         Raises:
             ValueError: If the server config type is unknown.
         """
         self._server_config = server_config
+        self._stderr_file: IO[str] | None = None
+        if capture_stderr:
+            self._stderr_file = tempfile.TemporaryFile(mode="w+")
         self._mcp_client_factory = self._create_client_factory()
         self._mcp_session: ClientSession | None = None
         self._teardown_event = asyncio.Event()
@@ -59,17 +65,30 @@ class MCPLifecycleManager:
         """Get the server name for logging."""
         return self._server_config.name
 
+    @property
+    def captured_stderr(self) -> str | None:
+        """Read captured stderr content. Returns None if not capturing."""
+        if not self._stderr_file:
+            return None
+        self._stderr_file.seek(0)
+        content = self._stderr_file.read()
+        return content or None
+
     def _create_client_factory(self) -> Any:
         """Create the MCP client factory based on server config type."""
         typed_config = self._server_config.config
 
         if isinstance(typed_config, StdioMCPConfig):
+            kwargs: dict[str, Any] = {}
+            if self._stderr_file:
+                kwargs["errlog"] = self._stderr_file
             return stdio_client(
                 StdioServerParameters(
                     command=typed_config.command,
                     args=typed_config.args or [],
                     env=typed_config.env,
-                )
+                ),
+                **kwargs,
             )
 
         if isinstance(typed_config, HttpMCPConfig):

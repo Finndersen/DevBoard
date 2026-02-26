@@ -4,7 +4,6 @@ Provides business logic for managing MCP server configurations including
 CRUD operations and connectivity verification.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 from devboard.api.schemas.mcp import (
@@ -107,10 +106,8 @@ class MCPService:
         if not config:
             raise ValueError("Server not found")
 
-        now = datetime.now(UTC)
-
         try:
-            lifecycle = MCPLifecycleManager(config)
+            lifecycle = MCPLifecycleManager(config, capture_stderr=True)
             async with lifecycle as session:
                 result = await session.list_tools()
                 tools = [
@@ -122,29 +119,29 @@ class MCPService:
                     for tool in result.tools
                 ]
 
+                if not tools:
+                    error = "Server returned no tools"
+                    stderr = lifecycle.captured_stderr
+                    if stderr:
+                        error += f"\n\n[stderr]\n{stderr.strip()}"
+                    self.repository.update_verification_status(config, success=False, error=error)
+                    return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
+
                 # Sync tools to database
                 self._sync_tools(config, tools)
 
                 # Expire config to force fresh load of tools relationship
                 self.repository.expire(config)
 
-                # Update verification status on success
-                config.last_verified_at = now
-                config.last_verified_success = True
-                config.last_verified_error = None
-                self.repository.update(config)
-
-                # Return server detail with refreshed tools
+                self.repository.update_verification_status(config, success=True, error=None)
                 return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
 
         except Exception as e:
-            # Update verification status on failure
-            config.last_verified_at = now
-            config.last_verified_success = False
-            config.last_verified_error = str(e)
-            self.repository.update(config)
-
-            # Return server detail (with existing cached tools)
+            error = str(e)
+            stderr = lifecycle.captured_stderr if lifecycle else None
+            if stderr:
+                error += f"\n\n[stderr]\n{stderr.strip()}"
+            self.repository.update_verification_status(config, success=False, error=error)
             return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
 
     async def verify_legacy(self, server_id: int) -> VerifyResult:

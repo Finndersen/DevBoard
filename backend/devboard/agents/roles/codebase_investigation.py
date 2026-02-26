@@ -33,8 +33,8 @@ BEHAVIOR GUIDELINES:
 - Adapt your response structure to the type of question being asked
 
 INVESTIGATION STRATEGY:
-- Start with reading appropriate documentation (in docs/) to get a high level understanding (when applicable)
-- Use directory tree to understand project structure and locate components
+- **Prioritise speed**: Only search or read files when the query cannot be answered from the context already provided.
+- If searching is necessary, prefer targeted searches (text/code structure search for specific patterns) over broad file reads
 - Use text search for finding specific code patterns or references
 - Use file search for locating files by name or pattern
 - Use code structure search for finding classes, functions, or AST patterns

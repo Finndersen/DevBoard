@@ -1,5 +1,7 @@
 """MCP server configuration repository for data access operations."""
 
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -31,6 +33,13 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
         self.db.merge(config)
         self.db.flush()
         return config
+
+    def update_verification_status(self, config: MCPServerConfig, *, success: bool, error: str | None) -> None:
+        config.last_verified_at = datetime.now(UTC)
+        config.last_verified_success = success
+        config.last_verified_error = error
+        self.db.merge(config)
+        self.db.flush()
 
     def delete(self, server_id: int) -> bool:
         config = self.get_by_id(server_id)

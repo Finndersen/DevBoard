@@ -39,6 +39,9 @@ A specification defines an atomic piece of work (feature, bug fix, or improvemen
 
 Provides a technical roadmap for the implementation agent to execute without further investigation. Captures WHAT needs to be done with required context, not the full specifics of HOW. Reference the Task Specification instead of duplicating content.
 
+**Before Drafting:**
+Use `investigate_codebase` to research codebase patterns, conventions, and frameworks relevant to the implementation approach. This should cover things like: how similar features are structured, existing utilities or helpers that can be reused, naming conventions, testing patterns, and relevant framework usage. Use multiple parallel calls if investigating several areas. Ground the plan in actual codebase reality — don't rely solely on what's been discussed in the conversation.
+
 **Include:**
 - Context: Relevant context (if not already in the Task Specification) and high level overview of changes required.
 - Implementation Steps: Concise steps with specific files/components to modify. Indicate parallel execution where applicable.

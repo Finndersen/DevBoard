@@ -351,9 +351,12 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         })
       }
 
-      // Clean up immediately if no pending tool requests
+      // Clean up streaming state if no pending tool requests
       // Messages are already copied to component local state, so we don't need to keep them here
       // Use a short delay to ensure React has completed its render cycle
+      // Note: eventHandlerRegistries are NOT deleted here - they are managed by React component
+      // lifecycle (useEffect cleanup on unmount). Deleting them here causes a race condition
+      // where subsequent streams on the same conversation can't find their handlers.
       if (!stream?.pendingToolRequests || stream.pendingToolRequests.length === 0) {
         setTimeout(() => {
           // Re-check in case a new stream started on same conversation ID
@@ -362,7 +365,6 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
             set((draft) => {
               draft.activeStreams.delete(conversationId)
             })
-            eventHandlerRegistries.delete(conversationId)
             conversationIdRefs.delete(conversationId)
           }
         }, 100) // Short delay for React render cycle
@@ -525,13 +527,13 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
       // Schedule cleanup if stream is completed (not actively streaming)
       // Use short delay consistent with completeStream
+      // Note: eventHandlerRegistries are NOT deleted here - managed by React component lifecycle
       setTimeout(() => {
         const stream = get().activeStreams.get(conversationId)
         if (stream && !stream.isStreaming && (!stream.pendingToolRequests || stream.pendingToolRequests.length === 0)) {
           set((draft) => {
             draft.activeStreams.delete(conversationId)
           })
-          eventHandlerRegistries.delete(conversationId)
           conversationIdRefs.delete(conversationId)
         }
       }, 100) // Short delay for React render cycle

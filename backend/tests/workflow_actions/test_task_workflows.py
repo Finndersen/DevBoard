@@ -30,8 +30,8 @@ class TestGetTaskChangesPromptContext:
 
         result = await _get_task_changes_prompt_context(mock_task_git_service, mock_task)
 
-        assert "Check if there are any uncommitted changes" in result
-        assert "create appropriate commit(s)" in result
+        assert "Unable to determine branch state" in result
+        assert "no worktree slot found" in result
         mock_task_git_service.get_task_commit_metadata.assert_not_called()
         mock_task_git_service.get_task_uncommitted_changes.assert_not_called()
 
@@ -57,7 +57,6 @@ class TestGetTaskChangesPromptContext:
         assert "def5678: Second commit" in result
         assert "Uncommitted changes" in result
         assert "src/new.py (+10/-0) (new)" in result
-        assert "Create appropriate commit(s)" in result
 
     @pytest.mark.asyncio
     async def test_worktree_with_no_uncommitted_changes(self, mock_task_git_service, mock_task):
@@ -75,9 +74,8 @@ class TestGetTaskChangesPromptContext:
 
         assert "Commits on task branch" in result
         assert "abc1234: Implement feature" in result
-        assert "All changes are committed" in result
-        assert "Proceed directly to the finalisation tool" in result
-        assert "Uncommitted changes" not in result
+        assert "No uncommitted changes" in result
+        assert "Uncommitted changes:" not in result
 
     @pytest.mark.asyncio
     async def test_worktree_with_no_commits(self, mock_task_git_service, mock_task):

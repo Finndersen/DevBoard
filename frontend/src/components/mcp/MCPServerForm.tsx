@@ -40,7 +40,7 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
           name: server.name,
           server_type: 'stdio',
           command: config.command,
-          args: config.args?.join(', ') || '',
+          args: config.args?.join(' ') || '',
           env: config.env ? Object.entries(config.env).map(([k, v]) => `${k}=${v}`).join('\n') : '',
           url: '',
           auth_type: 'none',
@@ -82,9 +82,6 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
 
   const parseArgs = (argsString: string): string[] => {
     if (!argsString.trim()) return []
-    if (argsString.includes(',')) {
-      return argsString.split(',').map(s => s.trim()).filter(Boolean)
-    }
     return argsString.trim().split(/\s+/)
   }
 
@@ -214,7 +211,7 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
               value={formData.args}
               onChange={(e) => handleChange('args', e.target.value)}
               placeholder="--directory /path/to/project --flag"
-              helpText="Space-separated or comma-separated"
+              helpText="Space-separated arguments (as you would type in a terminal)"
             />
 
             <div>

@@ -211,17 +211,91 @@ class TestMCPServiceVerify:
             mock_lifecycle = AsyncMock()
             mock_lifecycle.__aenter__.return_value = mock_session
             mock_lifecycle.__aexit__.return_value = None
+            mock_lifecycle.captured_stderr = None
             mock_create_lifecycle.return_value = mock_lifecycle
 
             result = await mcp_service.verify(1)
 
         assert isinstance(result, MCPServerDetailResponse)
-        # Verify status was updated
-        assert sample_stdio_config.last_verified_success is True
-        assert sample_stdio_config.last_verified_error is None
-        mock_repository.update.assert_called_once()
-        # Verify new tool was created (since cache was empty)
+        mock_repository.update_verification_status.assert_called_once_with(
+            sample_stdio_config, success=True, error=None
+        )
         mock_repository.create_tool.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_verify_empty_tools_returns_failure(self, mcp_service, mock_repository, sample_stdio_config):
+        """Test that verification fails when server returns no tools."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_by_id_with_tools.return_value = sample_stdio_config
+
+        mock_session = AsyncMock()
+        mock_list_result = Mock()
+        mock_list_result.tools = []
+        mock_session.list_tools.return_value = mock_list_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_lifecycle.captured_stderr = None
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.verify(1)
+
+        assert isinstance(result, MCPServerDetailResponse)
+        mock_repository.update_verification_status.assert_called_once()
+        _, kwargs = mock_repository.update_verification_status.call_args
+        assert kwargs["success"] is False
+        assert "no tools" in kwargs["error"]
+        mock_repository.create_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_verify_empty_tools_includes_stderr(self, mcp_service, mock_repository, sample_stdio_config):
+        """Test that verification failure includes captured stderr output."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_by_id_with_tools.return_value = sample_stdio_config
+
+        mock_session = AsyncMock()
+        mock_list_result = Mock()
+        mock_list_result.tools = []
+        mock_session.list_tools.return_value = mock_list_result
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_lifecycle.captured_stderr = "error: Failed to build `uvx==3.0.0`\nThis is not a real package"
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.verify(1)
+
+        assert isinstance(result, MCPServerDetailResponse)
+        mock_repository.update_verification_status.assert_called_once()
+        _, kwargs = mock_repository.update_verification_status.call_args
+        assert kwargs["success"] is False
+        assert "no tools" in kwargs["error"]
+        assert "Failed to build" in kwargs["error"]
+
+    @pytest.mark.asyncio
+    async def test_verify_connection_failure_includes_stderr(self, mcp_service, mock_repository, sample_stdio_config):
+        """Test that connection failure includes captured stderr output."""
+        mock_repository.get_by_id.return_value = sample_stdio_config
+        mock_repository.get_by_id_with_tools.return_value = sample_stdio_config
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.side_effect = ConnectionError("Failed to connect")
+            mock_lifecycle.captured_stderr = "FATAL: authentication failed"
+            mock_create_lifecycle.return_value = mock_lifecycle
+
+            result = await mcp_service.verify(1)
+
+        assert isinstance(result, MCPServerDetailResponse)
+        mock_repository.update_verification_status.assert_called_once()
+        _, kwargs = mock_repository.update_verification_status.call_args
+        assert kwargs["success"] is False
+        assert "Failed to connect" in kwargs["error"]
+        assert "authentication failed" in kwargs["error"]
 
     @pytest.mark.asyncio
     async def test_verify_connection_failure(self, mcp_service, mock_repository, sample_stdio_config):
@@ -232,14 +306,16 @@ class TestMCPServiceVerify:
         with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:
             mock_lifecycle = AsyncMock()
             mock_lifecycle.__aenter__.side_effect = ConnectionError("Failed to connect")
+            mock_lifecycle.captured_stderr = None
             mock_create_lifecycle.return_value = mock_lifecycle
 
             result = await mcp_service.verify(1)
 
         assert isinstance(result, MCPServerDetailResponse)
-        assert sample_stdio_config.last_verified_success is False
-        assert "Failed to connect" in sample_stdio_config.last_verified_error
-        mock_repository.update.assert_called_once()
+        mock_repository.update_verification_status.assert_called_once()
+        _, kwargs = mock_repository.update_verification_status.call_args
+        assert kwargs["success"] is False
+        assert "Failed to connect" in kwargs["error"]
 
 
 class TestMCPServiceToolSync:
@@ -321,10 +397,14 @@ class TestMCPServiceToolSync:
         # Existing tool in cache
         mock_repository.get_tools_by_server_id.return_value = [sample_mcp_tool]
 
-        # Server returns empty list (tool removed from server)
+        # Server returns a different tool (old one should be deleted)
         mock_session = AsyncMock()
         mock_list_result = Mock()
-        mock_list_result.tools = []
+        new_tool = Mock()
+        new_tool.name = "new_tool"
+        new_tool.description = "A new tool"
+        new_tool.inputSchema = {"type": "object"}
+        mock_list_result.tools = [new_tool]
         mock_session.list_tools.return_value = mock_list_result
 
         with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_create_lifecycle:

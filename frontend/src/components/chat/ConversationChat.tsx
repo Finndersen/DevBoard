@@ -114,8 +114,9 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   // Local state for non-streaming concerns
   const [approvalError, setApprovalError] = useState<string | null>(null)
   const [fetchHistoryError, setFetchHistoryError] = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const [hasNewMessages, setHasNewMessages] = useState(false)
   const lastFetchedConversationIdRef = useRef<number | null>(null)
   const initialMessageSentRef = useRef(false)
 
@@ -194,14 +195,38 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      isNearBottomRef.current = true
+      setHasNewMessages(false)
     }
   }, [])
 
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+    isNearBottomRef.current = nearBottom
+    if (nearBottom) {
+      setHasNewMessages(false)
+    }
+  }, [])
+
+  // Auto-scroll on new messages only when user is near bottom
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (isNearBottomRef.current) {
+        scrollToBottom()
+      } else {
+        setHasNewMessages(true)
+      }
+    })
+  }, [messages, scrollToBottom])
+
+  // Always scroll to bottom for user-initiated actions
   useEffect(() => {
     requestAnimationFrame(() => {
       scrollToBottom()
     })
-  }, [messages, pendingMessage, isRunningAction, scrollToBottom])
+  }, [pendingMessage, isRunningAction, scrollToBottom])
 
   // Fetch history when conversation changes (but not if store already has messages)
   useEffect(() => {
@@ -440,7 +465,8 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       {engine && (
         <TodoPanel conversationId={conversationId} engine={engine} />
       )}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
+      <div className="relative flex-1 min-h-0">
+      <div ref={messagesContainerRef} onScroll={handleScroll} className="h-full overflow-y-auto p-3 space-y-1.5">
         <ConversationMessageList
           messages={messages}
           pendingMessage={pendingMessage}
@@ -498,8 +524,19 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
             </div>
           </div>
         )}
+      </div>
 
-        <div ref={messagesEndRef} />
+        {hasNewMessages && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-full shadow-lg transition-colors cursor-pointer z-10"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+              <path fillRule="evenodd" d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z" clipRule="evenodd" />
+            </svg>
+            New messages
+          </button>
+        )}
       </div>
 
       <div className="border-t border-gray-200 dark:border-gray-600 p-3 flex-shrink-0">

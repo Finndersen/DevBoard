@@ -62,7 +62,16 @@ def create_complete_task_with_local_merge_tool(
         try:
             merge_result = await task_service.complete_task_with_local_merge(task, change_summary)
         except ValueError as e:
-            raise ModelRetry(str(e)) from e
+            error_msg = str(e)
+            if "conflict" in error_msg.lower():
+                error_msg += (
+                    "\n\nThe feature branch has NOT been modified - it is still in a clean state. "
+                    "To resolve this:\n"
+                    "1. Call rebase_task_branch() to rebase the feature branch onto the latest base branch\n"
+                    "2. If there are conflicts, resolve them manually\n"
+                    "3. Then call complete_task_with_local_merge() again"
+                )
+            raise ModelRetry(error_msg) from e
 
         result = f"Task completed successfully. {merge_result.message}"
         if merge_result.merge_commit:

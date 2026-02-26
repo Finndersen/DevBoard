@@ -21,11 +21,7 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
     last_used_slot = task_git_service.worktree_slot_repo.get_last_used_slot_for_task(task.id)
 
     if not last_used_slot:
-        # No worktree slot — fall back to manual discovery
-        return (
-            "Check if there are any uncommitted changes in the workspace. "
-            "If there are uncommitted changes, create appropriate commit(s) with clear commit messages before proceeding."
-        )
+        return "Unable to determine branch state — no worktree slot found for this task."
 
     # Fetch commit history and uncommitted changes
     commits = await task_git_service.get_task_commit_metadata(task)
@@ -43,11 +39,8 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
     # Uncommitted changes
     if uncommitted.files:
         parts.append(f"**Uncommitted changes:**\n{uncommitted.format_summary()}")
-        parts.append(
-            "Create appropriate commit(s) with clear commit messages for these uncommitted changes before proceeding."
-        )
     else:
-        parts.append("All changes are committed. Proceed directly to the finalisation tool.")
+        parts.append("No uncommitted changes.")
 
     return "\n\n".join(parts)
 
@@ -337,7 +330,11 @@ class ApproveAndMergeAction(TaskWorkflowAction):
     KEY = "task.approve_and_merge"
     PROMPT_TEMPLATE = """Finalize this task for local merge.
 
+## Current Branch State
 {changes_context}
+
+## Instructions
+If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
 
 Once all changes are committed, use the complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
@@ -388,7 +385,11 @@ class ApproveAndCreatePRAction(TaskWorkflowAction):
     KEY = "task.approve_and_create_pr"
     PROMPT_TEMPLATE = """Finalize and create a pull request for this task.
 
+## Current Branch State
 {changes_context}
+
+## Instructions
+If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
 
 Once all changes are committed, use the create_pull_request tool to create a GitHub PR.
 
@@ -463,7 +464,11 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
     KEY = "task.merge_and_finalise"
     PROMPT_TEMPLATE = """Merge this PR and complete the task.
 
+## Current Branch State
 {changes_context}
+
+## Instructions
+If there are uncommitted changes, create appropriate commit(s) with clear commit messages and push them first.
 
 Once all changes are committed and pushed, use the merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
