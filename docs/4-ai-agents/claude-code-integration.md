@@ -149,6 +149,40 @@ client = ClaudeClient(
 - Requires all tool calls to arrive in single `AssistantMessage`
 - Tools must be stateless and order-independent
 
+## MCP Tool Name Prefixing and Normalization
+
+When DevBoard registers internal PydanticAI tools with Claude Code CLI, they are prefixed with `mcp__builtin_tools__` to distinguish them from Claude Code's native tools (Read, Edit, Bash, etc.). External MCP server tools are prefixed with `mcp__<server_name>__`.
+
+**Prefix Format**:
+- Internal tools: `mcp__builtin_tools__<tool_name>` (e.g., `mcp__builtin_tools__render_html`)
+- External tools: `mcp__<server_name>__<tool_name>` (e.g., `mcp__github__create_issue`)
+
+**Why Prefixing Exists**:
+- Namespace management: Separates custom MCP tools from Claude Code's built-in tools
+- Multi-server support: Allows tools from multiple MCP servers with unique namespaces
+- Concurrent execution: Enables detection and special handling of MCP tool calls
+
+**Normalization at Engine Boundary**:
+
+The `mcp__builtin_tools__` prefix for **internal tools only** is stripped before creating DevBoard events. External MCP server tools keep their full prefixed names since the application may not have built-in handling for them.
+
+- **Tool Registration** (line 219 in `client.py`): Prefix added when building MCP server config
+- **Tool Execution** (line 318 in `client.py`): Prefix stripped when looking up tool function
+- **Event Creation** (in `agent.py` and `message_parser.py`): Prefix stripped when creating ToolCall/ToolCallRequest events
+
+This ensures that internal tool events use **canonical tool names** matching the Internal (PydanticAI) engine, while external MCP tools remain prefixed for proper identification.
+
+**Normalization Logic** (`ClaudeClient.normalize_tool_name()`):
+- Only strips `mcp__builtin_tools__` prefix for internal PydanticAI tools
+- External MCP tools keep full prefix: `mcp__<server>__<tool_name>` (unchanged)
+- Preserves double underscores in tool names (e.g., `mcp__builtin_tools__my__tool__name` → `my__tool__name`)
+
+**Impact**:
+- Internal tools: Frontend receives canonical names without MCP prefix
+- External tools: Frontend receives full prefixed names (e.g., `mcp__github__create_issue`)
+- Tool renderer registry works for internal tools with canonical names
+- External MCP tools identified by their full prefixed names
+
 ## Conversation Filtering
 
 **Location**: `backend/devboard/agents/engines/claude_code/agent_conversation.py`

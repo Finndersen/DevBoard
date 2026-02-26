@@ -184,6 +184,39 @@ Available workflow actions:
 
 **Gemini CLI** (`gemini_cli.py`): Gemini CLI integration.
 
+#### Tool Name Normalization
+
+Agent engines normalize tool names to canonical form when creating conversation events, ensuring consistency across different engine implementations.
+
+**ClaudeCodeEngine Normalization**:
+
+The Claude Code engine uses MCP (Model Context Protocol) prefixes internally for namespace management:
+- Internal tools: `mcp__builtin_tools__<tool_name>`
+- External MCP servers: `mcp__<server_name>__<tool_name>`
+
+Only internal tool prefixes are stripped at the engine boundary:
+- **Location**: `ClaudeCodeAgent._convert_claude_message_to_events()` and `message_parser.convert_virtual_tool_call_to_events()`
+- **Method**: `ClaudeClient.normalize_tool_name()` strips `mcp__builtin_tools__` prefix only
+- **Result**: Internal tool events use canonical names; external tools keep prefixed names
+
+**Benefits**:
+- Internal tools: Canonical names work across all engines
+- External tools: Prefixed names provide proper identification
+- Frontend handles internal tools with built-in renderers
+- External tools identified by their server namespace
+
+**Example**:
+```
+# Internal tool normalization
+Internal Engine:     ToolCall(tool_name="render_html")
+Claude Code Engine:  ToolCall(tool_name="render_html")  # normalized from "mcp__builtin_tools__render_html"
+Frontend Registry:   richResultRenderers["render_html"]  # matches both
+
+# External tool keeps prefix
+Claude Code Engine:  ToolCall(tool_name="mcp__github__create_issue")  # prefix preserved
+Frontend:            Displays as "mcp__github__create_issue"
+```
+
 ### Agent Roles
 
 **Location**: `backend/devboard/agents/roles/`

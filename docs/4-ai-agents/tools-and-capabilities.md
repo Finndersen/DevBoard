@@ -161,6 +161,30 @@ The factory handles:
 
 MCP tool errors are converted to `ModelRetry` exceptions, allowing the agent to retry with feedback about what went wrong.
 
+### Tool Name Normalization
+
+When internal PydanticAI tools are provided to the Claude Code engine, they are internally prefixed with `mcp__builtin_tools__` for namespace management within Claude Code CLI. This prefix is **stripped at the engine boundary** before creating tool call events. External MCP server tools keep their full prefixed names.
+
+This means:
+- Internal tool events (ToolCall, ToolCallRequest, ToolResult) use canonical tool names
+- External MCP tool events keep their prefixed names (e.g., `mcp__github__create_issue`)
+- Frontend components use canonical names for internal tools, prefixed names for external tools
+- Internal tool names are consistent across all engines (Internal, Claude Code, Gemini)
+
+Example:
+```python
+# Internal tool
+Tool(function=render_html, name="render_html")
+"mcp__builtin_tools__render_html"  # Claude Code CLI (internal)
+ToolCall(tool_name="render_html")  # DevBoard event (normalized)
+
+# External MCP tool
+"mcp__github__create_issue"  # Claude Code CLI (internal)
+ToolCall(tool_name="mcp__github__create_issue")  # DevBoard event (keeps prefix)
+```
+
+The normalization logic is implemented in `ClaudeClient.normalize_tool_name()` and only strips the `mcp__builtin_tools__` prefix for internal tools.
+
 ## Files
 
 **Built-in Tools**: `backend/devboard/agents/tools.py`
