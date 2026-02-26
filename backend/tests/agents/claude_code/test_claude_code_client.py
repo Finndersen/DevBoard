@@ -17,7 +17,8 @@ from mcp.types import CallToolRequest, CallToolRequestParams
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
-from devboard.agents.engines.claude_code.client import BUILTIN_TOOLS_MCP_NAME, ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.utils import BUILTIN_TOOLS_MCP_NAME
 
 
 @pytest.fixture

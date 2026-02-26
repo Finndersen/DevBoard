@@ -32,6 +32,7 @@ AVAILABLE CAPABILITIES:
 1. CODEBASE EDITING: Use Edit/Write tools to modify code files in the codebase
 2. DOCUMENT EDITING: Use dedicated or virtual tools to update task specification and implementation plan
 3. INVESTIGATION: Read files, search code, run bash commands for testing/verification
+4. BUILTIN TOOLS: Custom task management tools (e.g. complete_task_with_local_merge, create_pull_request, merge_pr_and_complete_task, rebase_task_branch) are available with the `mcp__builtin_tools__` prefix
 
 WORKFLOW:
 - Review the implementation plan and understand requirements

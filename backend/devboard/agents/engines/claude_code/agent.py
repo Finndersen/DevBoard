@@ -28,6 +28,7 @@ from devboard.agents.engines.claude_code.message_parser import (
     convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
+from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualTool,
     build_virtual_tool_schemas_section,
@@ -72,6 +73,28 @@ def _should_retry_error_result(result: str | None) -> bool:
             return True
 
     return False
+
+
+def _verify_result_message(result: str | None, last_agent_text: str | None) -> None:
+    """Log a warning if ResultMessage.result diverges from the last AssistantMessage text.
+
+    This validates the assumption that ResultMessage is always a duplicate of the
+    preceding AssistantMessage. Divergence indicates the final answer may only be
+    in ResultMessage.result and is being silently dropped.
+    """
+    if not result:
+        return
+    if last_agent_text is None:
+        logfire.warning(
+            "ResultMessage has content but no prior agent TextMessage was seen - final answer may be lost",
+            result_preview=result[:300],
+        )
+    elif result.strip() != last_agent_text.strip():
+        logfire.warning(
+            "ResultMessage.result differs from last agent TextMessage - final answer may be lost",
+            result_preview=result[:300],
+            last_text_preview=last_agent_text[:300],
+        )
 
 
 CLAUDE_COMPACTION_PROMPT = "Your context window will be automatically compacted as it approaches its limit, allowing you to continue working indefinitely from where you left off. Therefore, do not stop tasks early due to token budget concerns. Always be as persistent and autonomous as possible and complete tasks fully, even if the end of your budget is approaching. Never artificially stop any task early regardless of the context remaining."
@@ -215,7 +238,7 @@ class ClaudeCodeAgent(BaseAgent):
             for content_block in message.content:
                 if isinstance(content_block, ToolUseBlock):
                     # Normalize tool name to strip MCP prefix
-                    normalized_tool_name = ClaudeClient.normalize_tool_name(content_block.name)
+                    normalized_tool_name = normalize_tool_name(content_block.name)
 
                     yield ToolCall(
                         tool_call_id=content_block.id,
@@ -299,6 +322,7 @@ class ClaudeCodeAgent(BaseAgent):
             # Capture the stream generator to ensure proper cleanup on exception
             stream_generator = client.stream(user_query=current_message)
             should_retry_api_error = False
+            last_agent_text: str | None = None
             try:
                 # Stream messages from the client
                 async for message in stream_generator:
@@ -322,6 +346,8 @@ class ClaudeCodeAgent(BaseAgent):
                             )
                             # Set flag to retry with "continue" message
                             should_retry_api_error = True
+                        else:
+                            _verify_result_message(message.result, last_agent_text)
                         # ResultMessage is always last - break to check retry flag or exit loop
                         break
 
@@ -340,6 +366,8 @@ class ClaudeCodeAgent(BaseAgent):
 
                     # Convert normal Message events to ConversationEvent
                     for conv_event in self._convert_claude_message_to_events(message):
+                        if isinstance(conv_event, TextMessage) and conv_event.role == MessageRole.AGENT:
+                            last_agent_text = conv_event.text_content
                         yield conv_event
 
                 # Check if we need to retry due to API error
@@ -463,8 +491,10 @@ class ClaudeCodeAgent(BaseAgent):
 
         response_text = text_content.strip()
 
-        # Use unified parser to handle both normal messages and virtual tool calls
-        tool_call_or_text = ClaudeResponseParser.parse_message_content(response_text)
+        if self._virtual_tools:
+            tool_call_or_text = ClaudeResponseParser.parse_message_content(response_text)
+        else:
+            tool_call_or_text = TextResponse(content=response_text)
 
         # Handle each message type
         if isinstance(tool_call_or_text, VirtualToolCall):

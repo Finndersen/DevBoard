@@ -8,6 +8,7 @@ from claude_agent_sdk import ToolUseBlock
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeToolContent
+from devboard.agents.engines.claude_code.utils import normalize_tool_name
 
 
 @pytest.fixture
@@ -227,9 +228,9 @@ class TestConcurrentExecution:
     @pytest.mark.asyncio
     async def test_normalize_tool_name(self, client_with_tools: ClaudeClient) -> None:
         """Test normalizing tool names - only strips builtin_tools prefix."""
-        assert ClaudeClient.normalize_tool_name("mcp__builtin_tools__test_tool") == "test_tool"
-        assert ClaudeClient.normalize_tool_name("mcp__other__my_tool") == "mcp__other__my_tool"
-        assert ClaudeClient.normalize_tool_name("test_tool") == "test_tool"
+        assert normalize_tool_name("mcp__builtin_tools__test_tool") == "test_tool"
+        assert normalize_tool_name("mcp__other__my_tool") == "mcp__other__my_tool"
+        assert normalize_tool_name("test_tool") == "test_tool"
 
     @pytest.mark.asyncio
     async def test_concurrent_execution_disabled(self, mock_tool: Tool) -> None:

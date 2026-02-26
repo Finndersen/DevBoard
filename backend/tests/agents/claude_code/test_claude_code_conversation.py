@@ -12,7 +12,8 @@ from devboard.agents.engines.claude_code import (
     ClaudeCodeAgentExecutionService,
     ClaudeCodeConversationHistoryService,
 )
-from devboard.agents.events import MessageRole, SystemEventType, TextMessage
+from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
+from devboard.agents.events import MessageRole, SystemEventType, TextMessage, ToolCall
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories.conversation import ConversationRepository
@@ -207,3 +208,58 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         # Verify the session ID was reset
         db_session.refresh(conversation)
         assert conversation.external_session_id is None
+
+
+class TestSessionMessagesToEvents:
+    """Test _session_messages_to_events tool name normalization."""
+
+    @pytest.fixture
+    def conversation_repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    def _make_session_message(self, tool_name: str) -> SessionMessage:
+        return SessionMessage(
+            uuid="test-uuid",
+            timestamp=datetime.datetime.now(datetime.UTC),
+            role=SessionMessageRole.ASSISTANT,
+            content=[{"type": "tool_use", "id": "tool-call-1", "name": tool_name, "input": {"arg": "value"}}],
+            line_num=1,
+            is_sidechain=False,
+        )
+
+    def test_tool_use_block_normalizes_mcp_prefix(self, conversation_repo, db_session):
+        conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=3,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id=None,
+            is_active=True,
+        )
+        db_session.commit()
+
+        history_service = ClaudeCodeConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+
+        builtin_msg = self._make_session_message("mcp__builtin_tools__render_html")
+        external_msg = self._make_session_message("mcp__github__create_issue")
+
+        events = history_service._session_messages_to_events([builtin_msg, external_msg])
+
+        assert len(events) == 2
+        assert isinstance(events[0], ToolCall)
+        assert events[0] == ToolCall(
+            tool_call_id="tool-call-1",
+            tool_name="render_html",
+            tool_args={"arg": "value"},
+            timestamp=builtin_msg.timestamp,
+        )
+        assert isinstance(events[1], ToolCall)
+        assert events[1] == ToolCall(
+            tool_call_id="tool-call-1",
+            tool_name="mcp__github__create_issue",
+            tool_args={"arg": "value"},
+            timestamp=external_msg.timestamp,
+        )

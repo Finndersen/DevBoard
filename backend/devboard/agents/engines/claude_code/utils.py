@@ -15,6 +15,9 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import StreamEvent
 
+# MCP server name for internal PydanticAI tools
+BUILTIN_TOOLS_MCP_NAME = "builtin_tools"
+
 
 def load_env_from_settings() -> dict[str, str]:
     """Load environment variables from ~/.claude/settings.json.
@@ -95,3 +98,32 @@ def describe_message(message: Message) -> str:
 
     else:
         return f"Unknown message type: {type(message).__name__}"
+
+
+def normalize_tool_name(tool_name: str) -> str:
+    """Normalize tool name by stripping MCP prefix for internal tools only.
+
+    Only internal PydanticAI tools (prefixed with mcp__builtin_tools__) are normalized.
+    External MCP server tools keep their full prefixed names since the application
+    may not have built-in handling for them.
+
+    Args:
+        tool_name: Raw tool name (possibly with MCP prefix)
+
+    Returns:
+        Normalized tool name with builtin_tools prefix removed if present
+
+    Examples:
+        >>> normalize_tool_name("mcp__builtin_tools__render_html")
+        "render_html"
+        >>> normalize_tool_name("mcp__builtin_tools__my__custom__tool")
+        "my__custom__tool"
+        >>> normalize_tool_name("mcp__github__create_issue")
+        "mcp__github__create_issue"  # External tools keep prefix
+        >>> normalize_tool_name("render_html")
+        "render_html"
+    """
+    prefix = f"mcp__{BUILTIN_TOOLS_MCP_NAME}__"
+    if tool_name.startswith(prefix):
+        return tool_name.replace(prefix, "", 1)
+    return tool_name

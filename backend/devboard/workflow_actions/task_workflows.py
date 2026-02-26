@@ -197,14 +197,14 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
     KEY = "task.rebase_branch"
     DESCRIPTION = "Rebase task branch onto base branch"
 
-    IMPLEMENTING_PROMPT = """Use the rebase_task_branch tool to rebase this task's feature branch onto the base branch.
+    IMPLEMENTING_PROMPT = """Use the mcp__builtin_tools__rebase_task_branch tool to rebase this task's feature branch onto the base branch.
 
 The tool is idempotent - if a rebase is already in progress, it will continue it.
 If you encounter merge conflicts:
 1. The tool will tell you which files have conflicts
 2. Edit those files to resolve the conflicts (remove conflict markers, keep correct code)
 3. Stage the resolved files with `git add`
-4. Call the rebase_task_branch tool again to continue
+4. Call the mcp__builtin_tools__rebase_task_branch tool again to continue
 
 Keep using the tool until the rebase completes successfully."""
 
@@ -336,7 +336,7 @@ class ApproveAndMergeAction(TaskWorkflowAction):
 ## Instructions
 If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
 
-Once all changes are committed, use the complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
+Once all changes are committed, use the mcp__builtin_tools__complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs
@@ -391,7 +391,7 @@ class ApproveAndCreatePRAction(TaskWorkflowAction):
 ## Instructions
 If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
 
-Once all changes are committed, use the create_pull_request tool to create a GitHub PR.
+Once all changes are committed, use the mcp__builtin_tools__create_pull_request tool to create a GitHub PR.
 
 When creating the PR:
 - Use a clear, descriptive title that summarizes what this task accomplishes
@@ -470,7 +470,7 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
 ## Instructions
 If there are uncommitted changes, create appropriate commit(s) with clear commit messages and push them first.
 
-Once all changes are committed and pushed, use the merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
+Once all changes are committed and pushed, use the mcp__builtin_tools__merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs

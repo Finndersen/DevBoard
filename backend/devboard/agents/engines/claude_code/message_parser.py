@@ -15,7 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
 
-from devboard.agents.engines.claude_code.client import ClaudeClient
+from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolCallRequest
 
 
@@ -112,7 +112,7 @@ def convert_virtual_tool_call_to_events(
     events: list[ConversationEvent] = []
 
     # Normalize tool name to strip MCP prefix
-    normalized_tool_name = ClaudeClient.normalize_tool_name(tool_call.tool_name)
+    normalized_tool_name = normalize_tool_name(tool_call.tool_name)
 
     # Generate preamble message if present
     if tool_call.preamble:
@@ -166,84 +166,66 @@ class ClaudeResponseParser:
         re.DOTALL,
     )
 
-    # Tool call pattern with optional preamble and postamble
-    # Captures:
-    # - Group 1 (optional): Preamble text before the tool call
-    # - Group 2: The JSON content (must contain "tool_name" field somewhere)
-    # - Group 3 (optional): Postamble text after the tool call
-    # This pattern looks for JSON objects in code blocks or plain text
-    TOOL_CALL_PATTERN = re.compile(
-        r"^(.*?)?"  # Optional preamble (non-greedy)
-        r"(?:```(?:json)?\s*\n)?"  # Optional code block start (non-capturing)
-        r'(\{.*?"tool_name":.*\})'  # JSON object containing "tool_name" field
-        r"(?:\n```)?"  # Optional code block end (non-capturing)
-        r"(.*?)$",  # Optional postamble (non-greedy)
-        re.DOTALL,
-    )
-
     @classmethod
     def _detect_virtual_tool_call(cls, text: str) -> VirtualToolCall | None:
         """Detect and parse a virtual tool call with optional preamble and postamble.
 
-        Uses regex to match tool calls in various formats:
+        Uses json.JSONDecoder.raw_decode() for precise JSON extraction, correctly
+        handling nested braces without over-consuming surrounding content.
+
+        Supports:
         - Plain JSON: {"tool_name": "...", "arguments": {...}}
-        - JSON with preamble: Some text\n{"tool_name": ...}
-        - JSON with postamble: {"tool_name": ...}\nSome text
-        - JSON with preamble and postamble: Some text\n{"tool_name": ...}\nMore text
-        - JSON in code block: ```json\n{"tool_name": ...}\n```
-        - JSON in code block with preamble: Some text\n```json\n{"tool_name": ...}\n```
-        - JSON in code block with postamble: ```json\n{"tool_name": ...}\n```\nSome text
+        - JSON with preamble: Some text\\n{"tool_name": ...}
+        - JSON with postamble: {"tool_name": ...}\\nSome text
+        - JSON in code block: ```json\\n{"tool_name": ...}\\n```
+        - All combinations of the above
 
         Args:
             text: Text potentially containing a tool call
 
         Returns:
-            VirtualToolCall (valid or invalid) if JSON tool call detected, None otherwise
+            VirtualToolCall (valid or invalid) if a JSON tool call is detected, None otherwise
         """
         text = text.strip()
 
-        # Try regex pattern first (handles all formats with preamble and postamble)
-        match = cls.TOOL_CALL_PATTERN.match(text)
-        if not match:
-            # No match - not a tool call
+        # Match optional code fence: preamble before fence, JSON inside, postamble after
+        fence_pattern = re.compile(r"^(.*?)```(?:json)?\s*\n([\s\S]*?)\n```([\s\S]*)$", re.DOTALL)
+        fence_match = fence_pattern.match(text)
+
+        if fence_match:
+            preamble_raw = fence_match.group(1).strip()
+            json_region = fence_match.group(2)
+            postamble_raw = fence_match.group(3).strip()
+        else:
+            preamble_raw = ""
+            json_region = text
+            postamble_raw = ""
+
+        brace_pos = json_region.find("{")
+        if brace_pos == -1:
             return None
 
-        # Extract preamble if present
-        preamble = stripped_text if (stripped_text := match.group(1).strip()) else None
-
-        # Extract JSON content
-        json_str = match.group(2).strip()
-
-        # Extract postamble if present
-        postamble = stripped_text if (stripped_text := match.group(3).strip()) else None
+        # raw_decode extracts exactly one JSON value starting at brace_pos,
+        # correctly handling any nesting depth without over-consuming
         try:
-            json_data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            # Malformed JSON in what appears to be a tool call - return invalid tool call
-            return VirtualToolCall(
-                tool_name="invalid_tool_call",
-                arguments={},
-                valid=False,
-                validation_error=f"Malformed JSON in tool call: {str(e)}",
-                preamble=preamble,
-                postamble=postamble,
-            )
+            json_data, end_pos = json.JSONDecoder().raw_decode(json_region, brace_pos)
+        except json.JSONDecodeError:
+            return None
 
-        # Ensure we have a dict
-        if not isinstance(json_data, dict):
-            return VirtualToolCall(
-                tool_name="invalid_tool_call",
-                arguments={},
-                valid=False,
-                validation_error="Tool call JSON must be an object, not an array or primitive",
-                preamble=preamble,
-                postamble=postamble,
-            )
+        if not isinstance(json_data, dict) or "tool_name" not in json_data:
+            return None
 
-        # Try to parse as ToolCall (validates tool_name and arguments structure)
+        # Build preamble from text before '{' in json_region, plus any fence preamble
+        pre_brace = json_region[:brace_pos].strip()
+        if fence_match:
+            preamble = "\n\n".join(filter(None, [preamble_raw, pre_brace])) or None
+            postamble = postamble_raw or None
+        else:
+            preamble = pre_brace or None
+            postamble = json_region[end_pos:].strip() or None
+
         try:
             tool_call = VirtualToolCallSchema.model_validate(json_data)
-            # Convert to VirtualToolCall with preamble and postamble
             return VirtualToolCall(
                 tool_name=tool_call.tool_name,
                 arguments=tool_call.arguments,
@@ -252,7 +234,6 @@ class ClaudeResponseParser:
                 postamble=postamble,
             )
         except ValidationError as e:
-            # Return invalid tool call with preamble and postamble
             tool_name = json_data.get("tool_name")
             error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
             return VirtualToolCall(

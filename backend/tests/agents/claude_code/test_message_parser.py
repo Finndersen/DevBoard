@@ -133,6 +133,7 @@ First, I'll update the task specification to remove the duplication."""
         assert isinstance(parsed, VirtualToolCall)
         assert parsed.valid is False
         assert parsed.preamble == "I'll fix the issues now."
+        assert parsed.validation_error is not None
         assert "Invalid tool call format" in parsed.validation_error
 
     def test_multiline_preamble(self):
@@ -290,6 +291,7 @@ Let me know if you need changes."""
         assert parsed.valid is False
         assert parsed.preamble is None
         assert parsed.postamble == "Let me know if you need changes."
+        assert parsed.validation_error is not None
         assert "Invalid tool call format" in parsed.validation_error
 
     def test_invalid_tool_call_with_preamble_and_postamble(self):
@@ -310,6 +312,7 @@ This might need a retry."""
         assert parsed.valid is False
         assert parsed.preamble == "I'll fix this now."
         assert parsed.postamble == "This might need a retry."
+        assert parsed.validation_error is not None
         assert "Invalid tool call format" in parsed.validation_error
 
     def test_empty_postamble_not_set(self):
@@ -360,6 +363,35 @@ class TestTextResponseWithoutToolCall:
 def hello():
     print("Hello, world!")
 ```"""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+    def test_long_markdown_with_tool_name_in_explanatory_text(self):
+        """Test that a long markdown response describing tool_name in code examples is not a false positive."""
+        text = """The virtual tool system uses a JSON format to communicate tool calls. Here is an example:
+
+```json
+{"tool_name": "<tool_name>", "arguments": {...}}
+```
+
+When the agent wants to call a tool, it outputs this JSON. The backend parses the response
+and extracts the tool name and arguments. If the response contains `"tool_name":` in an
+explanatory context, the parser must not treat it as an actual tool call.
+
+This is a detailed explanation of how the system works, with many closing braces: } } }
+The above braces are just part of the explanation text."""
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+    def test_placeholder_notation_not_detected_as_tool_call(self):
+        """Test that placeholder JSON notation with {...} is not detected as a tool call."""
+        text = '{"tool_name": "<tool_name>", "arguments": {...}}'
 
         parsed = ClaudeResponseParser.parse_message_content(text)
 
@@ -457,30 +489,23 @@ class TestDetectVirtualToolCall:
         assert result.valid is False
         assert result.validation_error is not None
 
-    def test_returns_invalid_tool_call_for_malformed_json(self):
-        """Test that malformed JSON in a tool call attempt returns invalid VirtualToolCall."""
+    def test_returns_none_for_malformed_json(self):
+        """Test that malformed JSON is not detected as a tool call."""
         text = '{"tool_name": "test_tool", "arguments": {missing quote}}'
 
         result = ClaudeResponseParser._detect_virtual_tool_call(text)
 
-        assert isinstance(result, VirtualToolCall)
-        assert result.tool_name == "invalid_tool_call"
-        assert result.valid is False
-        assert "Malformed JSON" in result.validation_error
+        assert result is None
 
-    def test_returns_invalid_tool_call_for_malformed_json_with_preamble(self):
-        """Test that malformed JSON with preamble returns invalid VirtualToolCall with preamble."""
+    def test_returns_none_for_malformed_json_with_preamble(self):
+        """Test that malformed JSON with preamble is not detected as a tool call."""
         text = """Let me update the specification.
 
 {"tool_name": "edit_task", "arguments": {missing: "quote"}}"""
 
         result = ClaudeResponseParser._detect_virtual_tool_call(text)
 
-        assert isinstance(result, VirtualToolCall)
-        assert result.tool_name == "invalid_tool_call"
-        assert result.valid is False
-        assert result.preamble == "Let me update the specification."
-        assert "Malformed JSON" in result.validation_error
+        assert result is None
 
     def test_returns_invalid_tool_call_for_json_array_in_tool_call_format(self):
         """Test that JSON array in tool call format returns invalid VirtualToolCall."""

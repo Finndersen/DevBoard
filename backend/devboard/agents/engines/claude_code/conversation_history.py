@@ -17,6 +17,7 @@ from devboard.agents.engines.claude_code.session import (
     SessionMessage,
     SessionMessageRole,
 )
+from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.events import (
     ConversationEvent,
     MessageRole,
@@ -157,7 +158,7 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
                     events.append(
                         ToolCall(
                             tool_call_id=content_block["id"],
-                            tool_name=content_block["name"],
+                            tool_name=normalize_tool_name(content_block["name"]),
                             tool_args=content_block["input"],
                             timestamp=session_msg.timestamp,
                         )

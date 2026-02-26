@@ -104,8 +104,6 @@ def setup_mock_client(mock_client_class, messages_to_yield):
     Returns:
         The mock client instance
     """
-    from devboard.agents.engines.claude_code.client import ClaudeClient
-
     mock_client = AsyncMock()
 
     # Ensure messages_to_yield is a list
@@ -118,9 +116,6 @@ def setup_mock_client(mock_client_class, messages_to_yield):
 
     mock_client.stream = mock_stream
     mock_client_class.return_value = mock_client
-
-    # Preserve the normalize_tool_name classmethod from the real class
-    mock_client_class.normalize_tool_name = ClaudeClient.normalize_tool_name
 
     return mock_client
 
@@ -137,14 +132,9 @@ def setup_mock_client_with_callback(mock_client_class, stream_callback):
     Returns:
         The mock client instance
     """
-    from devboard.agents.engines.claude_code.client import ClaudeClient
-
     mock_client = AsyncMock()
     mock_client.stream = stream_callback
     mock_client_class.return_value = mock_client
-
-    # Preserve the normalize_tool_name classmethod from the real class
-    mock_client_class.normalize_tool_name = ClaudeClient.normalize_tool_name
 
     return mock_client
 
