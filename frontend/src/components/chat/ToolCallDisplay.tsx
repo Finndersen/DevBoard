@@ -4,7 +4,7 @@ import type { ToolCall, ToolResult } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
-import { getRichResultRenderer, tryParseToolResult } from './toolResultRenderers'
+import { getRichResultRenderer, tryParseToolResult, getCustomToolDisplay } from './toolResultRenderers'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
@@ -12,7 +12,7 @@ interface ToolCallDisplayProps {
   codebaseLocalPath?: string
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
+function StandardToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const hasResult = toolResult !== undefined
   const isError = toolResult?.is_error || false
@@ -160,4 +160,13 @@ export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPat
         </button>
     </div>
   )
+}
+
+export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
+  const CustomDisplay = getCustomToolDisplay(toolCall.tool_name)
+  if (CustomDisplay) {
+    return <CustomDisplay toolCall={toolCall} toolResult={toolResult} />
+  }
+
+  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} codebaseLocalPath={codebaseLocalPath} />
 }

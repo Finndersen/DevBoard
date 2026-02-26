@@ -19,7 +19,7 @@ export default function HtmlRenderModal({ isOpen, onClose, title, html }: HtmlRe
         srcDoc={html}
         sandbox="allow-scripts"
         title={title}
-        className="w-full h-full border-none"
+        className="w-full h-[75vh] border-none"
       />
     </Modal>
   )

@@ -668,4 +668,67 @@ describe('ToolCallDisplay', () => {
       expect(screen.getByText('{"some":"data"}')).toBeInTheDocument()
     })
   })
+
+  describe('Custom Tool Displays', () => {
+    const renderHtmlToolCall: ToolCall = {
+      event_type: 'tool_call',
+      tool_call_id: 'call_render_html',
+      tool_name: 'render_html',
+      tool_args: {
+        title: 'My Chart',
+        html: '<html><body>Hello</body></html>',
+      },
+      timestamp: '2024-01-01T10:00:00Z',
+    }
+
+    const renderHtmlResult: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_render_html',
+      result_content: 'HTML rendered successfully',
+      is_error: false,
+      timestamp: '2024-01-01T10:00:05Z',
+    }
+
+    it('renders render_html as a standalone button (not expandable) when complete', () => {
+      render(<ToolCallDisplay toolCall={renderHtmlToolCall} toolResult={renderHtmlResult} />)
+
+      expect(screen.getByRole('button')).toBeInTheDocument()
+      expect(screen.getByText('My Chart')).toBeInTheDocument()
+      // Should NOT show standard expandable UI elements
+      expect(screen.queryByText('Arguments:')).not.toBeInTheDocument()
+      expect(screen.queryByText('Result:')).not.toBeInTheDocument()
+      expect(screen.queryByText('Running...')).not.toBeInTheDocument()
+    })
+
+    it('shows loading indicator for render_html while running', () => {
+      render(<ToolCallDisplay toolCall={renderHtmlToolCall} />)
+
+      expect(screen.getByText('Generating HTML...')).toBeInTheDocument()
+      expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('shows error card for render_html on error', () => {
+      const errorResult: ToolResult = {
+        ...renderHtmlResult,
+        is_error: true,
+        result_content: 'Something went wrong',
+      }
+
+      render(<ToolCallDisplay toolCall={renderHtmlToolCall} toolResult={errorResult} />)
+
+      expect(screen.getByText('Failed to render HTML')).toBeInTheDocument()
+      expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('does not expand when render_html button is clicked', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={renderHtmlToolCall} toolResult={renderHtmlResult} />)
+
+      await user.click(screen.getByRole('button'))
+
+      // Standard expandable content should never appear
+      expect(screen.queryByText('Arguments:')).not.toBeInTheDocument()
+      expect(screen.queryByText('Result:')).not.toBeInTheDocument()
+    })
+  })
 })

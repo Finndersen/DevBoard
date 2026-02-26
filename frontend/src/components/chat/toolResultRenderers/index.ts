@@ -1,16 +1,16 @@
 /**
- * Rich Result Renderer Registry
+ * Tool Result Renderer Registry
  *
- * Maps tool names to custom React components that render tool results
- * in interactive, user-friendly formats instead of plain text.
+ * Maps tool names to custom React components that render tool calls or results
+ * in interactive, user-friendly formats instead of the standard collapsible display.
  */
 
-import type { ComponentType } from 'react'
+import type { ComponentType, JSX } from 'react'
 
-import type { ToolCall } from '../../../lib/api'
+import type { ToolCall, ToolResult } from '../../../lib/api'
 
 import CreateTaskResultRenderer from './CreateTaskResultRenderer'
-import RenderHtmlResultRenderer from './RenderHtmlResultRenderer'
+import RenderHtmlToolDisplay from './RenderHtmlToolDisplay'
 
 /**
  * Props passed to all rich result renderer components.
@@ -33,7 +33,6 @@ export type RichResultRenderer = ComponentType<RichResultRendererProps>
  */
 const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
-  render_html: RenderHtmlResultRenderer,
 }
 
 /**
@@ -58,4 +57,36 @@ export function tryParseToolResult(resultContent: string): unknown | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Props passed to custom tool display components.
+ * These completely replace the standard ToolCallDisplay for specific tools.
+ */
+export interface CustomToolDisplayProps {
+  toolCall: ToolCall
+  toolResult?: ToolResult
+}
+
+/**
+ * A React component that fully replaces the standard ToolCallDisplay for a tool.
+ */
+export type CustomToolDisplay = (props: CustomToolDisplayProps) => JSX.Element
+
+/**
+ * Registry mapping tool names to custom display components that replace
+ * the standard collapsible ToolCallDisplay entirely.
+ */
+const customToolDisplays: Record<string, CustomToolDisplay> = {
+  render_html: RenderHtmlToolDisplay,
+}
+
+/**
+ * Look up a custom display component for a tool by name.
+ *
+ * @param toolName - The name of the tool
+ * @returns The custom display component if one exists, or null to use standard display
+ */
+export function getCustomToolDisplay(toolName: string): CustomToolDisplay | null {
+  return customToolDisplays[toolName] ?? null
 }

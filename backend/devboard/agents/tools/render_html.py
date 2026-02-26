@@ -1,7 +1,5 @@
 """Tool for rendering HTML content in the frontend."""
 
-import json
-
 from pydantic_ai import Tool
 
 
@@ -37,10 +35,7 @@ def create_render_html_tool() -> Tool:
         Args:
             title: A short descriptive title for the content (shown in modal header).
             html: Complete self-contained HTML document to render.
-
-        Returns:
-            JSON string containing the title and HTML for the frontend renderer.
         """
-        return json.dumps({"title": title, "html": html})
+        return "HTML rendered successfully"
 
     return Tool(function=render_html, name="render_html")
