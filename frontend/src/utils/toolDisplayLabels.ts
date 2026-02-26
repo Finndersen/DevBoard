@@ -11,17 +11,10 @@ export interface ToolDisplayLabel {
 
 /**
  * Strip MCP prefixes from tool names for cleaner display.
- * - Removes `mcp__builtin_tools__` prefix completely
- * - Removes only `mcp__` prefix for other MCP servers (keeps server name for context)
+ * Removes only `mcp__` prefix for external MCP servers (keeps server name for context).
+ * e.g., mcp__github__get_repo -> github__get_repo
  */
 export function cleanToolName(toolName: string): string {
-  // Remove mcp__builtin_tools__ prefix completely (these are standard tools)
-  if (toolName.startsWith('mcp__builtin_tools__')) {
-    return toolName.replace('mcp__builtin_tools__', '')
-  }
-
-  // For other MCP servers, only remove the `mcp__` prefix but keep the server name
-  // e.g., mcp__github__get_repo -> github__get_repo
   if (toolName.startsWith('mcp__')) {
     return toolName.replace('mcp__', '')
   }
