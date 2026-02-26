@@ -22,6 +22,12 @@
 
 **edit_project_specification**: Find-and-replace in project spec. Approval required. Params: `old_string`, `new_string`. Used by: ProjectQARole
 
+### Visualization
+
+**render_html**: Render HTML content in a sandboxed iframe modal. No approval (display-only). Params: `title` (string), `html` (complete HTML document). Used by: ProjectQARole
+
+Enables agents to generate rich visualizations like dashboards, charts, styled tables, and interactive diagrams. The HTML is rendered in a sandboxed iframe that can execute JavaScript and load external CDN libraries (e.g., Chart.js, D3.js, Plotly) but cannot access the parent page (no `allow-same-origin` sandbox policy).
+
 ### Task Query Tools
 
 **list_tasks**: List tasks belonging to the current project with optional filtering. No approval (read-only). Params: `status_filter` (list of status values), `created_after` (ISO date), `created_before` (ISO date), `codebase_name`. Used by: ProjectQARole
@@ -99,7 +105,7 @@
 
 ## Tool Registration by Role
 
-**ProjectQARole**: edit_project_specification, list_tasks, view_task_details, create_task, search_codebase, read_codebase_files
+**ProjectQARole**: edit_project_specification, render_html, list_tasks, view_task_details, create_task, search_codebase, read_codebase_files
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 

@@ -4,7 +4,11 @@ from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
-from devboard.agents.tools import create_document_edit_tool, create_set_document_content_tool
+from devboard.agents.tools import (
+    create_document_edit_tool,
+    create_render_html_tool,
+    create_set_document_content_tool,
+)
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.agents.tools.task_query_tools import (
     create_create_task_tool,
@@ -24,7 +28,13 @@ Your role is to assist a developer working on a software project. This includes:
 
 You will have access to the project specification document, which you are able to edit using the provided tools.
 
-You will also have access to various context sources related to the project, and should use the available tools to query these context sources to obtain the information required to answer the user's questions, or complete tasks
+You will also have access to various context sources related to the project, and should use the available tools to query these context sources to obtain the information required to answer the user's questions, or complete tasks.
+
+RICH VISUALIZATIONS:
+- Use the `render_html` tool to generate rich visualizations, dashboards, charts, styled tables, or other interactive read-only content when the user requests something visual or when the content would benefit significantly from rich formatting beyond Markdown.
+- The HTML is rendered in a sandboxed iframe that can execute JavaScript and load external libraries from CDNs (e.g., Chart.js, D3.js, Plotly) but cannot access the parent page.
+- Provide a complete, self-contained HTML document including <html>, <head>, <style>, and <script> tags as needed.
+- This is ideal for project status dashboards, progress charts, architecture diagrams, interactive data tables, or any visual representation of project data.
 
 BEHAVIOUR GUIDELINES:
 - When the user is discussing a change to the project specification or feature, reflect and elaborate on the ideas and ask clarifying questions to arrive at a mutual understanding, then propose to make appropriate updates to the project specification.
@@ -105,6 +115,8 @@ class ProjectQAAgentRole(AgentRole):
             create_list_tasks_tool(self.project, self.task_service),
             create_view_task_details_tool(self.project, self.task_service),
             create_create_task_tool(self.project, self.task_service, self.custom_field_definitions),
+            # HTML rendering tool
+            create_render_html_tool(),
         ]
 
         # Add codebase investigation tool if project has codebases

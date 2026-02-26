@@ -10,6 +10,7 @@ import type { ComponentType } from 'react'
 import type { ToolCall } from '../../../lib/api'
 
 import CreateTaskResultRenderer from './CreateTaskResultRenderer'
+import RenderHtmlResultRenderer from './RenderHtmlResultRenderer'
 
 /**
  * Props passed to all rich result renderer components.
@@ -32,6 +33,7 @@ export type RichResultRenderer = ComponentType<RichResultRendererProps>
  */
 const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
+  render_html: RenderHtmlResultRenderer,
 }
 
 /**
