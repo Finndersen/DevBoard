@@ -225,11 +225,11 @@ class TestConcurrentExecution:
         assert "tool_1" not in client_with_tools._tool_execution_cache
 
     @pytest.mark.asyncio
-    async def test_get_original_tool_name_from_mcp_tool(self, client_with_tools: ClaudeClient) -> None:
-        """Test extracting original tool name from MCP tool name."""
-        assert ClaudeClient._get_original_tool_name_from_mcp_tool("mcp__builtin_tools__test_tool") == "test_tool"
-        assert ClaudeClient._get_original_tool_name_from_mcp_tool("mcp__other__my_tool") == "my_tool"
-        assert ClaudeClient._get_original_tool_name_from_mcp_tool("test_tool") == "test_tool"
+    async def test_normalize_tool_name(self, client_with_tools: ClaudeClient) -> None:
+        """Test normalizing tool names - only strips builtin_tools prefix."""
+        assert ClaudeClient.normalize_tool_name("mcp__builtin_tools__test_tool") == "test_tool"
+        assert ClaudeClient.normalize_tool_name("mcp__other__my_tool") == "mcp__other__my_tool"
+        assert ClaudeClient.normalize_tool_name("test_tool") == "test_tool"
 
     @pytest.mark.asyncio
     async def test_concurrent_execution_disabled(self, mock_tool: Tool) -> None:

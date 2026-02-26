@@ -17,7 +17,7 @@ from mcp.types import CallToolRequest, CallToolRequestParams
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
-from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
+from devboard.agents.engines.claude_code.client import BUILTIN_TOOLS_MCP_NAME, ClaudeClient, ClaudeCodeResult
 
 
 @pytest.fixture
@@ -64,9 +64,9 @@ class TestClaudeClient:
 
         agent = ClaudeClient(tools=[tool], load_settings=False)
         assert agent.options.mcp_servers is not None
-        assert "builtin_tools" in agent.options.mcp_servers
+        assert BUILTIN_TOOLS_MCP_NAME in agent.options.mcp_servers
         assert len(agent.options.allowed_tools) == 1
-        assert agent.options.allowed_tools[0] == "mcp__builtin_tools__custom_tool"
+        assert agent.options.allowed_tools[0] == f"mcp__{BUILTIN_TOOLS_MCP_NAME}__custom_tool"
         assert agent.options.disallowed_tools is not None
 
     @pytest.mark.asyncio
