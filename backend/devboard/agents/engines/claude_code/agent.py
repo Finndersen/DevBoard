@@ -75,25 +75,20 @@ def _should_retry_error_result(result: str | None) -> bool:
     return False
 
 
-def _verify_result_message(result: str | None, last_agent_text: str | None) -> None:
-    """Log a warning if ResultMessage.result diverges from the last AssistantMessage text.
-
-    This validates the assumption that ResultMessage is always a duplicate of the
-    preceding AssistantMessage. Divergence indicates the final answer may only be
-    in ResultMessage.result and is being silently dropped.
-    """
+def _verify_result_message(result: str | None, last_assistant_text: str | None) -> None:
+    """Log an error if ResultMessage.result diverges from the last AssistantMessage text."""
     if not result:
         return
-    if last_agent_text is None:
-        logfire.warning(
-            "ResultMessage has content but no prior agent TextMessage was seen - final answer may be lost",
+    if last_assistant_text is None:
+        logfire.error(
+            "ResultMessage has content but no prior AssistantMessage text was seen - final answer may be lost",
             result_preview=result[:300],
         )
-    elif result.strip() != last_agent_text.strip():
-        logfire.warning(
-            "ResultMessage.result differs from last agent TextMessage - final answer may be lost",
+    elif result.strip() != last_assistant_text.strip():
+        logfire.error(
+            "ResultMessage.result differs from last AssistantMessage text - final answer may be lost",
             result_preview=result[:300],
-            last_text_preview=last_agent_text[:300],
+            last_text_preview=last_assistant_text[:300],
         )
 
 
@@ -250,11 +245,8 @@ class ClaudeCodeAgent(BaseAgent):
                     # Parse text content to handle both normal messages and virtual tool calls
                     yield from self._parse_claude_message_text(content_block.text)
                 elif isinstance(content_block, ThinkingBlock):
-                    yield TextMessage(
-                        role=MessageRole.AGENT,
-                        text_content="Thinking: " + content_block.thinking,
-                        timestamp=timestamp,
-                    )
+                    # Thinking blocks are ignored for now
+                    pass
         # Extract tool results from UserMessage if present
         elif isinstance(message, UserMessage):
             # UserMessage content can be str or list[ContentBlock]
@@ -322,7 +314,7 @@ class ClaudeCodeAgent(BaseAgent):
             # Capture the stream generator to ensure proper cleanup on exception
             stream_generator = client.stream(user_query=current_message)
             should_retry_api_error = False
-            last_agent_text: str | None = None
+            last_assistant_text: str | None = None
             try:
                 # Stream messages from the client
                 async for message in stream_generator:
@@ -347,7 +339,7 @@ class ClaudeCodeAgent(BaseAgent):
                             # Set flag to retry with "continue" message
                             should_retry_api_error = True
                         else:
-                            _verify_result_message(message.result, last_agent_text)
+                            _verify_result_message(message.result, last_assistant_text)
                         # ResultMessage is always last - break to check retry flag or exit loop
                         break
 
@@ -364,10 +356,14 @@ class ClaudeCodeAgent(BaseAgent):
                             )
                         continue
 
+                    # Track raw AssistantMessage text for ResultMessage verification
+                    if isinstance(message, AssistantMessage):
+                        text_parts = [block.text for block in message.content if isinstance(block, TextBlock)]
+                        if text_parts:
+                            last_assistant_text = "\n".join(text_parts)
+
                     # Convert normal Message events to ConversationEvent
                     for conv_event in self._convert_claude_message_to_events(message):
-                        if isinstance(conv_event, TextMessage) and conv_event.role == MessageRole.AGENT:
-                            last_agent_text = conv_event.text_content
                         yield conv_event
 
                 # Check if we need to retry due to API error

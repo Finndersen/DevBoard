@@ -230,9 +230,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const statusColumns = ['planning', 'implementing', 'reviewing', 'complete']
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="h-full flex flex-col">
       {/* Navigation Tabs with Project Name and Actions */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Left: Navigation Tabs */}
           <nav className="-mb-px flex space-x-8 shrink-0">
@@ -256,24 +256,24 @@ function ProjectDetail({ id }: ProjectDetailProps) {
             ))}
           </nav>
 
-          {/* Center: Project Name and Description */}
-          <div className="flex-1 min-w-0 text-center py-1">
-            <h1 className={`text-xl font-bold ${textColors.primary} truncate`}>
+          {/* Center: Project Name and Description (inline) */}
+          <div className="flex-1 min-w-0 flex items-center justify-center gap-2 py-1">
+            <h1 className={`text-xl font-bold ${textColors.primary} truncate shrink-0`}>
               {project?.name}
             </h1>
 
-            {/* Description - View Mode */}
             {!descriptionField.isEditing ? (
               <div
-                className="flex items-center justify-center gap-1 group cursor-pointer mt-0.5"
+                className="flex items-center gap-1 group cursor-pointer min-w-0"
                 onClick={descriptionField.startEditing}
               >
+                <span className={`text-sm ${textColors.secondary} shrink-0`}>&mdash;</span>
                 {project?.description ? (
                   <p className={`text-sm ${textColors.secondary} truncate`}>
                     {project.description}
                   </p>
                 ) : (
-                  <p className={`text-sm ${textColors.secondary} italic opacity-60`}>
+                  <p className={`text-sm ${textColors.secondary} italic opacity-60 truncate`}>
                     Add a description...
                   </p>
                 )}
@@ -288,8 +288,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                 </Button>
               </div>
             ) : (
-              /* Edit Mode */
-              <div className="flex items-center justify-center gap-2 mt-1">
+              <div className="flex items-center gap-2">
                 <Input
                   value={descriptionField.editedValue}
                   onChange={(e) => descriptionField.setEditedValue(e.target.value)}
@@ -324,7 +323,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               </div>
             )}
             {descriptionField.error && (
-              <p className="text-xs text-red-500 mt-1">{descriptionField.error}</p>
+              <p className="text-xs text-red-500">{descriptionField.error}</p>
             )}
           </div>
 
@@ -374,13 +373,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       )}
 
       {activeTab === 'editor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 h-[calc(100vh-200px)] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 flex-1 min-h-0 overflow-hidden">
           {/* Left Side - Project Specification */}
           <div className="flex flex-col overflow-hidden">
             {/* Specification Document Section */}
             <Card padding="xs" className="h-full flex flex-col overflow-hidden">
               <div className="flex items-center justify-between mb-2 flex-shrink-0">
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Specification</h3>
+                <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Context</h3>
                 {!specificationField.isEditing ? (
                   <Button
                     onClick={specificationField.startEditing}
@@ -426,7 +425,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                     {specificationDoc?.content ? (
                       <Markdown>{specificationDoc.content}</Markdown>
                     ) : (
-                      <p className="text-gray-500 dark:text-gray-400 italic">No project specification provided. Click Edit to add specification.</p>
+                      <p className="text-gray-500 dark:text-gray-400 italic">No project context provided. Click Edit to add context.</p>
                     )}
                   </div>
                 )}
