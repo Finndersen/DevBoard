@@ -50,10 +50,12 @@ export interface TaskCreate {
 
 // Custom Field Definition types
 export type CustomFieldType = 'text' | 'boolean' | 'enum'
+export type CustomFieldEntityType = 'task' | 'project' | 'codebase'
 
 export interface CustomFieldDefinition {
   id: number
   name: string
+  entity_type: CustomFieldEntityType
   description: string | null
   type: CustomFieldType
   options: string[] | null
@@ -63,6 +65,7 @@ export interface CustomFieldDefinition {
 
 export interface CustomFieldCreate {
   name: string
+  entity_type?: CustomFieldEntityType
   description?: string | null
   type: CustomFieldType
   options?: string[] | null
@@ -768,8 +771,9 @@ export class ApiClient {
   }
 
   // Custom Fields
-  async getCustomFieldDefinitions(): Promise<CustomFieldDefinition[]> {
-    return this.request<CustomFieldDefinition[]>('/api/custom-fields/')
+  async getCustomFieldDefinitions(entityType?: CustomFieldEntityType): Promise<CustomFieldDefinition[]> {
+    const params = entityType ? `?entity_type=${entityType}` : ''
+    return this.request<CustomFieldDefinition[]>(`/api/custom-fields/${params}`)
   }
 
   async createCustomFieldDefinition(field: CustomFieldCreate): Promise<CustomFieldDefinition> {

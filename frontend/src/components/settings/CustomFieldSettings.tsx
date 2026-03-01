@@ -24,7 +24,7 @@ export function CustomFieldSettings() {
     try {
       setLoading(true)
       setError(null)
-      const data = await apiClient.getCustomFieldDefinitions()
+      const data = await apiClient.getCustomFieldDefinitions('task')
       setFields(data)
     } catch (err) {
       console.error('Failed to load custom fields:', err)

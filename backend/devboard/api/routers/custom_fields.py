@@ -1,6 +1,6 @@
 """Custom field API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.api.dependencies.repositories import get_custom_field_repository
 from devboard.api.schemas import (
@@ -10,6 +10,7 @@ from devboard.api.schemas import (
     DeleteResponse,
 )
 from devboard.db.models.custom_field import CustomFieldType
+from devboard.db.models.enums import EntityType
 from devboard.db.repositories import CustomFieldRepository
 
 router = APIRouter()
@@ -17,10 +18,11 @@ router = APIRouter()
 
 @router.get("/", response_model=list[CustomFieldResponse])
 async def list_custom_fields(
+    entity_type: EntityType | None = Query(None),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
-    """List all custom field definitions."""
-    fields = custom_field_repo.get_all()
+    """List custom field definitions, optionally filtered by entity type."""
+    fields = custom_field_repo.get_all(entity_type=entity_type)
     return fields
 
 
@@ -40,18 +42,19 @@ async def create_custom_field(
     Raises:
         HTTPException: If field name already exists
     """
-    # Check if field with same name already exists
-    existing = custom_field_repo.get_by_name(field_data.name)
+    # Check if field with same name already exists for this entity type
+    existing = custom_field_repo.get_by_name(field_data.name, entity_type=field_data.entity_type)
     if existing:
         raise HTTPException(
             status_code=409,
-            detail=f"Custom field with name '{field_data.name}' already exists",
+            detail=f"Custom field with name '{field_data.name}' already exists for entity type '{field_data.entity_type}'",
         )
 
     # Create the field
     field = custom_field_repo.create(
         name=field_data.name,
         field_type=field_data.type,
+        entity_type=field_data.entity_type,
         description=field_data.description,
         options=field_data.options,
         mandatory=field_data.mandatory,
@@ -107,11 +110,11 @@ async def update_custom_field(
 
     # Check for name conflict if name is being changed
     if field_data.name is not None and field_data.name != field.name:
-        existing = custom_field_repo.get_by_name(field_data.name)
+        existing = custom_field_repo.get_by_name(field_data.name, entity_type=field.entity_type)
         if existing:
             raise HTTPException(
                 status_code=409,
-                detail=f"Custom field with name '{field_data.name}' already exists",
+                detail=f"Custom field with name '{field_data.name}' already exists for entity type '{field.entity_type}'",
             )
 
     # If type is being changed to ENUM, validate options

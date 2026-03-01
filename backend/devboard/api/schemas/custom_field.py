@@ -5,12 +5,14 @@ import datetime
 from pydantic import BaseModel, field_validator, model_validator
 
 from devboard.db.models.custom_field import CustomFieldType
+from devboard.db.models.enums import EntityType
 
 
 class CustomFieldCreate(BaseModel):
     """Schema for creating a new custom field definition."""
 
     name: str
+    entity_type: EntityType = EntityType.TASK
     description: str | None = None
     type: CustomFieldType
     options: list[str] | None = None
@@ -71,6 +73,7 @@ class CustomFieldResponse(BaseModel):
 
     id: int
     name: str
+    entity_type: EntityType
     description: str | None
     type: CustomFieldType
     options: list[str] | None

@@ -56,7 +56,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Fetch custom field definitions on mount
   useEffect(() => {
-    apiClient.getCustomFieldDefinitions()
+    apiClient.getCustomFieldDefinitions('task')
       .then(setCustomFieldDefinitions)
       .catch(err => console.error('Failed to load custom field definitions:', err))
   }, [])

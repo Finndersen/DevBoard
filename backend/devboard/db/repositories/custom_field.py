@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from devboard.db.models import CustomFieldDefinition, CustomFieldType
+from devboard.db.models.enums import EntityType
 from devboard.db.repositories.base import BaseRepository
 
 
@@ -13,74 +14,45 @@ class CustomFieldRepository(BaseRepository[CustomFieldDefinition]):
     def __init__(self, db_session: Session):
         super().__init__(db_session)
 
-    def get_all(self) -> list[CustomFieldDefinition]:
-        """Get all custom field definitions.
-
-        Returns:
-            List of all custom field definitions ordered by name
-        """
-        stmt = select(CustomFieldDefinition).order_by(CustomFieldDefinition.name)
+    def get_all(self, entity_type: EntityType | None = None) -> list[CustomFieldDefinition]:
+        """Get all custom field definitions, optionally filtered by entity type."""
+        stmt = select(CustomFieldDefinition)
+        if entity_type is not None:
+            stmt = stmt.where(CustomFieldDefinition.entity_type == entity_type)
+        stmt = stmt.order_by(CustomFieldDefinition.name)
         return list(self.db.execute(stmt).scalars().all())
 
     def get_by_id(self, field_id: int) -> CustomFieldDefinition | None:
-        """Get a custom field definition by its ID.
-
-        Args:
-            field_id: The field definition ID to search for
-
-        Returns:
-            CustomFieldDefinition instance if found, None otherwise
-        """
         stmt = select(CustomFieldDefinition).where(CustomFieldDefinition.id == field_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_name(self, name: str) -> CustomFieldDefinition | None:
-        """Get a custom field definition by its name.
-
-        Args:
-            name: The field name to search for
-
-        Returns:
-            CustomFieldDefinition instance if found, None otherwise
-        """
+    def get_by_name(self, name: str, entity_type: EntityType | None = None) -> CustomFieldDefinition | None:
+        """Get a custom field definition by name, optionally scoped to entity type."""
         stmt = select(CustomFieldDefinition).where(CustomFieldDefinition.name == name)
+        if entity_type is not None:
+            stmt = stmt.where(CustomFieldDefinition.entity_type == entity_type)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_mandatory_fields(self) -> list[CustomFieldDefinition]:
-        """Get all mandatory custom field definitions.
-
-        Returns:
-            List of custom field definitions where mandatory is True
-        """
-        stmt = (
-            select(CustomFieldDefinition)
-            .where(CustomFieldDefinition.mandatory.is_(True))
-            .order_by(CustomFieldDefinition.name)
-        )
+    def get_mandatory_fields(self, entity_type: EntityType | None = None) -> list[CustomFieldDefinition]:
+        """Get all mandatory custom field definitions, optionally filtered by entity type."""
+        stmt = select(CustomFieldDefinition).where(CustomFieldDefinition.mandatory.is_(True))
+        if entity_type is not None:
+            stmt = stmt.where(CustomFieldDefinition.entity_type == entity_type)
+        stmt = stmt.order_by(CustomFieldDefinition.name)
         return list(self.db.execute(stmt).scalars().all())
 
     def create(
         self,
         name: str,
         field_type: CustomFieldType,
+        entity_type: EntityType = EntityType.TASK,
         description: str | None = None,
         options: list[str] | None = None,
         mandatory: bool = False,
     ) -> CustomFieldDefinition:
-        """Create a new custom field definition.
-
-        Args:
-            name: Field name (unique identifier/label)
-            field_type: Field type (TEXT, BOOLEAN, or ENUM)
-            description: Optional help text for users
-            options: Required if field_type is ENUM - allowed values
-            mandatory: Whether field is required on task creation
-
-        Returns:
-            Created custom field definition with assigned ID
-        """
         field = CustomFieldDefinition(
             name=name,
+            entity_type=entity_type,
             description=description,
             type=field_type,
             options=options,
@@ -88,7 +60,7 @@ class CustomFieldRepository(BaseRepository[CustomFieldDefinition]):
         )
 
         self.db.add(field)
-        self.db.flush()  # Get the ID without committing
+        self.db.flush()
         return field
 
     def update(

@@ -38,7 +38,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       refetchCodebases()
       // Fetch custom field definitions
       setCustomFieldsLoading(true)
-      apiClient.getCustomFieldDefinitions()
+      apiClient.getCustomFieldDefinitions('task')
         .then(fields => {
           setCustomFieldDefinitions(fields)
           // Initialize values for all fields
