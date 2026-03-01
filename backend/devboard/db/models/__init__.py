@@ -4,9 +4,10 @@ from .agent_role_config import AgentRoleConfig
 from .base import Base
 from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
-from .conversation import Conversation, ParentEntityType
+from .conversation import Conversation
 from .custom_field import CustomFieldDefinition, CustomFieldType
 from .document import Document, DocumentType
+from .enums import EntityType, ParentEntityType
 from .mcp_server import (
     HttpMCPConfig,
     MCPServerConfig,
@@ -50,6 +51,7 @@ __all__ = [
     "OAuthProvider",
     "OAuthProviderType",
     "OAuthToken",
+    "EntityType",
     "ParentEntityType",
     "PendingOAuthAuthorization",
     "Project",

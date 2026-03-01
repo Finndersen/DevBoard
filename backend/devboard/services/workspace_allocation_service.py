@@ -17,8 +17,7 @@ import logfire
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
-from devboard.db.models import Codebase, Task, WorktreeSlot
-from devboard.db.models.conversation import ParentEntityType
+from devboard.db.models import Codebase, ParentEntityType, Task, WorktreeSlot
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository

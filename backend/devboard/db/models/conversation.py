@@ -1,7 +1,6 @@
 """Conversation model for managing agent conversations."""
 
 import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Index, select
@@ -11,14 +10,10 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 
 from .base import Base
+from .enums import EntityType
 
-
-class ParentEntityType(StrEnum):
-    """Enum for conversation parent entity types."""
-
-    PROJECT = "project"
-    TASK = "task"
-    CODEBASE = "codebase"
+# Backwards-compatible alias
+ParentEntityType = EntityType
 
 
 class ParentEntityNotFoundError(ValueError):
