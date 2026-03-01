@@ -732,6 +732,96 @@ class TestStreamEventsRetryLogic:
         assert events[0].tool_name == "edit_document"
 
 
+class TestStreamEventsSubagentFiltering:
+    """Tests for filtering subagent messages from the conversation stream."""
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_filters_subagent_assistant_message(self, mock_client_class, agent_with_virtual_tool):
+        """Test that AssistantMessage with parent_tool_use_id is filtered out."""
+        subagent_msg = AssistantMessage(
+            content=[TextBlock(text="Subagent message")],
+            model="claude-sonnet-4",
+            parent_tool_use_id="tool-parent-123",
+        )
+        final_messages = create_mock_text_stream("Parent response")
+        setup_mock_client(mock_client_class, [subagent_msg] + final_messages)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test"):
+            events.append(event)
+
+        text_events = [e for e in events if isinstance(e, TextMessage)]
+        assert len(text_events) == 1
+        assert text_events[0].text_content == "Parent response"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_filters_subagent_user_message(self, mock_client_class, agent_with_virtual_tool):
+        """Test that UserMessage with parent_tool_use_id is filtered out."""
+        subagent_tool_result = ToolResultBlock(tool_use_id="tool-sub-1", content="Subagent result", is_error=False)
+        subagent_user_msg = UserMessage(
+            content=[subagent_tool_result],
+            parent_tool_use_id="tool-parent-456",
+        )
+        final_messages = create_mock_text_stream("Parent response")
+        setup_mock_client(mock_client_class, [subagent_user_msg] + final_messages)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test"):
+            events.append(event)
+
+        # No ToolResult from subagent, only parent text
+        tool_result_events = [e for e in events if isinstance(e, ToolResult)]
+        assert len(tool_result_events) == 0
+        text_events = [e for e in events if isinstance(e, TextMessage)]
+        assert len(text_events) == 1
+        assert text_events[0].text_content == "Parent response"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_mixed_parent_and_subagent_messages(self, mock_client_class, agent_with_both_tools):
+        """Test that only parent messages are converted to events in a mixed stream."""
+        # Parent tool call
+        tool_use = create_mock_tool_use_block("search_code", "tool-1", {"query": "test"})
+        parent_assistant = AssistantMessage(content=[tool_use], model="claude-sonnet-4", parent_tool_use_id=None)
+
+        # Subagent messages (should be filtered)
+        subagent_assistant = AssistantMessage(
+            content=[TextBlock(text="Subagent working...")],
+            model="claude-sonnet-4",
+            parent_tool_use_id="tool-parent-789",
+        )
+        subagent_user = UserMessage(
+            content=[ToolResultBlock(tool_use_id="sub-tool-1", content="sub result", is_error=False)],
+            parent_tool_use_id="tool-parent-789",
+        )
+
+        # Parent tool result
+        parent_user = UserMessage(
+            content=[ToolResultBlock(tool_use_id="tool-1", content="Found results", is_error=False)]
+        )
+
+        final_messages = create_mock_text_stream("Done")
+        setup_mock_client(
+            mock_client_class,
+            [parent_assistant, subagent_assistant, subagent_user, parent_user] + final_messages,
+        )
+
+        events = []
+        async for event in agent_with_both_tools.stream_events("Test"):
+            events.append(event)
+
+        # Should have: parent ToolCall, parent ToolResult, final TextMessage
+        assert len(events) == 3
+        assert isinstance(events[0], ToolCall)
+        assert events[0].tool_call_id == "tool-1"
+        assert isinstance(events[1], ToolResult)
+        assert events[1].tool_call_id == "tool-1"
+        assert isinstance(events[2], TextMessage)
+        assert events[2].text_content == "Done"
+
+
 class TestStreamEventsEdgeCases:
     """Tests for edge cases and error conditions."""
 

@@ -226,6 +226,11 @@ class ClaudeCodeAgent(BaseAgent):
 
     def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
         """Convert Claude SDK Message to ConversationEvent(s)."""
+        # Filter out subagent messages - they should not appear in the parent conversation UI
+        # TODO: Consider adding proper visualization for subagent messages in the future
+        if isinstance(message, (AssistantMessage, UserMessage)) and message.parent_tool_use_id is not None:
+            return
+
         timestamp = datetime.datetime.now(datetime.UTC)
 
         # Extract tool calls from AssistantMessage if present
