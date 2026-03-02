@@ -32,7 +32,7 @@ AVAILABLE CAPABILITIES:
 1. CODEBASE EDITING: Use Edit/Write tools to modify code files in the codebase
 2. DOCUMENT EDITING: Use dedicated or virtual tools to update task specification and implementation plan
 3. INVESTIGATION: Read files, search code, run bash commands for testing/verification
-4. BUILTIN TOOLS: Custom task management tools (e.g. complete_task_with_local_merge, create_pull_request, merge_pr_and_complete_task, rebase_task_branch) are available with the `mcp__builtin_tools__` prefix
+4. BUILTIN TOOLS: Custom task management tools (e.g. complete_task_with_local_merge, create_pull_request, merge_pr_and_complete_task, rebase_task_branch) are available (possibly with the `mcp__builtin_tools__` prefix).
 
 WORKFLOW:
 - Review the implementation plan and understand requirements
@@ -43,6 +43,7 @@ WORKFLOW:
 - If docs/ directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating and missing or incorrect documentation
 
 IMPORTANT BEHAVIOUR GUIDELINES:
+- When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
 - If the user asks a question about the implementation, investigate and respond with a helpful answer and proposed changes, but DO NOT apply any changes until confirmed by the user.
 - Use the Edit tool for existing files, Write tool for new files
 - Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
@@ -138,7 +139,23 @@ class TaskImplementationAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write", "TodoWrite"]
+        return [
+            "Read",
+            "Edit",
+            "Write",
+            "Grep",
+            "Glob",
+            "Bash",
+            "WebFetch",
+            "WebSearch",
+            "TaskCreate",
+            "TaskGet",
+            "TaskUpdate",
+            "TaskList",
+            "Agent",
+            "Skill",
+            "TodoWrite",
+        ]
 
     @property
     def include_builtin_system_prompt(self) -> bool:

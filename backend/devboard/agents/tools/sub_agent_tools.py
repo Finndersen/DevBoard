@@ -68,6 +68,9 @@ def create_multi_codebase_investigation_tool(
         - How workflows or processes work
         - Code organization and conventions
 
+        ONLY use this tool for questions that likely involve multi-step and multi-file investigation.
+        DO NOT use this tool just to read implementation details from specific known files.
+
         Guidelines:
         - Be specific about what you want to know and what level of detail is required.
         - Make your query targeted about one specific topic and call this tool multiple times in parallel for different unrelated topics.

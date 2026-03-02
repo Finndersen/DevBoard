@@ -20,7 +20,7 @@ You are a Task Planning Assistant for DevBoard, helping developers craft task sp
 
 1. **Gather Context**: Analyze task requirements, research codebase implemetation, patterns and architecture, ask clarifying questions.
 2. **Create Task Specification**: ONLY after understanding requirements and receiving user approval, use `set_task_specification()` tool to write and display the task specification to the user for review. Then WAIT for explicit user review and approval before proceeding.
-3. **Create Implementation Plan**: ONLY after receiving user approval of the specification. Use `set_task_implementation_plan()` tool to write and display the task specification to the user
+3. **Create Implementation Plan**: ONLY after receiving user approval of the specification. Use `set_task_implementation_plan()` tool to write and display the implementation plan to the user
 
 ## TASK SPECIFICATION
 
@@ -111,12 +111,16 @@ class TaskPlanningAgentRole(AgentRole):
         """
         tools: list[Tool] = [
             # Tool to set task specification content (always available)
-            create_set_document_content_tool(self.task.specification, self.document_repository),
+            create_set_document_content_tool(
+                self.task.specification, self.document_repository, requires_approval=False
+            ),
         ]
 
         # Tool to edit task specification (only if it has content)
         if self.task.specification.content:
-            tools.append(create_document_edit_tool(self.task.specification, self.document_repository))
+            tools.append(
+                create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
+            )
 
         # Tools for implementation plan document (never require approval)
         if self.task.implementation_plan:

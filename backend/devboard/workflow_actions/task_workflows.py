@@ -32,17 +32,17 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
     # Commit history
     if commits:
         commit_list = "\n".join(f"  - {c.hash[:7]}: {c.subject}" for c in commits)
-        parts.append(f"**Commits on task branch** ({len(commits)}):\n{commit_list}")
+        parts.append(f"Commits on task branch ({len(commits)}):\n{commit_list}")
     else:
         parts.append("No commits on task branch yet.")
 
     # Uncommitted changes
     if uncommitted.files:
-        parts.append(f"**Uncommitted changes:**\n{uncommitted.format_summary()}")
+        parts.append(f"Uncommitted changes:\n{uncommitted.format_summary()}")
     else:
         parts.append("No uncommitted changes.")
 
-    return "\n\n".join(parts)
+    return "```\n" + "\n\n".join(parts) + "\n```"
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
@@ -197,14 +197,14 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
     KEY = "task.rebase_branch"
     DESCRIPTION = "Rebase task branch onto base branch"
 
-    IMPLEMENTING_PROMPT = """Use the mcp__builtin_tools__rebase_task_branch tool to rebase this task's feature branch onto the base branch.
+    IMPLEMENTING_PROMPT = """Use the `rebase_task_branch` tool to rebase this task's feature branch onto the base branch.
 
 The tool is idempotent - if a rebase is already in progress, it will continue it.
 If you encounter merge conflicts:
 1. The tool will tell you which files have conflicts
 2. Edit those files to resolve the conflicts (remove conflict markers, keep correct code)
 3. Stage the resolved files with `git add`
-4. Call the mcp__builtin_tools__rebase_task_branch tool again to continue
+4. Call the `rebase_task_branch` tool again to continue
 
 Keep using the tool until the rebase completes successfully."""
 
@@ -316,6 +316,15 @@ Please briefly review these changes and note if any are relevant to the current 
         )
 
 
+_FINALISATION_PREAMBLE = """## Git Status
+{changes_context}
+
+## Instructions
+IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
+
+If there are uncommitted changes, create appropriate commit(s) with clear commit messages first."""
+
+
 class ApproveAndMergeAction(TaskWorkflowAction):
     """Workflow action for solo/local development - approve changes and merge feature branch locally.
 
@@ -328,19 +337,16 @@ class ApproveAndMergeAction(TaskWorkflowAction):
     """
 
     KEY = "task.approve_and_merge"
-    PROMPT_TEMPLATE = """Finalize this task for local merge.
+    PROMPT_TEMPLATE = (
+        _FINALISATION_PREAMBLE
+        + """
 
-## Current Branch State
-{changes_context}
-
-## Instructions
-If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
-
-Once all changes are committed, use the mcp__builtin_tools__complete_task_with_local_merge tool to merge the feature branch and complete the task. Include a change_summary with:
+Once all changes are committed, use the `complete_task_with_local_merge` tool to merge the feature branch and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs
 - Testing considerations or known limitations"""
+    )
 
     DESCRIPTION = "Approve changes and merge locally"
 
@@ -383,15 +389,11 @@ class ApproveAndCreatePRAction(TaskWorkflowAction):
     """
 
     KEY = "task.approve_and_create_pr"
-    PROMPT_TEMPLATE = """Finalize and create a pull request for this task.
+    PROMPT_TEMPLATE = (
+        _FINALISATION_PREAMBLE
+        + """
 
-## Current Branch State
-{changes_context}
-
-## Instructions
-If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.
-
-Once all changes are committed, use the mcp__builtin_tools__create_pull_request tool to create a GitHub PR.
+Once all changes are committed, use the `create_pull_request` tool to create a GitHub PR.
 
 When creating the PR:
 - Use a clear, descriptive title that summarizes what this task accomplishes
@@ -402,6 +404,7 @@ When creating the PR:
   - Testing notes if applicable
 
 The PR will be created against the base branch and the task will transition to PR_OPEN status."""
+    )
 
     DESCRIPTION = "Approve changes and create PR"
 
@@ -462,19 +465,19 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
     """
 
     KEY = "task.merge_and_finalise"
-    PROMPT_TEMPLATE = """Merge this PR and complete the task.
+    PROMPT_TEMPLATE = (
+        _FINALISATION_PREAMBLE.replace(
+            "commit messages first.",
+            "commit messages and push them first.",
+        )
+        + """
 
-## Current Branch State
-{changes_context}
-
-## Instructions
-If there are uncommitted changes, create appropriate commit(s) with clear commit messages and push them first.
-
-Once all changes are committed and pushed, use the mcp__builtin_tools__merge_pr_and_complete_task tool to merge the PR and complete the task. Include a change_summary with:
+Once all changes are committed and pushed, use the `merge_pr_and_complete_task` tool to merge the PR and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs
 - Testing considerations or known limitations"""
+    )
 
     DESCRIPTION = "Merge PR and complete task"
 

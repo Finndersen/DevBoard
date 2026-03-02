@@ -35,6 +35,11 @@ CLAUDE_BUILTIN_TOOLS: set[str] = {
     # Execution
     "Bash",
     "Task",
+    "TaskCreate",
+    "TaskGet",
+    "TaskUpdate",
+    "TaskList",
+    "Agent",
     "Skill",
     # Planning & Task Management
     "EnterPlanMode",
