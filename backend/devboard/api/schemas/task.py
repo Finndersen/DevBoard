@@ -56,6 +56,20 @@ class WorkflowActionInfo(BaseModel):
     label: str
 
 
+class TaskListResponse(BaseModel):
+    """Schema for task list responses (lightweight, no conversation/workflow data)."""
+
+    id: int
+    title: str
+    project_id: int
+    project_name: str
+    codebase_id: int
+    status: TaskStatus
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TaskResponse(TaskBase):
     """Schema for task responses."""
 

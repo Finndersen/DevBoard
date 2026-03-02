@@ -80,25 +80,35 @@ class TaskRepository(BaseRepository[Task]):
         return self.db.execute(stmt).unique().scalar_one_or_none()
 
     def get_all(self) -> list[Task]:
-        """Get all tasks.
-
-        Returns:
-            List of all tasks
-        """
-        stmt = select(Task)
-        return list(self.db.execute(stmt).scalars().all())
+        """Get all tasks."""
+        return self.get_list()
 
     def get_for_project(self, project_id: int) -> list[Task]:
-        """Get all tasks for a specific project.
+        """Get all tasks for a specific project."""
+        return self.get_list(project_id=project_id)
+
+    def get_list(
+        self,
+        *,
+        project_id: int | None = None,
+        statuses: list[TaskStatus] | None = None,
+        with_project: bool = False,
+    ) -> list[Task]:
+        """Get tasks with optional filtering.
 
         Args:
-            project_id: The project ID to get tasks for
-
-        Returns:
-            List of tasks for the project
+            project_id: Optional project ID to filter by
+            statuses: Optional list of task statuses to filter by
+            with_project: If True, eager load project relationship
         """
-        stmt = select(Task).where(Task.project_id == project_id)
-        return list(self.db.execute(stmt).scalars().all())
+        stmt = select(Task)
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
+        if statuses:
+            stmt = stmt.where(Task.status.in_(statuses))
+        if with_project:
+            stmt = stmt.options(joinedload(Task.project))
+        return list(self.db.execute(stmt).unique().scalars().all())
 
     def update(self, task: Task) -> Task:
         """Update an existing task.

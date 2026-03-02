@@ -139,6 +139,96 @@ def client_with_mock_workflow_deps(
         del app.dependency_overrides[get_workspace_allocation_service]
 
 
+class TestListAllTasks:
+    """Tests for GET /api/tasks/ endpoint."""
+
+    def _create_project_with_task(self, db_session, test_codebase, project_name: str, task_title: str) -> Task:
+        """Helper to create a project with a task."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        task_repo = TaskRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name=project_name, description=f"Description for {project_name}", specification=spec_doc
+        )
+
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title=task_title,
+            status=TaskStatus.PLANNING,
+            specification=task_spec_doc,
+            base_branch="main",
+            codebase_id=test_codebase.id,
+            branch_name=f"feature/{task_title.lower().replace(' ', '-')}",
+        )
+        db_session.commit()
+        return task
+
+    def test_list_all_tasks_without_filter(self, client, db_session, test_codebase):
+        """Should return all tasks across all projects."""
+        self._create_project_with_task(db_session, test_codebase, "Project A", "Task A1")
+        self._create_project_with_task(db_session, test_codebase, "Project B", "Task B1")
+
+        response = client.get("/api/tasks/")
+        assert response.status_code == 200
+
+        data = response.json()
+        titles = {t["title"] for t in data}
+        assert "Task A1" in titles
+        assert "Task B1" in titles
+
+    def test_list_all_tasks_with_project_filter(self, client, db_session, test_codebase):
+        """Should return only tasks for specified projects."""
+        task_c = self._create_project_with_task(db_session, test_codebase, "Project C", "Task C1")
+        self._create_project_with_task(db_session, test_codebase, "Project D", "Task D1")
+
+        response = client.get(f"/api/tasks/?project_id={task_c.project_id}")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert all(t["project_id"] == task_c.project_id for t in data)
+        assert any(t["title"] == "Task C1" for t in data)
+        assert not any(t["title"] == "Task D1" for t in data)
+
+    def test_list_all_tasks_with_status_filter(self, client, db_session, test_codebase):
+        """Should return only tasks matching the specified status."""
+        self._create_project_with_task(db_session, test_codebase, "Project G", "Task G1")
+
+        response = client.get("/api/tasks/?status=planning")
+        assert response.status_code == 200
+        data = response.json()
+        assert all(t["status"] == "planning" for t in data)
+        assert any(t["title"] == "Task G1" for t in data)
+
+        response = client.get("/api/tasks/?status=implementing")
+        assert response.status_code == 200
+        data = response.json()
+        assert not any(t["title"] == "Task G1" for t in data)
+
+    def test_list_all_tasks_empty(self, client):
+        """Should return empty list when no tasks exist."""
+        response = client.get("/api/tasks/")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_list_all_tasks_includes_project_name(self, client, db_session, test_codebase):
+        """Should include project_name field in each task response."""
+        self._create_project_with_task(db_session, test_codebase, "Named Project", "Named Task")
+
+        response = client.get("/api/tasks/")
+        assert response.status_code == 200
+
+        data = response.json()
+        named_task = next(t for t in data if t["title"] == "Named Task")
+        assert named_task["project_name"] == "Named Project"
+        assert "id" in named_task
+        assert "status" in named_task
+        assert "codebase_id" in named_task
+        assert "created_at" in named_task
+
+
 class TestTasksRouter:
     """Test tasks router endpoints."""
 

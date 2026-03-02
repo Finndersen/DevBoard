@@ -2,7 +2,7 @@
 
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from devboard.agents.agent_config_service import AgentConfigService
@@ -34,6 +34,7 @@ from devboard.api.schemas import (
     TaskBranchInfo,
     TaskDiffResponse,
     TaskGitStatusResponse,
+    TaskListResponse,
     TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
@@ -75,6 +76,29 @@ def _get_available_workflow_actions(task: Task) -> list[WorkflowActionInfo]:
             )
 
     return available_actions
+
+
+@router.get("/", response_model=list[TaskListResponse])
+async def list_all_tasks(
+    project_id: int | None = Query(None),
+    status: list[TaskStatus] | None = Query(None),
+    task_repo: TaskRepository = Depends(get_task_repository),
+) -> list[TaskListResponse]:
+    """Fetch all tasks across projects with optional project and status filtering."""
+    tasks = task_repo.get_list(project_id=project_id, statuses=status, with_project=True)
+
+    return [
+        TaskListResponse(
+            id=task.id,
+            title=task.title,
+            project_id=task.project_id,
+            project_name=task.project.name,
+            codebase_id=task.codebase_id,
+            status=task.status,
+            created_at=task.created_at,
+        )
+        for task in tasks
+    ]
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
