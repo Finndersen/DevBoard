@@ -8,7 +8,7 @@ import { useUIStore } from '../stores/uiStore'
  */
 export function useKeyboardShortcuts() {
   const navigate = useNavigate()
-  const { tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, openTab } = useUIStore()
+  const { tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, toggleNavigationCompactMode, navigationMenuOpen, openTab } = useUIStore()
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -28,10 +28,14 @@ export function useKeyboardShortcuts() {
         }
       }
 
-      // Cmd/Ctrl + B: Toggle navigation menu
+      // Cmd/Ctrl + B: Toggle compact mode on large screens, toggle menu on small screens
       if (modifierKey && event.key === 'b') {
         event.preventDefault()
-        toggleNavigationMenu()
+        if (window.innerWidth >= 1024 && navigationMenuOpen) {
+          toggleNavigationCompactMode()
+        } else {
+          toggleNavigationMenu()
+        }
         return
       }
 
@@ -83,5 +87,5 @@ export function useKeyboardShortcuts() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, openTab, navigate])
+  }, [tabs, activeTabId, switchTab, closeTab, toggleNavigationMenu, toggleNavigationCompactMode, navigationMenuOpen, openTab, navigate])
 }

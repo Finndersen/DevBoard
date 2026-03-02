@@ -6,7 +6,7 @@ import { enableMapSet } from 'immer'
 // Enable Immer's MapSet plugin for Set and Map support
 enableMapSet()
 
-export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers'
+export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'tasks-list' | 'projects-list' | 'codebases-list'
 
 export type ActivityStatus =
   | { type: 'idle' }
@@ -28,6 +28,7 @@ interface UIState {
   tabs: TabState[]
   activeTabId: string | null
   navigationMenuOpen: boolean
+  navigationCompactMode: boolean
   visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
   shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
 }
@@ -44,6 +45,8 @@ interface UIActions {
   // Navigation menu
   toggleNavigationMenu: () => void
   setNavigationMenuOpen: (open: boolean) => void
+  setNavigationCompactMode: (compact: boolean) => void
+  toggleNavigationCompactMode: () => void
 
   // Activity status updates
   setTabActivityStatus: (tabId: string, status: ActivityStatus) => void
@@ -65,7 +68,8 @@ export const useUIStore = create<UIStore>()(
       // Initial state
       tabs: [],
       activeTabId: null,
-      navigationMenuOpen: false,
+      navigationMenuOpen: true,
+      navigationCompactMode: false,
       visitedTabs: new Set<string>(),
       shouldPushHistory: false,
 
@@ -199,6 +203,18 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
+      setNavigationCompactMode: (compact) => {
+        set((draft) => {
+          draft.navigationCompactMode = compact
+        })
+      },
+
+      toggleNavigationCompactMode: () => {
+        set((draft) => {
+          draft.navigationCompactMode = !draft.navigationCompactMode
+        })
+      },
+
       // Activity status
       setTabActivityStatus: (tabId, status) => {
         set((draft) => {
@@ -243,7 +259,8 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
-        navigationMenuOpen: state.navigationMenuOpen
+        navigationMenuOpen: state.navigationMenuOpen,
+        navigationCompactMode: state.navigationCompactMode
       })
     }
   )

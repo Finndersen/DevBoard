@@ -16,13 +16,16 @@ export default function AppShell({ children }: AppShellProps) {
       {/* Tab Bar */}
       <TabBar />
 
-      {/* Navigation Menu (Slide-out) */}
-      <NavigationMenu />
+      {/* Content area with sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Navigation Sidebar */}
+        <NavigationMenu />
 
-      {/* Main Content */}
-      <main className="flex-1 w-full py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {children}
-      </main>
+        {/* Main Content */}
+        <main className="flex-1 min-w-0 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

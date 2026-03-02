@@ -20,9 +20,20 @@ export function useURLSync() {
 
   // Parse URL to determine tab type and entity ID
   const parseURL = (pathname: string): { type: TabType; entityId: string; title: string } | null => {
-    // Home (consolidated projects and codebases view)
-    if (pathname === '/' || pathname === '/projects') {
+    // Home
+    if (pathname === '/') {
       return { type: 'home', entityId: 'main', title: 'Home' }
+    }
+
+    // List views
+    if (pathname === '/projects') {
+      return { type: 'projects-list', entityId: 'main', title: 'Projects' }
+    }
+    if (pathname === '/tasks') {
+      return { type: 'tasks-list', entityId: 'main', title: 'Tasks' }
+    }
+    if (pathname === '/codebases') {
+      return { type: 'codebases-list', entityId: 'main', title: 'Codebases' }
     }
 
     // Project detail
@@ -91,6 +102,15 @@ export function useURLSync() {
     switch (activeTab.type) {
       case 'home':
         targetPath = '/'
+        break
+      case 'projects-list':
+        targetPath = '/projects'
+        break
+      case 'tasks-list':
+        targetPath = '/tasks'
+        break
+      case 'codebases-list':
+        targetPath = '/codebases'
         break
       case 'project':
         targetPath = `/projects/${activeTab.entityId}`
