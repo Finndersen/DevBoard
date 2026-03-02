@@ -17,6 +17,7 @@ import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, 
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
+import { useUIStore } from '../stores/uiStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
@@ -45,6 +46,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { mutate: updateDocument } = useUpdateDocument()
 
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
+  const { closeTab, findTabByEntity } = useUIStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
 
@@ -222,6 +224,12 @@ function TaskDetail({ id }: TaskDetailProps) {
       await deleteTaskFromStore(String(task.id))
       await fetchProjectTasks(String(task.project_id))
 
+      // Close the task's tab if it exists
+      const tab = findTabByEntity('task', String(task.id))
+      if (tab) {
+        closeTab(tab.id)
+      }
+
       // Show success notification
       addNotification({
         type: 'system_error', // Using system_error as closest match for success
@@ -242,7 +250,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     } finally {
       setShowDeleteConfirm(false)
     }
-  }, [task, project, deleteTask, deleteBranch, deleteTaskFromStore, fetchProjectTasks, addNotification, navigate])
+  }, [task, project, deleteTask, deleteBranch, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
