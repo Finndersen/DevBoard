@@ -4,6 +4,8 @@
  * relevant arguments like file paths, search patterns, and descriptions.
  */
 
+import { isDocumentTool } from './toolTypeUtils'
+
 export interface ToolDisplayLabel {
   toolName: string
   details?: string
@@ -164,8 +166,15 @@ export function getToolDisplayLabel(
       return { toolName: cleanedName }
     }
 
-    default:
+    default: {
+      if (isDocumentTool(cleanedName)) {
+        const reasoning = args.reasoning as string | undefined
+        if (reasoning) {
+          return { toolName: cleanedName, details: reasoning }
+        }
+      }
       return { toolName: cleanedName }
+    }
   }
 }
 
