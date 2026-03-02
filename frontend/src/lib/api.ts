@@ -29,6 +29,16 @@ export interface Task {
   available_workflow_actions: WorkflowActionInfo[]
 }
 
+export interface TaskListItem {
+  id: number
+  title: string
+  project_id: number
+  project_name: string
+  codebase_id: number
+  status: string
+  created_at: string
+}
+
 export interface GitHubPRStatusResponse {
   merged: boolean
   mergeable: boolean | null
@@ -616,6 +626,11 @@ export class ApiClient {
   }
 
   // Tasks
+  async getAllTasks(projectId?: number): Promise<TaskListItem[]> {
+    const params = projectId ? `?project_id=${projectId}` : ''
+    return this.request<TaskListItem[]>(`/api/tasks${params}`)
+  }
+
   async getProjectTasks(projectId: number | string): Promise<Task[]> {
     return this.request<Task[]>(`/api/projects/${projectId}/tasks`)
   }

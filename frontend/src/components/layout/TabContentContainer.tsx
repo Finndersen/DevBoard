@@ -6,6 +6,9 @@ import ProjectDetail from '../../views/ProjectDetail'
 import CodebaseDetail from '../../views/CodebaseDetail'
 import MCPServersView from '../../views/MCPServers'
 import Settings from '../../views/Settings'
+import ProjectsList from '../../views/ProjectsList'
+import CodebasesList from '../../views/CodebasesList'
+import TasksList from '../../views/TasksList'
 import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 
 /**
@@ -62,6 +65,9 @@ export default function TabContentContainer() {
             </ConversationEventHandlerProvider>
           )}
           {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
+          {tab.type === 'projects-list' && <ProjectsList />}
+          {tab.type === 'codebases-list' && <CodebasesList />}
+          {tab.type === 'tasks-list' && <TasksList />}
           {tab.type === 'mcp-servers' && <MCPServersView />}
           {tab.type === 'settings' && <Settings />}
         </div>

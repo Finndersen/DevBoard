@@ -1,6 +1,10 @@
 import { apiClient } from '../lib/api'
-import type { Task, TaskCreate } from '../lib/api'
+import type { Task, TaskCreate, TaskListItem } from '../lib/api'
 import { useApi, useMutation } from './useApi'
+
+export function useAllTasks(projectId?: number) {
+  return useApi<TaskListItem[]>(() => apiClient.getAllTasks(projectId))
+}
 
 export function useProjectTasks(projectId: number | string) {
   return useApi(() => apiClient.getProjectTasks(projectId))
