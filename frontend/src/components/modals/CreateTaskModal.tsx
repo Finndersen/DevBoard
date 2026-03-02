@@ -2,20 +2,26 @@ import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import { apiClient } from '../../lib/api'
-import type { CustomFieldDefinition } from '../../lib/api'
-import { useProjectCodebases } from '../../hooks'
+import type { Codebase, CustomFieldDefinition } from '../../lib/api'
+import { useProjects, useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
 
 interface CreateTaskModalProps {
   isOpen: boolean
   onClose: () => void
-  projectId: string
+  projectId?: string
 }
 
 export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTaskModalProps) {
   const navigate = useNavigate()
-  const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(projectId)
+  const { data: projects } = useProjects()
   const { setTask, fetchProjectTasks } = useDataStore()
+
+  // Selected project (from prop or user selection)
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId ?? '')
+
+  // Fetch codebases for selected project
+  const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(selectedProjectId || '0')
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -32,16 +38,27 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
 
-  // Refetch codebases and custom fields when modal opens
+  // Update selected project when prop changes
+  useEffect(() => {
+    if (projectId) {
+      setSelectedProjectId(projectId)
+    }
+  }, [projectId])
+
+  // Refetch codebases when selected project changes
+  useEffect(() => {
+    if (isOpen && selectedProjectId) {
+      refetchCodebases()
+    }
+  }, [isOpen, selectedProjectId, refetchCodebases])
+
+  // Fetch custom fields when modal opens
   useEffect(() => {
     if (isOpen) {
-      refetchCodebases()
-      // Fetch custom field definitions
       setCustomFieldsLoading(true)
       apiClient.getCustomFieldDefinitions('task')
         .then(fields => {
           setCustomFieldDefinitions(fields)
-          // Initialize values for all fields
           const initialValues: Record<string, unknown> = {}
           fields.forEach(field => {
             if (field.type === 'boolean') {
@@ -55,7 +72,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         .catch(err => console.error('Failed to load custom fields:', err))
         .finally(() => setCustomFieldsLoading(false))
     }
-  }, [isOpen, refetchCodebases])
+  }, [isOpen])
 
   // Reset form when modal closes
   useEffect(() => {
@@ -70,19 +87,26 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       setIsCreating(false)
       setAutoGenerateBranch(true)
       setCustomFieldValues({})
+      if (!projectId) {
+        setSelectedProjectId('')
+      }
     }
-  }, [isOpen])
+  }, [isOpen, projectId])
 
-  // Individual change handlers to avoid object spread on every keystroke
+  const handleProjectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedProjectId(e.target.value)
+    // Reset codebase selection when project changes
+    setNewTask(prev => ({ ...prev, codebase_id: null, base_branch: '' }))
+  }, [])
+
   const handleTaskTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setNewTask(prev => ({ ...prev, title: e.target.value }))
   }, [])
 
   const handleTaskCodebaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const codebaseId = e.target.value ? Number(e.target.value) : null
-    // Auto-populate base_branch from selected codebase's default_branch
     const selectedCodebase = codebaseId && codebases
-      ? codebases.find(c => c.id === codebaseId)
+      ? codebases.find((c: Codebase) => c.id === codebaseId)
       : null
     setNewTask(prev => ({
       ...prev,
@@ -111,12 +135,10 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     }
   }, [])
 
-  // Custom field change handler
   const handleCustomFieldChange = useCallback((fieldName: string, value: unknown) => {
     setCustomFieldValues(prev => ({ ...prev, [fieldName]: value }))
   }, [])
 
-  // Check if all mandatory custom fields are filled
   const areMandatoryFieldsFilled = useCallback(() => {
     const mandatoryFields = customFieldDefinitions.filter(f => f.mandatory)
     return mandatoryFields.every(field => {
@@ -125,11 +147,13 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     })
   }, [customFieldDefinitions, customFieldValues])
 
+  const effectiveProjectId = projectId ?? selectedProjectId
+
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!effectiveProjectId) return
     setIsCreating(true)
     try {
-      // Build custom fields object (only include non-empty values)
       const customFields: Record<string, unknown> = {}
       Object.entries(customFieldValues).forEach(([name, value]) => {
         if (value !== '' && value !== null && value !== undefined) {
@@ -140,30 +164,25 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       const taskData: any = {
         title: newTask.title,
         codebase_id: newTask.codebase_id,
-        specification_content: null,  // Always empty, initial message is sent via chat
+        specification_content: null,
         custom_fields: Object.keys(customFields).length > 0 ? customFields : null
       }
 
-      // Add working branch if provided (otherwise auto-generated)
       if (newTask.working_branch.trim()) {
         taskData.branch_name = newTask.working_branch.trim()
       }
 
-      // Add base branch if provided
       if (newTask.base_branch.trim()) {
         taskData.base_branch = newTask.base_branch.trim()
       }
 
-      const createdTask = await apiClient.createTask(projectId, taskData)
+      const createdTask = await apiClient.createTask(effectiveProjectId, taskData)
 
-      // Update cache with new task
       setTask(createdTask)
-      await fetchProjectTasks(projectId)
+      await fetchProjectTasks(effectiveProjectId)
 
-      // Store initial message for navigation
       const initialMessage = newTask.initial_message.trim() || null
 
-      // Reset form
       setNewTask({
         title: '',
         codebase_id: null,
@@ -173,7 +192,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       })
 
       onClose()
-      // Navigate to the newly created task, passing initial message in state
       navigate(`/tasks/${createdTask.id}`, {
         state: initialMessage ? { initialMessage, taskId: createdTask.id } : undefined
       })
@@ -182,7 +200,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     } finally {
       setIsCreating(false)
     }
-  }, [newTask, projectId, navigate, onClose, setTask, fetchProjectTasks, customFieldValues])
+  }, [newTask, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, customFieldValues])
 
   return (
     <Modal
@@ -192,6 +210,26 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       maxWidth="xl"
     >
       <form onSubmit={handleCreateTask} className="space-y-4">
+        {/* Project Selection - only when no projectId prop */}
+        {!projectId && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Project
+            </label>
+            <select
+              value={selectedProjectId}
+              onChange={handleProjectChange}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              required
+            >
+              <option value="">Select a project...</option>
+              {projects?.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Task Title
@@ -205,9 +243,10 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           />
         </div>
 
-        {/* Codebase and Base Branch */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-3">
+        {/* Codebase and Base Branch - only show when project is selected */}
+        {selectedProjectId && (
+          <div className="grid grid-cols-4 gap-4">
+            <div className="col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Codebase
               </label>
@@ -221,7 +260,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                   <p className="text-sm text-amber-700 dark:text-amber-300">
                     Please{' '}
                     <Link
-                      to={`/projects/${projectId}?tab=settings`}
+                      to={`/projects/${selectedProjectId}?tab=settings`}
                       onClick={onClose}
                       className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                     >
@@ -247,20 +286,21 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
               )}
             </div>
 
-          {newTask.codebase_id && (
-            <div className="col-span-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Base Branch
-              </label>
-              <Input
-                type="text"
-                value={newTask.base_branch}
-                onChange={handleBaseBranchChange}
-                placeholder="origin/main"
-              />
-            </div>
-          )}
-        </div>
+            {newTask.codebase_id && (
+              <div className="col-span-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Base Branch
+                </label>
+                <Input
+                  type="text"
+                  value={newTask.base_branch}
+                  onChange={handleBaseBranchChange}
+                  placeholder="origin/main"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Working Branch Configuration */}
         {newTask.codebase_id && (
@@ -367,7 +407,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             type="submit"
             variant="primary"
             loading={isCreating}
-            disabled={!newTask.title.trim() || !newTask.codebase_id || isCreating || !codebases || codebases.length === 0 || !areMandatoryFieldsFilled()}
+            disabled={!newTask.title.trim() || !newTask.codebase_id || !selectedProjectId || isCreating || !areMandatoryFieldsFilled()}
           >
             Create Task
           </Button>

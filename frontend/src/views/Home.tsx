@@ -1,120 +1,16 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { PlusIcon, FolderIcon, CodeBracketIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { useDataStore } from '../stores/dataStore'
-import { useUIStore } from '../stores/uiStore'
-import { useProjects, useCreateProject } from '../hooks'
-import { useCodebases, useDeleteCodebase } from '../hooks/useCodebases'
-import type { Project, Codebase } from '../lib/api'
-import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
-import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
-import { loadingSpinner } from '../styles/designSystem'
+import { Link } from 'react-router-dom'
+import { FolderIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
+import { useProjects } from '../hooks'
+import { useCodebases } from '../hooks/useCodebases'
+import { useAllTasks } from '../hooks/useTasks'
+import { Card } from '../components/ui'
 
 export default function Home() {
-  const navigate = useNavigate()
-  const { openTab } = useUIStore()
-  const { fetchProjects, fetchCodebases } = useDataStore()
+  const { data: projects } = useProjects()
+  const { data: codebases } = useCodebases()
+  const { data: tasks } = useAllTasks()
 
-  // Projects
-  const { data: projects, loading: projectsLoading, error: projectsError, refetch: refetchProjects } = useProjects()
-  const { mutate: createProject, loading: creatingProject } = useCreateProject()
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
-  const [newProject, setNewProject] = useState({
-    name: '',
-    description: '',
-    specification: {
-      id: 0,
-      document_type: 'project_specification',
-      content: '',
-      content_hash: '',
-      created_at: '',
-      updated_at: ''
-    }
-  })
-
-  // Codebases
-  const { data: codebases, loading: codebasesLoading, error: codebasesError, refetch: refetchCodebases } = useCodebases()
-  const { mutate: deleteCodebase } = useDeleteCodebase()
-  const [showCreateCodebaseModal, setShowCreateCodebaseModal] = useState(false)
-
-  useEffect(() => {
-    fetchProjects()
-    fetchCodebases()
-  }, [fetchProjects, fetchCodebases])
-
-  const handleOpenProject = (project: Project) => {
-    openTab({
-      type: 'project',
-      entityId: String(project.id),
-      title: project.name
-    })
-  }
-
-  const handleOpenCodebase = (codebase: Codebase) => {
-    openTab({
-      type: 'codebase',
-      entityId: String(codebase.id),
-      title: codebase.name
-    })
-  }
-
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const projectData = {
-        name: newProject.name,
-        description: newProject.description,
-        specification: newProject.specification,
-        default_conversation_id: null
-      }
-      const createdProject = await createProject(projectData)
-      await refetchProjects()
-      await fetchProjects()
-      setShowCreateProjectModal(false)
-      setNewProject({
-        name: '',
-        description: '',
-        specification: {
-          id: 0,
-          document_type: 'project_specification',
-          content: '',
-          content_hash: '',
-          created_at: '',
-          updated_at: ''
-        }
-      })
-      // Navigate to project settings to link codebases
-      navigate(`/projects/${createdProject.id}?tab=settings`)
-    } catch (error) {
-      console.error('Failed to create project:', error)
-    }
-  }
-
-  const handleCodebaseCreated = async () => {
-    await refetchCodebases()
-    await fetchCodebases()
-  }
-
-  const handleDeleteCodebase = async (codebaseId: number) => {
-    if (!confirm('Are you sure you want to delete this codebase?')) return
-    try {
-      await deleteCodebase(codebaseId)
-      await refetchCodebases()
-      await fetchCodebases()
-    } catch (error) {
-      console.error('Failed to delete codebase:', error)
-    }
-  }
-
-  const isLoading = projectsLoading || codebasesLoading
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className={loadingSpinner}></div>
-      </div>
-    )
-  }
+  const activeTasks = tasks?.filter(t => t.status !== 'complete') ?? []
 
   return (
     <div className="space-y-8 h-full overflow-auto">
@@ -128,171 +24,99 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Projects Section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
-            <FolderIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Projects
-            </h2>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              ({projects?.length || 0})
-            </span>
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <FolderIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {projects?.length ?? 0}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Projects</p>
+            </div>
           </div>
-          <Button onClick={() => setShowCreateProjectModal(true)} icon={<PlusIcon />}>
-            New Project
-          </Button>
-        </div>
-
-        {projectsError && (
-          <ErrorMessage error={projectsError} retry={refetchProjects} className="mb-4" />
-        )}
-
-        {!projects || projects.length === 0 ? (
-          <Card className="p-8 text-center">
-            <FolderIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">No projects yet</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Get started by creating your first project
-            </p>
-            <Button onClick={() => setShowCreateProjectModal(true)} icon={<PlusIcon />}>
-              Create Project
-            </Button>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => (
-              <Card
-                key={project.id}
-                className="p-4 hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => handleOpenProject(project)}
-                hover
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {project.name}
-                  </h3>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                  {project.description}
-                </p>
-              </Card>
-            ))}
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+              <ListBulletIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {activeTasks.length}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Active Tasks</p>
+            </div>
           </div>
-        )}
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <CodeBracketIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {codebases?.length ?? 0}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Codebases</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
-      {/* Codebases Section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <CodeBracketIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Codebases
-            </h2>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              ({codebases?.length || 0})
-            </span>
-          </div>
-          <Button onClick={() => setShowCreateCodebaseModal(true)} icon={<PlusIcon />}>
-            New Codebase
-          </Button>
-        </div>
-
-        {codebasesError && (
-          <ErrorMessage error={codebasesError} retry={refetchCodebases} className="mb-4" />
-        )}
-
-        {!codebases || codebases.length === 0 ? (
-          <Card className="p-8 text-center">
-            <CodeBracketIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">No codebases yet</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Add a codebase to track and manage your code
+      {/* Navigation Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link to="/projects" className="block">
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer h-full" hover>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <FolderIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Projects
+              </h2>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Manage your development projects, specifications, and linked codebases
             </p>
-            <Button onClick={() => setShowCreateCodebaseModal(true)} icon={<PlusIcon />}>
-              Add Codebase
-            </Button>
           </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {codebases.map((codebase) => (
-              <Card
-                key={codebase.id}
-                className="p-4 hover:shadow-lg transition-shadow"
-                hover
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3
-                    className="text-lg font-semibold text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                    onClick={() => handleOpenCodebase(codebase)}
-                  >
-                    {codebase.name}
-                  </h3>
-                  <button
-                    onClick={() => handleDeleteCodebase(codebase.id)}
-                    className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                    title="Delete codebase"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
-                  {codebase.description}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 font-mono truncate">
-                  {codebase.local_path}
-                </p>
-              </Card>
-            ))}
-          </div>
-        )}
+        </Link>
+
+        <Link to="/tasks" className="block">
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer h-full" hover>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <ListBulletIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Tasks
+              </h2>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              View and manage all tasks across projects in a unified kanban board
+            </p>
+          </Card>
+        </Link>
+
+        <Link to="/codebases" className="block">
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer h-full" hover>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <CodeBracketIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Codebases
+              </h2>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Manage code repositories, architecture docs, and worktree configurations
+            </p>
+          </Card>
+        </Link>
       </div>
-
-      {/* Create Project Modal */}
-      <Modal
-        isOpen={showCreateProjectModal}
-        onClose={() => setShowCreateProjectModal(false)}
-        title="Create New Project"
-      >
-        <form onSubmit={handleCreateProject} className="space-y-4">
-          <Input
-            label="Name"
-            value={newProject.name}
-            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-            required
-            autoFocus
-          />
-          <Textarea
-            label="Description"
-            value={newProject.description}
-            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-            rows={3}
-          />
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              onClick={() => setShowCreateProjectModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={creatingProject || !newProject.name}
-            >
-              {creatingProject ? 'Creating...' : 'Create Project'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Create Codebase Modal */}
-      <CreateCodebaseModal
-        isOpen={showCreateCodebaseModal}
-        onClose={() => setShowCreateCodebaseModal(false)}
-        onSuccess={handleCodebaseCreated}
-      />
     </div>
   )
 }

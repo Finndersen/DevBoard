@@ -121,27 +121,23 @@ describe('ProjectDetail', () => {
     
     // Project should be rendered with basic information and navigation tabs
     expect(screen.getByText('Home')).toBeInTheDocument()
-    expect(screen.getByText('Tasks')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 
-  it('can switch to tasks tab', async () => {
+  it('can switch to settings tab', async () => {
     const user = userEvent.setup()
     renderProjectDetail()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test Project')).toBeInTheDocument()
     })
-    
-    // Click on Tasks tab
-    const tasksTab = screen.getByText('Tasks')
-    await user.click(tasksTab)
-    
+
+    // Click on Settings tab
+    const settingsTab = screen.getByText('Settings')
+    await user.click(settingsTab)
+
     // Verify the tab is active (has blue styling)
-    expect(tasksTab).toHaveClass('border-blue-500')
-    
-    // Should show tasks content area or at least not show the specification
-    // (The exact content may vary depending on implementation)
+    expect(settingsTab).toHaveClass('border-blue-500')
   })
 
   it('handles missing project gracefully', async () => {

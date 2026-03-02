@@ -7,8 +7,8 @@ import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { Button, Card, Textarea, Markdown, Input } from '../components/ui'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
-import type { Task, Codebase } from '../lib/api'
-import { useModal, useEditableField, useProject, useProjectTasks, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
+import type { Codebase } from '../lib/api'
+import { useModal, useEditableField, useProject, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
@@ -34,8 +34,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Fetch specification document separately - only when project is loaded with valid document ID
   const { data: specificationDoc, refetch: refetchSpecification } = useDocument(project?.specification_document_id ?? null)
 
-  const { data: tasks, loading: tasksLoading } = useProjectTasks(id!)
-
   // Project codebases hooks
   const { data: projectCodebases, loading: codebasesLoading, refetch: refetchProjectCodebases } = useProjectCodebases(id!)
   const { data: allCodebases, refetch: refetchAllCodebases } = useCodebases()
@@ -47,18 +45,18 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const createCodebaseModal = useModal()
 
   // Combined loading state
-  const loading = projectLoading || tasksLoading
-  
+  const loading = projectLoading
+
   // Get tab from URL query params, default to 'home'
   const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as 'home' | 'board' | 'settings'
-    return ['home', 'board', 'settings'].includes(tab) ? tab : 'home'
+    const tab = params.get('tab') as 'home' | 'settings'
+    return ['home', 'settings'].includes(tab) ? tab : 'home'
   }, [location.search])
-  
-  const [activeTab, setActiveTab] = useState<'board' | 'editor' | 'settings'>(() => {
+
+  const [activeTab, setActiveTab] = useState<'editor' | 'settings'>(() => {
     const tab = getTabFromUrl()
-    return tab === 'home' ? 'editor' : tab as 'board' | 'editor' | 'settings'
+    return tab === 'settings' ? 'settings' : 'editor'
   })
 
   // Use new custom hooks
@@ -85,7 +83,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const descriptionField = useEditableField(project?.description || '', saveDescriptionField)
 
   // Update URL when tab changes
-  const handleTabChange = (tab: 'board' | 'editor' | 'settings') => {
+  const handleTabChange = (tab: 'editor' | 'settings') => {
     setActiveTab(tab)
     const urlTab = tab === 'editor' ? 'home' : tab
     const params = new URLSearchParams(location.search)
@@ -96,8 +94,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Update activeTab when URL changes
   useEffect(() => {
     const urlTab = getTabFromUrl()
-    const internalTab = urlTab === 'home' ? 'editor' : urlTab
-    setActiveTab(internalTab)
+    setActiveTab(urlTab === 'settings' ? 'settings' : 'editor')
   }, [getTabFromUrl])
 
   // Store project in DataStore when loaded
@@ -127,43 +124,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
     refetchProject()
   }, [project?.default_conversation_id, migrateStream, refetchProject])
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'planning':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-      case 'implementing':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
-      case 'reviewing':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
-      case 'complete':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-    }
-  }
-
-  // Memoize task grouping to avoid recalculation on every render
-  const taskGroups = useMemo(() => {
-    if (!tasks) return {} as Record<string, Task[]>
-    const groups = tasks.reduce((groups, task) => {
-      const status = task.status
-      if (!groups[status]) {
-        groups[status] = []
-      }
-      groups[status].push(task)
-      return groups
-    }, {} as Record<string, Task[]>)
-
-    // Sort tasks within each group by created_at descending (newest first)
-    Object.keys(groups).forEach(status => {
-      groups[status].sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-    })
-
-    return groups
-  }, [tasks])
 
   // Compute unlinked codebases for dropdown
   const unlinkedCodebases = useMemo(() => {
@@ -227,8 +187,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     )
   }
 
-  const statusColumns = ['planning', 'implementing', 'reviewing', 'complete']
-
   return (
     <div className="h-full flex flex-col">
       {/* Navigation Tabs with Project Name and Actions */}
@@ -238,7 +196,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           <nav className="-mb-px flex space-x-8 shrink-0">
             {[
               { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
-              { id: 'board' as const, name: 'Tasks', icon: null },
               { id: 'settings' as const, name: 'Settings', icon: null },
             ].map((tab) => (
               <button
@@ -338,40 +295,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'board' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-          {statusColumns.map((status) => (
-            <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800">
-              <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between`}>
-                {status}
-                <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
-                  {taskGroups[status]?.length || 0}
-                </span>
-              </h3>
-              
-              <div className="space-y-3">
-                {taskGroups[status]?.map((task) => (
-                  <Link
-                    key={task.id}
-                    to={`/tasks/${task.id}`}
-                    className="block bg-white dark:bg-gray-700 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
-                  >
-                    <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
-                      {task.title}
-                    </h4>
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                        {task.status}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
       {activeTab === 'editor' && (
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 flex-1 min-h-0 overflow-hidden">
           {/* Left Side - Project Specification */}
