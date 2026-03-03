@@ -1,12 +1,18 @@
 """Tests for sub-agent tools, including the codebase investigation tool."""
 
+import datetime
+import inspect
+import json
 from typing import Literal
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.config_types import AgentEngineModelConfig
+from devboard.agents.engines import AgentEngine
+from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
     create_multi_codebase_investigation_tool,
@@ -120,14 +126,11 @@ class TestCreateCodebaseInvestigationTool:
         assert set(codebase_name_type.__args__) == {"backend", "frontend"}
 
     def test_function_signature_has_codebase_name_parameter(self, mock_codebases, mock_agent_config_service):
-        """Test that the tool function has a codebase_name parameter."""
+        """Test that the tool function has expected parameters."""
         tool = create_multi_codebase_investigation_tool(
             mock_codebases,
             mock_agent_config_service,
         )
-
-        # Get function signature
-        import inspect
 
         sig = inspect.signature(tool.function)
         params = sig.parameters
@@ -135,10 +138,104 @@ class TestCreateCodebaseInvestigationTool:
         # Check parameters exist
         assert "query" in params
         assert "codebase_name" in params
+        assert "session_id" in params
 
         # Check parameter annotations
         assert params["query"].annotation is str
         assert params["codebase_name"].annotation is not str  # Should be Literal type
+        assert params["session_id"].annotation == str | None
+        assert params["session_id"].default is None
+
+    @pytest.mark.asyncio
+    async def test_investigate_returns_json_with_result_and_session_id_claude_code(
+        self, mock_codebases, mock_agent_config_service
+    ):
+        """Test that the tool returns JSON with result and session_id for ClaudeCode engine."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.session_id = "test-session-123"
+        final_message = TextMessage(
+            role=MessageRole.AGENT, text_content="Investigation result", timestamp=datetime.datetime.now()
+        )
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        with patch(
+            "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+            return_value=mock_agent_instance,
+        ):
+            result = await tool.function(codebase_name="backend", query="How does X work?")
+
+        parsed = json.loads(result)
+        assert parsed == {
+            "result": "Investigation result",
+            "session_id": "test-session-123",
+        }
+
+    @pytest.mark.asyncio
+    async def test_investigate_internal_agent_returns_null_session_id(self, mock_codebases, mock_agent_config_service):
+        """Test that InternalAgent engine returns null session_id."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model = Mock()
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        final_message = TextMessage(
+            role=MessageRole.AGENT, text_content="Internal result", timestamp=datetime.datetime.now()
+        )
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        with patch(
+            "devboard.agents.engines.internal.agent.InternalAgent",
+            return_value=mock_agent_instance,
+        ):
+            result = await tool.function(codebase_name="backend", query="How does Y work?")
+
+        parsed = json.loads(result)
+        assert parsed == {
+            "result": "Internal result",
+            "session_id": None,
+        }
+
+    @pytest.mark.asyncio
+    async def test_investigate_passes_session_id_to_claude_code_agent(self, mock_codebases, mock_agent_config_service):
+        """Test that session_id is passed to ClaudeCodeAgent constructor."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.session_id = "resumed-session-456"
+        final_message = TextMessage(
+            role=MessageRole.AGENT, text_content="Follow-up result", timestamp=datetime.datetime.now()
+        )
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        with patch(
+            "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+            return_value=mock_agent_instance,
+        ) as mock_claude_code_cls:
+            await tool.function(
+                codebase_name="backend",
+                query="Follow-up question",
+                session_id="previous-session-456",
+            )
+
+        mock_claude_code_cls.assert_called_once()
+        call_kwargs = mock_claude_code_cls.call_args[1]
+        assert call_kwargs["session_id"] == "previous-session-456"
 
 
 class TestCreateTaskCodebaseInvestigationTool:

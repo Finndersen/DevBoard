@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from typing import Literal
 
@@ -57,7 +58,7 @@ def create_multi_codebase_investigation_tool(
         cb_config.codebase.name: cb_config for cb_config in codebases
     }
 
-    async def investigate_codebase(codebase_name: str, query: str) -> str:
+    async def investigate_codebase(codebase_name: str, query: str, session_id: str | None = None) -> str:
         """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
 
         Use this tool when you need detailed information about:
@@ -81,9 +82,13 @@ def create_multi_codebase_investigation_tool(
         Args:
             query: Specific question about the codebase. Be as detailed as possible about what you want to know.
             codebase_name: Name of the codebase to investigate. Choose from the available codebases.
+            session_id: Optional session ID from a prior call to this tool. Provide it when continuing a previous
+                investigation where the prior session already has relevant context, to resume rather than starting fresh.
 
         Returns:
-            Comprehensive answer with file paths, code references, and implementation details.
+            A JSON string with two keys:
+            - `result`: The investigation answer with file paths, code references, and implementation details.
+            - `session_id`: An opaque session identifier to pass back on follow-up calls, or null if unavailable.
         """
         # Get the selected codebase
         codebase_config = codebase_map[codebase_name]
@@ -99,6 +104,10 @@ def create_multi_codebase_investigation_tool(
             # Lazy import to avoid circular dependency
             from devboard.agents.engines.internal.agent import InternalAgent
 
+            # NOTE: Session resumption is not supported for InternalAgent. To support it, one would
+            # need to store and return `investigation_agent.conversation_history` (a `list[ModelMessage]`)
+            # keyed by an investigation ID (e.g. in-memory cache with TTL, or a `Conversation` DB
+            # record via `AgentExecutionService`), and pass it back on subsequent calls.
             if config.model is None:
                 raise ValueError(
                     f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
@@ -115,6 +124,7 @@ def create_multi_codebase_investigation_tool(
                 role=investigation_role,
                 model=config.model,
                 working_dir=working_dir,
+                session_id=session_id,
             )
         else:
             raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
@@ -131,7 +141,12 @@ def create_multi_codebase_investigation_tool(
                 f"Expected final response from investigation agent to be TextMessage, but got {final_response}"
             )
 
-        return final_response.text_content
+        # Extract session_id for ClaudeCodeAgent (populated during streaming from SystemMessage)
+        result_session_id: str | None = None
+        if config.engine == AgentEngine.CLAUDE_CODE:
+            result_session_id = investigation_agent.session_id  # type: ignore[union-attr]
+
+        return json.dumps({"result": final_response.text_content, "session_id": result_session_id})
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
