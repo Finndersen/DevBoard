@@ -58,7 +58,7 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         if not result:
             return f"No matches found for '{pattern}'"
 
-        return "\n".join(result)
+        return result
 
     return Tool(
         function=search_file_content,
@@ -187,7 +187,7 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         if not result:
             return f"No code structure matches found for pattern '{pattern}'"
 
-        return "\n".join(result)
+        return result
 
     return Tool(
         function=search_code_structure,

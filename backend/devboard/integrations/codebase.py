@@ -137,8 +137,17 @@ class CodebaseIntegration:
         path: str | None = None,
         context_before: int = 0,
         context_after: int = 0,
-    ) -> list[str]:
+    ) -> str:
         """Search for text within files using ripgrep.
+
+        Results are grouped by file with the file path as a heading::
+
+            services/auth.py
+            10:class AuthService:
+            45:class AuthTokenService:
+
+            services/user.py
+            8:class UserService:
 
         Args:
             query: Text or regex pattern to search for
@@ -148,35 +157,8 @@ class CodebaseIntegration:
             path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
             context_before: Number of lines to show before each match (default: 0)
             context_after: Number of lines to show after each match (default: 0)
-
-        Returns:
-            List of matching lines from ripgrep output
-        TODO: Output appears to repeat the file path multiple times, e.g.:
-        backend/devboard/services/workflow_action_service.py-8-
-        backend/devboard/services/workflow_action_service.py-9-
-        backend/devboard/services/workflow_action_service.py:10:class PromptActionNotFoundError(Exception):
-        backend/devboard/services/workflow_action_service.py-11-    \"\"\"Raised when a requested prompt action key does not exist.\"\"\"
-        backend/devboard/services/workflow_action_service.py-12-
-        backend/devboard/services/workflow_action_service.py-13-    pass
-        backend/devboard/services/workflow_action_service.py-14-
-        backend/devboard/services/workflow_action_service.py-15-
-        backend/devboard/services/workflow_action_service.py:16:class PromptActionService:
-        backend/devboard/services/workflow_action_service.py-17-    \"\"\"Service for managing and executing prompt actions.
-        backend/devboard/services/workflow_action_service.py-18-
-        backend/devboard/services/workflow_action_service.py-19-    Prompt actions are reusable, named operations that send predefined prompts
-        backend/devboard/services/workflow_action_service.py-20-    to agent conversations. This service handles action lookup and execution.
-        backend/devboard/services/workflow_action_service.py-21-    \"\"\"
-        --
-        backend/devboard/agents/base.py-11-
-        backend/devboard/agents/base.py-12-@dataclass(frozen=True)
-        backend/devboard/agents/base.py:13:class PromptAction:
-        backend/devboard/agents/base.py-14-    \"\"\"A reusable prompt action that can be triggered in conversations.
-        backend/devboard/agents/base.py-15-
-        backend/devboard/agents/base.py-16-    Attributes:
-        backend/devboard/agents/base.py-17-        key: Unique identifier for the action (e.g., \"task.create_implementation_plan\")
-        backend/devboard/agents/base.py-18-        prompt_template: The prompt text to send to the agent
         """
-        cmd = ["rg", "--line-number"]
+        cmd = ["rg", "--line-number", "--heading"]
 
         if not case_sensitive:
             cmd.append("--ignore-case")
@@ -209,8 +191,8 @@ class CodebaseIntegration:
         )
 
         if result.success and result.stdout:
-            return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-        return []
+            return result.stdout.strip()
+        return ""
 
     async def search_files(
         self,
@@ -269,31 +251,26 @@ class CodebaseIntegration:
         pattern: str,
         language: str | None = None,
         path: str | None = None,
-    ) -> list[str]:
+    ) -> str:
         """Search for code structure patterns using ast-grep.
+
+        Results are grouped by file with the file path as a heading::
+
+            models/task.py
+            19│class TaskStatus(StrEnum):
+            20│    DEFINING = "defining"
+            21│    PLANNING = "planning"
+
+            models/user.py
+            5│class UserRole(StrEnum):
+            6│    ADMIN = "admin"
 
         Args:
             pattern: AST pattern to search (e.g., 'class $NAME', 'def $FUNC($$$ARGS)')
             language: Optional language filter (e.g., 'python', 'typescript', 'rust')
             path: Optional path to search within - can be a subdirectory (e.g., 'tests', 'src/components') or a specific file
-
-        Returns:
-            List of matching lines from ast-grep output
-
-        TODO: Output appears to repeat the file path multiple times, e.g.:
-        Search: "class TaskStatus(StrEnum):
-        $$$"
-        Returns:
-        backend/devboard/db/models/task.py:19:class TaskStatus(StrEnum):
-        backend/devboard/db/models/task.py:20:    ""Enumeration of possible task statuses.""
-        backend/devboard/db/models/task.py:21:
-        backend/devboard/db/models/task.py:22:    DEFINING = "defining"
-        backend/devboard/db/models/task.py:23:    PLANNING = "planning"
-        backend/devboard/db/models/task.py:24:    IMPLEMENTING = "implementing"
-        backend/devboard/db/models/task.py:25:    REVIEWING = "reviewing"
-        backend/devboard/db/models/task.py:26:    COMPLETE = "complete"
         """
-        cmd = ["ast-grep", "--pattern", pattern]
+        cmd = ["ast-grep", "--pattern", pattern, "--heading=always"]
 
         if language:
             cmd.extend(["--lang", language])
@@ -312,8 +289,8 @@ class CodebaseIntegration:
         )
 
         if result.success and result.stdout:
-            return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-        return []
+            return result.stdout.strip()
+        return ""
 
     async def get_directory_tree(self, max_depth: int | None = None, subdirectory: str | None = None) -> str:
         """Get git-tracked file tree structure using piped git ls-files | tree command.

@@ -229,8 +229,7 @@ class TestSearchFileContent:
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result):
             result = await integration.search_file_content("hello")
 
-            assert len(result) == 1
-            assert result[0] == "test.py:1:def hello():"
+            assert result == "test.py:1:def hello():"
 
     @pytest.mark.asyncio
     async def test_search_file_content_with_pattern(self, temp_codebase):
@@ -245,7 +244,7 @@ class TestSearchFileContent:
             call_args = mock_exec.call_args[0][0]
             assert "--glob" in call_args
             assert "*.py" in call_args
-            assert result == []
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_search_file_content_case_sensitive(self, temp_codebase):
@@ -259,7 +258,7 @@ class TestSearchFileContent:
 
             call_args = mock_exec.call_args[0][0]
             assert "--ignore-case" not in call_args
-            assert result == []
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_search_file_content_search_hidden(self, temp_codebase):
@@ -273,7 +272,7 @@ class TestSearchFileContent:
 
             call_args = mock_exec.call_args[0][0]
             assert "--no-ignore" in call_args
-            assert result == []
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_search_file_content_with_subdirectory(self, temp_codebase):
@@ -289,8 +288,7 @@ class TestSearchFileContent:
             call_args = mock_exec.call_args[0][0]
             assert "tests" in call_args
             # Verify results are returned
-            assert len(result) == 1
-            assert "tests/test_auth.py" in result[0]
+            assert "tests/test_auth.py" in result
 
     @pytest.mark.asyncio
     async def test_search_file_content_subdirectory_with_trailing_slash(self, temp_codebase):
@@ -455,8 +453,7 @@ class TestSearchCodeStructure:
         with patch("devboard.integrations.codebase.execute_shell_command", return_value=mock_result):
             matches = await integration.search_code_structure("def $FUNC($$$ARGS)")
 
-            assert len(matches) == 1
-            assert matches[0] == "test.py:1:1:def hello():"
+            assert matches == "test.py:1:1:def hello():"
 
     @pytest.mark.asyncio
     async def test_search_code_structure_with_language(self, temp_codebase):
@@ -471,7 +468,7 @@ class TestSearchCodeStructure:
             call_args = mock_exec.call_args[0][0]
             assert "--lang" in call_args
             assert "python" in call_args
-            assert result == []
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_search_code_structure_with_path(self, temp_codebase):
@@ -487,8 +484,7 @@ class TestSearchCodeStructure:
             call_args = mock_exec.call_args[0][0]
             assert "backend/models" in call_args
             # Verify results are returned
-            assert len(result) == 1
-            assert "backend/models/user.py" in result[0]
+            assert "backend/models/user.py" in result
 
     @pytest.mark.asyncio
     async def test_search_code_structure_path_with_trailing_slash(self, temp_codebase):
