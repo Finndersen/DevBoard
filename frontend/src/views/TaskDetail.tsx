@@ -166,6 +166,9 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [diffLoading, setDiffLoading] = useState(false)
   const [lastDiffUpdate, setLastDiffUpdate] = useState<string | null>(null)
   const diffRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const branchInfoInFlightRef = useRef(false)
+  const diffInFlightRef = useRef(false)
+  const gitStatusInFlightRef = useRef(false)
 
   // Use ref to store refetch function to avoid dependency issues
   const refetchRef = useRef(refetch)
@@ -260,7 +263,8 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Fetch task branch info (commits list and uncommitted status)
   const fetchTaskBranchInfo = useCallback(async () => {
-    if (!task?.id) return
+    if (!task?.id || branchInfoInFlightRef.current) return
+    branchInfoInFlightRef.current = true
 
     setBranchInfoLoading(true)
 
@@ -271,12 +275,14 @@ function TaskDetail({ id }: TaskDetailProps) {
       console.error('Failed to fetch task branch info:', error)
     } finally {
       setBranchInfoLoading(false)
+      branchInfoInFlightRef.current = false
     }
   }, [task?.id])
 
   // Fetch task diff
   const fetchTaskDiff = useCallback(async (view: string) => {
-    if (!task?.id) return
+    if (!task?.id || diffInFlightRef.current) return
+    diffInFlightRef.current = true
 
     setDiffLoading(true)
 
@@ -288,6 +294,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       console.error('Failed to fetch task diff:', error)
     } finally {
       setDiffLoading(false)
+      diffInFlightRef.current = false
     }
   }, [task?.id])
 
@@ -349,13 +356,16 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Refresh git status (called after modal actions)
   const refreshGitStatus = useCallback(async () => {
-    if (!task?.id) return
+    if (!task?.id || gitStatusInFlightRef.current) return
+    gitStatusInFlightRef.current = true
 
     try {
       const status = await apiClient.getTaskGitStatus(task.id)
       setGitStatus(status)
     } catch (error) {
       console.error('Failed to refresh git status:', error)
+    } finally {
+      gitStatusInFlightRef.current = false
     }
   }, [task?.id])
 
@@ -404,7 +414,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
       diffRefreshTimeoutRef.current = setTimeout(() => {
         handleDiffRefresh('all')
-      }, 500)
+      }, 1000)
     }
   }, [task?.status, task?.codebase_id, handleDiffRefresh])
 
@@ -486,6 +496,11 @@ function TaskDetail({ id }: TaskDetailProps) {
   const streamCompleteHandler = useCallback(() => {
     // Only refresh diff when task is in implementing status
     if (task?.status?.toLowerCase() === 'implementing' && task?.codebase_id) {
+      // Clear any pending debounced refresh to avoid duplicate requests
+      if (diffRefreshTimeoutRef.current) {
+        clearTimeout(diffRefreshTimeoutRef.current)
+        diffRefreshTimeoutRef.current = null
+      }
       // Refresh the 'all' view to show latest changes
       handleDiffRefresh('all')
     }

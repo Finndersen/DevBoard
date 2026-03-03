@@ -26,7 +26,11 @@ export function useApi<T>(
     error: null
   })
 
+  const inFlightRef = useRef(false)
+
   const execute = useCallback(async () => {
+    if (inFlightRef.current) return
+    inFlightRef.current = true
     setState(prev => ({ ...prev, loading: true, error: null }))
 
     try {
@@ -35,8 +39,10 @@ export function useApi<T>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
       setState({ data: null, loading: false, error: errorMessage })
+    } finally {
+      inFlightRef.current = false
     }
-  }, []) // Remove apiCall from dependencies
+  }, [])
 
   const setData = useCallback((data: T) => {
     setState({ data, loading: false, error: null })
