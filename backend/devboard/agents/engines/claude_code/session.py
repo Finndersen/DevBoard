@@ -76,7 +76,7 @@ class UserMessageDict(TypedDict):
     """User message data structure."""
 
     role: str  # "user"
-    content: str | list[ToolResultBlockDict]
+    content: str | list[TextBlockDict] | list[ToolResultBlockDict]
 
 
 class AssistantMessageDict(TypedDict):
@@ -460,7 +460,14 @@ class ClaudeCodeSessionService:
                 meta_type = (
                     MetaMessageType.COMPACT_SUMMARY if entry.get("isCompactSummary") else MetaMessageType.SKILL_CONTENT
                 )
-                text = content_raw if isinstance(content_raw, str) else ""
+                if isinstance(content_raw, str):
+                    text = content_raw
+                elif isinstance(content_raw, list):
+                    text = "\n".join(
+                        b.get("text", "") for b in content_raw if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                else:
+                    text = ""
                 return MetaSessionMessage(
                     uuid=uuid,
                     timestamp=timestamp,

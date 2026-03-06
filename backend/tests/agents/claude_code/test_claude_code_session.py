@@ -89,6 +89,29 @@ class TestClaudeCodeSessionService:
         assert session_msg.meta_type == MetaMessageType.SKILL_CONTENT
         assert session_msg.text_content == "Skill prompt content here..."
 
+    def test_parse_user_message_meta_list_of_text_blocks(self, service):
+        """Test parsing an isMeta message where content is a list of text blocks (Claude Code JSONL format)."""
+        entry = {
+            "type": "user",
+            "uuid": "user-meta-2",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "isMeta": True,
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "First skill block."},
+                    {"type": "text", "text": "Second skill block."},
+                ],
+            },
+        }
+
+        session_msg = service._parse_session_message(entry, line_num=7)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.SKILL_CONTENT
+        assert session_msg.text_content == "First skill block.\nSecond skill block."
+
     def test_parse_assistant_text_message(self, service):
         """Test parsing an assistant message with text content."""
         entry = {
