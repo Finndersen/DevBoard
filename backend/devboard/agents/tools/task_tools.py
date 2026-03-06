@@ -62,7 +62,7 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
 
         Args:
             status_filter: Filter by one or more status values.
-                Valid values: 'planning', 'implementing', 'pr_open', 'reviewing', 'complete'
+                Valid values: 'planning', 'implementing', 'pr_open', 'complete'
             created_after_date: Filter tasks created on or after this date (format: 'YYYY-MM-DD')
             created_before_date: Filter tasks created before this date (format: 'YYYY-MM-DD')
             codebase_name: Filter by codebase name. Choose from the available codebases.

@@ -201,3 +201,41 @@ class GitHubPRStatusResponse(BaseModel):
     review_comments_count: int
     checks_status: str | None
     pr_url: str
+
+
+class PRFeedbackCommentResponse(BaseModel):
+    """A single PR review comment."""
+
+    id: int
+    author: str
+    body: str
+    path: str
+    line: int | None
+    diff_hunk: str | None
+    created_at: datetime.datetime | None
+    in_reply_to_id: int | None
+
+
+class PRFeedbackCommentThreadResponse(BaseModel):
+    """A thread of comments: original comment plus replies."""
+
+    original: PRFeedbackCommentResponse
+    replies: list[PRFeedbackCommentResponse]
+
+
+class PRFeedbackReviewResponse(BaseModel):
+    """A review with its associated comment threads."""
+
+    id: int
+    author: str
+    state: str
+    body: str
+    submitted_at: datetime.datetime | None
+    comment_threads: list[PRFeedbackCommentThreadResponse]
+
+
+class PRFeedbackResponse(BaseModel):
+    """Complete PR feedback including reviews and standalone comment threads."""
+
+    reviews: list[PRFeedbackReviewResponse]
+    standalone_threads: list[PRFeedbackCommentThreadResponse]

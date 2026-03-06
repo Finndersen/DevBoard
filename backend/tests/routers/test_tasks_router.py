@@ -1063,3 +1063,199 @@ async def test_get_task_diff(client, db_session):
         # Check totals
         assert data["additions"] == 2
         assert data["deletions"] == 0
+
+
+class TestGetTaskPRFeedback:
+    """Tests for GET /api/tasks/{task_id}/pr-feedback endpoint."""
+
+    def _create_pr_open_task(
+        self, db_session, test_codebase, github_pr_number=42, repository_url="https://github.com/owner/repo"
+    ):
+        """Helper to create a task in PR_OPEN state with GitHub PR configured."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        task_repo = TaskRepository(db_session)
+        conversation_repo = ConversationRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="PR Test Project", description="Test", specification=spec_doc)
+
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "has content")
+        task = task_repo.create(
+            project_id=project.id,
+            title="PR Test Task",
+            status=TaskStatus.PR_OPEN,
+            specification=task_spec_doc,
+            implementation_plan=task_plan_doc,
+            base_branch="main",
+            codebase_id=test_codebase.id,
+            branch_name="feature/pr-test",
+        )
+        task.github_pr_number = github_pr_number
+
+        # Set repository_url on codebase
+        test_codebase.repository_url = repository_url
+
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+        return task
+
+    def test_returns_404_when_not_pr_open(self, client, db_session, test_codebase):
+        """Should return 404 when task is not in PR_OPEN state."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        task_repo = TaskRepository(db_session)
+        conversation_repo = ConversationRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Feedback Test", description="Test", specification=spec_doc)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Non-PR Task",
+            status=TaskStatus.PLANNING,
+            specification=task_spec_doc,
+            base_branch="main",
+            codebase_id=test_codebase.id,
+            branch_name="feature/non-pr",
+        )
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+        )
+        db_session.commit()
+
+        response = client.get(f"/api/tasks/{task.id}/pr-feedback")
+        assert response.status_code == 404
+        assert "not in PR_OPEN state" in response.json()["detail"]
+
+    def test_returns_404_when_no_pr_number(self, client, db_session, test_codebase):
+        """Should return 404 when task has no github_pr_number."""
+        task = self._create_pr_open_task(db_session, test_codebase, github_pr_number=None)
+
+        response = client.get(f"/api/tasks/{task.id}/pr-feedback")
+        assert response.status_code == 404
+        assert "no PR configured" in response.json()["detail"]
+
+    @patch("devboard.api.routers.tasks.IntegrationService")
+    def test_returns_feedback_successfully(self, mock_integration_cls, client, db_session, test_codebase):
+        """Should return serialised PRFeedback when GitHub integration works."""
+        from devboard.api.dependencies.services import get_integration_service
+        from devboard.api.main import app
+        from devboard.integrations.github import CommentThread, PRFeedback, ReviewComment, ReviewWithComments
+
+        task = self._create_pr_open_task(db_session, test_codebase)
+
+        # Build mock feedback data
+        comment = ReviewComment(
+            id=101,
+            author="reviewer1",
+            body="Fix this line",
+            path="src/main.py",
+            line=42,
+            diff_hunk="@@ -40,3 +40,5 @@\n old\n+new",
+            created_at=datetime.datetime(2025, 1, 15, 10, 30, 0),
+            in_reply_to_id=None,
+        )
+        reply = ReviewComment(
+            id=102,
+            author="author1",
+            body="Done",
+            path="src/main.py",
+            line=42,
+            diff_hunk="@@ -40,3 +40,5 @@\n old\n+new",
+            created_at=datetime.datetime(2025, 1, 15, 11, 0, 0),
+            in_reply_to_id=101,
+        )
+        thread = CommentThread(original=comment, replies=[reply])
+        review = ReviewWithComments(
+            id=201,
+            author="reviewer1",
+            state="CHANGES_REQUESTED",
+            body="Please address these issues",
+            submitted_at=datetime.datetime(2025, 1, 15, 10, 30, 0),
+            comment_threads=[thread],
+        )
+        standalone_comment = ReviewComment(
+            id=103,
+            author="reviewer2",
+            body="General comment",
+            path="",
+            line=None,
+            diff_hunk=None,
+            created_at=datetime.datetime(2025, 1, 15, 12, 0, 0),
+            in_reply_to_id=None,
+        )
+        standalone_thread = CommentThread(original=standalone_comment, replies=[])
+        feedback = PRFeedback(reviews=[review], standalone_threads=[standalone_thread])
+
+        # Mock integration service chain
+        mock_github_pr = AsyncMock()
+        mock_github_pr.get_feedback = AsyncMock(return_value=feedback)
+        mock_github_repo = AsyncMock()
+        mock_github_repo.get_pull_request = AsyncMock(return_value=mock_github_pr)
+        mock_github = AsyncMock()
+        mock_github.get_repository_from_url = AsyncMock(return_value=mock_github_repo)
+        mock_service = MagicMock()
+        mock_service.get_integration_instance.return_value = mock_github
+
+        app.dependency_overrides[get_integration_service] = lambda: mock_service
+
+        try:
+            response = client.get(f"/api/tasks/{task.id}/pr-feedback")
+            assert response.status_code == 200
+
+            data = response.json()
+            assert len(data["reviews"]) == 1
+            assert data["reviews"][0]["id"] == 201
+            assert data["reviews"][0]["author"] == "reviewer1"
+            assert data["reviews"][0]["state"] == "CHANGES_REQUESTED"
+            assert data["reviews"][0]["body"] == "Please address these issues"
+            assert len(data["reviews"][0]["comment_threads"]) == 1
+
+            ct = data["reviews"][0]["comment_threads"][0]
+            assert ct["original"]["id"] == 101
+            assert ct["original"]["author"] == "reviewer1"
+            assert ct["original"]["body"] == "Fix this line"
+            assert ct["original"]["path"] == "src/main.py"
+            assert ct["original"]["line"] == 42
+            assert len(ct["replies"]) == 1
+            assert ct["replies"][0]["id"] == 102
+            assert ct["replies"][0]["body"] == "Done"
+
+            assert len(data["standalone_threads"]) == 1
+            assert data["standalone_threads"][0]["original"]["id"] == 103
+            assert data["standalone_threads"][0]["original"]["author"] == "reviewer2"
+        finally:
+            if get_integration_service in app.dependency_overrides:
+                del app.dependency_overrides[get_integration_service]
+
+    def test_returns_500_when_github_unavailable(self, client, db_session, test_codebase):
+        """Should return 500 when GitHub integration fails."""
+        from devboard.api.dependencies.services import get_integration_service
+        from devboard.api.main import app
+
+        task = self._create_pr_open_task(db_session, test_codebase)
+
+        mock_service = MagicMock()
+        mock_service.get_integration_instance.side_effect = RuntimeError("GitHub not configured")
+
+        app.dependency_overrides[get_integration_service] = lambda: mock_service
+
+        try:
+            response = client.get(f"/api/tasks/{task.id}/pr-feedback")
+            assert response.status_code == 500
+            assert "GitHub integration not configured" in response.json()["detail"]
+        finally:
+            if get_integration_service in app.dependency_overrides:
+                del app.dependency_overrides[get_integration_service]

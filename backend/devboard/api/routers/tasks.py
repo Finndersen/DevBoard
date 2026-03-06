@@ -29,6 +29,10 @@ from devboard.api.schemas import (
     GitHubPRStatusResponse,
     MergeBranchRequest,
     MergeBranchResponse,
+    PRFeedbackCommentResponse,
+    PRFeedbackCommentThreadResponse,
+    PRFeedbackResponse,
+    PRFeedbackReviewResponse,
     PromptActionRequest,
     ResourceResponse,
     TaskBranchInfo,
@@ -49,7 +53,7 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
-from devboard.integrations.github import GitHubIntegration
+from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment
 from devboard.services.integration_service import IntegrationService
 from devboard.services.resource_service import (
     ResourceService,
@@ -636,4 +640,72 @@ async def get_task_pr_status(
         review_comments_count=pr.review_comments,
         checks_status=checks_status,
         pr_url=pr.html_url,
+    )
+
+
+def _map_comment(comment: ReviewComment) -> PRFeedbackCommentResponse:
+    return PRFeedbackCommentResponse(
+        id=comment.id,
+        author=comment.author,
+        body=comment.body,
+        path=comment.path,
+        line=comment.line,
+        diff_hunk=comment.diff_hunk,
+        created_at=comment.created_at,
+        in_reply_to_id=comment.in_reply_to_id,
+    )
+
+
+def _map_thread(thread: CommentThread) -> PRFeedbackCommentThreadResponse:
+    return PRFeedbackCommentThreadResponse(
+        original=_map_comment(thread.original),
+        replies=[_map_comment(r) for r in thread.replies],
+    )
+
+
+@router.get("/{task_id}/pr-feedback", response_model=PRFeedbackResponse)
+async def get_task_pr_feedback(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PRFeedbackResponse:
+    """Get GitHub PR feedback (reviews and comments) for a task in PR_OPEN state.
+
+    Returns structured review feedback including inline comment threads and
+    standalone comment threads, suitable for rendering in the diff view.
+    """
+    if task.status != TaskStatus.PR_OPEN:
+        raise HTTPException(status_code=404, detail=f"Task is not in PR_OPEN state (current: {task.status.value})")
+
+    if not task.github_pr_number:
+        raise HTTPException(status_code=404, detail="Task has no PR configured")
+
+    if not task.codebase.repository_url:
+        raise HTTPException(status_code=404, detail="Task codebase has no repository URL configured")
+
+    try:
+        github = integration_service.get_integration_instance(GitHubIntegration)
+        github_repo = await github.get_repository_from_url(task.codebase.repository_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GitHub integration not configured: {e}") from e
+
+    try:
+        github_pr = await github_repo.get_pull_request(task.github_pr_number)
+        feedback = await github_pr.get_feedback()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch PR feedback: {e}") from e
+
+    return PRFeedbackResponse(
+        reviews=[
+            PRFeedbackReviewResponse(
+                id=review.id,
+                author=review.author,
+                state=review.state,
+                body=review.body,
+                submitted_at=review.submitted_at,
+                comment_threads=[_map_thread(t) for t in review.comment_threads],
+            )
+            for review in feedback.reviews
+        ],
+        standalone_threads=[_map_thread(t) for t in feedback.standalone_threads],
     )
