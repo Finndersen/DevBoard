@@ -10,7 +10,11 @@ lock:
 
 install:	## Install development dependencies & setup dev environment
 	env -u PIP_INDEX_URL -u UV_DEFAULT_INDEX uv sync --extra dev --frozen
-	uv run --frozen pre-commit install
+	@if [ -f "$$(git rev-parse --show-toplevel)/.git" ]; then \
+		echo "Skipping pre-commit install (git worktree detected)"; \
+	else \
+		uv run --frozen pre-commit install; \
+	fi
 
 format:		## Format code with ruff
 	uv run --frozen ruff format .

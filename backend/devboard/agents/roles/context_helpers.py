@@ -48,11 +48,12 @@ def build_task_context(
 def _format_task_metadata(task: Task) -> str:
     """Format task name and status metadata."""
     lines = [
-        f"TASK NAME: {task.title}",
-        f"TASK STATUS: {task.status.value}",
+        "## TASK DETAILS",
+        f"NAME: {task.title}",
+        f"STATUS: {task.status.value}",
     ]
     if task.github_pr_number:
-        lines.append(f"PULL REQUEST: #{task.github_pr_number}")
+        lines.append(f"ASSOCIATED PULL REQUEST: #{task.github_pr_number}")
     return "\n".join(lines)
 
 

@@ -11,7 +11,7 @@ from devboard.agents.tools import (
     create_get_pr_feedback_tool,
     create_merge_pr_and_complete_task_tool,
 )
-from devboard.agents.tools.task_query_tools import create_create_task_tool
+from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration, PRStatus

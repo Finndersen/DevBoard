@@ -10,7 +10,7 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
 )
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
-from devboard.agents.tools.task_query_tools import (
+from devboard.agents.tools.task_tools import (
     create_create_task_tool,
     create_list_tasks_tool,
     create_view_task_details_tool,
@@ -25,6 +25,7 @@ You are a Project Assistant for DevBoard, an AI-powered developer command center
 Your role is to assist a developer working on a software project. This includes:
 - Answering questions about the project based on project specification, tasks, and associated context resources
 - Discussing project requirements and goals in order to create new tasks or update project specification
+- Managing project tasks
 
 You will have access to the project specification document, which you are able to edit using the provided tools.
 
@@ -140,3 +141,20 @@ class ProjectQAAgentRole(AgentRole):
             Formatted context containing project details and specification
         """
         return build_project_qa_context(self.project)
+
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return [
+            "Read",
+            "Bash",
+            "WebFetch",
+            "WebSearch",
+            "TaskCreate",
+            "TaskGet",
+            "TaskUpdate",
+            "TaskList",
+            "Agent",
+            "Skill",
+            "TodoWrite",
+        ]

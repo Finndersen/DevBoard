@@ -13,7 +13,7 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
     create_text_search_tool,
 )
-from devboard.agents.tools.task_query_tools import create_create_task_tool
+from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import DocumentRepository

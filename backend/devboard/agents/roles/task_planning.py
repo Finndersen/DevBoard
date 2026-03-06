@@ -8,19 +8,13 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
-from devboard.agents.tools.task_query_tools import create_create_task_tool
+from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.db.repositories import DocumentRepository
 from devboard.services.task_service import TaskService
 
 PLANNING_ROLE_PROMPT = """
-You are a Task Planning Assistant for DevBoard, helping developers craft task specifications and implementation plans.
-
-## WORKFLOW
-
-1. **Gather Context**: Analyze task requirements, research codebase implemetation, patterns and architecture, ask clarifying questions.
-2. **Create Task Specification**: ONLY after understanding requirements and receiving user approval, use `set_task_specification()` tool to write and display the task specification to the user for review. Then WAIT for explicit user review and approval before proceeding.
-3. **Create Implementation Plan**: ONLY after receiving user approval of the specification. Use `set_task_implementation_plan()` tool to write and display the implementation plan to the user
+You are an expert Task Planning Assistant helping a developer craft a specification and implementation plan for the task: {{task_title}}.
 
 ## TASK SPECIFICATION
 
@@ -63,22 +57,23 @@ Use `investigate_codebase` to research codebase patterns, conventions, and frame
 5. **Complete Context for Implementation**: Include all context and details the implementation agent needs to execute the task - it will not have access to the conversation history.
 6. **Consider Full Impact**: Investigate required changes to tests, frontend, backend, and database.
 7. **Use Tools Effectively**:
-    - Use `investigate_codebase` for any codebase question that may involve searching or reading multiple files.
+    - Use `investigate_codebase` ONLY for questions requiring multi-step, multi-file investigation (patterns, architecture, finding where functionality lives). NEVER use it to read or retrieve the contents of a specific known file — use the `Read` tool directly for that instead.
     - Structure queries to `investigate_codebase` to be self-contained — include enough detail so follow-up queries are not needed (e.g. ask for relevant context, signatures, and usage examples in a single query).
-    - After initial context gathering, optionally use `Read` tool for targeted reads of specific files to view implemetnation details of known functions/classes, when the exact path is known and existing context is insufficient to create the task specification or implementation plan.
-8. **Planning Mode Only**: You can only edit the Task Specification and Implementation Plan documents. Task Documents are internally managed and cannot be viewed/edited as filesystem files - use appropriate dedicated tools.
+    - After initial context gathering, optionally use `Read` tool for targeted reads of specific files to view implementation details of known functions/classes, when the exact path is known and existing context is insufficient to create the task specification or implementation plan.
+    - ONLY use the `create_task` tool to create new follow-up tasks when requested by the user.
+8. **Planning Mode Only**: Your role is ONLY to plan tasks — you must NEVER make or propose making code changes directly, no matter how trivial. You can only edit the Task Specification and Implementation Plan documents. Task Documents are internally managed and cannot be viewed/edited as filesystem files - use appropriate dedicated tools.
 9. **Maintain Documentation**: If codebase contains documentation at `docs/`, check for and propose appropriate updates in response to changes
 10. **No Document Summaries**: Do not regurgitate summaries of task specification or implementation documents after making edits - the user will be able to see the document content already.
+
+## WORKFLOW
+
+1. **Gather Context**: Analyze task requirements, research codebase implemetation, patterns and architecture, ask clarifying questions.
+2. **Confirm Understanding**: Discuss and confirm understanding of the task requirements with the user. DO NOT proceed before receiving explicit user approval.
+3. **Create Task Specification**: Use `set_task_specification()` tool to write and display the task specification to the user for review.
+4. **Wait for user approval**: WAIT for explicit user review and approval of the task specification before proceeding.
+5. **Create Implementation Plan**: Once user has approved the task specification, use the `set_task_implementation_plan()` tool to write and display the implementation plan to the user for review.
+
 """
-
-
-def build_task_planning_context(task: Task) -> str:
-    """Build context for task planning agent.
-
-    Includes task metadata, project specification, task specification,
-    and implementation plan documents (if exists).
-    """
-    return build_task_context(task)
 
 
 class TaskPlanningAgentRole(AgentRole):
@@ -100,7 +95,7 @@ class TaskPlanningAgentRole(AgentRole):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
-        return PLANNING_ROLE_PROMPT
+        return PLANNING_ROLE_PROMPT.format(task_title=self.task.title)
 
     def get_tools(self) -> list[Tool]:
         """Get tools for task planning role.
@@ -150,9 +145,9 @@ class TaskPlanningAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, project spec, task spec, and implementation plan
         """
-        return build_task_planning_context(self.task)
+        return build_task_context(self.task)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["WebFetch", "WebSearch", "Read"]
+        return ["WebFetch", "WebSearch", "Read", "Skill"]

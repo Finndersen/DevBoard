@@ -70,7 +70,7 @@ def create_multi_codebase_investigation_tool(
         - Code organization and conventions
 
         ONLY use this tool for questions that likely involve multi-step and multi-file investigation.
-        DO NOT use this tool just to read implementation details from specific known files.
+        DO NOT use this tool to read or retrieve the content of a specific known file — use the `Read` tool directly instead.
 
         Guidelines:
         - Be specific about what you want to know and what level of detail is required.

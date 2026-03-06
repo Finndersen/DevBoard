@@ -8,7 +8,7 @@ import pytest
 import toons
 from pydantic_ai import ModelRetry, Tool
 
-from devboard.agents.tools.task_query_tools import (
+from devboard.agents.tools.task_tools import (
     MAX_TASKS_LIMIT,
     _format_tasks_as_toon,
     _task_to_toon_record,
