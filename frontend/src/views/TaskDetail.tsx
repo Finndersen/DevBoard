@@ -462,6 +462,15 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   useToolResultHandler(createPRHandler)
 
+  // Handler for merge_pr_and_complete_task tool - refresh task details to show COMPLETE status
+  const mergePRAndCompleteHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('merge_pr_and_complete_task')) {
+      await refetch()
+    }
+  }, [refetch])
+
+  useToolResultHandler(mergePRAndCompleteHandler)
+
   // Handler for rebase_task_branch tool - refresh git status on success or failure
   const rebaseHandler = useCallback(async (toolName: string, result: any) => {
     if (toolName.includes('rebase_task_branch')) {
