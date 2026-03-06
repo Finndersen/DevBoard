@@ -41,13 +41,13 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
     async def _stream_events_impl(
         self,
         message_or_approvals: str | ToolApprovals,
-        mcp_tools: list[Tool],
+        extra_tools: list[Tool],
     ) -> AsyncIterator[ConversationEvent]:
         """Engine-specific implementation of event streaming.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
-            mcp_tools: PydanticAI Tool instances from enabled MCP servers
+            extra_tools: MCP server tools for the role plus any others added dynamically for the run
 
         Yields:
             ConversationEvent instances as they are generated during agent execution
@@ -56,7 +56,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         if isinstance(message_or_approvals, ToolApprovals) and not self.session_id:
             raise ValueError("No session ID available - cannot process tool approvals")
 
-        agent = self._get_agent(mcp_tools=mcp_tools)
+        agent = self._get_agent(extra_tools=extra_tools)
 
         # Stream events from agent execution
         try:
@@ -94,11 +94,11 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                 timestamp=datetime.now(UTC),
             )
 
-    def _get_agent(self, mcp_tools: list[Tool] | None = None) -> ClaudeCodeAgent:
-        """Create agent with session_id and optional MCP tools.
+    def _get_agent(self, extra_tools: list[Tool] | None = None) -> ClaudeCodeAgent:
+        """Create agent with session_id and optional extra tools.
 
         Args:
-            mcp_tools: Optional MCP tools to include as additional tools
+            extra_tools: Combined MCP and dynamically-added tools
 
         Returns:
             ClaudeCodeAgent instance configured with role, model, and tools
@@ -112,14 +112,11 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         else:
             codebase_path = None
 
-        # Combine additional_tools with MCP tools
-        all_additional_tools = self.additional_tools + (mcp_tools or [])
-
         return ClaudeCodeAgent(
             role=self.role,
             model=model,
             session_id=self.conversation.external_session_id,
             working_dir=codebase_path,
-            additional_tools=all_additional_tools,
+            additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),
         )

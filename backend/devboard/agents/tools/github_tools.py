@@ -77,9 +77,8 @@ def create_github_pr_tool(
             if existing_pr:
                 pr_number = existing_pr.number
             else:
-                # Push branch to remote if not already pushed
-                if not await git.is_branch_pushed(task.branch_name):
-                    await git.push_branch(task.branch_name, set_upstream=True)
+                # Push branch to remote (safe even if already up-to-date)
+                await git.push_branch(task.branch_name, set_upstream=True)
 
                 # Create PR via GitHub API
                 pr = await github_repo.create_pull_request(

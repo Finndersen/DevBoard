@@ -2,13 +2,18 @@
 
 import os
 from collections.abc import Generator
+from pathlib import Path
 
 import logfire
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-# Database URL from environment or default to local SQLite
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/devboard.db")
+# Database URL from environment or default to ~/.devboard/data/devboard.db
+_default_db_dir = Path.home() / ".devboard" / "data"
+_default_db_dir.mkdir(parents=True, exist_ok=True)
+_DEFAULT_DATABASE_URL = f"sqlite:///{_default_db_dir / 'devboard.db'}"
+
+DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_DATABASE_URL)
 
 # Create engine with connection pooling
 is_sqlite = "sqlite" in DATABASE_URL

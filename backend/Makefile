@@ -35,7 +35,7 @@ start:		## Start development server (use BACKEND_PORT=XXXX to override default 8
 	uv run --frozen uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
 
 migrate:	## Run database migrations
-	mkdir -p data && uv run --frozen alembic upgrade head
+	mkdir -p ~/.devboard/data && uv run --frozen alembic upgrade head
 
 migrate-auto:	## Generate new migration
 	uv run --frozen alembic revision --autogenerate

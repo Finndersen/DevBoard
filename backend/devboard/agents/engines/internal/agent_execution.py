@@ -37,13 +37,13 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
     async def _stream_events_impl(
         self,
         message_or_approvals: str | ToolApprovals,
-        mcp_tools: list[Tool],
+        extra_tools: list[Tool],
     ) -> AsyncIterator[ConversationEvent]:
         """Engine-specific implementation of event streaming.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
-            mcp_tools: PydanticAI Tool instances from enabled MCP servers
+            extra_tools: MCP server tools for the role plus any others added dynamically for the run
 
         Yields:
             ConversationEvent instances as they are generated during agent execution
@@ -66,8 +66,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
 
         message_history = convert_messages_to_pydantic(existing_messages)
 
-        # Create agent with history, deps, and MCP tools
-        agent = self._get_agent(conversation_history=message_history, mcp_tools=mcp_tools)
+        agent = self._get_agent(conversation_history=message_history, extra_tools=extra_tools)
 
         # Stream events from agent execution
         try:
@@ -82,7 +81,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             raise
 
     def _get_agent(
-        self, conversation_history: list[ModelMessage], mcp_tools: list[Tool] | None = None
+        self, conversation_history: list[ModelMessage], extra_tools: list[Tool] | None = None
     ) -> InternalAgent:
         """Create and return an agent instance.
 
@@ -90,7 +89,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
 
         Args:
             conversation_history: Previous conversation messages
-            mcp_tools: Optional MCP tools to include as additional tools
+            extra_tools: Combined MCP and dynamically-added tools
 
         Returns:
             InternalAgent instance configured with role, model, and history
@@ -99,14 +98,11 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
         if not model:
             raise ValueError(f"Model '{self.conversation.model_id}' not found in registry")
 
-        # Combine additional_tools with MCP tools
-        all_additional_tools = self.additional_tools + (mcp_tools or [])
-
         return InternalAgent(
             role=self.role,
             model=model,
             conversation_history=conversation_history,
-            additional_tools=all_additional_tools,
+            additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),
         )
 

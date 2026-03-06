@@ -473,6 +473,8 @@ class ClaudeClient:
                             logfire.info(f"Received message: {message_desc}", message=message)
                             await self._start_running_any_mcp_tools(message)
                             await queue.put(message)
+
+                        await self._wait_for_subprocess_flush(client)
             except Exception as e:
                 # Propagate exceptions to the consumer via the queue
                 await queue.put(e)
@@ -508,3 +510,26 @@ class ClaudeClient:
     @staticmethod
     def _is_mcp_tool(tool_name: str) -> bool:
         return "__" in tool_name and tool_name.split("__")[0] == "mcp"
+
+    @staticmethod
+    async def _wait_for_subprocess_flush(client: ClaudeSDKClient, timeout: float = 5.0) -> None:
+        """Close stdin and wait for the CLI subprocess to flush and exit.
+
+        The SDK's transport.close() sends EOF and SIGTERM almost simultaneously,
+        which can kill the subprocess before it finishes writing the session file.
+        By closing stdin early and waiting, we let the subprocess flush and exit
+        naturally, so transport.close() finds returncode already set and skips SIGTERM.
+        """
+        try:
+            query = getattr(client, "_query", None)
+            if not query:
+                return
+            transport = getattr(query, "transport", None)
+            if not transport:
+                return
+            await transport.end_input()
+            process = getattr(transport, "_process", None)
+            if process and process.returncode is None:
+                await asyncio.wait_for(process.wait(), timeout=timeout)
+        except (TimeoutError, Exception):
+            pass

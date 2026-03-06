@@ -36,7 +36,6 @@ class AgentExecutionService(ABC):
         conversation: The conversation instance this service manages
         role: The Role defining agent behavior
         conversation_repo: Repository for conversation operations
-        additional_tools: Extra tools beyond those defined by the role
         agent_config_service: Service for loading agent configuration (custom instructions, MCP tools)
     """
 
@@ -65,7 +64,7 @@ class AgentExecutionService(ABC):
         self.conversation_repo = conversation_repository
         self._history_service = history_service
         self._agent_config_service = agent_config_service
-        self.additional_tools = additional_tools or []
+        self._additional_tools = additional_tools or []
 
     def get_custom_instructions(self) -> str | None:
         """Get custom instructions for this agent role from config service."""
@@ -122,16 +121,18 @@ class AgentExecutionService(ABC):
             engine=self.conversation.engine.value,
             is_approval=is_approval,
         ):
-            mcp_tools = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
-            async with MCPToolFactory(mcp_tools) as mcp_factory:
-                async for event in self._stream_events_impl(message_or_approvals, mcp_factory.get_tools()):
+            mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
+            async with MCPToolFactory(mcp_tool_configs) as mcp_factory:
+                # MCP server tools for the role plus any others added dynamically for the specific run
+                extra_tools = self._additional_tools + mcp_factory.get_tools()
+                async for event in self._stream_events_impl(message_or_approvals, extra_tools):
                     yield event
 
     @abstractmethod
     async def _stream_events_impl(
         self,
         message_or_approvals: str | ToolApprovals,
-        mcp_tools: list[Tool],
+        extra_tools: list[Tool],
     ) -> AsyncIterator[ConversationEvent]:
         """Engine-specific implementation of event streaming.
 
@@ -140,7 +141,7 @@ class AgentExecutionService(ABC):
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
-            mcp_tools: PydanticAI Tool instances from enabled MCP servers
+            extra_tools: MCP server tools for the role plus any others added dynamically for the run
 
         Yields:
             ConversationEvent instances as they are generated during agent execution

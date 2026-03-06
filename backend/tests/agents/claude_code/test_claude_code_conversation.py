@@ -152,7 +152,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(execution_service, "_get_agent", lambda mcp_tools=None: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda extra_tools=None: mock_agent)
 
         # Collect all streamed events
         events = []
@@ -193,7 +193,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         mock_agent.stream_events = mock_stream_events_raise_fnf_immediate
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(execution_service, "_get_agent", lambda mcp_tools=None: mock_agent)
+        monkeypatch.setattr(execution_service, "_get_agent", lambda extra_tools=None: mock_agent)
 
         # Collect all streamed events
         events = []

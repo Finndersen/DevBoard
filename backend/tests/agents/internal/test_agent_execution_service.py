@@ -116,7 +116,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, extra_tools=None: mock_agent_instance)
 
         events = await service.send_message_or_approval(message_or_approvals="Test message")
 
@@ -167,7 +167,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, extra_tools=None: mock_agent_instance)
 
         events = await service.send_message_or_approval(message_or_approvals="Edit this")
 
@@ -215,7 +215,7 @@ class TestPydanticAIAgentExecutionService:
         mock_agent_instance.get_new_messages = mock_get_new_messages
 
         # Patch _get_agent to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, mcp_tools=None: mock_agent_instance)
+        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, extra_tools=None: mock_agent_instance)
 
         # Process approvals
         approvals = {"tool_123": ToolApprovalDecision(approved=True)}

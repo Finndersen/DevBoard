@@ -429,6 +429,15 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   useToolResultHandler(taskCompletionHandler)
 
+  // Handler for create_pull_request tool - refresh task details to show PR_OPEN status
+  const createPRHandler = useCallback(async (toolName: string, result: any) => {
+    if (toolName.includes('create_pull_request')) {
+      await refetch()
+    }
+  }, [refetch])
+
+  useToolResultHandler(createPRHandler)
+
   // Handler for rebase_task_branch tool - refresh git status on success or failure
   const rebaseHandler = useCallback(async (toolName: string, result: any) => {
     if (toolName.includes('rebase_task_branch')) {

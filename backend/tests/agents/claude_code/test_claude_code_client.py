@@ -1,7 +1,8 @@
 """Tests for ClaudeClient."""
 
+import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from claude_agent_sdk import (
@@ -402,3 +403,97 @@ class TestMcpToolErrorHandling:
         # Verify isError is False for successful execution (MCP uses camelCase)
         assert hasattr(result.root, "isError"), "Result should have isError attribute"
         assert result.root.isError is False, "isError should be False for successful tool"
+
+
+class TestWaitForSubprocessFlush:
+    """Tests for ClaudeClient._wait_for_subprocess_flush."""
+
+    @pytest.mark.asyncio
+    async def test_calls_end_input_and_waits_for_process(self):
+        """Verify it calls end_input() and process.wait() with timeout."""
+        mock_process = AsyncMock()
+        mock_process.returncode = None
+        mock_process.wait = AsyncMock()
+
+        mock_transport = AsyncMock()
+        mock_transport.end_input = AsyncMock()
+        mock_transport._process = mock_process
+
+        mock_query = Mock()
+        mock_query.transport = mock_transport
+
+        mock_client = Mock(spec=[])
+        mock_client._query = mock_query
+
+        await ClaudeClient._wait_for_subprocess_flush(mock_client, timeout=3.0)
+
+        mock_transport.end_input.assert_awaited_once()
+        mock_process.wait.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_wait_when_process_already_exited(self):
+        """Verify it skips process.wait() when returncode is already set."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+
+        mock_transport = AsyncMock()
+        mock_transport.end_input = AsyncMock()
+        mock_transport._process = mock_process
+
+        mock_query = Mock()
+        mock_query.transport = mock_transport
+
+        mock_client = Mock(spec=[])
+        mock_client._query = mock_query
+
+        await ClaudeClient._wait_for_subprocess_flush(mock_client)
+
+        mock_transport.end_input.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_timeout_prevents_hanging(self):
+        """Verify that if process.wait() blocks, the timeout prevents hanging."""
+        mock_process = AsyncMock()
+        mock_process.returncode = None
+
+        async def hang_forever():
+            await asyncio.sleep(999)
+
+        mock_process.wait = hang_forever
+
+        mock_transport = AsyncMock()
+        mock_transport.end_input = AsyncMock()
+        mock_transport._process = mock_process
+
+        mock_query = Mock()
+        mock_query.transport = mock_transport
+
+        mock_client = Mock(spec=[])
+        mock_client._query = mock_query
+
+        # Should complete quickly due to timeout, not hang
+        await asyncio.wait_for(
+            ClaudeClient._wait_for_subprocess_flush(mock_client, timeout=0.1),
+            timeout=2.0,
+        )
+
+        mock_transport.end_input.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_query_is_noop(self):
+        """Verify it returns immediately if _query is not set."""
+        mock_client = Mock(spec=[])
+        mock_client._query = None
+
+        await ClaudeClient._wait_for_subprocess_flush(mock_client)
+
+    @pytest.mark.asyncio
+    async def test_no_transport_is_noop(self):
+        """Verify it returns immediately if transport is not set."""
+        mock_query = Mock()
+        mock_query.transport = None
+
+        mock_client = Mock(spec=[])
+        mock_client._query = mock_query
+
+        await ClaudeClient._wait_for_subprocess_flush(mock_client)
