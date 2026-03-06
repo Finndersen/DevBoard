@@ -49,6 +49,36 @@ export interface GitHubPRStatusResponse {
   pr_url: string
 }
 
+export interface PRFeedbackComment {
+  id: number
+  author: string
+  body: string
+  path: string
+  line: number | null
+  diff_hunk: string | null
+  created_at: string | null
+  in_reply_to_id: number | null
+}
+
+export interface PRFeedbackCommentThread {
+  original: PRFeedbackComment
+  replies: PRFeedbackComment[]
+}
+
+export interface PRFeedbackReview {
+  id: number
+  author: string
+  state: string
+  body: string
+  submitted_at: string | null
+  comment_threads: PRFeedbackCommentThread[]
+}
+
+export interface PRFeedbackResponse {
+  reviews: PRFeedbackReview[]
+  standalone_threads: PRFeedbackCommentThread[]
+}
+
 export interface TaskCreate {
   title: string
   codebase_id: number
@@ -942,6 +972,10 @@ export class ApiClient {
 
   async getTaskPRStatus(taskId: number | string): Promise<GitHubPRStatusResponse> {
     return this.request<GitHubPRStatusResponse>(`/api/tasks/${taskId}/pr-status`)
+  }
+
+  async getTaskPRFeedback(taskId: number | string): Promise<PRFeedbackResponse> {
+    return this.request<PRFeedbackResponse>(`/api/tasks/${taskId}/pr-feedback`)
   }
 
   async mergeTaskBranch(taskId: number | string, request: MergeBranchRequest): Promise<MergeBranchResponse> {

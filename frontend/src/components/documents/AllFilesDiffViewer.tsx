@@ -1,8 +1,9 @@
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
-import { useState } from 'react'
-import type { TaskDiffResponse, TaskBranchInfo } from '../../lib/api'
+import { useState, useMemo } from 'react'
+import type { TaskDiffResponse, TaskBranchInfo, PRFeedbackResponse, PRFeedbackCommentThread } from '../../lib/api'
 import { DiffReviewProvider, type CommentSubmitHandler } from '../../contexts/DiffReviewContext'
 import GitDiffViewer from './GitDiffViewer'
+import PRGeneralComments from './PRGeneralComments'
 import SubmitAllCommentsButton from './SubmitAllCommentsButton'
 
 interface AllFilesDiffViewerProps {
@@ -13,6 +14,7 @@ interface AllFilesDiffViewerProps {
   lastUpdated: string | null
   className?: string
   onSubmitComments?: CommentSubmitHandler
+  prFeedback?: PRFeedbackResponse | null
 }
 
 function AllFilesDiffViewerContent({
@@ -22,7 +24,8 @@ function AllFilesDiffViewerContent({
   onRefresh,
   lastUpdated,
   className = '',
-  onSubmitComments
+  onSubmitComments,
+  prFeedback
 }: AllFilesDiffViewerProps) {
   // Track selected view
   const [selectedView, setSelectedView] = useState<string>('all')
@@ -34,6 +37,41 @@ function AllFilesDiffViewerContent({
 
   // Get files to display from current response
   const displayFiles = diffResponse?.files || []
+
+  // Build a map of file path -> PR comment threads for efficient lookup
+  const prCommentsByFile = useMemo(() => {
+    if (!prFeedback) return new Map<string, PRFeedbackCommentThread[]>()
+
+    const map = new Map<string, PRFeedbackCommentThread[]>()
+
+    const addThread = (thread: PRFeedbackCommentThread) => {
+      const path = thread.original.path
+      if (!path) return
+      const existing = map.get(path) || []
+      existing.push(thread)
+      map.set(path, existing)
+    }
+
+    // Collect from review comment threads
+    for (const review of prFeedback.reviews) {
+      for (const thread of review.comment_threads) {
+        addThread(thread)
+      }
+    }
+
+    // Collect from standalone threads that have a path
+    for (const thread of prFeedback.standalone_threads) {
+      addThread(thread)
+    }
+
+    return map
+  }, [prFeedback])
+
+  // General comments: standalone threads without a path + review bodies
+  const generalStandaloneThreads = useMemo(() => {
+    if (!prFeedback) return []
+    return prFeedback.standalone_threads.filter(t => !t.original.path)
+  }, [prFeedback])
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -168,8 +206,19 @@ function AllFilesDiffViewerContent({
             stats={{ additions: file.additions, deletions: file.deletions }}
             isNewFile={file.is_new_file}
             isDeleted={file.is_deleted}
+            prComments={prCommentsByFile.get(file.file_path)}
+            onSubmitPRComment={onSubmitComments}
           />
         ))}
+
+        {/* PR General Comments section */}
+        {prFeedback && onSubmitComments && (
+          <PRGeneralComments
+            reviews={prFeedback.reviews}
+            standaloneThreads={generalStandaloneThreads}
+            onSubmit={onSubmitComments}
+          />
+        )}
       </div>
     </div>
   )

@@ -8,7 +8,7 @@ import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
 import type { TaskListItem } from '../lib/api'
 
-const STATUS_COLUMNS = ['planning', 'implementing', 'reviewing', 'complete']
+const STATUS_COLUMNS = ['planning', 'implementing', 'pr_open', 'complete']
 
 function getStatusColor(status: string) {
   switch (status.toLowerCase()) {
@@ -16,7 +16,7 @@ function getStatusColor(status: string) {
       return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
     case 'implementing':
       return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
-    case 'reviewing':
+    case 'pr_open':
       return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
     case 'complete':
       return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
