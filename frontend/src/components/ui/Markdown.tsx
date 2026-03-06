@@ -57,8 +57,9 @@ export default function Markdown({
       const language = match ? match[1] : undefined
       const codeString = String(children).replace(/\n$/, '')
 
-      // Check if this is a block code (has className with language) vs inline
-      const isBlock = className?.includes('language-')
+      // Check if this is a block code (has className with language, or contains newlines) vs inline
+      // Fenced code blocks without a language specifier have no className but still contain newlines
+      const isBlock = className?.includes('language-') || String(children).includes('\n')
 
       if (!isBlock) {
         return (

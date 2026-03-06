@@ -140,7 +140,7 @@ class ClaudeClient:
             mcp_server_config, custom_tool_names = self._build_custom_tools_mcp_server(tools)
             mcp_servers = {mcp_server_config["name"]: mcp_server_config}
         else:
-            mcp_servers = None
+            mcp_servers = {}
             custom_tool_names = []
 
         # Combine allowed builtin tools with custom MCP tool names
@@ -157,10 +157,9 @@ class ClaudeClient:
         permission_mode: PermissionMode
         if plan_mode:
             permission_mode = "plan"
-        elif "Write" in all_allowed_tools:
-            permission_mode = "acceptEdits"
         else:
-            permission_mode = "default"
+            # disallowed_tools deny rules still apply. This enables execution of all enabled MCP server tools
+            permission_mode = "bypassPermissions"
 
         self.options = ClaudeAgentOptions(
             resume=session_id,
@@ -517,8 +516,9 @@ class ClaudeClient:
 
         The SDK's transport.close() sends EOF and SIGTERM almost simultaneously,
         which can kill the subprocess before it finishes writing the session file.
-        By closing stdin early and waiting, we let the subprocess flush and exit
-        naturally, so transport.close() finds returncode already set and skips SIGTERM.
+        By closing stdin early and waiting (shielded from cancellation), we let
+        the subprocess flush and exit naturally. If this coroutine is cancelled,
+        we defer the cancellation until after the subprocess wait completes.
         """
         try:
             query = getattr(client, "_query", None)
@@ -530,6 +530,18 @@ class ClaudeClient:
             await transport.end_input()
             process = getattr(transport, "_process", None)
             if process and process.returncode is None:
-                await asyncio.wait_for(process.wait(), timeout=timeout)
-        except (TimeoutError, Exception):
+                wait_task = asyncio.ensure_future(process.wait())
+                try:
+                    await asyncio.wait_for(asyncio.shield(wait_task), timeout=timeout)
+                except asyncio.CancelledError:
+                    # Defer cancellation: let subprocess finish naturally before propagating.
+                    # Task.cancel() delivers only one CancelledError, so this await is safe.
+                    with contextlib.suppress(TimeoutError, Exception):
+                        await asyncio.wait_for(wait_task, timeout=timeout)
+                    raise
+                except TimeoutError:
+                    pass
+        except asyncio.CancelledError:
+            raise
+        except Exception:
             pass

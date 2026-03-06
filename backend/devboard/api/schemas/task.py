@@ -53,7 +53,6 @@ class WorkflowActionInfo(BaseModel):
     """Schema for available workflow action information."""
 
     key: str
-    label: str
 
 
 class TaskListResponse(BaseModel):

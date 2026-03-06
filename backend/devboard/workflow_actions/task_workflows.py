@@ -59,7 +59,6 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
     """
 
     KEY = "task.create_implementation_plan"
-    DESCRIPTION = "Generate a technical implementation plan from the task specification"
 
     PROMPT = "Proceed with creating a detailed technical implementation plan for the task, following your behaviour guidelines"
 
@@ -128,7 +127,6 @@ class BeginImplementationAction(TaskWorkflowAction):
     """
 
     KEY = "task.begin_implementation"
-    DESCRIPTION = "Start implementing the approved plan"
 
     PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to write the code to fulfill the plan."
 
@@ -195,7 +193,6 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
     """
 
     KEY = "task.rebase_branch"
-    DESCRIPTION = "Rebase task branch onto base branch"
 
     IMPLEMENTING_PROMPT = """Use the `rebase_task_branch` tool to rebase this task's feature branch onto the base branch.
 
@@ -348,8 +345,6 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
 - Testing considerations or known limitations"""
     )
 
-    DESCRIPTION = "Approve changes and merge locally"
-
     @classmethod
     def is_available(cls, task: Task) -> bool:
         """Check if this action is available for the given task.
@@ -405,8 +400,6 @@ When creating the PR:
 
 The PR will be created against the base branch and the task will transition to PR_OPEN status."""
     )
-
-    DESCRIPTION = "Approve changes and create PR"
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -479,8 +472,6 @@ Once all changes are committed and pushed, use the `merge_pr_and_complete_task` 
 - Testing considerations or known limitations"""
     )
 
-    DESCRIPTION = "Merge PR and complete task"
-
     @classmethod
     def is_available(cls, task: Task) -> bool:
         """Check if this action is available for the given task.
@@ -531,7 +522,6 @@ class FinaliseAction(TaskWorkflowAction):
     """
 
     KEY = "task.finalise"
-    DESCRIPTION = "Complete task (no merge)"
 
     @classmethod
     def is_available(cls, task: Task) -> bool:

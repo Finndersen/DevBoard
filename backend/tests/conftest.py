@@ -2,6 +2,7 @@ import datetime
 from collections.abc import Generator, Iterator
 from unittest.mock import AsyncMock, Mock
 
+import logfire
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.run import AgentRunResult
@@ -30,6 +31,9 @@ from devboard.db.repositories import (
 )
 from devboard.services.config_service import ConfigService
 from devboard.services.integration_service import IntegrationService
+
+# Disable sending to Logfire during tests, regardless of LOGFIRE_TOKEN in environment
+logfire.configure(send_to_logfire=False, console=False)
 
 
 @fixture(scope="session")

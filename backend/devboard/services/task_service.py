@@ -288,20 +288,23 @@ class TaskService:
                 or merge fails (conflict/error)
             InvalidStatusTransitionError: If task cannot transition to COMPLETE
         """
-        # Create change_summary document
+        if not task.branch_name:
+            raise ValueError(f"Task {task.id} has no branch configured")
+
+        task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
+        merge_result = await task_git_service.merge_task_feature_branch(task)
+
+        # SUCCESS, SKIPPED (already merged), and STASH_CONFLICT (merge succeeded, WIP restore had conflicts) are all acceptable
+        if merge_result.outcome not in (MergeOutcome.SUCCESS, MergeOutcome.SKIPPED, MergeOutcome.STASH_CONFLICT):
+            raise ValueError(f"Merge failed ({merge_result.outcome.value}): {merge_result.message}")
+
+        # Only create/update change_summary document after successful merge
         if not task.change_summary:
             doc = self.document_repo.create(DocumentType.CHANGE_SUMMARY, change_summary)
             task.change_summary_id = doc.id
             task.change_summary = doc
         else:
             self.document_repo.update_content(task.change_summary, change_summary)
-
-        task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
-        merge_result = await task_git_service.merge_task_feature_branch(task)
-
-        # SUCCESS and SKIPPED (already merged) are both acceptable outcomes
-        if merge_result.outcome not in (MergeOutcome.SUCCESS, MergeOutcome.SKIPPED):
-            raise ValueError(f"Merge failed ({merge_result.outcome.value}): {merge_result.message}")
 
         self.transition_to_complete(task)
         self.task_repo.commit()

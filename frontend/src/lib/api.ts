@@ -11,7 +11,6 @@ export interface Project {
 
 export interface WorkflowActionInfo {
   key: string
-  label: string
 }
 
 export interface Task {

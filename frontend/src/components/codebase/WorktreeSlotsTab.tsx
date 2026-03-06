@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { apiClient, type WorktreePoolStatus, type WorktreeSlot } from '../../lib/api'
 import { Card, StatusBadge } from '../ui'
 import { textColors } from '../../styles/designSystem'
+import { useUIStore } from '../../stores/uiStore'
 
 interface WorktreeSlotsTabProps {
   codebaseId: string
 }
 
 export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) {
+  const { openTab } = useUIStore()
   const [poolStatus, setPoolStatus] = useState<WorktreePoolStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -101,7 +103,10 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
             {isLocked && slot.locked_by_task && (
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                 <span className={`${textColors.secondary} block mb-1`}>Locked by task:</span>
-                <div className="bg-orange-50 dark:bg-orange-900/20 rounded p-2 space-y-1">
+                <div
+                  className="bg-orange-50 dark:bg-orange-900/20 rounded p-2 space-y-1 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+                  onClick={() => openTab({ type: 'task', entityId: String(slot.locked_by_task!.id), title: slot.locked_by_task!.title })}
+                >
                   <div className="font-medium text-orange-700 dark:text-orange-300">
                     {slot.locked_by_task.title}
                   </div>
@@ -114,8 +119,11 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
 
             {!isLocked && slot.last_used_by_task && (
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className={`${textColors.secondary} block mb-1`}>Last used by task:</span>
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 space-y-1">
+                <span className={`${textColors.secondary} block mb-1`}>Last active task:</span>
+                <div
+                  className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 space-y-1 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                  onClick={() => openTab({ type: 'task', entityId: String(slot.last_used_by_task!.id), title: slot.last_used_by_task!.title })}
+                >
                   <div className="font-medium text-blue-700 dark:text-blue-300">
                     {slot.last_used_by_task.title}
                   </div>

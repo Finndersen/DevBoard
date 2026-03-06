@@ -306,6 +306,8 @@ class TestCompleteTaskWithLocalMerge:
             with pytest.raises(ValueError, match="Merge failed"):
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
+        mock_document_repo.create.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_fails_with_merge_error(self, task_service, task_with_branch, mock_document_repo):
         """Test complete raises ValueError when merge returns ERROR outcome."""
@@ -322,6 +324,8 @@ class TestCompleteTaskWithLocalMerge:
 
             with pytest.raises(ValueError, match="Merge failed"):
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+        mock_document_repo.create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fails_without_branch_configured(self, task_service, task_with_branch):

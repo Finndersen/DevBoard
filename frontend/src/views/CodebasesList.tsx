@@ -83,16 +83,13 @@ export default function CodebasesList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {codebases.map((codebase) => (
-            <Card key={codebase.id} className="p-4 hover:shadow-lg transition-shadow" hover>
+            <Card key={codebase.id} className="p-4 hover:shadow-lg transition-shadow" hover onClick={() => handleOpenCodebase(codebase)}>
               <div className="flex items-start justify-between mb-2">
-                <h3
-                  className="text-lg font-semibold text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                  onClick={() => handleOpenCodebase(codebase)}
-                >
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   {codebase.name}
                 </h3>
                 <button
-                  onClick={() => handleDeleteCodebase(codebase.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDeleteCodebase(codebase.id) }}
                   className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                   title="Delete codebase"
                 >

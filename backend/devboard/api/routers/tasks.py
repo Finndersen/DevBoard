@@ -73,11 +73,7 @@ def _get_available_workflow_actions(task: Task) -> list[WorkflowActionInfo]:
 
     for action_class in workflow_action_registry.list_values():
         if action_class.is_available(task):
-            available_actions.append(
-                WorkflowActionInfo(
-                    key=action_class.KEY, label=action_class.KEY.replace("task.", "").replace("_", " ").title()
-                )
-            )
+            available_actions.append(WorkflowActionInfo(key=action_class.KEY))
 
     return available_actions
 

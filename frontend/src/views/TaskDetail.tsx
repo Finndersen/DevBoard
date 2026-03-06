@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, TagIcon, FolderIcon } from '@heroicons/react/24/outline'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
@@ -35,6 +35,16 @@ import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
+
+const WORKFLOW_ACTION_LABELS: Record<string, string> = {
+  'task.create_implementation_plan': 'Generate a technical implementation plan from the task specification',
+  'task.start_implementation': 'Start implementing the approved plan',
+  'task.rebase_branch': 'Rebase task branch onto base branch',
+  'task.approve_and_merge': 'Approve changes and merge locally',
+  'task.approve_and_create_pr': 'Approve changes and create PR',
+  'task.merge_and_finalise': 'Merge PR and complete task',
+  'task.complete_no_merge': 'Complete task (no merge)',
+}
 
 interface TaskDetailProps {
   id: string
@@ -624,7 +634,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       'task.merge_and_finalise': {
         loadingMessage: 'Merging PR and completing...',
         className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
-        isDisabled: () => prStatus?.mergeable === false,
+        isDisabled: () => prStatus !== null && !prStatus.merged && prStatus.mergeable_state !== 'clean',
       },
       'task.finalise': {
         loadingMessage: 'Completing task...',
@@ -657,7 +667,9 @@ function TaskDetail({ id }: TaskDetailProps) {
               className={config.className}
               disabled={isDisabled}
             >
-              {action.label}
+              {action.key === 'task.merge_and_finalise' && prStatus?.merged
+                ? 'Complete task'
+                : (WORKFLOW_ACTION_LABELS[action.key] ?? action.key)}
             </Button>
           )
         })}
@@ -708,7 +720,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Error Display */}
       {updateError && (
         <ErrorMessage error={updateError} className="mb-6" />
@@ -783,6 +795,18 @@ function TaskDetail({ id }: TaskDetailProps) {
             <StatusBadge variant={getStatusVariant(task.status)}>
               {task.status}
             </StatusBadge>
+
+            {/* Parent Project Link */}
+            {project && (
+              <Link
+                to={`/projects/${project.id}`}
+                className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                title="View project"
+              >
+                <FolderIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <span className="text-blue-600 dark:text-blue-400 hover:underline">{project.name}</span>
+              </Link>
+            )}
 
             {/* Codebase Display/Selector */}
             <div className="relative">
@@ -862,19 +886,18 @@ function TaskDetail({ id }: TaskDetailProps) {
               <button
                 onClick={() => window.open(prStatus.pr_url, '_blank')}
                 className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ${textColors.secondary}`}
-                title="Open PR on GitHub"
+                title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
               >
                 <GitHubIcon className="w-4 h-4" />
-                {prStatus.checks_status === 'success' && (
+                {prStatus.merged ? (
+                  <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
+                ) : prStatus.checks_status === 'success' ? (
                   <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                )}
-                {prStatus.checks_status === 'pending' && (
+                ) : prStatus.checks_status === 'pending' ? (
                   <ClockIcon className="w-3.5 h-3.5 text-yellow-500" />
-                )}
-                {(prStatus.checks_status === 'failure' || prStatus.checks_status === 'error') && (
+                ) : (prStatus.checks_status === 'failure' || prStatus.checks_status === 'error') ? (
                   <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                )}
-                {!prStatus.checks_status && (
+                ) : (
                   <MinusCircleIcon className="w-3.5 h-3.5 text-gray-400" />
                 )}
                 <ArrowTopRightOnSquareIcon className="w-3 h-3 opacity-60" />
@@ -916,7 +939,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
       
       {/* Main Content Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)] overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
         {/* Left Column: Document Content with Integrated Tabs */}
         <Card padding="none" className="h-full flex flex-col overflow-hidden">
           {/* Card Header with Tabs */}

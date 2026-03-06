@@ -1,6 +1,7 @@
 """Tests for ClaudeClient."""
 
 import asyncio
+import contextlib
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -497,3 +498,35 @@ class TestWaitForSubprocessFlush:
         mock_client._query = mock_query
 
         await ClaudeClient._wait_for_subprocess_flush(mock_client)
+
+    @pytest.mark.asyncio
+    async def test_cancellation_deferred_until_after_process_wait(self):
+        """Verify that task cancellation does not prevent process.wait() from completing."""
+        mock_process = AsyncMock()
+        mock_process.returncode = None
+
+        process_waited = asyncio.Event()
+
+        async def wait_briefly():
+            await asyncio.sleep(0.05)
+            process_waited.set()
+
+        mock_process.wait = wait_briefly
+
+        mock_transport = AsyncMock()
+        mock_transport.end_input = AsyncMock()
+        mock_transport._process = mock_process
+
+        mock_query = Mock()
+        mock_query.transport = mock_transport
+
+        mock_client = Mock(spec=[])
+        mock_client._query = mock_query
+
+        task = asyncio.create_task(ClaudeClient._wait_for_subprocess_flush(mock_client, timeout=2.0))
+        await asyncio.sleep(0)  # Let task start
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+        assert process_waited.is_set(), "process.wait() should complete even when task is cancelled"

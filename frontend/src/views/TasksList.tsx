@@ -10,6 +10,13 @@ import type { TaskListItem } from '../lib/api'
 
 const STATUS_COLUMNS = ['planning', 'implementing', 'pr_open', 'complete']
 
+const STATUS_LABELS: Record<string, string> = {
+  planning: 'Planning',
+  implementing: 'Implementing',
+  pr_open: 'PR Open',
+  complete: 'Complete',
+}
+
 function getStatusColor(status: string) {
   switch (status.toLowerCase()) {
     case 'planning':
@@ -115,8 +122,8 @@ export default function TasksList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {STATUS_COLUMNS.map((status) => (
           <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800">
-            <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between capitalize`}>
-              {status}
+            <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between`}>
+              {STATUS_LABELS[status] ?? status}
               <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
                 {taskGroups[status]?.length || 0}
               </span>

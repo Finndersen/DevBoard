@@ -193,7 +193,7 @@ describe('TaskDetail', () => {
       status: 'Defining',
       codebase_id: 1,
       available_workflow_actions: [
-        { key: 'task.create_implementation_plan', label: 'Begin Planning' }
+        { key: 'task.create_implementation_plan' }
       ],
     })
 
@@ -220,11 +220,11 @@ describe('TaskDetail', () => {
 
     // Wait for the Planning button to appear
     await waitFor(() => {
-      const button = screen.queryByText('Begin Planning')
+      const button = screen.queryByText('Generate a technical implementation plan from the task specification')
       expect(button).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    const beginPlanningButton = screen.getByText('Begin Planning')
+    const beginPlanningButton = screen.getByText('Generate a technical implementation plan from the task specification')
     await user.click(beginPlanningButton)
 
     // Wait for the stream to complete
@@ -247,7 +247,7 @@ describe('TaskDetail', () => {
       status: 'Defining',
       codebase_id: 1,
       available_workflow_actions: [
-        { key: 'task.create_implementation_plan', label: 'Begin Planning' }
+        { key: 'task.create_implementation_plan' }
       ],
     })
 
@@ -267,11 +267,11 @@ describe('TaskDetail', () => {
 
     // Wait for the Planning button to appear
     await waitFor(() => {
-      const button = screen.queryByText('Begin Planning')
+      const button = screen.queryByText('Generate a technical implementation plan from the task specification')
       expect(button).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    const beginPlanningButton = screen.getByText('Begin Planning')
+    const beginPlanningButton = screen.getByText('Generate a technical implementation plan from the task specification')
     await user.click(beginPlanningButton)
 
     // Verify component continues to function despite error

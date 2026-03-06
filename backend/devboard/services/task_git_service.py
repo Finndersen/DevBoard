@@ -43,6 +43,7 @@ class MergeOutcome(StrEnum):
     CONFLICT = "conflict"  # Merge blocked due to conflicts
     SKIPPED = "skipped"  # No merge performed (e.g., 'none' strategy)
     ERROR = "error"  # Merge failed due to an error
+    STASH_CONFLICT = "stash_conflict"  # Merge succeeded but restoring pre-merge stash had conflicts
 
 
 @dataclass
@@ -112,6 +113,18 @@ class RebaseResult:
     conflicted_files: list[str] | None = None  # Set when there are conflicts
     has_pending_stash: bool = False  # True if uncommitted changes are stashed waiting to be restored
     base_branch_changes: BaseBranchChanges | None = None  # Changes in base branch since last sync
+
+
+def _stash_conflict_message(repo_path: str) -> str:
+    """Build a user-facing message for a stash pop conflict after a successful merge."""
+    return (
+        f"Merge succeeded, but restoring pre-merge stashed changes in '{repo_path}' had conflicts "
+        f"(the merged changes touched the same files as your WIP). "
+        f"The task has been marked complete. To resolve manually:\n"
+        f"1. In '{repo_path}', run `git status` to see conflicted files\n"
+        f"2. Resolve the conflict markers in each file\n"
+        f"3. Run `git stash drop` to remove the stash entry"
+    )
 
 
 class TaskGitService:
@@ -681,17 +694,34 @@ class TaskGitService:
                     logfire.info(f"Deleted remote branch {task.branch_name}")
                 except Exception as e:
                     logfire.warning(f"Could not delete remote branch: {e}")
-
-            return MergeResult(
-                outcome=MergeOutcome.SUCCESS,
-                merge_method=merge_method,
-                message=f"Successfully squash merged {task.branch_name} into {task.base_branch}",
-                merge_commit=merge_commit,
-            )
-        finally:
-            # Always restore stashed changes
+        except Exception:
+            # Merge failed - best-effort restore stash before re-raising
             if stash_ref:
+                try:
+                    await git.stash_pop()
+                except Exception as pop_err:
+                    logfire.warning(f"Failed to restore stash after merge failure for task {task.id}: {pop_err}")
+            raise
+
+        # Merge succeeded - try to restore pre-merge stash
+        if stash_ref:
+            try:
                 await git.stash_pop()
+            except Exception as pop_err:
+                logfire.warning(f"Stash pop had conflicts after merge for task {task.id}: {pop_err}")
+                return MergeResult(
+                    outcome=MergeOutcome.STASH_CONFLICT,
+                    merge_method=merge_method,
+                    message=_stash_conflict_message(git.repo_path),
+                    merge_commit=merge_commit,
+                )
+
+        return MergeResult(
+            outcome=MergeOutcome.SUCCESS,
+            merge_method=merge_method,
+            message=f"Successfully squash merged {task.branch_name} into {task.base_branch}",
+            merge_commit=merge_commit,
+        )
 
     async def _squash_merge_to_local_base(self, task: Task, git: GitRepoIntegration) -> str:
         """Squash merge into a local base branch."""
@@ -787,16 +817,34 @@ class TaskGitService:
                     await git.push_delete_branch(task.branch_name)
                 except Exception as e:
                     logfire.warning(f"Could not delete remote branch: {e}")
-
-            return MergeResult(
-                outcome=MergeOutcome.SUCCESS,
-                merge_method=merge_method,
-                message=f"Successfully rebased and merged {task.branch_name} into {task.base_branch}",
-                merge_commit=merge_commit,
-            )
-        finally:
+        except Exception:
+            # Merge failed - best-effort restore stash before re-raising
             if stash_ref:
+                try:
+                    await git.stash_pop()
+                except Exception as pop_err:
+                    logfire.warning(f"Failed to restore stash after merge failure for task {task.id}: {pop_err}")
+            raise
+
+        # Merge succeeded - try to restore pre-merge stash
+        if stash_ref:
+            try:
                 await git.stash_pop()
+            except Exception as pop_err:
+                logfire.warning(f"Stash pop had conflicts after merge for task {task.id}: {pop_err}")
+                return MergeResult(
+                    outcome=MergeOutcome.STASH_CONFLICT,
+                    merge_method=merge_method,
+                    message=_stash_conflict_message(git.repo_path),
+                    merge_commit=merge_commit,
+                )
+
+        return MergeResult(
+            outcome=MergeOutcome.SUCCESS,
+            merge_method=merge_method,
+            message=f"Successfully rebased and merged {task.branch_name} into {task.base_branch}",
+            merge_commit=merge_commit,
+        )
 
     async def _execute_merge_commit_merge(self, task: Task, git: GitRepoIntegration) -> MergeResult:
         """Execute merge commit method.
@@ -846,16 +894,34 @@ class TaskGitService:
                     await git.push_delete_branch(task.branch_name)
                 except Exception as e:
                     logfire.warning(f"Could not delete remote branch: {e}")
-
-            return MergeResult(
-                outcome=MergeOutcome.SUCCESS,
-                merge_method=merge_method,
-                message=f"Successfully merged {task.branch_name} into {task.base_branch} with merge commit",
-                merge_commit=merge_commit,
-            )
-        finally:
+        except Exception:
+            # Merge failed - best-effort restore stash before re-raising
             if stash_ref:
+                try:
+                    await git.stash_pop()
+                except Exception as pop_err:
+                    logfire.warning(f"Failed to restore stash after merge failure for task {task.id}: {pop_err}")
+            raise
+
+        # Merge succeeded - try to restore pre-merge stash
+        if stash_ref:
+            try:
                 await git.stash_pop()
+            except Exception as pop_err:
+                logfire.warning(f"Stash pop had conflicts after merge for task {task.id}: {pop_err}")
+                return MergeResult(
+                    outcome=MergeOutcome.STASH_CONFLICT,
+                    merge_method=merge_method,
+                    message=_stash_conflict_message(git.repo_path),
+                    merge_commit=merge_commit,
+                )
+
+        return MergeResult(
+            outcome=MergeOutcome.SUCCESS,
+            merge_method=merge_method,
+            message=f"Successfully merged {task.branch_name} into {task.base_branch} with merge commit",
+            merge_commit=merge_commit,
+        )
 
     async def abort_rebase(self, task: Task) -> None:
         """Abort an in-progress rebase for a task.

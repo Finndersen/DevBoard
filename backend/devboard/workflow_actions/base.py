@@ -37,7 +37,6 @@ class TaskWorkflowAction(ABC):
 
     # Subclasses must define these class attributes
     KEY: str  # Unique identifier (e.g., "task.create_implementation_plan")
-    DESCRIPTION: str  # Human-readable description for UI display
 
     def __init__(
         self,
@@ -178,12 +177,10 @@ class PromptTemplateActionConfig:
 
     Attributes:
         key: Unique identifier for the action (e.g., "task.create_implementation_plan")
-        description: Human-readable description for UI display
         prompt_template: The prompt text to send to the agent
     """
 
     key: str
-    description: str
     prompt_template: str
 
 
@@ -217,7 +214,7 @@ class PromptTemplateAction(TaskWorkflowAction):
             document_repository: Repository for document database operations
             workspace_allocation_service: Service for workspace allocation
             integration_service: Service for external integrations (GitHub, etc.)
-            prompt_config: Configuration defining the action's key, description, and prompt
+            prompt_config: Configuration defining the action's key and prompt
         """
         super().__init__(
             task=task,
@@ -234,10 +231,6 @@ class PromptTemplateAction(TaskWorkflowAction):
     @property
     def KEY(self) -> str:  # type: ignore[override]
         return self.prompt_config.key
-
-    @property
-    def DESCRIPTION(self) -> str:  # type: ignore[override]
-        return self.prompt_config.description
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
