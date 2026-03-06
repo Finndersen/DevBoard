@@ -8,7 +8,7 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
-from devboard.agents.tools.task_tools import create_create_task_tool
+from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.db.repositories import DocumentRepository
 from devboard.services.task_service import TaskService
@@ -136,6 +136,9 @@ class TaskPlanningAgentRole(AgentRole):
 
         # Add create_task tool
         tools.append(create_create_task_tool(self.task.project, self.task_service, self.custom_field_definitions))
+
+        # Add edit_task tool
+        tools.append(create_edit_task_tool(self.task.project, self.task_service, self.custom_field_definitions))
 
         return tools
 

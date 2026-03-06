@@ -300,6 +300,128 @@ def _build_create_task_json_schema(
     }
 
 
+def _build_edit_custom_fields_schema(
+    custom_field_definitions: list[CustomFieldDefinition],
+) -> dict[str, Any] | None:
+    """Build JSON schema for the custom_fields parameter in the edit tool (all nullable, none required).
+
+    Returns None if no definitions exist.
+    """
+    if not custom_field_definitions:
+        return None
+
+    properties: dict[str, Any] = {}
+
+    for field_def in custom_field_definitions:
+        if field_def.type == CustomFieldType.TEXT:
+            type_schema: dict[str, Any] = {"type": "string"}
+        elif field_def.type == CustomFieldType.BOOLEAN:
+            type_schema = {"type": "boolean"}
+        elif field_def.type == CustomFieldType.ENUM:
+            type_schema = {"type": "string"}
+            if field_def.options:
+                type_schema["enum"] = field_def.options
+        else:
+            type_schema = {"type": "string"}
+
+        field_schema: dict[str, Any] = {"anyOf": [type_schema, {"type": "null"}]}
+
+        if field_def.description:
+            field_schema["description"] = field_def.description
+
+        properties[field_def.name] = field_schema
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+
+
+def _build_edit_task_json_schema(
+    custom_field_definitions: list[CustomFieldDefinition],
+) -> dict[str, Any]:
+    """Build the full JSON schema for the edit_task tool."""
+    properties: dict[str, Any] = {
+        "task_id": {
+            "type": "integer",
+            "description": "The ID of the task to edit",
+        },
+        "title": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "New title for the task (leave null to keep unchanged)",
+            "default": None,
+        },
+    }
+
+    edit_custom_fields_schema = _build_edit_custom_fields_schema(custom_field_definitions)
+    if edit_custom_fields_schema:
+        properties["custom_fields"] = {
+            "anyOf": [edit_custom_fields_schema, {"type": "null"}],
+            "description": "Custom field values to merge into the task. Set a key to null to remove it.",
+            "default": None,
+        }
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    }
+
+
+def create_edit_task_tool(
+    project: Project,
+    task_service: TaskService,
+    custom_field_definitions: list[CustomFieldDefinition] | None = None,
+) -> Tool:
+    """Create a tool for editing task metadata within a project.
+
+    Args:
+        project: The project context (for security validation)
+        task_service: Service for task operations
+        custom_field_definitions: Custom field definitions to expose in the tool schema
+    """
+
+    async def edit_task(
+        task_id: int,
+        title: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
+    ) -> str:
+        """Edit metadata fields of an existing task within the current project."""
+        if title is None and custom_fields is None:
+            raise ModelRetry("No fields to update. Provide at least one of: title, custom_fields.")
+
+        task = task_service.get_task_by_id(task_id)
+
+        if not task:
+            raise ModelRetry(f"Task with ID {task_id} not found.")
+
+        if task.project_id != project.id:
+            raise ModelRetry(f"Task with ID {task_id} does not belong to this project.")
+
+        try:
+            updated_task = task_service.update_task(task, title=title, custom_fields=custom_fields)
+            return json.dumps(
+                {
+                    "task_id": updated_task.id,
+                    "title": updated_task.title,
+                    "custom_fields": updated_task.custom_fields,
+                }
+            )
+        except Exception as e:
+            raise ModelRetry(f"Failed to update task: {e}") from e
+
+    json_schema = _build_edit_task_json_schema(custom_field_definitions or [])
+
+    return Tool.from_schema(
+        function=edit_task,
+        name="edit_task",
+        description="Edit metadata fields (title, custom fields) of an existing task within the current project.",
+        json_schema=json_schema,
+    )
+
+
 def create_create_task_tool(
     project: Project,
     task_service: TaskService,

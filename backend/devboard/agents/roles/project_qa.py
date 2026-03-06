@@ -12,6 +12,7 @@ from devboard.agents.tools import (
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.agents.tools.task_tools import (
     create_create_task_tool,
+    create_edit_task_tool,
     create_list_tasks_tool,
     create_view_task_details_tool,
 )
@@ -116,6 +117,7 @@ class ProjectQAAgentRole(AgentRole):
             create_list_tasks_tool(self.project, self.task_service),
             create_view_task_details_tool(self.project, self.task_service),
             create_create_task_tool(self.project, self.task_service, self.custom_field_definitions),
+            create_edit_task_tool(self.project, self.task_service, self.custom_field_definitions),
             # HTML rendering tool
             create_render_html_tool(),
         ]

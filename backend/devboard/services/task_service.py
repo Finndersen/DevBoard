@@ -351,6 +351,36 @@ class TaskService:
         self.transition_to_complete(task)
         self.task_repo.commit()
 
+    def update_task(
+        self,
+        task: Task,
+        title: str | None = None,
+        custom_fields: dict | None = None,
+    ) -> Task:
+        """Update task metadata fields with merge semantics for custom fields.
+
+        Args:
+            task: Task to update
+            title: New title (unchanged if None)
+            custom_fields: Dict to merge into existing custom_fields. Keys with None values are removed.
+
+        Returns:
+            Updated task instance
+        """
+        if title is not None:
+            task.title = title
+
+        if custom_fields is not None:
+            merged = dict(task.custom_fields or {})
+            for key, value in custom_fields.items():
+                if value is None:
+                    merged.pop(key, None)
+                else:
+                    merged[key] = value
+            task.custom_fields = merged
+
+        return self.task_repo.update(task)
+
     # Query methods (delegating to repository)
 
     def get_task_by_id(self, task_id: int, *, with_documents: bool = False) -> Task | None:

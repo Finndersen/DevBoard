@@ -13,6 +13,7 @@ from devboard.agents.tools.task_tools import (
     _format_tasks_as_toon,
     _task_to_toon_record,
     create_create_task_tool,
+    create_edit_task_tool,
     create_list_tasks_tool,
     create_view_task_details_tool,
 )
@@ -828,3 +829,155 @@ class TestToolSchemas:
         assert "codebase_name" in schema["properties"]
         assert "enum" not in schema["properties"]["codebase_name"]
         assert "const" not in schema["properties"]["codebase_name"]
+
+
+class TestCreateEditTaskTool:
+    """Tests for create_edit_task_tool."""
+
+    def test_edit_task_tool_creation(self, mock_project, mock_task_service):
+        """Tool is created with name 'edit_task'."""
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "edit_task"
+        assert tool.function is not None
+
+    @pytest.mark.asyncio
+    async def test_edit_task_title(self, mock_project, mock_task_service, mock_task):
+        """Updates task title and returns confirmation JSON."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+        mock_task_service.update_task.return_value = mock_task
+        mock_task.title = "New Title"
+
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+        result = await tool.function(task_id=1, title="New Title")
+
+        mock_task_service.update_task.assert_called_once_with(mock_task, title="New Title", custom_fields=None)
+        result_data = json.loads(result)
+        assert result_data == {
+            "task_id": 1,
+            "title": "New Title",
+            "custom_fields": {"priority": "high"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_edit_task_custom_fields(self, mock_project, mock_task_service, mock_task):
+        """Updates custom fields and returns confirmation JSON."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+        mock_task_service.update_task.return_value = mock_task
+        mock_task.custom_fields = {"priority": "high", "team": "backend"}
+
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+        result = await tool.function(task_id=1, custom_fields={"team": "backend"})
+
+        mock_task_service.update_task.assert_called_once_with(mock_task, title=None, custom_fields={"team": "backend"})
+        result_data = json.loads(result)
+        assert result_data == {
+            "task_id": 1,
+            "title": "Implement feature X",
+            "custom_fields": {"priority": "high", "team": "backend"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_edit_task_nothing_to_update(self, mock_project, mock_task_service):
+        """Raises ModelRetry when no fields provided to update."""
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=1)
+
+        assert "No fields to update" in str(exc_info.value)
+        mock_task_service.get_task_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_edit_task_not_found(self, mock_project, mock_task_service):
+        """Raises ModelRetry when task not found."""
+        mock_task_service.get_task_by_id.return_value = None
+
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=999, title="New Title")
+
+        assert "Task with ID 999 not found" in str(exc_info.value)
+        mock_task_service.update_task.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_edit_task_wrong_project(self, mock_project, mock_task_service, mock_task):
+        """Raises ModelRetry when task belongs to a different project."""
+        mock_task.project_id = 999
+        mock_task_service.get_task_by_id.return_value = mock_task
+
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=1, title="New Title")
+
+        assert "does not belong to this project" in str(exc_info.value)
+        mock_task_service.update_task.assert_not_called()
+
+
+class TestEditTaskToolSchemas:
+    """Tests for edit_task tool schema construction."""
+
+    def test_edit_task_schema_has_task_id_required(self, mock_project, mock_task_service):
+        """task_id is required; no other fields are required."""
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "task_id" in schema["properties"]
+        assert schema["required"] == ["task_id"]
+
+    def test_edit_task_schema_no_custom_fields(self, mock_project, mock_task_service):
+        """custom_fields is omitted when no field definitions provided."""
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "custom_fields" not in schema["properties"]
+
+    def test_edit_task_schema_with_custom_fields_nullable(self, mock_project, mock_task_service):
+        """Each custom field uses anyOf with null; no required array in custom_fields object."""
+        priority_def = Mock(spec=CustomFieldDefinition)
+        priority_def.name = "priority"
+        priority_def.type = CustomFieldType.ENUM
+        priority_def.options = ["low", "high"]
+        priority_def.description = "Priority level"
+        priority_def.mandatory = True
+
+        notes_def = Mock(spec=CustomFieldDefinition)
+        notes_def.name = "notes"
+        notes_def.type = CustomFieldType.TEXT
+        notes_def.options = None
+        notes_def.description = None
+        notes_def.mandatory = False
+
+        tool = create_edit_task_tool(
+            mock_project, mock_task_service, custom_field_definitions=[priority_def, notes_def]
+        )
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "custom_fields" in schema["properties"]
+        cf_anyof = schema["properties"]["custom_fields"]["anyOf"]
+        cf_schema = [s for s in cf_anyof if s.get("type") == "object"][0]
+
+        # No required array (all optional for editing)
+        assert "required" not in cf_schema
+
+        # Each field uses anyOf with null
+        priority_prop = cf_schema["properties"]["priority"]
+        assert "anyOf" in priority_prop
+        null_schemas = [s for s in priority_prop["anyOf"] if s.get("type") == "null"]
+        assert len(null_schemas) == 1
+
+        notes_prop = cf_schema["properties"]["notes"]
+        assert "anyOf" in notes_prop
+        null_schemas = [s for s in notes_prop["anyOf"] if s.get("type") == "null"]
+        assert len(null_schemas) == 1
+
+    def test_edit_task_schema_title_optional(self, mock_project, mock_task_service):
+        """title is in schema properties but not in required."""
+        tool = create_edit_task_tool(mock_project, mock_task_service)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "title" in schema["properties"]
+        assert "title" not in schema.get("required", [])

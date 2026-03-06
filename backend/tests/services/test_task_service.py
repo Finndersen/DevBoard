@@ -334,3 +334,55 @@ class TestCompleteTaskWithLocalMerge:
 
         with pytest.raises(ValueError, match="has no branch configured"):
             await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+
+
+class TestUpdateTask:
+    """Tests for TaskService.update_task()."""
+
+    @pytest.fixture
+    def task(self):
+        task = MagicMock(spec=Task)
+        task.id = 1
+        task.title = "Original Title"
+        task.custom_fields = {"a": 1}
+        return task
+
+    def test_update_task_title(self, task_service, task, mock_task_repo):
+        """Updates task title when provided."""
+        result = task_service.update_task(task, title="New Title")
+
+        assert task.title == "New Title"
+        mock_task_repo.update.assert_called_once_with(task)
+        assert result == task
+
+    def test_update_task_custom_fields_merge(self, task_service, task, mock_task_repo):
+        """Merges provided custom_fields into existing ones."""
+        task.custom_fields = {"a": 1}
+
+        task_service.update_task(task, custom_fields={"b": 2})
+
+        assert task.custom_fields == {"a": 1, "b": 2}
+
+    def test_update_task_custom_fields_remove_null(self, task_service, task, mock_task_repo):
+        """Removes keys set to None from custom_fields."""
+        task.custom_fields = {"a": 1, "b": 2}
+
+        task_service.update_task(task, custom_fields={"a": None})
+
+        assert task.custom_fields == {"b": 2}
+
+    def test_update_task_custom_fields_from_none(self, task_service, task, mock_task_repo):
+        """Handles existing custom_fields being None."""
+        task.custom_fields = None
+
+        task_service.update_task(task, custom_fields={"a": 1})
+
+        assert task.custom_fields == {"a": 1}
+
+    def test_update_task_no_changes(self, task_service, task, mock_task_repo):
+        """Calls update even when no fields change."""
+        task_service.update_task(task)
+
+        assert task.title == "Original Title"
+        assert task.custom_fields == {"a": 1}
+        mock_task_repo.update.assert_called_once_with(task)
