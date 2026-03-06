@@ -22,7 +22,7 @@ Track and review file modifications made by implementation agents:
 The File Changes tab appears in the task detail view's document panel:
 
 - **Tab Position**: Third tab after "Task Specification" and "Implementation Plan"
-- **Visibility**: Only shown when task status is `IMPLEMENTING`, `REVIEWING`, or `COMPLETE`
+- **Visibility**: Only shown when task status is `IMPLEMENTING` or `PR_OPEN`
 - **Requirement**: Task must have an associated codebase (`codebase_id` not null)
 
 ### Data Source
@@ -185,6 +185,17 @@ Falls back to plain text for unknown extensions.
 **SubmitAllCommentsButton** (`frontend/src/components/documents/SubmitAllCommentsButton.tsx`):
 - Batch submit button for multiple pending comments
 - Shows comment count and clear all option
+
+**PRInlineCommentThread** (`frontend/src/components/documents/PRInlineCommentThread.tsx`):
+- Renders a GitHub PR review comment thread inline in the diff at the corresponding line
+- Amber/orange styling to distinguish from internal developer comments (blue)
+- Shows original comment and replies (read-only)
+- "Send to agent" button formats comment context and sends to the implementation agent
+
+**PRGeneralComments** (`frontend/src/components/documents/PRGeneralComments.tsx`):
+- Renders review-level comments and standalone comment threads at the bottom of the File Changes tab
+- Shown for `pr_open` tasks when PR feedback is available
+- Same "Send to agent" functionality as inline PR comments
 
 **Integration** (`frontend/src/views/TaskDetail.tsx`):
 - Adds "Changes" tab to task detail view

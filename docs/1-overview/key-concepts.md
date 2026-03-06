@@ -27,7 +27,7 @@ A **discrete unit of work** representing a specific development deliverable, oft
 **Purpose**: Break down projects into manageable work items with clear specifications and implementation plans.
 
 **Lifecycle States**:
-- **Defining** → **Designing** → **Planning** → **Implementing** → **In Review** → **Complete**
+- **Planning** → **Implementing** → **PR Open** → **Complete**
 
 **Key Characteristics**:
 - **Task Specification**: Detailed requirements document developed collaboratively with AI

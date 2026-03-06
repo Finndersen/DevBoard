@@ -109,6 +109,12 @@ See [Backend API Reference](./backend/api-reference.md) for complete endpoint li
 
 **Pattern**: Type-safe deserialization with automatic type resolution based on discriminator field.
 
+### Task PR Feedback
+
+**Endpoint**: `GET /api/tasks/{task_id}/pr-feedback`
+
+Returns structured PR review feedback (reviews with inline comment threads and standalone comment threads) from GitHub. Only available when the task is in `PR_OPEN` state with a configured PR number. Used by the frontend to display GitHub review comments inline in the File Changes diff view.
+
 ## Future Considerations
 
 **Versioning**: Currently v1 implied. Use `/api/v2/` prefix for breaking changes.

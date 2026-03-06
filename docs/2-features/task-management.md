@@ -8,17 +8,15 @@ DevBoard provides **AI-assisted task development** with clear lifecycle manageme
 
 ## Task Lifecycle
 
-Tasks progress through six states, each with specific purposes and agent support:
+Tasks progress through defined states, each with specific purposes and agent support:
 
-### Defining → Designing → Planning → Implementing → In Review → Complete
+### Planning → Implementing → PR Open → Complete
 
 **State Descriptions**:
 
-- **Defining**: Initial task creation with basic information and external links
-- **Designing**: Collaborative specification development with AI (TaskSpecificationRole agent)
-- **Planning**: Create implementation plan and technical strategy (TaskPlanningRole agent)
+- **Planning**: Collaborative specification development and implementation planning with AI
 - **Implementing**: Execute development work with AI assistance (TaskImplementationRole agent)
-- **In Review**: Code review, testing, integration activities
+- **PR Open**: GitHub PR created for the task; displays PR status and review comments inline
 - **Complete**: Task finished and delivered
 
 ## Core Workflow
@@ -87,14 +85,14 @@ Delegate implementation work to specialized agents:
 - **Statistics**: See additions/deletions per file and total changes
 - **Refresh Capability**: Manually refresh to see latest changes with timestamps
 
-### 5. Review & Integration
+### 5. PR Review & Completion
 
-Monitor progress and integrate completed work:
+When a GitHub PR is created for the task:
 
-- **Manual State Transition**: Move task to "In Review" when implementation complete
-- **Review Activities**: Code review, testing, integration validation
-- **External Updates**: Update Jira tickets, GitHub PRs, etc.
-- **Completion**: Mark task complete when delivered
+- **PR Status Display**: GitHub PR status button in task header shows CI check status and links to the PR
+- **Inline PR Comments**: GitHub review comments are displayed inline in the File Changes diff view at the corresponding file and line
+- **Send to Agent**: Each PR review comment has a "Send to agent" button to forward it to the implementation agent for addressing
+- **Completion**: Merge the PR and mark the task complete
 
 ## Task Behavior
 
@@ -168,9 +166,7 @@ Maintain living specification and implementation plan documents:
 
 ## Agent Roles by State
 
-- **Defining**: No specific agent (user provides basic info)
-- **Designing**: TaskSpecificationRole guides requirement gathering
-- **Planning**: TaskPlanningRole creates implementation strategies
+- **Planning**: TaskPlanningRole guides specification and implementation planning
 - **Implementing**: TaskImplementationRole assists with coding
-- **In Review**: No specific agent (manual review activities)
+- **PR Open**: No specific agent (PR review and feedback handling)
 - **Complete**: No agent (task finished)
