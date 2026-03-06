@@ -18,7 +18,7 @@ from claude_agent_sdk import (
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent, _should_retry_error_result
-from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
+from devboard.agents.engines.claude_code.session import AssistantSessionMessage
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
@@ -139,22 +139,14 @@ def setup_mock_client_with_callback(mock_client_class, stream_callback):
     return mock_client
 
 
-def create_mock_session_message_with_tool_call(tool_call_json: str) -> SessionMessage:
-    """Helper to create a SessionMessage containing a virtual tool call.
-
-    Args:
-        tool_call_json: JSON string representing the tool call
-
-    Returns:
-        SessionMessage with the tool call as text content
-    """
-    return SessionMessage(
+def create_mock_session_message_with_tool_call(tool_call_json: str) -> AssistantSessionMessage:
+    """Helper to create an AssistantSessionMessage containing a virtual tool call."""
+    return AssistantSessionMessage(
         uuid="test-uuid",
         timestamp=datetime.now(),
-        role=SessionMessageRole.ASSISTANT,
-        content=[{"type": "text", "text": tool_call_json}],
         line_num=1,
         is_sidechain=False,
+        content=[{"type": "text", "text": tool_call_json}],
     )
 
 

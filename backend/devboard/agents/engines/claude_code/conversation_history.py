@@ -14,13 +14,15 @@ from devboard.agents.engines.claude_code.message_parser import (
 )
 from devboard.agents.engines.claude_code.session import (
     ClaudeCodeSessionService,
+    MetaSessionMessage,
     SessionMessage,
-    SessionMessageRole,
+    UserSessionMessage,
 )
 from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.events import (
     ConversationEvent,
     MessageRole,
+    MetaMessage,
     SystemEvent,
     SystemEventType,
     TextMessage,
@@ -104,25 +106,26 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
         events: list[ConversationEvent] = []
         message_count = len(session_messages)
         for session_idx, session_msg in enumerate(session_messages):
-            # Skip sidechain messages
             if session_msg.is_sidechain:
                 continue
 
-            # Process each content block in the message
+            if isinstance(session_msg, MetaSessionMessage):
+                events.append(
+                    MetaMessage(
+                        meta_type=session_msg.meta_type,
+                        text_content=session_msg.text_content,
+                        timestamp=session_msg.timestamp,
+                    )
+                )
+                continue
+
             for content_block in session_msg.content:
-                block_type = content_block["type"]
-
-                if block_type == "text":
-                    # Text content - parse to determine message type
-                    text_content: str = content_block["text"]
-
-                    # Parse the message to get its type
-                    parsed = ClaudeResponseParser.parse_message_content(text_content)
+                if content_block["type"] == "text":
+                    parsed = ClaudeResponseParser.parse_message_content(content_block["text"])
 
                     if isinstance(parsed, TextResponse):
-                        # Standard text message
                         conv_role = (
-                            MessageRole.USER if session_msg.role == SessionMessageRole.USER else MessageRole.AGENT
+                            MessageRole.USER if isinstance(session_msg, UserSessionMessage) else MessageRole.AGENT
                         )
                         events.append(
                             TextMessage(
@@ -133,9 +136,6 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
                         )
 
                     elif isinstance(parsed, VirtualToolCall):
-                        # Virtual tool call - convert to ToolCall event (for both invalid and valid calls)
-                        # Use helper function to convert to events
-                        # Produce a ToolCallRequest if this is the last message in the session, otherwise use ToolCall
                         tool_call_events = convert_virtual_tool_call_to_events(
                             tool_call=parsed,
                             timestamp=session_msg.timestamp,
@@ -144,17 +144,16 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
                         events.extend(tool_call_events)
 
                     elif isinstance(parsed, VirtualToolResult):
-                        # Tool result - convert to ToolResult event
                         events.append(
                             ToolResult(
-                                tool_call_id=parsed.tool_name,  # Use tool_name as ID for virtual tools
+                                tool_call_id=parsed.tool_name,
                                 result_content=parsed.content,
                                 is_error=not parsed.successful,
                                 timestamp=session_msg.timestamp,
                             )
                         )
 
-                elif block_type == "tool_use":
+                elif content_block["type"] == "tool_use":
                     events.append(
                         ToolCall(
                             tool_call_id=content_block["id"],
@@ -164,16 +163,11 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
                         )
                     )
 
-                elif block_type == "tool_result":
+                elif content_block["type"] == "tool_result":
                     result_content = content_block["content"]
 
-                    # Convert content to string if it's a list of dicts
                     if isinstance(result_content, list):
-                        # Join text blocks from the content
-                        text_parts = []
-                        for item in result_content:
-                            if item.get("type") == "text":
-                                text_parts.append(item.get("text", ""))
+                        text_parts = [item.get("text", "") for item in result_content if item.get("type") == "text"]
                         result_str = "\n".join(text_parts)
                     else:
                         result_str = str(result_content)

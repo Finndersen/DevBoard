@@ -12,8 +12,12 @@ from devboard.agents.engines.claude_code import (
     ClaudeCodeAgentExecutionService,
     ClaudeCodeConversationHistoryService,
 )
-from devboard.agents.engines.claude_code.session import SessionMessage, SessionMessageRole
-from devboard.agents.events import MessageRole, SystemEventType, TextMessage, ToolCall
+from devboard.agents.engines.claude_code.session import (
+    AssistantSessionMessage,
+    MetaSessionMessage,
+    UserSessionMessage,
+)
+from devboard.agents.events import MessageRole, MetaMessage, MetaMessageType, SystemEventType, TextMessage, ToolCall
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories.conversation import ConversationRepository
@@ -217,14 +221,13 @@ class TestSessionMessagesToEvents:
     def conversation_repo(self, db_session: Session) -> ConversationRepository:
         return ConversationRepository(db_session)
 
-    def _make_session_message(self, tool_name: str) -> SessionMessage:
-        return SessionMessage(
+    def _make_session_message(self, tool_name: str) -> AssistantSessionMessage:
+        return AssistantSessionMessage(
             uuid="test-uuid",
             timestamp=datetime.datetime.now(datetime.UTC),
-            role=SessionMessageRole.ASSISTANT,
-            content=[{"type": "tool_use", "id": "tool-call-1", "name": tool_name, "input": {"arg": "value"}}],
             line_num=1,
             is_sidechain=False,
+            content=[{"type": "tool_use", "id": "tool-call-1", "name": tool_name, "input": {"arg": "value"}}],
         )
 
     def test_tool_use_block_normalizes_mcp_prefix(self, conversation_repo, db_session):
@@ -262,4 +265,83 @@ class TestSessionMessagesToEvents:
             tool_name="mcp__github__create_issue",
             tool_args={"arg": "value"},
             timestamp=external_msg.timestamp,
+        )
+
+
+class TestMetaMessageEvents:
+    """Test MetaMessage event emission from _session_messages_to_events."""
+
+    @pytest.fixture
+    def conversation_repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def history_service(self, conversation_repo, db_session):
+        conversation = conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=10,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.CLAUDE_CODE,
+            model_id=None,
+            is_active=True,
+        )
+        db_session.commit()
+        return ClaudeCodeConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+
+    _TIMESTAMP = datetime.datetime(2025, 10, 8, 15, 0, 0, tzinfo=datetime.UTC)
+
+    def _base_kwargs(self) -> dict:
+        return {"uuid": "test-uuid", "timestamp": self._TIMESTAMP, "line_num": 1, "is_sidechain": False}
+
+    def test_compact_summary_emits_meta_message(self, history_service):
+        """MetaSessionMessage with COMPACT_SUMMARY produces a MetaMessage event."""
+        session_msg = MetaSessionMessage(
+            **self._base_kwargs(),
+            meta_type=MetaMessageType.COMPACT_SUMMARY,
+            text_content="Summary of conversation so far...",
+        )
+
+        events = history_service._session_messages_to_events([session_msg])
+
+        assert len(events) == 1
+        assert events[0] == MetaMessage(
+            meta_type=MetaMessageType.COMPACT_SUMMARY,
+            text_content="Summary of conversation so far...",
+            timestamp=self._TIMESTAMP,
+        )
+
+    def test_skill_content_emits_meta_message(self, history_service):
+        """MetaSessionMessage with SKILL_CONTENT produces a MetaMessage event."""
+        session_msg = MetaSessionMessage(
+            **self._base_kwargs(),
+            meta_type=MetaMessageType.SKILL_CONTENT,
+            text_content="Skill prompt content...",
+        )
+
+        events = history_service._session_messages_to_events([session_msg])
+
+        assert len(events) == 1
+        assert events[0] == MetaMessage(
+            meta_type=MetaMessageType.SKILL_CONTENT,
+            text_content="Skill prompt content...",
+            timestamp=self._TIMESTAMP,
+        )
+
+    def test_regular_message_not_affected(self, history_service):
+        """Regular UserSessionMessage still produces a TextMessage."""
+        session_msg = UserSessionMessage(
+            **self._base_kwargs(),
+            content=[{"type": "text", "text": "Hello, can you help me?"}],
+        )
+
+        events = history_service._session_messages_to_events([session_msg])
+
+        assert len(events) == 1
+        assert events[0] == TextMessage(
+            role=MessageRole.USER,
+            text_content="Hello, can you help me?",
+            timestamp=self._TIMESTAMP,
         )

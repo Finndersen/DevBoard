@@ -18,6 +18,14 @@ class ConversationEventType(StrEnum):
     TOOL_RESULT = "tool_result"
     TOOL_CALL_REQUEST = "tool_call_request"
     SYSTEM = "system"
+    META_MESSAGE = "meta_message"
+
+
+class MetaMessageType(StrEnum):
+    """Type of meta message."""
+
+    COMPACT_SUMMARY = "compact_summary"
+    SKILL_CONTENT = "skill_content"
 
 
 class SystemEventType(StrEnum):
@@ -77,6 +85,15 @@ class ToolCallRequest(BaseModel):
     timestamp: datetime.datetime
 
 
+class MetaMessage(BaseModel):
+    """Special-case user message rendered as a collapsed indicator in the frontend."""
+
+    event_type: Literal["meta_message"] = "meta_message"
+    meta_type: MetaMessageType
+    text_content: str
+    timestamp: datetime.datetime
+
+
 class SystemEvent(BaseModel):
     """System-level event for entity changes and workflow notifications.
 
@@ -104,6 +121,6 @@ class SystemEvent(BaseModel):
 
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent,
+    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage,
     Field(discriminator="event_type"),
 ]
