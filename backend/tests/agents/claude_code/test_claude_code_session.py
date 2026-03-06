@@ -6,7 +6,13 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService, SessionMessageRole
+from devboard.agents.engines.claude_code.session import (
+    AssistantSessionMessage,
+    ClaudeCodeSessionService,
+    MetaSessionMessage,
+    UserSessionMessage,
+)
+from devboard.agents.events import MetaMessageType
 from devboard.api.schemas.claude_code_todo import TodoPriority, TodoStatus
 
 
@@ -30,11 +36,58 @@ class TestClaudeCodeSessionService:
 
         session_msg = service._parse_session_message(entry, line_num=1)
 
-        assert session_msg is not None
-        assert session_msg.role == SessionMessageRole.USER
+        assert isinstance(session_msg, UserSessionMessage)
         assert session_msg.text_content == "What is the current directory?"
         assert session_msg.timestamp.year == 2025
         assert session_msg.line_num == 1
+
+    def test_parse_user_message_no_meta_flags(self, service):
+        """Test that regular user messages produce a UserSessionMessage (not MetaSessionMessage)."""
+        entry = {
+            "type": "user",
+            "uuid": "user-msg-plain",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": "Hello there!"},
+        }
+
+        session_msg = service._parse_session_message(entry, line_num=1)
+
+        assert isinstance(session_msg, UserSessionMessage)
+
+    def test_parse_user_message_compact_summary(self, service):
+        """Test parsing a user message with isCompactSummary flag produces MetaSessionMessage."""
+        entry = {
+            "type": "user",
+            "uuid": "user-compact-1",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "isCompactSummary": True,
+            "message": {"role": "user", "content": "Summary of conversation so far..."},
+        }
+
+        session_msg = service._parse_session_message(entry, line_num=5)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.COMPACT_SUMMARY
+        assert session_msg.text_content == "Summary of conversation so far..."
+
+    def test_parse_user_message_meta(self, service):
+        """Test parsing a user message with isMeta flag produces MetaSessionMessage."""
+        entry = {
+            "type": "user",
+            "uuid": "user-meta-1",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "isMeta": True,
+            "message": {"role": "user", "content": "Skill prompt content here..."},
+        }
+
+        session_msg = service._parse_session_message(entry, line_num=6)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.SKILL_CONTENT
+        assert session_msg.text_content == "Skill prompt content here..."
 
     def test_parse_assistant_text_message(self, service):
         """Test parsing an assistant message with text content."""
@@ -51,8 +104,7 @@ class TestClaudeCodeSessionService:
 
         session_msg = service._parse_session_message(entry, line_num=2)
 
-        assert session_msg is not None
-        assert session_msg.role == SessionMessageRole.ASSISTANT
+        assert isinstance(session_msg, AssistantSessionMessage)
         assert session_msg.text_content == "/Users/test/projects/TestProject"
         assert session_msg.line_num == 2
 
@@ -208,16 +260,16 @@ class TestClaudeCodeSessionService:
                 session_messages = service.load_session_messages("test-session")
 
         assert len(session_messages) == 4  # 2 user + 2 assistant, summary filtered out
-        assert session_messages[0].role == SessionMessageRole.USER
+        assert isinstance(session_messages[0], UserSessionMessage)
         assert session_messages[0].text_content == "Hello"
         assert session_messages[0].line_num == 1
-        assert session_messages[1].role == SessionMessageRole.ASSISTANT
+        assert isinstance(session_messages[1], AssistantSessionMessage)
         assert session_messages[1].text_content == "Hi there!"
         assert session_messages[1].line_num == 2
-        assert session_messages[2].role == SessionMessageRole.USER
+        assert isinstance(session_messages[2], UserSessionMessage)
         assert session_messages[2].text_content == "How are you?"
         assert session_messages[2].line_num == 4  # Line 3 was summary, skipped
-        assert session_messages[3].role == SessionMessageRole.ASSISTANT
+        assert isinstance(session_messages[3], AssistantSessionMessage)
         assert session_messages[3].text_content == "I'm doing well!"
         assert session_messages[3].line_num == 5
 
@@ -253,8 +305,7 @@ class TestClaudeCodeSessionService:
             with patch("pathlib.Path.open", mock_open(read_data=jsonl_content)):
                 message = service.get_last_session_message("test-session")
 
-        assert message is not None
-        assert message.role == SessionMessageRole.ASSISTANT
+        assert isinstance(message, AssistantSessionMessage)
         assert message.text_content == "Hi there!"
         assert message.line_num == 2
 
