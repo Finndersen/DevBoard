@@ -166,6 +166,30 @@ export function getToolDisplayLabel(
       return { toolName: cleanedName }
     }
 
+    case 'Skill': {
+      const skill = args.skill as string | undefined
+      if (skill) {
+        return { toolName: 'Skill', details: skill }
+      }
+      return { toolName: cleanedName }
+    }
+
+    case 'ToolSearch': {
+      const query = args.query as string | undefined
+      if (query) {
+        return { toolName: 'ToolSearch', details: query }
+      }
+      return { toolName: cleanedName }
+    }
+
+    case 'TaskOutput': {
+      const taskId = args.task_id as string | undefined
+      if (taskId) {
+        return { toolName: 'TaskOutput', details: taskId }
+      }
+      return { toolName: cleanedName }
+    }
+
     default: {
       if (isDocumentTool(cleanedName)) {
         const reasoning = args.reasoning as string | undefined
