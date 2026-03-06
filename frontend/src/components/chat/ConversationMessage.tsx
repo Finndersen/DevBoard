@@ -3,7 +3,7 @@ import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType } 
 import {
   getMessageBubbleClasses
 } from '../../styles/messageStyles'
-import { Markdown } from '../ui'
+import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
@@ -209,41 +209,33 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     )
   }
 
-  // Meta messages (compact summaries, skill content) - render as collapsible centered indicator
+  // Meta messages (compact summaries, skill content) - render as clickable indicator that opens a modal
   if (message.event_type === 'meta_message') {
     const metaLabels: Record<MetaMessageType, string> = {
       compact_summary: 'Conversation compacted',
       skill_content: 'Skill activated',
     }
     const label = metaLabels[message.meta_type]
-    const [isExpanded, setIsExpanded] = useState(false)
+    const [isModalOpen, setIsModalOpen] = useState(false)
 
     return (
       <div className="flex w-full justify-center my-1">
-        <div className="inline-flex flex-col items-center gap-1 max-w-lg w-full">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            <span>{label}</span>
-            <svg
-              className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {isExpanded && message.text_content && (
-            <div className="w-full rounded-md bg-gray-900/50 border border-blue-500/10 px-3 py-2 text-xs text-gray-400 font-mono whitespace-pre-wrap overflow-x-auto">
-              {message.text_content}
-            </div>
-          )}
-        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer"
+          title="Click to view details"
+        >
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <span>{label}</span>
+          <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </button>
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={label} maxWidth="6xl">
+          <Markdown>{message.text_content}</Markdown>
+        </Modal>
       </div>
     )
   }
