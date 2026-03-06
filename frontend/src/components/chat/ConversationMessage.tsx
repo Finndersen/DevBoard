@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import type { ConversationEvent, ToolResult, SystemEventType } from '../../lib/api'
+import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType } from '../../lib/api'
 import {
   getMessageBubbleClasses
 } from '../../styles/messageStyles'
@@ -204,6 +204,45 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
             )}
           </svg>
           <span>{label}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Meta messages (compact summaries, skill content) - render as collapsible centered indicator
+  if (message.event_type === 'meta_message') {
+    const metaLabels: Record<MetaMessageType, string> = {
+      compact_summary: 'Conversation compacted',
+      skill_content: 'Skill activated',
+    }
+    const label = metaLabels[message.meta_type]
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    return (
+      <div className="flex w-full justify-center my-1">
+        <div className="inline-flex flex-col items-center gap-1 max-w-lg w-full">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-colors"
+          >
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <span>{label}</span>
+            <svg
+              className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {isExpanded && message.text_content && (
+            <div className="w-full rounded-md bg-gray-900/50 border border-blue-500/10 px-3 py-2 text-xs text-gray-400 font-mono whitespace-pre-wrap overflow-x-auto">
+              {message.text_content}
+            </div>
+          )}
         </div>
       </div>
     )

@@ -131,7 +131,16 @@ export interface DocumentResponse {
 // New agent conversation interfaces matching backend schemas
 export type MessageRole = 'user' | 'agent'
 
-export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system'
+export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message'
+
+export type MetaMessageType = 'compact_summary' | 'skill_content'
+
+export interface MetaMessage {
+  event_type: 'meta_message'
+  meta_type: MetaMessageType
+  text_content: string
+  timestamp: string
+}
 
 export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'stream_interrupted' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired' | 'compacting_conversation'
 
@@ -174,7 +183,7 @@ export interface SystemEvent {
 }
 
 // Union type for all conversation events
-export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent
+export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent | MetaMessage
 
 export interface UserPrompt {
   message: string
