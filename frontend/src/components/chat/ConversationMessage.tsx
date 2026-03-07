@@ -38,17 +38,16 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
 
 interface ConversationMessageProps {
   message: ConversationEvent
-  // Optional: pass the corresponding tool result for a tool call
   toolResult?: ToolResult
-  // Whether this is the latest message (should not be collapsible)
   isLatest?: boolean
-  // Optional codebase local path for relativizing file paths in tool display labels
+  isHighlighted?: boolean
   codebaseLocalPath?: string
 }
 
 const MAX_COLLAPSED_HEIGHT = 240 // ~10 lines at typical line height
 
-export default function ConversationMessageComponent({ message, toolResult, isLatest = false, codebaseLocalPath }: ConversationMessageProps) {
+export default function ConversationMessageComponent({ message, toolResult, isLatest = false, isHighlighted = false, codebaseLocalPath }: ConversationMessageProps) {
+  const highlightRing = isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''
   // Handle different event types
   if (message.event_type === 'message') {
     const isUser = message.role === 'user'
@@ -70,7 +69,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     return (
       <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
         {/* Message bubble with content-based width */}
-        <div className={`${getMessageBubbleClasses(isUser)} max-w-full min-w-[200px]`}>
+        <div className={`${getMessageBubbleClasses(isUser)} max-w-full min-w-[200px] rounded-lg ${highlightRing}`}>
           <div className="relative">
             <div
               ref={contentRef}
@@ -117,7 +116,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   }
 
   if (message.event_type === 'tool_call') {
-    return <ToolCallDisplay toolCall={message} toolResult={toolResult} codebaseLocalPath={codebaseLocalPath} />
+    return <ToolCallDisplay toolCall={message} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} />
   }
 
   // Tool results are rendered as part of their corresponding tool call
@@ -133,7 +132,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     return (
       <div className="flex w-full min-w-0">
-        <div className="rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px]">
+        <div className={`rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px] ${highlightRing}`}>
           <div className="px-3 py-1.5 bg-yellow-800/20 border-b border-yellow-600 flex items-center gap-2 min-w-0">
             <svg
               className="w-4 h-4 text-yellow-400 flex-shrink-0"
@@ -222,7 +221,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
       <div className="flex w-full justify-center my-1">
         <button
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer ${highlightRing}`}
           title="Click to view details"
         >
           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">

@@ -6,6 +6,7 @@ interface ProjectListPanelProps {
   projects: ClaudeCodeProject[]
   selectedEncodedPath: string | null
   onSelect: (project: ClaudeCodeProject) => void
+  matchCounts?: Map<string, number>
 }
 
 function formatRelativeTime(isoDate: string | null): string {
@@ -29,12 +30,7 @@ function getFriendlyProjectName(path: string): string {
   return parts.length > 0 ? parts[parts.length - 1] : path
 }
 
-function formatCost(cost: number | null): string | null {
-  if (cost === null || cost === undefined) return null
-  return `$${cost.toFixed(4)}`
-}
-
-export function ProjectListPanel({ projects, selectedEncodedPath, onSelect }: ProjectListPanelProps) {
+export function ProjectListPanel({ projects, selectedEncodedPath, onSelect, matchCounts }: ProjectListPanelProps) {
   if (projects.length === 0) {
     return (
       <div className="text-center py-8 px-4">
@@ -52,10 +48,6 @@ export function ProjectListPanel({ projects, selectedEncodedPath, onSelect }: Pr
       {projects.map(project => {
         const isSelected = project.encoded_path === selectedEncodedPath
         const name = getFriendlyProjectName(project.path)
-        const cost = formatCost(project.last_cost)
-        const linesChanged = project.last_lines_added !== null || project.last_lines_removed !== null
-          ? `+${project.last_lines_added ?? 0}/-${project.last_lines_removed ?? 0}`
-          : null
 
         return (
           <button
@@ -66,8 +58,13 @@ export function ProjectListPanel({ projects, selectedEncodedPath, onSelect }: Pr
             }`}
           >
             <div className="min-w-0">
-              <h3 className={`font-medium ${textColors.primary} truncate`} title={project.path}>
-                {name}
+              <h3 className={`font-medium ${textColors.primary} truncate flex items-center`} title={project.path}>
+                <span className="truncate">{name}</span>
+                {matchCounts?.get(project.encoded_path) ? (
+                  <span className="ml-1.5 shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    {matchCounts.get(project.encoded_path)}
+                  </span>
+                ) : null}
               </h3>
               <p className={`text-xs ${textColors.secondary} truncate`} title={project.path}>
                 {project.path}
@@ -76,18 +73,6 @@ export function ProjectListPanel({ projects, selectedEncodedPath, onSelect }: Pr
                 <span>{formatRelativeTime(project.last_activity)}</span>
                 <span>·</span>
                 <span>{project.session_count} {project.session_count === 1 ? 'session' : 'sessions'}</span>
-                {cost && (
-                  <>
-                    <span>·</span>
-                    <span>{cost}</span>
-                  </>
-                )}
-                {linesChanged && (
-                  <>
-                    <span>·</span>
-                    <span className="font-mono">{linesChanged}</span>
-                  </>
-                )}
               </div>
             </div>
           </button>

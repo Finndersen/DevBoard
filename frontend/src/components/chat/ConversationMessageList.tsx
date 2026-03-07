@@ -11,6 +11,7 @@ interface ConversationMessageListProps {
   emptyStateMessage: string
   showEmptyState: boolean
   codebaseLocalPath?: string
+  highlightUuids?: string[]
 }
 
 // Memoized message component to prevent unnecessary re-renders
@@ -25,7 +26,8 @@ function ConversationMessageList({
   onRetryMessage,
   emptyStateMessage,
   showEmptyState,
-  codebaseLocalPath
+  codebaseLocalPath,
+  highlightUuids
 }: ConversationMessageListProps) {
   // Compute tool result mappings using useMemo
   // This creates a Map of cache keys to ToolResults, recomputed only when messages change
@@ -58,6 +60,8 @@ function ConversationMessageList({
     return map
   }, [messages])
 
+  const highlightSet = useMemo(() => new Set(highlightUuids ?? []), [highlightUuids])
+
   // Find the index of the last 'message' type event
   const lastMessageIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -81,27 +85,24 @@ function ConversationMessageList({
     <>
       {/* Render confirmed messages with memoization to avoid unnecessary re-renders */}
       {messages.map((message, index) => {
-        // Create a truly unique key combining timestamp and event type + index
-        // This ensures uniqueness even for messages generated in the same millisecond
         const messageKey = `${message.timestamp}-${message.event_type}-${index}`
-
-        // For tool calls, look up the matching result from memoized map
-        // Map is computed via useMemo, so React knows to re-render when it changes
         const toolResult = message.event_type === 'tool_call'
           ? toolResultMap.get(messageKey)
           : undefined
-
-        // Check if this is the latest message
         const isLatest = index === lastMessageIndex
+        const uuid = (message as { uuid?: string }).uuid
+        const isHighlighted = uuid ? highlightSet.has(uuid) : false
 
         return (
-          <MemoizedMessageComponent
-            key={messageKey}
-            message={message}
-            toolResult={toolResult}
-            isLatest={isLatest}
-            codebaseLocalPath={codebaseLocalPath}
-          />
+          <div key={messageKey} id={uuid ? `msg-${uuid}` : undefined}>
+            <MemoizedMessageComponent
+              message={message}
+              toolResult={toolResult}
+              isLatest={isLatest}
+              isHighlighted={isHighlighted}
+              codebaseLocalPath={codebaseLocalPath}
+            />
+          </div>
         )
       })}
 

@@ -20,6 +20,7 @@ class ClaudeCodeSessionResponse(BaseModel):
     label: str
     last_activity: datetime
     file_size: int
+    is_empty: bool
     linked_session_id: str | None = None
     session_role: str | None = None
 
@@ -29,3 +30,5 @@ class SessionSearchResultResponse(BaseModel):
     project_encoded_path: str
     line_number: int
     line_content: str
+    message_uuid: str | None = None
+    text_snippet: str | None = None

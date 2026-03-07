@@ -9,10 +9,11 @@ import { getRichResultRenderer, tryParseToolResult, getCustomToolDisplay } from 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
   toolResult?: ToolResult
+  isHighlighted?: boolean
   codebaseLocalPath?: string
 }
 
-function StandardToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
+function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const hasResult = toolResult !== undefined
   const isError = toolResult?.is_error || false
@@ -65,7 +66,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: To
       {/* Collapsed Tool Call Card */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-lg border ${getStatusColor()} overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity`}
+        className={`rounded-lg border ${getStatusColor()} overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
@@ -162,11 +163,11 @@ function StandardToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: To
   )
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult, codebaseLocalPath }: ToolCallDisplayProps) {
+export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath }: ToolCallDisplayProps) {
   const CustomDisplay = getCustomToolDisplay(toolCall.tool_name)
   if (CustomDisplay) {
     return <CustomDisplay toolCall={toolCall} toolResult={toolResult} />
   }
 
-  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} codebaseLocalPath={codebaseLocalPath} />
+  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} />
 }

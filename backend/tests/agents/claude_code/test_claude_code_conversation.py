@@ -240,6 +240,7 @@ class TestSessionMessagesToEvents:
             tool_name="render_html",
             tool_args={"arg": "value"},
             timestamp=builtin_msg.timestamp,
+            uuid="test-uuid",
         )
         assert isinstance(events[1], ToolCall)
         assert events[1] == ToolCall(
@@ -247,6 +248,7 @@ class TestSessionMessagesToEvents:
             tool_name="mcp__github__create_issue",
             tool_args={"arg": "value"},
             timestamp=external_msg.timestamp,
+            uuid="test-uuid",
         )
 
 
@@ -273,6 +275,7 @@ class TestMetaMessageEvents:
             meta_type=MetaMessageType.COMPACT_SUMMARY,
             text_content="Summary of conversation so far...",
             timestamp=self._TIMESTAMP,
+            uuid="test-uuid",
         )
 
     def test_skill_content_emits_meta_message(self):
@@ -290,6 +293,7 @@ class TestMetaMessageEvents:
             meta_type=MetaMessageType.SKILL_CONTENT,
             text_content="Skill prompt content...",
             timestamp=self._TIMESTAMP,
+            uuid="test-uuid",
         )
 
     def test_regular_message_not_affected(self):
@@ -306,4 +310,5 @@ class TestMetaMessageEvents:
             role=MessageRole.USER,
             text_content="Hello, can you help me?",
             timestamp=self._TIMESTAMP,
+            uuid="test-uuid",
         )

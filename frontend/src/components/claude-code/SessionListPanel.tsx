@@ -7,6 +7,7 @@ interface SessionListPanelProps {
   selectedSessionId: string | null
   loading: boolean
   onSelect: (session: ClaudeCodeSession) => void
+  matchCounts?: Map<string, number>
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -30,7 +31,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
-export function SessionListPanel({ sessions, selectedSessionId, loading, onSelect }: SessionListPanelProps) {
+export function SessionListPanel({ sessions, selectedSessionId, loading, onSelect, matchCounts }: SessionListPanelProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -63,8 +64,13 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
             }`}
           >
             <div className="min-w-0">
-              <p className={`text-sm ${textColors.primary} line-clamp-2 leading-snug`}>
-                {session.label}
+              <p className={`text-sm ${textColors.primary} leading-snug flex items-start`}>
+                <span className="line-clamp-2">{session.label}</span>
+                {matchCounts?.get(session.session_id) ? (
+                  <span className="ml-1.5 shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    {matchCounts.get(session.session_id)}
+                  </span>
+                ) : null}
               </p>
               <div className={`flex items-center gap-2 mt-1 text-xs ${textColors.muted}`}>
                 <span>{formatRelativeTime(session.last_activity)}</span>

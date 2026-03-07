@@ -53,6 +53,7 @@ class TextMessage(BaseModel):
     role: MessageRole
     text_content: str
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 class ToolCall(BaseModel):
@@ -63,6 +64,7 @@ class ToolCall(BaseModel):
     tool_name: str
     tool_args: dict[str, Any] | None = None
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 class ToolResult(BaseModel):
@@ -73,6 +75,7 @@ class ToolResult(BaseModel):
     result_content: str
     is_error: bool = False
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 class ToolCallRequest(BaseModel):
@@ -92,6 +95,7 @@ class MetaMessage(BaseModel):
     meta_type: MetaMessageType
     text_content: str
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 class SystemEvent(BaseModel):

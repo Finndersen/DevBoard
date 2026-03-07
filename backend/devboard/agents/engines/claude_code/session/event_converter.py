@@ -48,6 +48,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                     meta_type=session_msg.meta_type,
                     text_content=session_msg.text_content,
                     timestamp=session_msg.timestamp,
+                    uuid=session_msg.uuid,
                 )
             )
             continue
@@ -63,6 +64,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                             role=conv_role,
                             text_content=parsed.content,
                             timestamp=session_msg.timestamp,
+                            uuid=session_msg.uuid,
                         )
                     )
 
@@ -72,6 +74,8 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                         timestamp=session_msg.timestamp,
                         use_tool_call_request=session_idx == message_count - 1,
                     )
+                    for event in tool_call_events:
+                        event.uuid = session_msg.uuid
                     events.extend(tool_call_events)
 
                 elif isinstance(parsed, VirtualToolResult):
@@ -81,6 +85,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                             result_content=parsed.content,
                             is_error=not parsed.successful,
                             timestamp=session_msg.timestamp,
+                            uuid=session_msg.uuid,
                         )
                     )
 
@@ -91,6 +96,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                         tool_name=normalize_tool_name(content_block["name"]),
                         tool_args=content_block["input"],
                         timestamp=session_msg.timestamp,
+                        uuid=session_msg.uuid,
                     )
                 )
 
@@ -109,6 +115,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
                         result_content=result_str,
                         is_error=content_block.get("is_error", False),
                         timestamp=session_msg.timestamp,
+                        uuid=session_msg.uuid,
                     )
                 )
 

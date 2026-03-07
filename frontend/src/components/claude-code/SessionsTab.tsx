@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
@@ -19,8 +19,55 @@ export default function SessionsTab() {
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [excludeEmpty, setExcludeEmpty] = useState(true)
+  const [searchResults, setSearchResults] = useState<SessionSearchResult[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
 
   const selectedProject = projects.find(p => p.encoded_path === selectedProjectPath) ?? null
+  const filteredSessions = excludeEmpty ? sessions.filter(s => !s.is_empty) : sessions
+
+  const isSearchActive = searchQuery.trim().length > 0
+
+  const matchingProjectPaths = useMemo(
+    () => new Set(searchResults.map(r => r.project_encoded_path)),
+    [searchResults]
+  )
+
+  const matchingSessionIds = useMemo(
+    () => new Set(searchResults.map(r => r.session_id)),
+    [searchResults]
+  )
+
+  const projectMatchCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of searchResults) {
+      counts.set(r.project_encoded_path, (counts.get(r.project_encoded_path) ?? 0) + 1)
+    }
+    return counts
+  }, [searchResults])
+
+  const sessionMatchCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of searchResults) {
+      counts.set(r.session_id, (counts.get(r.session_id) ?? 0) + 1)
+    }
+    return counts
+  }, [searchResults])
+
+  const highlightUuids = useMemo(() => {
+    if (!isSearchActive || !selectedSessionId) return undefined
+    return searchResults
+      .filter(r => r.session_id === selectedSessionId && r.message_uuid)
+      .map(r => r.message_uuid!)
+  }, [isSearchActive, selectedSessionId, searchResults])
+
+  const displayedProjects = isSearchActive
+    ? projects.filter(p => matchingProjectPaths.has(p.encoded_path))
+    : projects
+
+  const displayedSessions = isSearchActive
+    ? filteredSessions.filter(s => matchingSessionIds.has(s.session_id))
+    : filteredSessions
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -77,17 +124,26 @@ export default function SessionsTab() {
     }, { replace: true })
   }
 
-  const handleSearchResultSelect = (result: SessionSearchResult) => {
-    setSearchParams(prev => {
-      prev.set('tab', 'sessions')
-      prev.set('project', result.project_encoded_path)
-      prev.set('session', result.session_id)
-      return prev
-    }, { replace: true })
-  }
-
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Global toolbar */}
+      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-4">
+        <p className={`text-sm ${textColors.secondary} flex-1 min-w-0 truncate`}>
+          Browse and search Claude Code project session histories
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+          <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
+          Hide empty
+        </label>
+        <div className="w-80 shrink-0">
+          <SessionSearch onResults={(results, query) => {
+            setSearchResults(results)
+            setSearchQuery(query)
+          }} />
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
       {/* Left panel: Projects */}
       <div className="w-72 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
@@ -107,9 +163,10 @@ export default function SessionsTab() {
             </div>
           ) : (
             <ProjectListPanel
-              projects={projects}
+              projects={displayedProjects}
               selectedEncodedPath={selectedProjectPath}
               onSelect={handleProjectSelect}
+              matchCounts={isSearchActive ? projectMatchCounts : undefined}
             />
           )}
         </div>
@@ -119,20 +176,15 @@ export default function SessionsTab() {
       {selectedProjectPath && (
         <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <h2 className={`text-sm font-semibold ${textColors.primary} truncate`}>
-              {selectedProject ? selectedProject.path.split('/').pop() : 'Sessions'}
-            </h2>
+            <h2 className={`text-sm font-semibold ${textColors.primary}`}>Sessions</h2>
           </div>
-          <SessionSearch
-            projectPath={selectedProject?.path ?? null}
-            onResultSelect={handleSearchResultSelect}
-          />
           <div className="flex-1 overflow-y-auto">
             <SessionListPanel
-              sessions={sessions}
+              sessions={displayedSessions}
               selectedSessionId={selectedSessionId}
               loading={sessionsLoading}
               onSelect={handleSessionSelect}
+              matchCounts={isSearchActive ? sessionMatchCounts : undefined}
             />
           </div>
         </div>
@@ -151,6 +203,7 @@ export default function SessionsTab() {
             <SessionConversationViewer
               sessionId={selectedSessionId}
               linkedSessionId={sessions.find(s => s.session_id === selectedSessionId)?.linked_session_id ?? null}
+              highlightUuids={highlightUuids}
             />
           </div>
         </div>
@@ -163,6 +216,7 @@ export default function SessionsTab() {
           <p className={`text-sm ${textColors.secondary}`}>Select a project to browse its sessions</p>
         </div>
       )}
+      </div>
     </div>
   )
 }

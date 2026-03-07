@@ -140,6 +140,7 @@ export interface MetaMessage {
   meta_type: MetaMessageType
   text_content: string
   timestamp: string
+  uuid?: string
 }
 
 export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'stream_interrupted' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired' | 'compacting_conversation'
@@ -149,6 +150,7 @@ export interface ConversationMessage {
   role: MessageRole
   text_content: string
   timestamp: string
+  uuid?: string
 }
 
 export interface ToolCall {
@@ -157,6 +159,7 @@ export interface ToolCall {
   tool_name: string
   tool_args: Record<string, unknown> | null
   timestamp: string
+  uuid?: string
 }
 
 export interface ToolResult {
@@ -165,6 +168,7 @@ export interface ToolResult {
   result_content: string
   is_error: boolean
   timestamp: string
+  uuid?: string
 }
 
 export interface ToolCallRequest {
@@ -615,6 +619,7 @@ export interface ClaudeCodeSession {
   label: string
   last_activity: string
   file_size: number
+  is_empty: boolean
   linked_session_id: string | null
   session_role: 'plan' | 'implementation' | null
 }
@@ -624,6 +629,8 @@ export interface SessionSearchResult {
   project_encoded_path: string
   line_number: number
   line_content: string
+  message_uuid: string | null
+  text_snippet: string | null
 }
 
 export class ApiClient {

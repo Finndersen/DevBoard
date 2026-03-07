@@ -16,6 +16,13 @@ from devboard.integrations.shell import execute_shell_command
 _LABEL_SCAN_LIMIT = 50
 # Maximum length for session labels (characters)
 _LABEL_MAX_LENGTH = 200
+# Prefixes that indicate a non-genuine user message (hook-injected or system messages)
+_HOOK_MESSAGE_TAGS = (
+    "<command-name>",
+    "<local-command-caveat>",
+    "<local-command-stdout>",
+    "[Request interrupted by user for tool use]",
+)
 
 
 @dataclass
@@ -39,6 +46,7 @@ class ClaudeCodeSessionInfo:
     label: str
     last_activity: datetime
     file_size: int
+    is_empty: bool
     linked_session_id: str | None = None
     session_role: str | None = None  # "plan" | "implementation" | None
 
@@ -51,6 +59,8 @@ class SessionSearchResult:
     project_encoded_path: str
     line_number: int
     line_content: str
+    message_uuid: str | None
+    text_snippet: str | None
 
 
 class ClaudeSessionManager:
@@ -153,8 +163,9 @@ class ClaudeSessionManager:
 
             if session_id in custom_titles:
                 label = custom_titles[session_id]
+                is_empty = False
             else:
-                label = self._extract_first_user_message_label(jsonl_file)
+                label, is_empty = self._extract_first_user_message_label(jsonl_file)
 
             # Determine session role and linked session
             if session_id in plan_to_impl:
@@ -180,6 +191,7 @@ class ClaudeSessionManager:
                     label=label,
                     last_activity=last_activity,
                     file_size=file_size,
+                    is_empty=is_empty,
                     linked_session_id=linked_session_id,
                     session_role=session_role,
                 )
@@ -202,8 +214,13 @@ class ClaudeSessionManager:
             pass
         return None
 
-    def _extract_first_user_message_label(self, jsonl_file: Path) -> str:
-        """Read the first genuine user message text from a session file as a label."""
+    def _extract_first_user_message_label(self, jsonl_file: Path) -> tuple[str, bool]:
+        """Read the first genuine user message text from a session file as a label.
+
+        Returns:
+            A tuple of (label, is_empty) where is_empty is True if no genuine user
+            message was found (only hook-injected or meta messages).
+        """
         try:
             with jsonl_file.open("r") as f:
                 for i, line in enumerate(f):
@@ -219,7 +236,7 @@ class ClaudeSessionManager:
 
                     if entry.get("type") != "user":
                         continue
-                    if entry.get("isMeta"):
+                    if entry.get("isMeta") or entry.get("isCompactSummary"):
                         continue
 
                     content = entry.get("message", {}).get("content", "")
@@ -227,15 +244,14 @@ class ClaudeSessionManager:
 
                     if not text:
                         continue
-                    # Skip slash command entries
-                    if "<command-name>" in text:
+                    if any(text.startswith(tag) for tag in _HOOK_MESSAGE_TAGS):
                         continue
 
-                    return text[:_LABEL_MAX_LENGTH]
+                    return text[:_LABEL_MAX_LENGTH], False
         except (OSError, KeyError):
             pass
 
-        return "No messages"
+        return "No messages", True
 
     @staticmethod
     def _extract_text_from_content(content: str | list) -> str:
@@ -321,10 +337,26 @@ class ClaudeSessionManager:
             session_id = file_path.stem
             project_encoded_path = file_path.parent.name
             line_number = match_data.get("line_number", 0)
-            line_content = match_data.get("lines", {}).get("text", "").strip()[:500]
+            raw_line = match_data.get("lines", {}).get("text", "").strip()
+            line_content = raw_line[:500]
 
             if not session_id or not project_encoded_path:
                 continue
+
+            message_uuid: str | None = None
+            text_snippet: str | None = None
+            try:
+                jsonl_entry = json.loads(raw_line)
+                message_uuid = jsonl_entry.get("uuid")
+                content = jsonl_entry.get("message", {}).get("content")
+                if isinstance(content, list):
+                    text_parts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                    joined = "\n".join(text_parts)
+                    text_snippet = joined[:200] if joined else None
+                elif isinstance(content, str):
+                    text_snippet = content[:200] if content else None
+            except (json.JSONDecodeError, AttributeError):
+                pass
 
             search_results.append(
                 SessionSearchResult(
@@ -332,6 +364,8 @@ class ClaudeSessionManager:
                     project_encoded_path=project_encoded_path,
                     line_number=line_number,
                     line_content=line_content,
+                    message_uuid=message_uuid,
+                    text_snippet=text_snippet,
                 )
             )
 

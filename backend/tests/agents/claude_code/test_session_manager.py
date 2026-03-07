@@ -174,40 +174,45 @@ class TestExtractFirstUserMessageLabel:
         _write_jsonl(jsonl, [_make_user_entry("Hello, world!")])
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert label == "Hello, world!"
+        assert is_empty is False
 
     def test_skips_non_user_entries(self, tmp_path: Path) -> None:
         jsonl = tmp_path / "sess.jsonl"
         _write_jsonl(jsonl, [_make_summary_entry(), _make_user_entry("First real message")])
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert label == "First real message"
+        assert is_empty is False
 
     def test_skips_meta_user_entries(self, tmp_path: Path) -> None:
         jsonl = tmp_path / "sess.jsonl"
         _write_jsonl(jsonl, [_make_user_entry("meta content", is_meta=True), _make_user_entry("Real message")])
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert label == "Real message"
+        assert is_empty is False
 
     def test_skips_command_entries(self, tmp_path: Path) -> None:
         jsonl = tmp_path / "sess.jsonl"
         _write_jsonl(jsonl, [_make_user_entry("<command-name>clear</command-name>"), _make_user_entry("Real message")])
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert label == "Real message"
+        assert is_empty is False
 
     def test_returns_no_messages_when_empty(self, tmp_path: Path) -> None:
         jsonl = tmp_path / "sess.jsonl"
         jsonl.write_text("")
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert label == "No messages"
+        assert is_empty is True
 
     def test_truncates_long_messages(self, tmp_path: Path) -> None:
         long_text = "x" * 300
@@ -215,8 +220,63 @@ class TestExtractFirstUserMessageLabel:
         _write_jsonl(jsonl, [_make_user_entry(long_text)])
 
         manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
-        label = manager._extract_first_user_message_label(jsonl)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
         assert len(label) == 200
+        assert is_empty is False
+
+    def test_only_command_name_tags_is_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("<command-name>clear</command-name>")])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "No messages"
+        assert is_empty is True
+
+    def test_only_local_command_caveat_is_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("<local-command-caveat>some caveat</local-command-caveat>")])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "No messages"
+        assert is_empty is True
+
+    def test_only_local_command_stdout_is_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("<local-command-stdout>some output</local-command-stdout>")])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "No messages"
+        assert is_empty is True
+
+    def test_only_meta_messages_is_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("meta content", is_meta=True)])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "No messages"
+        assert is_empty is True
+
+    def test_interrupted_message_is_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("[Request interrupted by user for tool use]")])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "No messages"
+        assert is_empty is True
+
+    def test_tag_in_middle_of_message_is_not_empty(self, tmp_path: Path) -> None:
+        jsonl = tmp_path / "sess.jsonl"
+        _write_jsonl(jsonl, [_make_user_entry("Hello <command-name>clear</command-name>")])
+
+        manager = ClaudeSessionManager.__new__(ClaudeSessionManager)
+        label, is_empty = manager._extract_first_user_message_label(jsonl)
+        assert label == "Hello <command-name>clear</command-name>"
+        assert is_empty is False
 
 
 class TestResolveCustomTitles:
@@ -403,6 +463,8 @@ class TestSearchSessions:
             project_encoded_path="-Users-foo-proj",
             line_number=5,
             line_content='{"type":"user","message":{"content":"hello"}}',
+            message_uuid=None,
+            text_snippet="hello",
         )
 
     @pytest.mark.asyncio
