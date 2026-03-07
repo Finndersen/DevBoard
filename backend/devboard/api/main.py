@@ -27,11 +27,9 @@ from devboard.api.routers import (
 from devboard.config.logfire_config import setup_logfire
 from devboard.db.database import SessionLocal
 from devboard.db.repositories.codebase import CodebaseRepository
-from devboard.db.repositories.conversation import ConversationRepository
-from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.mcp import mcp
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
+from devboard.services.workspace.pool_manager import WorktreePoolManager
 
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
@@ -82,15 +80,8 @@ async def cleanup_stale_locks_on_startup():
     db = SessionLocal()
     try:
         codebase_repo = CodebaseRepository(db)
-        task_repo = TaskRepository(db)
         worktree_slot_repo = WorktreeSlotRepository(db)
-        conversation_repo = ConversationRepository(db)
-
-        workspace_service = WorkspaceAllocationService(
-            worktree_slot_repo=worktree_slot_repo,
-            task_repo=task_repo,
-            conversation_repo=conversation_repo,
-        )
+        worktree_pool_manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo)
 
         # Get all codebases
         codebases = codebase_repo.get_all()
@@ -98,7 +89,7 @@ async def cleanup_stale_locks_on_startup():
         total_released = 0
         for codebase in codebases:
             try:
-                released = await workspace_service.cleanup_stale_locks(codebase.id)
+                released = await worktree_pool_manager.cleanup_stale_locks(codebase.id)
                 if released > 0:
                     logfire.info(f"Released {released} stale lock(s) for codebase {codebase.name}")
                 total_released += released

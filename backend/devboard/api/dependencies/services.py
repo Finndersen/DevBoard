@@ -42,6 +42,7 @@ from devboard.services.resource_service import ResourceService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
+from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 
@@ -117,6 +118,13 @@ def get_task_git_service(
 ) -> TaskGitService:
     """Get TaskGitService instance."""
     return TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
+
+
+def get_pool_manager(
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+) -> WorktreePoolManager:
+    """Get WorktreePoolManager instance."""
+    return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo)
 
 
 def get_workspace_allocation_service(

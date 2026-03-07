@@ -37,7 +37,6 @@ from devboard.api.schemas import (
     ResourceResponse,
     TaskBranchInfo,
     TaskDiffResponse,
-    TaskGitStatusResponse,
     TaskListResponse,
     TaskResourceCreate,
     TaskResponse,
@@ -59,8 +58,10 @@ from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
+from devboard.services.task_git import TaskGitStatus
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService, TaskTransitionError
+from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 from devboard.workflow_actions.registry import workflow_action_registry
 
@@ -379,7 +380,6 @@ async def get_task_branch_info(
     task: Task = Depends(get_verified_task),
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
     task_git_service: TaskGitService = Depends(get_task_git_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> TaskBranchInfo:
     """Get branch information for a task.
 
@@ -401,7 +401,8 @@ async def get_task_branch_info(
     # Check for uncommitted changes only if there's a worktree slot
     has_uncommitted = False
     if last_used_slot:
-        has_uncommitted = await workspace_allocation_service.slot_has_uncommitted_changes(last_used_slot)
+        pool_manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo)
+        has_uncommitted = await pool_manager.slot_has_uncommitted_changes(last_used_slot)
 
     # Convert GitLogEntry to CommitMetadata schema
     commits = [
@@ -420,12 +421,12 @@ async def get_task_branch_info(
     )
 
 
-@router.get("/{task_id}/git-status", response_model=TaskGitStatusResponse)
+@router.get("/{task_id}/git-status", response_model=TaskGitStatus)
 async def get_task_git_status(
     task_id: int,
     task: Task = Depends(get_verified_task),
     task_git_service: TaskGitService = Depends(get_task_git_service),
-) -> TaskGitStatusResponse:
+) -> TaskGitStatus:
     """Get git status for a task's branch.
 
     Returns information about the task's git branch including:
@@ -441,7 +442,7 @@ async def get_task_git_status(
     """
     try:
         status = await task_git_service.get_task_git_status(task)
-        return TaskGitStatusResponse(**status)
+        return status
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

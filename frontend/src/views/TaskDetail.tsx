@@ -1,40 +1,26 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, CodeBracketIcon, TrashIcon, TagIcon, FolderIcon } from '@heroicons/react/24/outline'
-
-// Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
-const GitBranchIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="20" r="2" />
-    <circle cx="12" cy="4" r="2" />
-    <circle cx="18" cy="6" r="2" />
-    <path d="M12 18 L12 6" />
-    <path d="M12 18 Q16 14 18 8" />
-  </svg>
-)
-
-// GitHub mark icon
-const GitHubIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 16 16" fill="currentColor">
-    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-  </svg>
-)
-import { CheckCircleIcon, ClockIcon, XCircleIcon, MinusCircleIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
-import type { Task, Codebase, TaskDiffResponse, TaskGitStatus, TaskBranchInfo, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler, useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
+import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
-import { Button, Card, Input, StatusBadge, Textarea, ErrorMessage, Markdown, ConfirmDialog } from '../components/ui'
+import { Button, Card, ErrorMessage } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
-import AllFilesDiffViewer from '../components/documents/AllFilesDiffViewer'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
-import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useTaskGitStatus } from './hooks/useTaskGitStatus'
+import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
+import { TaskDetailHeader } from '../components/task/TaskDetailHeader'
+import { SpecificationTab } from '../components/task/SpecificationTab'
+import { PlanTab } from '../components/task/PlanTab'
+import { ChangesTab } from '../components/task/ChangesTab'
+import { SummaryTab } from '../components/task/SummaryTab'
 
 const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.create_implementation_plan': 'Generate a technical implementation plan from the task specification',
@@ -72,16 +58,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
   // PR feedback (reviews and comments) for tasks in PR_OPEN state
   const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
-
-  // Custom field definitions (fetched once to determine display type)
-  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
-
-  // Fetch custom field definitions on mount
-  useEffect(() => {
-    apiClient.getCustomFieldDefinitions('task')
-      .then(setCustomFieldDefinitions)
-      .catch(err => console.error('Failed to load custom field definitions:', err))
-  }, [])
 
   // Fetch PR status and feedback when task is in PR_OPEN state
   useEffect(() => {
@@ -174,25 +150,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   useTabTitle('task', id)
 
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'summary'>('specification')
-  const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [streamingMessage, setStreamingMessage] = useState<string>('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteBranch, setDeleteBranch] = useState(true)
-  const [gitStatus, setGitStatus] = useState<TaskGitStatus | null>(null)
-  const [showBranchStatusModal, setShowBranchStatusModal] = useState(false)
-  const [branchStatusLoading, setBranchStatusLoading] = useState(false)
-  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
-
-  // State for branch info and diff data
-  const [branchInfo, setBranchInfo] = useState<TaskBranchInfo | null>(null)
-  const [branchInfoLoading, setBranchInfoLoading] = useState(false)
-  const [diffData, setDiffData] = useState<TaskDiffResponse | null>(null)
-  const [diffLoading, setDiffLoading] = useState(false)
-  const [lastDiffUpdate, setLastDiffUpdate] = useState<string | null>(null)
-  const diffRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const branchInfoInFlightRef = useRef(false)
-  const diffInFlightRef = useRef(false)
-  const gitStatusInFlightRef = useRef(false)
 
   // Use ref to store refetch function to avoid dependency issues
   const refetchRef = useRef(refetch)
@@ -241,7 +199,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { mutate: deleteTask, loading: deleteLoading, error: deleteError } = useDeleteTask()
 
   // Handle task deletion
-  const handleDeleteTask = useCallback(async () => {
+  const handleDeleteTask = useCallback(async (deleteBranch: boolean) => {
     if (!task) return
 
     try {
@@ -274,281 +232,50 @@ function TaskDetail({ id }: TaskDetailProps) {
     } catch (error) {
       console.error('Failed to delete task:', error)
       // Error will be shown via deleteError state
-    } finally {
-      setShowDeleteConfirm(false)
     }
-  }, [task, project, deleteTask, deleteBranch, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, addNotification, navigate])
+  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
-    setShowCodebaseSelector(false)
     updateTask({ id: id!, task: { codebase_id: codebaseId } as unknown as Task })
   }, [updateTask, id])
-
-  // Fetch task branch info (commits list and uncommitted status)
-  const fetchTaskBranchInfo = useCallback(async () => {
-    if (!task?.id || branchInfoInFlightRef.current) return
-    branchInfoInFlightRef.current = true
-
-    setBranchInfoLoading(true)
-
-    try {
-      const response = await apiClient.getTaskBranchInfo(task.id)
-      setBranchInfo(response)
-    } catch (error) {
-      console.error('Failed to fetch task branch info:', error)
-    } finally {
-      setBranchInfoLoading(false)
-      branchInfoInFlightRef.current = false
-    }
-  }, [task?.id])
-
-  // Fetch task diff
-  const fetchTaskDiff = useCallback(async (view: string) => {
-    if (!task?.id || diffInFlightRef.current) return
-    diffInFlightRef.current = true
-
-    setDiffLoading(true)
-
-    try {
-      const response = await apiClient.getTaskDiff(task.id, view)
-      setDiffData(response)
-      setLastDiffUpdate(new Date().toISOString())
-    } catch (error) {
-      console.error('Failed to fetch task diff:', error)
-    } finally {
-      setDiffLoading(false)
-      diffInFlightRef.current = false
-    }
-  }, [task?.id])
-
-  // Combined refresh handler that refetches both branch info and diff
-  const handleDiffRefresh = useCallback(async (view: string) => {
-    if (!task?.id) return
-
-    // First refetch branch info to find new commits
-    await fetchTaskBranchInfo()
-    // Then refetch the diff for the selected view
-    await fetchTaskDiff(view)
-  }, [task?.id, fetchTaskBranchInfo, fetchTaskDiff])
-
-  // Auto-fetch branch info and initial diff when Changes tab is first opened
-  useEffect(() => {
-    if (activeTab === 'changes' && !branchInfo && !branchInfoLoading && task?.codebase_id) {
-      // First fetch branch info to populate dropdown
-      fetchTaskBranchInfo().then(() => {
-        // Then fetch 'all' view as default
-        fetchTaskDiff('all')
-      })
-    }
-  }, [activeTab, branchInfo, branchInfoLoading, task?.codebase_id, fetchTaskBranchInfo, fetchTaskDiff])
 
   // Get selected codebase object
   const selectedCodebase = task && task.codebase_id && codebases
     ? codebases.find((c: Codebase) => c.id === task.codebase_id)
     : null
 
-  // Fetch git status on task load to show branch icon in header
-  useEffect(() => {
-    if (task?.id && task?.codebase_id) {
-      apiClient.getTaskGitStatus(task.id)
-        .then(status => setGitStatus(status))
-        .catch(error => {
-          console.error('Failed to fetch git status:', error)
-          setGitStatus(null)
-        })
-    }
-  }, [task?.id, task?.codebase_id])
+  const {
+    gitStatus,
+    showBranchStatusModal,
+    setShowBranchStatusModal,
+    branchStatusLoading,
+    branchInfo,
+    branchInfoLoading,
+    diffData,
+    diffLoading,
+    lastDiffUpdate,
+    diffRefreshTimeoutRef,
+    handleDiffRefresh,
+    handleOpenBranchStatusModal,
+    refreshGitStatus,
+  } = useTaskGitStatus({
+    taskId: task?.id,
+    codebaseId: task?.codebase_id,
+    activeTab,
+  })
 
-  // Handle opening branch status modal
-  const handleOpenBranchStatusModal = useCallback(async () => {
-    if (!task?.id) return
-
-    setBranchStatusLoading(true)
-    setShowBranchStatusModal(true)
-
-    try {
-      const status = await apiClient.getTaskGitStatus(task.id)
-      setGitStatus(status)
-    } catch (error) {
-      console.error('Failed to fetch git status:', error)
-      setGitStatus(null)
-    } finally {
-      setBranchStatusLoading(false)
-    }
-  }, [task?.id])
-
-  // Refresh git status (called after modal actions)
-  const refreshGitStatus = useCallback(async () => {
-    if (!task?.id || gitStatusInFlightRef.current) return
-    gitStatusInFlightRef.current = true
-
-    try {
-      const status = await apiClient.getTaskGitStatus(task.id)
-      setGitStatus(status)
-    } catch (error) {
-      console.error('Failed to refresh git status:', error)
-    } finally {
-      gitStatusInFlightRef.current = false
-    }
-  }, [task?.id])
-
-
-  // Handle specification document updates from MCP tools
-  const specificationHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
-      try {
-        await refetchSpecification()
-        // Refetch task to update available_workflow_actions (e.g., "Create implementation plan" becomes available)
-        await refetch()
-        // Switch to specification tab to show the updated content
-        setActiveTab('specification')
-      } catch (error) {
-        console.error('Failed to refetch specification document:', error)
-      }
-    }
-  }, [refetchSpecification, refetch, setActiveTab])
-
-  useToolResultHandler(specificationHandler)
-
-  // Handle implementation plan document updates from MCP tools
-  const implementationPlanHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content')) {
-      try {
-        await refetchImplementationPlan()
-        // Switch to plan tab to show the updated content
-        setActiveTab('plan')
-      } catch (error) {
-        console.error('Failed to refetch implementation plan document:', error)
-      }
-    }
-  }, [refetchImplementationPlan, setActiveTab])
-
-  useToolResultHandler(implementationPlanHandler)
-
-  // Handle file modification tool results to refresh diff view
-  const fileModificationHandler = useCallback((toolName: string, result: any) => {
-    const isFileModification = toolName === 'Edit' || toolName === 'Write'
-    const isImplementing = task?.status?.toLowerCase() === 'implementing' && task?.codebase_id
-
-    if (isFileModification && isImplementing) {
-      if (diffRefreshTimeoutRef.current) {
-        clearTimeout(diffRefreshTimeoutRef.current)
-      }
-
-      diffRefreshTimeoutRef.current = setTimeout(() => {
-        handleDiffRefresh('all')
-      }, 1000)
-    }
-  }, [task?.status, task?.codebase_id, handleDiffRefresh])
-
-  useToolResultHandler(fileModificationHandler)
-
-  // Handler for complete_task_with_local_merge tool - refresh task details
-  const taskCompletionHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('complete_task_with_local_merge')) {
-      await refetch()
-    }
-  }, [refetch])
-
-  useToolResultHandler(taskCompletionHandler)
-
-  // Handler for create_pull_request tool - refresh task details to show PR_OPEN status
-  const createPRHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('create_pull_request')) {
-      await refetch()
-    }
-  }, [refetch])
-
-  useToolResultHandler(createPRHandler)
-
-  // Handler for merge_pr_and_complete_task tool - refresh task details to show COMPLETE status
-  const mergePRAndCompleteHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('merge_pr_and_complete_task')) {
-      await refetch()
-    }
-  }, [refetch])
-
-  useToolResultHandler(mergePRAndCompleteHandler)
-
-  // Handler for rebase_task_branch tool - refresh git status on success or failure
-  const rebaseHandler = useCallback(async (toolName: string, result: any) => {
-    if (toolName.includes('rebase_task_branch')) {
-      await refreshGitStatus()
-    }
-  }, [refreshGitStatus])
-
-  useToolResultHandler(rebaseHandler)
-
-  // Handle task updates from SystemEvents (emitted during workflow actions)
-  const systemEventHandler = useCallback(async (event: any) => {
-    const isRelevantEventType = event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate'
-    const isForThisTask = event.data?.task_id === task?.id
-
-    if (isRelevantEventType && isForThisTask) {
-      console.log('[TaskDetail] SystemEvent received:', {
-        taskId: task?.id,
-        eventType: event.type,
-        eventData: event.data,
-        timestamp: new Date().toISOString()
-      })
-
-      try {
-        // Handle task_updated events
-        if (event.type === 'task_updated') {
-          // Check if conversation_id is changing
-          const oldConversationId = task?.conversation_id
-          const newConversationId = event.data?.updated_fields?.conversation_id
-
-          // Migrate stream FIRST (before refetch updates conversation_id in state)
-          // This prevents race condition where component re-renders with new conversation_id
-          // but stream is still registered under old conversation_id
-          if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
-            console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
-            migrateStream(oldConversationId, newConversationId)
-            // Clear streaming message immediately after migration
-            // The isConversationStreaming check in the effect won't work during migration
-            // because task.conversation_id hasn't updated yet
-            setStreamingMessage('')
-          }
-
-          // THEN refetch task to get updated status and conversation_id
-          await refetch()
-        }
-
-        // Handle branch_rebased events - refresh git status
-        if (event.type === 'branch_rebased') {
-          await refreshGitStatus()
-        }
-
-        // Handle workspace_allocate events - refresh git status to show worktree indicator
-        if (event.type === 'workspace_allocate') {
-          await refreshGitStatus()
-        }
-      } catch (error) {
-        console.error('Failed to handle system event:', error)
-        // Don't throw - allow other handlers and stream to continue
-      }
-    }
-  }, [task?.id, task?.conversation_id, migrateStream, refetch, refreshGitStatus])
-
-  useSystemEventHandler(systemEventHandler)
-
-  // Handle stream completion - refresh diff view when agent finishes during implementation phase
-  const streamCompleteHandler = useCallback(() => {
-    // Only refresh diff when task is in implementing status
-    if (task?.status?.toLowerCase() === 'implementing' && task?.codebase_id) {
-      // Clear any pending debounced refresh to avoid duplicate requests
-      if (diffRefreshTimeoutRef.current) {
-        clearTimeout(diffRefreshTimeoutRef.current)
-        diffRefreshTimeoutRef.current = null
-      }
-      // Refresh the 'all' view to show latest changes
-      handleDiffRefresh('all')
-    }
-  }, [task?.status, task?.codebase_id, handleDiffRefresh])
-
-  useStreamCompleteHandler(streamCompleteHandler)
+  useTaskEventHandlers({
+    task,
+    refetch,
+    refetchSpecification,
+    refetchImplementationPlan,
+    refreshGitStatus,
+    handleDiffRefresh,
+    setActiveTab,
+    setStreamingMessage,
+    diffRefreshTimeoutRef,
+  })
 
   // Handle conversation reset from AgentChat (when user clears chat history)
   const handleConversationReset = useCallback((newConversationId: number) => {
@@ -574,21 +301,6 @@ function TaskDetail({ id }: TaskDetailProps) {
       }
     }
   }, [])
-
-  // Close codebase selector when clicking outside
-  useEffect(() => {
-    if (!showCodebaseSelector) return
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      if (!target.closest('.relative')) {
-        setShowCodebaseSelector(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showCodebaseSelector])
 
   const executeWorkflowAction = async (actionKey: string, message: string) => {
     if (!task?.id || !task?.conversation_id) return
@@ -686,20 +398,6 @@ function TaskDetail({ id }: TaskDetailProps) {
     )
   }
 
-  const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
-    switch (status.toLowerCase()) {
-      case 'planning':
-      case 'implementing':
-        return 'info'
-      case 'pr_open':
-        return 'warning'
-      case 'complete':
-        return 'success'
-      default:
-        return 'default'
-    }
-  }
-
   // Only show loading spinner on initial load (when task data doesn't exist yet)
   // Don't show during refetches to avoid UI flash
   if (loading && !task) {
@@ -737,216 +435,25 @@ function TaskDetail({ id }: TaskDetailProps) {
       {deleteError && (
         <ErrorMessage error={deleteError} className="mb-6" />
       )}
-      
+
       {/* Compact Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-3">
-            {/* Task Title Display and Edit */}
-            {titleField.isEditing ? (
-              <div className="flex items-center space-x-2">
-                <Input
-                  type="text"
-                  value={titleField.editedValue}
-                  onChange={(e) => titleField.setEditedValue(e.target.value)}
-                  className="text-lg font-bold h-8"
-                  style={{ width: `${Math.max(20, titleField.editedValue.length * 0.8 + 5)}ch` }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') titleField.save()
-                    if (e.key === 'Escape') titleField.cancelEditing()
-                  }}
-                />
-                <Button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    titleField.save()
-                  }}
-                  variant="secondary"
-                  size="sm"
-                  className="p-1.5 min-w-[28px] h-7 border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400 dark:border-green-600 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
-                  title="Save (Enter)"
-                  loading={titleField.saving}
-                >
-                  <CheckIcon className="w-4 h-4" />
-                </Button>
-                <Button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    titleField.cancelEditing()
-                  }}
-                  variant="secondary"
-                  size="sm"
-                  className="p-1.5 min-w-[28px] h-7 border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-                  title="Cancel (Escape)"
-                >
-                  <XMarkIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <h1 className={`text-xl font-bold ${textColors.primary}`}>
-                  {task.title}
-                </h1>
-                <Button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    titleField.startEditing()
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  className="p-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                  title="Edit title"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-            <StatusBadge variant={getStatusVariant(task.status)}>
-              {task.status}
-            </StatusBadge>
+      <TaskDetailHeader
+        task={task}
+        project={project}
+        titleField={titleField}
+        codebases={codebases}
+        selectedCodebase={selectedCodebase}
+        gitStatus={gitStatus}
+        branchStatusLoading={branchStatusLoading}
+        prStatus={prStatus}
+        workflowActionButtons={getWorkflowActionButtons()}
+        onCodebaseSelect={handleCodebaseSelect}
+        onOpenBranchStatusModal={handleOpenBranchStatusModal}
+        onDeleteTask={handleDeleteTask}
+        deleteLoading={deleteLoading}
+        deleteError={deleteError}
+      />
 
-            {/* Parent Project Link */}
-            {project && (
-              <Link
-                to={`/projects/${project.id}`}
-                className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                title="View project"
-              >
-                <FolderIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                <span className="text-blue-600 dark:text-blue-400 hover:underline">{project.name}</span>
-              </Link>
-            )}
-
-            {/* Codebase Display/Selector */}
-            <div className="relative">
-              {selectedCodebase ? (
-                // Read-only display with link to codebase detail
-                <Link
-                  to={`/codebases/${selectedCodebase.id}`}
-                  className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  title="View codebase details"
-                >
-                  <CodeBracketIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  <span className="text-blue-600 dark:text-blue-400 hover:underline">{selectedCodebase.name}</span>
-                </Link>
-              ) : (
-                // Dropdown selector (only shown if no codebase assigned)
-                <>
-                  <button
-                    onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
-                    className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
-                    title="Select codebase"
-                  >
-                    <CodeBracketIcon className="w-4 h-4" />
-                    <span className="italic">No codebase</span>
-                    <ChevronDownIcon className="w-3 h-3" />
-                  </button>
-
-                  {showCodebaseSelector && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
-                      <div className="max-h-64 overflow-y-auto">
-                        {codebases && codebases.map((codebase: Codebase) => (
-                          <button
-                            key={codebase.id}
-                            onClick={() => handleCodebaseSelect(codebase.id)}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                              codebase.id === task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
-                            } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}
-                          >
-                            <div className="font-medium">{codebase.name}</div>
-                            <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
-            {gitStatus?.branch_name && task.status !== 'complete' && (
-              <button
-                onClick={handleOpenBranchStatusModal}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${
-                  gitStatus.worktree_slot_path
-                    ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
-                    : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ' + textColors.secondary
-                }`}
-                title={gitStatus.branch_name}
-                disabled={branchStatusLoading}
-              >
-                <GitBranchIcon className="w-4 h-4" />
-                {gitStatus.commits_ahead > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                    {gitStatus.commits_ahead} ahead
-                  </span>
-                )}
-                {gitStatus.commits_behind > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                    {gitStatus.commits_behind} behind
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* PR Status Button - shown when task is in PR_OPEN state */}
-            {task.status === 'pr_open' && prStatus && (
-              <button
-                onClick={() => window.open(prStatus.pr_url, '_blank')}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ${textColors.secondary}`}
-                title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
-              >
-                <GitHubIcon className="w-4 h-4" />
-                {prStatus.merged ? (
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
-                ) : prStatus.checks_status === 'success' ? (
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                ) : prStatus.checks_status === 'pending' ? (
-                  <ClockIcon className="w-3.5 h-3.5 text-yellow-500" />
-                ) : (prStatus.checks_status === 'failure' || prStatus.checks_status === 'error') ? (
-                  <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                ) : (
-                  <MinusCircleIcon className="w-3.5 h-3.5 text-gray-400" />
-                )}
-                <ArrowTopRightOnSquareIcon className="w-3 h-3 opacity-60" />
-              </button>
-            )}
-
-            {/* Custom Fields Button - only shown when task has custom fields */}
-            {task.custom_fields && Object.keys(task.custom_fields).length > 0 && (
-              <button
-                onClick={() => setShowCustomFieldsModal(true)}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
-                title="View custom fields"
-              >
-                <TagIcon className="w-4 h-4" />
-                <span>{Object.keys(task.custom_fields).length} field{Object.keys(task.custom_fields).length !== 1 ? 's' : ''}</span>
-              </button>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          {/* Delete Button */}
-          <Button
-            onClick={() => setShowDeleteConfirm(true)}
-            variant="ghost"
-            size="sm"
-            icon={<TrashIcon className="w-4 h-4" />}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-900/20"
-            title="Delete task"
-            aria-label="Delete task"
-          >
-            Delete
-          </Button>
-
-          {/* Workflow Action Buttons */}
-          {getWorkflowActionButtons()}
-        </div>
-      </div>
-
-      
       {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
         {/* Left Column: Document Content with Integrated Tabs */}
@@ -1051,71 +558,34 @@ function TaskDetail({ id }: TaskDetailProps) {
           {/* Tab Content */}
           <div className="flex-1 p-6 overflow-hidden">
             {activeTab === 'specification' && (
-              <div className="h-full flex flex-col">
-                {specificationField.isEditing ? (
-                  <Textarea
-                    value={specificationField.editedValue}
-                    onChange={(e) => specificationField.setEditedValue(e.target.value)}
-                    fillHeight={true}
-                    placeholder="Enter task specification in Markdown format..."
-                  />
-                ) : (
-                  <div className="h-full overflow-y-auto">
-                    {specificationDoc?.content ? (
-                      <Markdown>{specificationDoc.content}</Markdown>
-                    ) : (
-                      <p className={`${textColors.secondary} italic`}>No task specification provided. Click Edit to add specification.</p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <SpecificationTab
+                specificationDoc={specificationDoc}
+                specificationField={specificationField}
+              />
             )}
 
             {activeTab === 'plan' && (
-              <div className="h-full flex flex-col">
-                {planField.isEditing ? (
-                  <Textarea
-                    value={planField.editedValue}
-                    onChange={(e) => planField.setEditedValue(e.target.value)}
-                    fillHeight={true}
-                    placeholder="Enter implementation plan in Markdown format..."
-                  />
-                ) : (
-                  <div className="h-full overflow-y-auto">
-                    {implementationPlanDoc?.content ? (
-                      <Markdown>{implementationPlanDoc.content}</Markdown>
-                    ) : (
-                      <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <PlanTab
+                implementationPlanDoc={implementationPlanDoc}
+                planField={planField}
+              />
             )}
 
             {activeTab === 'changes' && (
-              <div className="h-full overflow-hidden">
-                <AllFilesDiffViewer
-                  branchInfo={branchInfo}
-                  diffResponse={diffData}
-                  loading={diffLoading || branchInfoLoading}
-                  onRefresh={handleDiffRefresh}
-                  lastUpdated={lastDiffUpdate}
-                  onSubmitComments={handleSubmitReviewComments}
-                  prFeedback={prFeedback}
-                />
-              </div>
+              <ChangesTab
+                branchInfo={branchInfo}
+                diffData={diffData}
+                diffLoading={diffLoading}
+                branchInfoLoading={branchInfoLoading}
+                lastDiffUpdate={lastDiffUpdate}
+                prFeedback={prFeedback}
+                onRefresh={handleDiffRefresh}
+                onSubmitComments={handleSubmitReviewComments}
+              />
             )}
 
             {activeTab === 'summary' && (
-              <div className="h-full flex flex-col">
-                <div className="h-full overflow-y-auto">
-                  {changeSummaryDoc?.content ? (
-                    <Markdown>{changeSummaryDoc.content}</Markdown>
-                  ) : (
-                    <p className={`${textColors.secondary} italic`}>No change summary available yet.</p>
-                  )}
-                </div>
-              </div>
+              <SummaryTab changeSummaryDoc={changeSummaryDoc} />
             )}
           </div>
         </Card>
@@ -1140,46 +610,6 @@ function TaskDetail({ id }: TaskDetailProps) {
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={handleDeleteTask}
-        title="Delete Task"
-        message={
-          <div>
-            <p>Are you sure you want to delete "{task.title}"? This will permanently delete the task, its specification, implementation plan, conversations, and all associated data. This action cannot be undone.</p>
-            {gitStatus?.branch_exists && gitStatus.commits_ahead > 0 && (
-              <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
-                ⚠️ Branch has {gitStatus.commits_ahead} unmerged commit{gitStatus.commits_ahead !== 1 ? 's' : ''}
-              </div>
-            )}
-            {gitStatus?.branch_exists && (
-              <label style={{ display: 'flex', alignItems: 'center', marginTop: '16px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={deleteBranch}
-                  onChange={(e) => setDeleteBranch(e.target.checked)}
-                  style={{ marginRight: '8px' }}
-                />
-                <span>
-                  Also delete git branch {gitStatus?.branch_name && `"${gitStatus.branch_name}"`}
-                </span>
-              </label>
-            )}
-            {!gitStatus?.branch_exists && gitStatus?.branch_name && (
-              <div style={{ marginTop: '12px', fontSize: '0.9em', color: '#666', fontStyle: 'italic' }}>
-                Branch "{gitStatus.branch_name}" does not exist
-              </div>
-            )}
-          </div>
-        }
-        confirmText="Delete Task"
-        cancelText="Cancel"
-        variant="danger"
-        loading={deleteLoading}
-      />
-
       {/* Branch Status Modal */}
       <GitBranchStatusModal
         isOpen={showBranchStatusModal}
@@ -1189,14 +619,6 @@ function TaskDetail({ id }: TaskDetailProps) {
         onStatusUpdate={refreshGitStatus}
         onTriggerRebase={handleTriggerRebase}
         isStreaming={isConversationStreaming}
-      />
-
-      {/* Custom Fields Modal */}
-      <TaskCustomFieldsModal
-        isOpen={showCustomFieldsModal}
-        onClose={() => setShowCustomFieldsModal(false)}
-        customFields={task.custom_fields || {}}
-        fieldDefinitions={customFieldDefinitions}
       />
     </div>
   )

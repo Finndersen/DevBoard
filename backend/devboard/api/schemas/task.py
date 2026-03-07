@@ -139,24 +139,6 @@ class TaskDiffResponse(BaseModel):
     generated_at: datetime.datetime
 
 
-class TaskGitStatusResponse(BaseModel):
-    """Schema for task git status response."""
-
-    branch_name: str
-    branch_exists: bool
-    base_branch: str
-    commits_ahead: int
-    commits_behind: int
-    can_merge: bool
-    has_conflicts: bool
-    # New fields for branch status modal
-    worktree_slot_path: str | None = None
-    main_repo_is_clean: bool = True
-    main_repo_current_branch: str | None = None
-    # Rebase state
-    rebase_in_progress: bool = False
-
-
 class MergeBranchRequest(BaseModel):
     """Schema for merging a task branch."""
 

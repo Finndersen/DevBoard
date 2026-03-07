@@ -483,7 +483,7 @@ class TestTasksRouter:
         mock_git.delete_branch = AsyncMock()
 
         # Patch GitRepoIntegration to return our mock
-        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+        with patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git):
             # Delete the task with delete_branch=true
             response = client.delete(f"/api/tasks/{task_id}?delete_branch=true")
 
@@ -536,7 +536,7 @@ class TestTasksRouter:
         mock_git.delete_branch = AsyncMock()
 
         # Patch GitRepoIntegration to return our mock
-        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+        with patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git):
             # Delete the task without specifying delete_branch (defaults to False)
             response = client.delete(f"/api/tasks/{task_id}")
 
@@ -585,7 +585,7 @@ class TestTasksRouter:
         mock_git.delete_branch = AsyncMock(side_effect=Exception("Git error"))
 
         # Patch GitRepoIntegration to return our mock
-        with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+        with patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git):
             # Delete the task with delete_branch=true
             response = client.delete(f"/api/tasks/{task_id}?delete_branch=true")
 
@@ -1041,7 +1041,7 @@ async def test_get_task_diff(client, db_session):
     mock_git.get_structured_diff = AsyncMock(return_value=mock_structured_diff)
 
     # Patch GitRepoIntegration - this will affect code running during the request
-    with patch("devboard.services.task_git_service.GitRepoIntegration", return_value=mock_git):
+    with patch("devboard.services.task_git.diff_service.GitRepoIntegration", return_value=mock_git):
         # Test with view='all' parameter (required)
         response = client.get(f"/api/tasks/{task.id}/diff?view=all")
 

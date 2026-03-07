@@ -97,11 +97,11 @@ async def test_allocate_for_task_branch_already_checked_out_in_worktree(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Used slot where branch was checked out (not stickiness or LRU)
     assert result.id == sample_slot.id
@@ -133,11 +133,11 @@ async def test_allocate_for_task_branch_in_main_repo_ignores_exclusion(
     worktree_slot_repo.get_by_codebase.return_value = [main_slot]
     worktree_slot_repo.lock_slot.return_value = main_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is checked out in main repo
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_codebase.local_path)
 
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Main repo was used despite exclusion (branch is there)
     assert result.id == main_slot.id
@@ -157,12 +157,12 @@ async def test_allocate_for_task_branch_location_with_uncommitted_changes(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is checked out in slot with uncommitted changes
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=True)
 
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Slot was used despite uncommitted changes
     assert result.id == sample_slot.id
@@ -198,12 +198,12 @@ async def test_allocate_for_task_branch_location_slot_locked_raises_exception(
 
     worktree_slot_repo.get_by_codebase.return_value = [branch_slot, sample_slot]
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is checked out in locked slot
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=branch_slot.path)
 
         with pytest.raises(BranchInUseException) as exc_info:
-            await service.allocate_for_task(sample_task)
+            await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Exception message contains branch name and task id
     assert sample_task.branch_name in str(exc_info.value)
@@ -221,7 +221,7 @@ async def test_allocate_for_task_no_branch_name_raises_error(
     sample_task.branch_name = None
 
     with pytest.raises(ValueError, match="has no branch configured"):
-        await service.allocate_for_task(sample_task)
+        await service._pool_manager.allocate_for_task(sample_task)
 
 
 @pytest.mark.asyncio
@@ -236,12 +236,12 @@ async def test_allocate_for_task_branch_not_checked_out_anywhere(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is not checked out anywhere
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Fell back to LRU (branch not checked out)
     assert result.id == sample_slot.id
@@ -276,12 +276,12 @@ async def test_allocate_for_task_branch_location_takes_priority_over_stickiness(
     worktree_slot_repo.get_by_codebase.return_value = [sticky_slot, branch_slot]
     worktree_slot_repo.lock_slot.return_value = branch_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is checked out in branch_slot, not sticky_slot
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=branch_slot.path)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Used branch_slot (where branch is) instead of sticky_slot
     assert result.id == branch_slot.id
@@ -304,13 +304,13 @@ async def test_allocate_for_task_sticky_slot(service, mock_repos, sample_task, s
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot  # Return same slot after locking
     # Mock git dirty check (clean slot)
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch not checked out anywhere (falls through to stickiness)
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute (no branch checkout - that's caller's responsibility)
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Returned the sticky slot
     assert result.id == sample_slot.id
@@ -331,13 +331,13 @@ async def test_allocate_for_task_branch_optimization(service, mock_repos, sample
     sample_slot.get_current_branch.return_value = sample_task.base_branch
 
     # Mock git dirty check (clean slot)
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch not checked out anywhere (falls through to LRU)
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute - should use branch optimization
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Used branch optimization
     assert result.id == sample_slot.id
@@ -359,13 +359,13 @@ async def test_allocate_for_task_all_slots_locked(service, mock_repos, sample_ta
 
     worktree_slot_repo.get_by_codebase.return_value = [locked_slot]  # Only locked slots
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch location check finds nothing (slot is locked anyway)
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
 
         # Execute and verify exception
         with pytest.raises(AllSlotsLockedException):
-            await service.allocate_for_task(sample_task)
+            await service._pool_manager.allocate_for_task(sample_task)
 
 
 @pytest.mark.asyncio
@@ -382,7 +382,7 @@ async def test_cleanup_stale_locks(service, mock_repos, sample_codebase):
     worktree_slot_repo.get_all_locked.return_value = [locked_slot]
 
     # Execute
-    released_count = await service.cleanup_stale_locks(sample_codebase.id)
+    released_count = await service._pool_manager.cleanup_stale_locks(sample_codebase.id)
 
     # Verify: Lock was released (>30min age threshold)
     assert released_count == 1
@@ -403,7 +403,7 @@ async def test_cleanup_stale_locks_does_not_release_recent(service, mock_repos, 
     worktree_slot_repo.get_all_locked.return_value = [recent_slot]
 
     # Execute
-    released_count = await service.cleanup_stale_locks(sample_codebase.id)
+    released_count = await service._pool_manager.cleanup_stale_locks(sample_codebase.id)
 
     # Verify: Lock was NOT released (within 30min threshold)
     assert released_count == 0
@@ -426,7 +426,7 @@ def test_bootstrap_main_repo_slot(service, mock_repos, sample_codebase):
     worktree_slot_repo.create.return_value = new_slot
 
     # Execute (not async)
-    service.bootstrap_main_repo_slot(sample_codebase)
+    service._pool_manager.bootstrap_main_repo_slot(sample_codebase)
 
     # Verify: Created main repo slot
     worktree_slot_repo.create.assert_called_once()
@@ -441,7 +441,7 @@ def test_release_slot(service, mock_repos):
     slot.id = 1
 
     # Execute (not async) - now takes WorktreeSlot instance
-    service.release_slot(slot)
+    service._pool_manager.release_slot(slot)
 
     # Verify: Unlocked the slot
     worktree_slot_repo.unlock_slot.assert_called_once_with(slot)
@@ -461,9 +461,11 @@ async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
 
     # Mock git operations and worktree validation
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
     ):
+        _mock_git_as.return_value = mock_git.return_value
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
@@ -516,7 +518,7 @@ async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
 
     # Mock git operations and worktree validation
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
     ):
@@ -576,7 +578,11 @@ async def test_run_task_agent_in_workspace_yields_workspace_create_event(
     worktree_slot_repo.get_by_path.return_value = main_slot
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with (
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
+    ):
+        _mock_git_as.return_value = mock_git.return_value
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.create_worktree = AsyncMock()
         mock_git.return_value.checkout_branch = AsyncMock()
@@ -650,12 +656,12 @@ async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
     worktree_slot_repo.lock_slot.return_value = main_slot
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: bootstrap_main_repo_slot was called (via create)
     worktree_slot_repo.create.assert_called_once()
@@ -690,7 +696,7 @@ async def test_run_task_agent_yields_stream_error_when_all_slots_locked(
     worktree_slot_repo.get_by_path.return_value = main_slot  # bootstrap finds existing
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
@@ -731,7 +737,7 @@ async def test_run_task_agent_yields_stream_error_when_branch_in_use(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         # Branch is checked out in the locked slot
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
 
@@ -785,7 +791,7 @@ async def test_checkout_task_to_main_repo_stashes_uncommitted_changes(service, m
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
 
@@ -827,7 +833,7 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(service, mock
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
 
@@ -866,7 +872,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
     # Setup: Task has a worktree slot
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
 
-    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
@@ -907,7 +913,7 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
     worktree_slot_repo, _, _ = mock_repos
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
 
-    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
@@ -944,7 +950,7 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
     worktree_slot_repo, _, _ = mock_repos
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
 
-    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
@@ -978,7 +984,7 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
     worktree_slot_repo, _, _ = mock_repos
     worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
 
-    with patch("devboard.services.task_git_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
         mock_git_class.return_value = mock_git
 
@@ -1053,12 +1059,12 @@ async def test_allocate_for_task_prefers_most_recent_sticky_slot(service, mock_r
     worktree_slot_repo.lock_slot.return_value = main_slot
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Main slot (most recent) was selected, not worktree slot
     assert result.id == main_slot.id
@@ -1075,7 +1081,7 @@ async def test_checkout_task_to_main_repo_rolls_back_on_checkout_failure(service
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         worktree_git = AsyncMock()
 
@@ -1127,7 +1133,7 @@ async def test_checkout_task_to_main_repo_rolls_back_on_stash_apply_failure(
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         worktree_git = AsyncMock()
 
@@ -1195,12 +1201,12 @@ async def test_allocate_uses_main_repo_assigned_but_not_locked_by_same_task(
     worktree_slot_repo.lock_slot.return_value = main_slot
 
     # Mock git operations
-    with patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git:
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
 
         # Execute
-        result = await service.allocate_for_task(sample_task)
+        result = await service._pool_manager.allocate_for_task(sample_task)
 
     # Verify: Main slot was used (sticky slot with matching branch)
     assert result.id == main_slot.id
@@ -1229,8 +1235,8 @@ async def test_checkout_task_to_main_repo_migrates_claude_session(service, mock_
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1279,8 +1285,8 @@ async def test_checkout_task_to_main_repo_skips_migration_for_internal_engine(
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1316,8 +1322,8 @@ async def test_checkout_task_to_main_repo_handles_no_session_file(service, mock_
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1351,7 +1357,9 @@ async def test_migrate_claude_session_if_needed_skips_when_no_external_session_i
     mock_conversation.external_session_id = None  # No session ID
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
-    with patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class:
+    with patch(
+        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
+    ) as mock_session_service_class:
         # Execute
         await service._migrate_claude_session_if_needed(
             task=sample_task,
@@ -1370,7 +1378,9 @@ async def test_migrate_claude_session_if_needed_skips_when_no_active_conversatio
     # Setup: No active conversation
     conversation_repo.get_active_conversation_for_entity.return_value = None
 
-    with patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class:
+    with patch(
+        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
+    ) as mock_session_service_class:
         # Execute
         await service._migrate_claude_session_if_needed(
             task=sample_task,
@@ -1392,7 +1402,9 @@ async def test_migrate_claude_session_if_needed_handles_file_not_found(service, 
     mock_conversation.external_session_id = "test-session-123"
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
-    with patch("devboard.services.workspace_allocation_service.ClaudeCodeSessionService") as mock_session_service_class:
+    with patch(
+        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
+    ) as mock_session_service_class:
         mock_session_service = AsyncMock()
         mock_session_service.migrate_session_to_directory.side_effect = FileNotFoundError("Session not found")
         mock_session_service_class.return_value = mock_session_service
@@ -1418,7 +1430,7 @@ async def test_run_setup_command_success(service, mock_repos, sample_task, sampl
     sample_codebase.setup_command = "npm install"
 
     with patch(
-        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         from devboard.integrations.shell import ShellCommandResult
 
@@ -1443,7 +1455,7 @@ async def test_run_setup_command_failure(service, mock_repos, sample_task, sampl
     sample_codebase.setup_command = "npm install"
 
     with patch(
-        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         from devboard.integrations.shell import ShellCommandResult
 
@@ -1463,7 +1475,7 @@ async def test_run_setup_command_no_command_configured(service, mock_repos, samp
     sample_codebase.setup_command = None
 
     with patch(
-        "devboard.services.workspace_allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         # Should not raise
         await service._run_setup_command(sample_slot, sample_codebase, sample_task)
@@ -1485,10 +1497,12 @@ async def test_run_task_agent_in_workspace_runs_setup_command(service, mock_repo
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
     ):
+        _mock_git_as.return_value = mock_git.return_value
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
@@ -1535,10 +1549,12 @@ async def test_run_task_agent_in_workspace_setup_failure_yields_error(service, m
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
     ):
+        _mock_git_as.return_value = mock_git.return_value
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()
@@ -1587,7 +1603,7 @@ async def test_run_task_agent_in_workspace_skips_setup_when_no_checkout(service,
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
@@ -1637,10 +1653,12 @@ async def test_run_task_agent_in_workspace_skips_setup_when_not_configured(
     worktree_slot_repo.lock_slot.return_value = sample_slot
 
     with (
-        patch("devboard.services.workspace_allocation_service.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
     ):
+        _mock_git_as.return_value = mock_git.return_value
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
         mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
         mock_git.return_value.checkout_branch = AsyncMock()

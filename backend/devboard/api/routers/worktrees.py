@@ -3,13 +3,13 @@
 from fastapi import APIRouter, Depends
 
 from devboard.api.dependencies.entities import get_verified_codebase
-from devboard.api.dependencies.services import get_workspace_allocation_service
+from devboard.api.dependencies.services import get_pool_manager
 from devboard.api.schemas import (
     WorktreePoolStatusResponse,
     WorktreeSlotWithTaskInfo,
 )
 from devboard.db.models import Codebase
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
+from devboard.services.workspace.pool_manager import WorktreePoolManager
 
 router = APIRouter()
 
@@ -18,7 +18,7 @@ router = APIRouter()
 async def get_worktree_pool_status(
     codebase_id: int,
     codebase: Codebase = Depends(get_verified_codebase),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+    pool_manager: WorktreePoolManager = Depends(get_pool_manager),
 ) -> WorktreePoolStatusResponse:
     """Get worktree pool status for a codebase.
 
@@ -31,12 +31,12 @@ async def get_worktree_pool_status(
     Args:
         codebase_id: ID of the codebase
         codebase: Codebase instance
-        workspace_allocation_service: Worktree pool service
+        pool_manager: Worktree pool manager
 
     Returns:
         Worktree pool status with all slots
     """
-    pool_status = await workspace_allocation_service.get_pool_status_for_codebase(codebase)
+    pool_status = await pool_manager.get_pool_status_for_codebase(codebase)
 
     # Enhance slots with task information - pool_status already includes this
     slots_with_info: list[WorktreeSlotWithTaskInfo] = []

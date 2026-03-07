@@ -7,9 +7,10 @@ import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 from pydantic_ai import Tool
 
-from devboard.agents.engines.claude_code.agent import (
-    ClaudeCodeAgent,
+from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+from devboard.agents.engines.claude_code.message_converter import (
     InvalidVirtualToolCallError,
+    parse_claude_message_text,
 )
 from devboard.agents.events import MessageRole, TextMessage, ToolCallRequest
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
@@ -72,7 +73,7 @@ class TestValidMessageResponse:
         """Test parsing a plain text message response."""
         text_content = "Hello, world!"
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert isinstance(response, list)
         assert len(response) == 1
@@ -97,7 +98,7 @@ class TestValidToolCallResponse:
             }
         )
 
-        response = test_agent._parse_claude_message_text(result)
+        response = parse_claude_message_text(result, test_agent._virtual_tools)
 
         assert isinstance(response, list)
         assert len(response) == 1
@@ -113,7 +114,7 @@ class TestInvalidJSONResponse:
         """Test that non-JSON responses are treated as normal messages (no retry)."""
         text_content = "This is not JSON at all"
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # Non-JSON is now treated as a normal text message
         assert isinstance(response, list)
@@ -125,7 +126,7 @@ class TestInvalidJSONResponse:
         """Test that plain text messages work without JSON format."""
         text_content = "Hello! I've analyzed the task and here's what I found..."
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # Plain text should work fine as normal message
         assert isinstance(response, list)
@@ -141,7 +142,7 @@ class TestInvalidResponseStructure:
         """Test that JSON array (not object) is treated as normal message."""
         text_content = '["array", "not", "object"]'
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # JSON array should be treated as plain text message
         assert isinstance(response, list)
@@ -153,7 +154,7 @@ class TestInvalidResponseStructure:
         """Test that JSON object without tool_name field is treated as plain text message."""
         text_content = '{"content": "Hello", "no_tool_fields": true}'
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # JSON without tool_name is treated as plain text message (no retry)
         assert isinstance(response, list)
@@ -169,7 +170,7 @@ class TestInvalidMessageFormat:
         """Test that JSON object without tool_name is treated as plain text message."""
         text_content = '{"type": "message"}'
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # JSON without tool_name is treated as plain text message (no validation/retry)
         assert isinstance(response, list)
@@ -181,7 +182,7 @@ class TestInvalidMessageFormat:
         """Test that plain text message works correctly."""
         text_content = "Test message"
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # Should return full text
         assert isinstance(response, list)
@@ -197,7 +198,7 @@ class TestInvalidToolCallFormat:
         """Test that JSON with arguments but no tool_name is treated as plain text message."""
         text_content = '{"arguments": {}}'
 
-        response = test_agent._parse_claude_message_text(text_content)
+        response = parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         # JSON without tool_name is treated as plain text message (no validation/retry)
         assert isinstance(response, list)
@@ -211,7 +212,7 @@ class TestInvalidToolCallFormat:
 
         # Should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid tool call format" in exc_info.value.error_message
         assert exc_info.value.tool_name == "edit_task_specification"
@@ -223,7 +224,7 @@ class TestInvalidToolCallFormat:
 
         # Should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid tool call format" in exc_info.value.error_message
         assert exc_info.value.tool_name == "edit_task_specification"
@@ -235,7 +236,7 @@ class TestInvalidToolCallFormat:
         # _parse_response() should raise InvalidVirtualToolCallError (not ValueError)
         # stream_events() catches this and retries, raising ValueError after max attempts
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid tool call format" in exc_info.value.error_message
 
@@ -255,7 +256,7 @@ class TestUnknownTool:
 
         # Should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Unknown virtual tool 'nonexistent_tool'" in exc_info.value.error_message
         assert "Available virtual tools:" in exc_info.value.error_message
@@ -274,7 +275,7 @@ class TestUnknownTool:
 
         # _parse_response() should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Unknown virtual tool" in exc_info.value.error_message
 
@@ -297,7 +298,7 @@ class TestInvalidToolArguments:
 
         # Should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid arguments for tool 'edit_task_specification'" in exc_info.value.error_message
         assert "Validation errors:" in exc_info.value.error_message
@@ -318,7 +319,7 @@ class TestInvalidToolArguments:
 
         # Should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid arguments for tool 'edit_task_specification'" in exc_info.value.error_message
         assert "Validation errors:" in exc_info.value.error_message
@@ -338,7 +339,7 @@ class TestInvalidToolArguments:
 
         # _parse_response() should raise InvalidVirtualToolCallError
         with pytest.raises(InvalidVirtualToolCallError) as exc_info:
-            test_agent._parse_claude_message_text(text_content)
+            parse_claude_message_text(text_content, test_agent._virtual_tools)
 
         assert "Invalid arguments" in exc_info.value.error_message
 

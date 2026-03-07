@@ -1,44 +1,38 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
 import datetime
-from collections.abc import AsyncIterator, Generator
+from collections.abc import AsyncIterator
 
 import logfire
 from claude_agent_sdk import (
     AssistantMessage,
-    Message,
     ResultMessage,
     SystemMessage,
     TextBlock,
-    ThinkingBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-    UserMessage,
 )
-from pydantic import ValidationError
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.engines.claude_code.client import ClaudeClient
+from devboard.agents.engines.claude_code.message_converter import (
+    InvalidVirtualToolCallError,
+    convert_claude_message_to_events,
+)
 from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
-    TextResponse,
     ToolCallOutcome,
     VirtualToolCall,
-    convert_virtual_tool_call_to_events,
+    format_tool_result,
 )
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
-from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.engines.claude_code.virtual_tools import (
     VirtualTool,
     build_virtual_tool_schemas_section,
 )
 from devboard.agents.events import (
     ConversationEvent,
-    MessageRole,
     SystemEvent,
     SystemEventType,
-    TextMessage,
     ToolCall,
     ToolResult,
 )
@@ -93,24 +87,6 @@ def _verify_result_message(result: str | None, last_assistant_text: str | None) 
 
 
 CLAUDE_COMPACTION_PROMPT = "Your context window will be automatically compacted as it approaches its limit, allowing you to continue working indefinitely from where you left off. Therefore, do not stop tasks early due to token budget concerns. Always be as persistent and autonomous as possible and complete tasks fully, even if the end of your budget is approaching. Never artificially stop any task early regardless of the context remaining."
-
-
-class InvalidVirtualToolCallError(Exception):
-    """Exception raised when a virtual tool call validation fails.
-
-    This exception is used to trigger retry logic in stream_events().
-    """
-
-    def __init__(self, tool_name: str, error_message: str):
-        """Initialize the exception.
-
-        Args:
-            tool_name: Name of the tool that failed validation
-            error_message: Detailed error message for the agent
-        """
-        self.tool_name = tool_name
-        self.error_message = error_message
-        super().__init__(f"Invalid virtual tool call for '{tool_name}': {error_message}")
 
 
 class ClaudeCodeAgent(BaseAgent):
@@ -224,60 +200,6 @@ class ClaudeCodeAgent(BaseAgent):
         """
         return self._virtual_tools.get(tool_name)
 
-    def _convert_claude_message_to_events(self, message: Message) -> Generator[ConversationEvent]:
-        """Convert Claude SDK Message to ConversationEvent(s)."""
-        # Filter out subagent messages - they should not appear in the parent conversation UI
-        # TODO: Consider adding proper visualization for subagent messages in the future
-        if isinstance(message, (AssistantMessage, UserMessage)) and message.parent_tool_use_id is not None:
-            return
-
-        timestamp = datetime.datetime.now(datetime.UTC)
-
-        # Extract tool calls from AssistantMessage if present
-        if isinstance(message, AssistantMessage):
-            for content_block in message.content:
-                if isinstance(content_block, ToolUseBlock):
-                    # Normalize tool name to strip MCP prefix
-                    normalized_tool_name = normalize_tool_name(content_block.name)
-
-                    yield ToolCall(
-                        tool_call_id=content_block.id,
-                        tool_name=normalized_tool_name,
-                        tool_args=content_block.input,
-                        timestamp=timestamp,
-                    )
-                elif isinstance(content_block, TextBlock):
-                    # Parse text content to handle both normal messages and virtual tool calls
-                    yield from self._parse_claude_message_text(content_block.text)
-                elif isinstance(content_block, ThinkingBlock):
-                    # Thinking blocks are ignored for now
-                    pass
-        # Extract tool results from UserMessage if present
-        elif isinstance(message, UserMessage):
-            # UserMessage content can be str or list[ContentBlock]
-            if isinstance(message.content, list):
-                for content_block in message.content:
-                    if isinstance(content_block, ToolResultBlock):
-                        # Convert content to string
-                        if isinstance(content_block.content, list):
-                            # Join text blocks from the content
-                            text_parts = []
-                            for item in content_block.content:
-                                if item.get("type") == "text":
-                                    text_parts.append(item.get("text", ""))
-                            result_str = "\n".join(text_parts)
-                        elif content_block.content is None:
-                            result_str = ""
-                        else:
-                            result_str = str(content_block.content)
-
-                        yield ToolResult(
-                            tool_call_id=content_block.tool_use_id,
-                            result_content=result_str,
-                            is_error=content_block.is_error or False,
-                            timestamp=timestamp,
-                        )
-
     async def stream_events(
         self,
         prompt_or_approvals: str | ToolApprovals,
@@ -368,7 +290,7 @@ class ClaudeCodeAgent(BaseAgent):
                             last_assistant_text = "\n".join(text_parts)
 
                     # Convert normal Message events to ConversationEvent
-                    for conv_event in self._convert_claude_message_to_events(message):
+                    for conv_event in convert_claude_message_to_events(message, self._virtual_tools):
                         yield conv_event
 
                 # Check if we need to retry due to API error
@@ -386,7 +308,7 @@ class ClaudeCodeAgent(BaseAgent):
                 # Validation failed during streaming - prepare retry message
                 if attempt < MAX_RETRY_ATTEMPTS:
                     # Format error message for retry
-                    current_message = self._format_tool_result(
+                    current_message = format_tool_result(
                         tool_name=e.tool_name,
                         outcome=ToolCallOutcome.VALIDATION_ERROR,
                         content=e.error_message,
@@ -465,7 +387,7 @@ class ClaudeCodeAgent(BaseAgent):
             result_content = "Tool execution denied: " + (decision.feedback or "<No reason provided>")
             outcome = ToolCallOutcome.DENIED
 
-        formatted_result = self._format_tool_result(tool_name=tool_call_id, outcome=outcome, content=result_content)
+        formatted_result = format_tool_result(tool_name=tool_call_id, outcome=outcome, content=result_content)
 
         yield ToolResult(
             tool_call_id=tool_call_id,
@@ -473,110 +395,3 @@ class ClaudeCodeAgent(BaseAgent):
             is_error=(outcome != ToolCallOutcome.SUCCESS),
             timestamp=datetime.datetime.now(datetime.UTC),
         )
-
-    def _format_tool_result(self, tool_name: str, outcome: ToolCallOutcome, content: str) -> str:
-        """Format a tool result message with XML markers."""
-        return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome.value}">\n{content}\n</tool_call_result>'
-
-    def _parse_claude_message_text(
-        self,
-        text_content: str,
-    ) -> list[ConversationEvent]:
-        """Parse the Claude response and convert to conversation events.
-
-        Raises:
-            InvalidVirtualToolCallError: If tool call validation fails
-        """
-        # Generate timestamp for all events
-        timestamp = datetime.datetime.now(datetime.UTC)
-
-        response_text = text_content.strip()
-
-        if self._virtual_tools:
-            tool_call_or_text = ClaudeResponseParser.parse_message_content(response_text)
-        else:
-            tool_call_or_text = TextResponse(content=response_text)
-
-        # Handle each message type
-        if isinstance(tool_call_or_text, VirtualToolCall):
-            # Validate tool call (raises InvalidVirtualToolCallError if invalid)
-            self._validate_virtual_tool_call_response(tool_call_or_text)
-
-            # Convert validated tool call to events using helper function
-            # Use ToolCallRequest since this is a new tool call requiring approval
-            return convert_virtual_tool_call_to_events(
-                tool_call=tool_call_or_text,
-                timestamp=timestamp,
-                use_tool_call_request=True,
-            )
-
-        elif isinstance(tool_call_or_text, TextResponse):
-            # Normal message - convert to ConversationMessage
-            return [
-                TextMessage(
-                    role=MessageRole.AGENT,
-                    text_content=tool_call_or_text.content,
-                    timestamp=timestamp,
-                )
-            ]
-        else:
-            raise ValueError(
-                f"Expected VirtualToolCall or TextMessage from agent response, got {type(tool_call_or_text)}"
-            )
-
-    def _validate_virtual_tool_call_response(
-        self,
-        tool_call: VirtualToolCall,
-    ) -> None:
-        """Validate a virtual tool call response.
-
-        Raises:
-            InvalidVirtualToolCallError: If validation fails
-        """
-        tool_name = tool_call.tool_name
-        # Check if tool call is structurally valid
-        if not tool_call.valid:
-            # Invalid tool call structure - provide feedback and retry
-            error_msg = (
-                f"ERROR: {tool_call.validation_error}\n\n"
-                f"Expected format:\n"
-                f'{{"tool_name": "<tool_name>", '
-                f'"arguments": {{"arg1": [...], "arg2": "..."}}}}\n\n'
-                f"Please correct these errors and try again."
-            )
-            raise InvalidVirtualToolCallError(
-                tool_name=tool_name,
-                error_message=error_msg,
-            )
-
-        # Get the virtual tool and validate arguments
-        virtual_tool = self.get_virtual_tool(tool_name)
-        if not virtual_tool:
-            # Get available tool names for helpful error message
-            available_tools = list(self._virtual_tools.keys()) if self._virtual_tools else []
-            tools_list = ", ".join(available_tools) if available_tools else "none"
-            error_msg = (
-                f"ERROR: Unknown virtual tool '{tool_name}'.\n\n"
-                f"Available virtual tools: {tools_list}\n\n"
-                f"Please use one of the available virtual tools, or an appropriate normal tool call."
-            )
-            raise InvalidVirtualToolCallError(
-                tool_name=tool_name,
-                error_message=error_msg,
-            )
-
-        # Validate tool arguments against the tool's schema
-        try:
-            # Use the tool's validate_args method
-            virtual_tool.validate_args(tool_call.arguments)
-        except ValidationError as e:
-            error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
-            error_msg = (
-                f"ERROR: Invalid arguments for tool '{tool_name}'.\n\n"
-                f"Validation errors:\n{error_details}\n\n"
-                f"Please check the tool schema and provide valid arguments."
-            )
-            raise InvalidVirtualToolCallError(
-                tool_name=tool_name,
-                error_message=error_msg,
-            ) from e

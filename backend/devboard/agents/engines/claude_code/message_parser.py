@@ -157,6 +157,11 @@ def convert_virtual_tool_call_to_events(
     return events
 
 
+def format_tool_result(tool_name: str, outcome: ToolCallOutcome, content: str) -> str:
+    """Format a tool result message with XML markers."""
+    return f'<tool_call_result tool_name="{tool_name}" outcome="{outcome.value}">\n{content}\n</tool_call_result>'
+
+
 class ClaudeResponseParser:
     """Parser for Claude Code agent responses with XML marker support."""
 
