@@ -7,7 +7,7 @@ from typing import Literal
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from pydantic_ai import Tool
+from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.config_types import AgentEngineModelConfig
@@ -15,6 +15,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
+    _active_investigation_sessions,
     create_multi_codebase_investigation_tool,
     create_task_codebase_investigation_tool,
 )
@@ -236,6 +237,117 @@ class TestCreateCodebaseInvestigationTool:
         mock_claude_code_cls.assert_called_once()
         call_kwargs = mock_claude_code_cls.call_args[1]
         assert call_kwargs["session_id"] == "previous-session-456"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_same_session_id_raises_model_retry(self, mock_codebases, mock_agent_config_service):
+        """Test that concurrent calls with the same session_id raise ModelRetry."""
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        _active_investigation_sessions.add("session-abc")
+        try:
+            with pytest.raises(ModelRetry, match="session-abc.*already in use"):
+                await tool.function(codebase_name="backend", query="How does X work?", session_id="session-abc")
+        finally:
+            _active_investigation_sessions.discard("session-abc")
+
+    @pytest.mark.asyncio
+    async def test_session_id_released_after_successful_execution(self, mock_codebases, mock_agent_config_service):
+        """Test that session_id is released from active set after successful execution."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.session_id = "session-xyz"
+        final_message = TextMessage(
+            role=MessageRole.AGENT, text_content="Investigation result", timestamp=datetime.datetime.now()
+        )
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        with patch(
+            "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+            return_value=mock_agent_instance,
+        ):
+            await tool.function(codebase_name="backend", query="How does X work?", session_id="session-xyz")
+
+        assert "session-xyz" not in _active_investigation_sessions
+
+    @pytest.mark.asyncio
+    async def test_session_id_released_after_failed_execution(self, mock_codebases, mock_agent_config_service):
+        """Test that session_id is released from active set even when execution fails."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.run.side_effect = RuntimeError("Agent failed")
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        with patch(
+            "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+            return_value=mock_agent_instance,
+        ):
+            with pytest.raises(RuntimeError, match="Agent failed"):
+                await tool.function(codebase_name="backend", query="How does X work?", session_id="session-fail")
+
+        assert "session-fail" not in _active_investigation_sessions
+
+    @pytest.mark.asyncio
+    async def test_none_session_id_does_not_interact_with_active_sessions(
+        self, mock_codebases, mock_agent_config_service
+    ):
+        """Test that session_id=None does not add to or interact with _active_investigation_sessions."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.session_id = None
+        final_message = TextMessage(role=MessageRole.AGENT, text_content="Result", timestamp=datetime.datetime.now())
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        sessions_before = set(_active_investigation_sessions)
+        with patch(
+            "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+            return_value=mock_agent_instance,
+        ):
+            await tool.function(codebase_name="backend", query="How does X work?", session_id=None)
+
+        assert _active_investigation_sessions == sessions_before
+
+    @pytest.mark.asyncio
+    async def test_different_session_ids_allowed_concurrently(self, mock_codebases, mock_agent_config_service):
+        """Test that different session_ids can run concurrently without conflict."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.CLAUDE_CODE
+        mock_config.model = Mock()
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.session_id = "session-2"
+        final_message = TextMessage(role=MessageRole.AGENT, text_content="Result", timestamp=datetime.datetime.now())
+        mock_agent_instance.run.return_value = [final_message]
+
+        tool = create_multi_codebase_investigation_tool(mock_codebases, mock_agent_config_service)
+
+        _active_investigation_sessions.add("session-1")
+        try:
+            with patch(
+                "devboard.agents.engines.claude_code.agent.ClaudeCodeAgent",
+                return_value=mock_agent_instance,
+            ):
+                # Should not raise ModelRetry since session-2 is different from session-1
+                await tool.function(codebase_name="backend", query="How does X work?", session_id="session-2")
+        finally:
+            _active_investigation_sessions.discard("session-1")
 
 
 class TestCreateTaskCodebaseInvestigationTool:

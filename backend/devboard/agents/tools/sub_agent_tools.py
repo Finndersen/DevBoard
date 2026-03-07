@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic_ai import Tool
+from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines import AgentEngine
@@ -11,6 +11,8 @@ from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
+
+_active_investigation_sessions: set[str] = set()
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
 Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
@@ -74,7 +76,11 @@ def create_multi_codebase_investigation_tool(
 
         Guidelines:
         - Be specific about what you want to know and what level of detail is required.
-        - Make your query targeted about one specific topic and call this tool multiple times in parallel for different unrelated topics.
+        - Make your query targeted about one specific topic. You may call this tool multiple times in parallel for
+          **independent** investigations (each with no `session_id`, or with **different** `session_id` values).
+        - **IMPORTANT**: Do NOT make concurrent calls with the same `session_id`. Concurrent calls sharing a `session_id`
+          will fail. When continuing a previous investigation session, calls must be sequential — wait for the previous
+          call to return before making a follow-up call with the same `session_id`.
         - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
           focus its analysis and provide more accurate and targeted answers.
         - Indicate specific directories or files to focus on if possible.
@@ -90,63 +96,79 @@ def create_multi_codebase_investigation_tool(
             - `result`: The investigation answer with file paths, code references, and implementation details.
             - `session_id`: An opaque session identifier to pass back on follow-up calls, or null if unavailable.
         """
-        # Get the selected codebase
-        codebase_config = codebase_map[codebase_name]
-        working_dir = codebase_config.working_dir
-        # Get investigation agent configuration
-        config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
-
-        # Create investigation role with selected codebase
-        investigation_role = CodebaseInvestigationAgentRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
-
-        # Create and run investigation agent
-        if config.engine == AgentEngine.INTERNAL:
-            # Lazy import to avoid circular dependency
-            from devboard.agents.engines.internal.agent import InternalAgent
-
-            # NOTE: Session resumption is not supported for InternalAgent. To support it, one would
-            # need to store and return `investigation_agent.conversation_history` (a `list[ModelMessage]`)
-            # keyed by an investigation ID (e.g. in-memory cache with TTL, or a `Conversation` DB
-            # record via `AgentExecutionService`), and pass it back on subsequent calls.
-            if config.model is None:
-                raise ValueError(
-                    f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
+        if session_id is not None:
+            if session_id in _active_investigation_sessions:
+                raise ModelRetry(
+                    f"session_id '{session_id}' is already in use by a concurrent investigation. "
+                    "Concurrent calls with the same session_id are not supported. "
+                    "Either wait for the previous investigation to complete before making a follow-up call with this session_id, "
+                    "or omit session_id to start independent parallel investigations."
                 )
-            investigation_agent = InternalAgent(
-                role=investigation_role,
-                model=config.model,
-            )
-        elif config.engine == AgentEngine.CLAUDE_CODE:
-            # Lazy import to avoid circular dependency
-            from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+            _active_investigation_sessions.add(session_id)
 
-            investigation_agent = ClaudeCodeAgent(
-                role=investigation_role,
-                model=config.model,
-                working_dir=working_dir,
-                session_id=session_id,
-            )
-        else:
-            raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
+        try:
+            # Get the selected codebase
+            codebase_config = codebase_map[codebase_name]
+            working_dir = codebase_config.working_dir
+            # Get investigation agent configuration
+            config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
 
-        # Execute investigation
-        prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
-        events = await investigation_agent.run(prompt)
-
-        # Extract final text response from events
-        # Look for the last agent message
-        final_response = events[-1]
-        if not (isinstance(final_response, TextMessage) and final_response.role == MessageRole.AGENT):
-            raise ValueError(
-                f"Expected final response from investigation agent to be TextMessage, but got {final_response}"
+            # Create investigation role with selected codebase
+            investigation_role = CodebaseInvestigationAgentRole(
+                codebase=codebase_config.codebase, worktree_dir=working_dir
             )
 
-        # Extract session_id for ClaudeCodeAgent (populated during streaming from SystemMessage)
-        result_session_id: str | None = None
-        if config.engine == AgentEngine.CLAUDE_CODE:
-            result_session_id = investigation_agent.session_id  # type: ignore[union-attr]
+            # Create and run investigation agent
+            if config.engine == AgentEngine.INTERNAL:
+                # Lazy import to avoid circular dependency
+                from devboard.agents.engines.internal.agent import InternalAgent
 
-        return json.dumps({"result": final_response.text_content, "session_id": result_session_id})
+                # NOTE: Session resumption is not supported for InternalAgent. To support it, one would
+                # need to store and return `investigation_agent.conversation_history` (a `list[ModelMessage]`)
+                # keyed by an investigation ID (e.g. in-memory cache with TTL, or a `Conversation` DB
+                # record via `AgentExecutionService`), and pass it back on subsequent calls.
+                if config.model is None:
+                    raise ValueError(
+                        f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
+                    )
+                investigation_agent = InternalAgent(
+                    role=investigation_role,
+                    model=config.model,
+                )
+            elif config.engine == AgentEngine.CLAUDE_CODE:
+                # Lazy import to avoid circular dependency
+                from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+
+                investigation_agent = ClaudeCodeAgent(
+                    role=investigation_role,
+                    model=config.model,
+                    working_dir=working_dir,
+                    session_id=session_id,
+                )
+            else:
+                raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
+
+            # Execute investigation
+            prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
+            events = await investigation_agent.run(prompt)
+
+            # Extract final text response from events
+            # Look for the last agent message
+            final_response = events[-1]
+            if not (isinstance(final_response, TextMessage) and final_response.role == MessageRole.AGENT):
+                raise ValueError(
+                    f"Expected final response from investigation agent to be TextMessage, but got {final_response}"
+                )
+
+            # Extract session_id for ClaudeCodeAgent (populated during streaming from SystemMessage)
+            result_session_id: str | None = None
+            if config.engine == AgentEngine.CLAUDE_CODE:
+                result_session_id = investigation_agent.session_id  # type: ignore[union-attr]
+
+            return json.dumps({"result": final_response.text_content, "session_id": result_session_id})
+        finally:
+            if session_id is not None:
+                _active_investigation_sessions.discard(session_id)
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
