@@ -64,6 +64,11 @@ export function useURLSync() {
       return { type: 'mcp-servers', entityId: 'main', title: 'MCP Servers' }
     }
 
+    // Claude Code
+    if (pathname === '/claude-code') {
+      return { type: 'claude-code', entityId: 'main', title: 'Claude Code' }
+    }
+
     return null
   }
 
@@ -126,6 +131,9 @@ export function useURLSync() {
         break
       case 'mcp-servers':
         targetPath = '/mcp-servers'
+        break
+      case 'claude-code':
+        targetPath = '/claude-code'
         break
     }
 

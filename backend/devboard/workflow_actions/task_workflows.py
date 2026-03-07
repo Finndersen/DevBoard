@@ -128,7 +128,7 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     KEY = "task.begin_implementation"
 
-    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to write the code to fulfill the plan."
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to execute the implementation plan, launching parallel sub-agents where appropriate."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:

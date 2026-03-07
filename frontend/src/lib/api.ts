@@ -599,6 +599,31 @@ export interface TodoItem {
   id: string | null
 }
 
+// Claude Code Session Viewer types
+export interface ClaudeCodeProject {
+  path: string
+  encoded_path: string
+  last_activity: string | null
+  last_cost: number | null
+  last_lines_added: number | null
+  last_lines_removed: number | null
+  session_count: number
+}
+
+export interface ClaudeCodeSession {
+  session_id: string
+  label: string
+  last_activity: string
+  file_size: number
+}
+
+export interface SessionSearchResult {
+  session_id: string
+  project_encoded_path: string
+  line_number: number
+  line_content: string
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -1086,6 +1111,27 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  }
+
+  // Claude Code Session Viewer
+  async getClaudeCodeProjects(): Promise<ClaudeCodeProject[]> {
+    return this.request<ClaudeCodeProject[]>('/api/claude-code/projects')
+  }
+
+  async getClaudeCodeSessions(encodedProjectPath: string): Promise<ClaudeCodeSession[]> {
+    return this.request<ClaudeCodeSession[]>(`/api/claude-code/projects/${encodeURIComponent(encodedProjectPath)}/sessions`)
+  }
+
+  async getClaudeCodeSessionMessages(sessionId: string): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(`/api/claude-code/sessions/${encodeURIComponent(sessionId)}/messages`)
+  }
+
+  async searchClaudeCodeSessions(query: string, projectPath?: string): Promise<SessionSearchResult[]> {
+    const params = new URLSearchParams({ query })
+    if (projectPath) {
+      params.set('project_path', projectPath)
+    }
+    return this.request<SessionSearchResult[]>(`/api/claude-code/sessions/search?${params.toString()}`)
   }
 }
 

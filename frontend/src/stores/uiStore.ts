@@ -6,7 +6,7 @@ import { enableMapSet } from 'immer'
 // Enable Immer's MapSet plugin for Set and Map support
 enableMapSet()
 
-export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'tasks-list' | 'projects-list' | 'codebases-list'
+export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'claude-code' | 'tasks-list' | 'projects-list' | 'codebases-list'
 
 export type ActivityStatus =
   | { type: 'idle' }

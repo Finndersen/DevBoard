@@ -6,6 +6,7 @@ import {
   FolderIcon,
   ListBulletIcon,
   CodeBracketIcon,
+  CommandLineIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
@@ -24,6 +25,7 @@ const navigationSections: NavigationSection[] = [
   { icon: ListBulletIcon, label: 'Tasks', route: '/tasks' },
   { icon: CodeBracketIcon, label: 'Codebases', route: '/codebases' },
   { icon: PuzzlePieceIcon, label: 'MCP Servers', route: '/mcp-servers' },
+  { icon: CommandLineIcon, label: 'Claude Code', route: '/claude-code' },
   { icon: Cog6ToothIcon, label: 'Settings', route: '/settings' },
 ]
 

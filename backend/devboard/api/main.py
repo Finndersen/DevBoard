@@ -11,6 +11,7 @@ from fastmcp import FastMCP
 
 from devboard.api.routers import (
     agents,
+    claude_code,
     codebases,
     configurations,
     conversations,
@@ -143,6 +144,7 @@ app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])
 app.include_router(tool_approvals.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
 app.include_router(mcp_servers.router, prefix="/api/mcp-servers", tags=["mcp-servers"])
+app.include_router(claude_code.router, prefix="/api/claude-code", tags=["claude-code"])
 
 # Mount MCP server as ASGI application
 # The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)

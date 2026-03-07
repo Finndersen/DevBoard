@@ -6,6 +6,7 @@ import ProjectDetail from '../../views/ProjectDetail'
 import CodebaseDetail from '../../views/CodebaseDetail'
 import MCPServersView from '../../views/MCPServers'
 import Settings from '../../views/Settings'
+import ClaudeCodeView from '../../views/ClaudeCodeView'
 import ProjectsList from '../../views/ProjectsList'
 import CodebasesList from '../../views/CodebasesList'
 import TasksList from '../../views/TasksList'
@@ -70,6 +71,7 @@ export default function TabContentContainer() {
           {tab.type === 'tasks-list' && <TasksList />}
           {tab.type === 'mcp-servers' && <MCPServersView />}
           {tab.type === 'settings' && <Settings />}
+          {tab.type === 'claude-code' && <ClaudeCodeView />}
         </div>
       )
     })
