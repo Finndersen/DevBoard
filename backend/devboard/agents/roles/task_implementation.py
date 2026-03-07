@@ -1,5 +1,6 @@
 from pydantic_ai import Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.tools import (
@@ -13,6 +14,7 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
     create_text_search_tool,
 )
+from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.db.models.codebase import BranchHandling
@@ -34,6 +36,7 @@ AVAILABLE CAPABILITIES:
 1. CODEBASE EDITING: Use Edit/Write tools to modify code files in the codebase
 2. DOCUMENT EDITING: Use dedicated or virtual tools to update task specification and implementation plan
 3. INVESTIGATION: Read files, search code, run bash commands for testing/verification
+   - Use `investigate_codebase` for questions requiring multi-step, multi-file investigation (e.g. understanding patterns, architecture, finding where related functionality lives). Do NOT use it to read a specific known file — use the `Read` tool directly instead.
 4. BUILTIN TOOLS: Custom task management tools (e.g. complete_task_with_local_merge, create_pull_request, merge_pr_and_complete_task, rebase_task_branch) are available (possibly with the `mcp__builtin_tools__` prefix).
 
 WORKFLOW:
@@ -71,6 +74,7 @@ class TaskImplementationAgentRole(AgentRole):
         self,
         task: Task,
         document_repository: DocumentRepository,
+        agent_config_service: AgentConfigService,
         task_service: TaskService,
         task_git_service: TaskGitService,
         github_integration: GitHubIntegration,
@@ -78,6 +82,7 @@ class TaskImplementationAgentRole(AgentRole):
     ):
         self.task = task
         self.document_repository = document_repository
+        self.agent_config_service = agent_config_service
         self.task_service = task_service
         self.task_git_service = task_git_service
         self.github_integration = github_integration
@@ -113,6 +118,7 @@ class TaskImplementationAgentRole(AgentRole):
             create_file_search_tool(codebase_integration),
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
+            create_task_codebase_investigation_tool(self.task, self.agent_config_service),
             # Rebase tool for updating branch with latest base branch changes
             create_rebase_task_branch_tool(self.task, self.task_git_service),
         ]

@@ -50,6 +50,7 @@ async def create_agent_role_for_conversation(
             return TaskImplementationAgentRole(
                 task=parent_entity,
                 document_repository=document_repo,
+                agent_config_service=agent_config_service,
                 task_service=task_service,
                 task_git_service=task_git_service,
                 github_integration=github_integration,
