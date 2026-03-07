@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PlusIcon, ServerStackIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, ServerIcon, ServerStackIcon } from '@heroicons/react/24/outline'
 import { Button, Card } from '../components/ui'
 import { MCPServerList } from '../components/mcp/MCPServerList'
 import { MCPServerDetail } from '../components/mcp/MCPServerDetail'
@@ -8,6 +8,7 @@ import { MCPServerForm } from '../components/mcp/MCPServerForm'
 import { textColors } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { MCPServerConfig, MCPServerDetail as MCPServerDetailType, MCPTool } from '../lib/api'
+import ViewHeader from '../components/layout/ViewHeader'
 
 export default function MCPServersView() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -177,20 +178,16 @@ export default function MCPServersView() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h1 className={`text-2xl font-semibold ${textColors.primary}`}>
-            MCP Servers
-          </h1>
-          <p className={`mt-1 text-sm ${textColors.secondary}`}>
-            Configure and manage Model Context Protocol server connections
-          </p>
-        </div>
-        <Button onClick={handleCreate} icon={<PlusIcon className="w-4 h-4" />}>
-          Add Server
-        </Button>
-      </div>
+      <ViewHeader
+        icon={ServerIcon}
+        iconColor="text-purple-600 dark:text-purple-400"
+        title="MCP Servers"
+        actions={
+          <Button onClick={handleCreate} icon={<PlusIcon className="w-4 h-4" />}>
+            Add Server
+          </Button>
+        }
+      />
 
       {error && (
         <Card className="mx-6 mt-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">

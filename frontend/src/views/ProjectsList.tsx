@@ -7,6 +7,7 @@ import { useProjects, useCreateProject } from '../hooks'
 import type { Project } from '../lib/api'
 import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
 import { loadingSpinner } from '../styles/designSystem'
+import ViewHeader from '../components/layout/ViewHeader'
 
 export default function ProjectsList() {
   const navigate = useNavigate()
@@ -56,29 +57,26 @@ export default function ProjectsList() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className={loadingSpinner}></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6 h-full overflow-auto">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <FolderIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Projects</h1>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            ({projects?.length || 0})
-          </span>
-        </div>
-        <Button onClick={() => setShowCreateModal(true)} icon={<PlusIcon />}>
-          New Project
-        </Button>
-      </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      <ViewHeader
+        icon={FolderIcon}
+        title="Projects"
+        count={projects?.length || 0}
+        actions={
+          <Button onClick={() => setShowCreateModal(true)} icon={<PlusIcon />}>
+            New Project
+          </Button>
+        }
+      />
 
+      <div className="flex-1 overflow-auto py-6 space-y-6">
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className={loadingSpinner}></div>
+        </div>
+      ) : (
+      <>
       {error && <ErrorMessage error={error} retry={refetch} className="mb-4" />}
 
       {!projects || projects.length === 0 ? (
@@ -113,6 +111,9 @@ export default function ProjectsList() {
           ))}
         </div>
       )}
+      </>
+      )}
+      </div>
 
       <Modal
         isOpen={showCreateModal}
@@ -145,4 +146,5 @@ export default function ProjectsList() {
       </Modal>
     </div>
   )
+
 }

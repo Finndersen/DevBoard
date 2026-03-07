@@ -7,6 +7,7 @@ import type { Codebase } from '../lib/api'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { loadingSpinner } from '../styles/designSystem'
+import ViewHeader from '../components/layout/ViewHeader'
 
 export default function CodebasesList() {
   const { openTab } = useUIStore()
@@ -44,29 +45,27 @@ export default function CodebasesList() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className={loadingSpinner}></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6 h-full overflow-auto">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <CodeBracketIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Codebases</h1>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            ({codebases?.length || 0})
-          </span>
-        </div>
-        <Button onClick={() => setShowCreateModal(true)} icon={<PlusIcon />}>
-          New Codebase
-        </Button>
-      </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      <ViewHeader
+        icon={CodeBracketIcon}
+        iconColor="text-green-600 dark:text-green-400"
+        title="Codebases"
+        count={codebases?.length || 0}
+        actions={
+          <Button onClick={() => setShowCreateModal(true)} icon={<PlusIcon />}>
+            New Codebase
+          </Button>
+        }
+      />
 
+      <div className="flex-1 overflow-auto py-6 space-y-6">
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className={loadingSpinner}></div>
+        </div>
+      ) : (
+      <>
       {error && <ErrorMessage error={error} retry={refetch} className="mb-4" />}
 
       {!codebases || codebases.length === 0 ? (
@@ -106,6 +105,10 @@ export default function CodebasesList() {
           ))}
         </div>
       )}
+
+      </>
+      )}
+      </div>
 
       <CreateCodebaseModal
         isOpen={showCreateModal}

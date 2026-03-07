@@ -7,6 +7,7 @@ import CreateTaskModal from '../components/modals/CreateTaskModal'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
 import type { TaskListItem } from '../lib/api'
+import ViewHeader from '../components/layout/ViewHeader'
 
 const STATUS_COLUMNS = ['planning', 'implementing', 'pr_open', 'complete']
 
@@ -74,48 +75,44 @@ export default function TasksList() {
     refetchTasks()
   }, [createTaskModal, refetchTasks])
 
-  if (tasksLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className={loadingSpinner}></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6 h-full overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <ListBulletIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tasks</h1>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            ({tasks?.length ?? 0})
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Project Filter */}
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="w-4 h-4 text-gray-500" />
-            <select
-              value={selectedProjectId ?? ''}
-              onChange={handleProjectFilterChange}
-              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-[180px]"
-            >
-              <option value="">All Projects</option>
-              {projects?.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+    <div className="h-full flex flex-col overflow-hidden">
+      <ViewHeader
+        icon={ListBulletIcon}
+        iconColor="text-indigo-600 dark:text-indigo-400"
+        title="Tasks"
+        count={tasks?.length ?? 0}
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <FunnelIcon className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedProjectId ?? ''}
+                onChange={handleProjectFilterChange}
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-[180px]"
+              >
+                <option value="">All Projects</option>
+                {projects?.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={createTaskModal.open} icon={<PlusIcon />}>
+              New Task
+            </Button>
           </div>
-          <Button onClick={createTaskModal.open} icon={<PlusIcon />}>
-            New Task
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
+      <div className="flex-1 overflow-auto py-6 space-y-6">
+      {tasksLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className={loadingSpinner}></div>
+        </div>
+      ) : (
+      <>
       {tasksError && <ErrorMessage error={tasksError} retry={refetchTasks} className="mb-4" />}
 
       {/* Kanban Board */}
@@ -157,6 +154,10 @@ export default function TasksList() {
             </div>
           </Card>
         ))}
+      </div>
+
+      </>
+      )}
       </div>
 
       {/* Create Task Modal - no projectId means user must select one */}

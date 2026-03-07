@@ -13,8 +13,7 @@ describe('Settings', () => {
     render(<Settings />)
 
     expect(screen.getByText('Settings')).toBeInTheDocument()
-    expect(screen.getByText('Configure integrations, AI providers, and system preferences')).toBeInTheDocument()
-    
+
     // Check tab navigation
     expect(screen.getByText('Integrations')).toBeInTheDocument()
     expect(screen.getByText('Agents')).toBeInTheDocument()

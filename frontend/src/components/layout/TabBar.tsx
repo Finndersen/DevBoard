@@ -1,7 +1,10 @@
 import { PlusIcon } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
+import type { TabType } from '../../stores/uiStore'
 import Tab from './Tab'
 import { useNavigate } from 'react-router-dom'
+
+const DETAIL_TAB_TYPES: TabType[] = ['task', 'project', 'codebase']
 
 export default function TabBar() {
   const { tabs, activeTabId, switchTab, closeTab, openTab } = useUIStore()
@@ -17,26 +20,21 @@ export default function TabBar() {
   }
 
   const handleNewTab = () => {
-    // Open home tab by default
     openTab({
       type: 'home',
       entityId: 'main',
       title: 'Home'
     })
-
-    // Navigate to home
     navigate('/')
   }
 
-  if (tabs.length === 0) {
-    return null
-  }
+  const visibleTabs = tabs.filter(t => DETAIL_TAB_TYPES.includes(t.type))
 
   return (
     <div className="flex items-center flex-1 overflow-x-auto">
-      {/* Tabs */}
+      {/* Detail Tabs */}
       <div className="flex flex-1 overflow-x-auto">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <Tab
             key={tab.id}
             tab={tab}

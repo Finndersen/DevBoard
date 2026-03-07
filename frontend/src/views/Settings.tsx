@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { CogIcon, LinkIcon, CpuChipIcon, TagIcon } from '@heroicons/react/24/outline'
+import { CogIcon, Cog6ToothIcon, LinkIcon, CpuChipIcon, TagIcon } from '@heroicons/react/24/outline'
+import ViewHeader from '../components/layout/ViewHeader'
 import { ConfigurationForm } from '../components/configuration/ConfigurationForm'
 import { ConfigurationList } from '../components/configuration/ConfigurationList'
 import { AgentRoleList } from '../components/configuration/AgentRoleList'
@@ -144,15 +145,14 @@ export default function Settings() {
   }, [activeTab])
 
   return (
-    <div className="h-full overflow-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className={`text-3xl font-bold ${textColors.primary}`}>Settings</h1>
-        <p className={`${textColors.secondary} mt-2`}>
-          Configure integrations, AI providers, and system preferences
-        </p>
-      </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      <ViewHeader
+        icon={Cog6ToothIcon}
+        iconColor="text-gray-600 dark:text-gray-400"
+        title="Settings"
+      />
 
+      <div className="flex-1 overflow-auto py-6">
       {/* Navigation Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-8">
         <nav className="-mb-px flex space-x-8">
@@ -331,6 +331,7 @@ export default function Settings() {
           </Card>
         </div>
       )}
+      </div>
     </div>
   )
 }
