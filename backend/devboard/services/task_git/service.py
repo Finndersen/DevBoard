@@ -174,7 +174,13 @@ class TaskGitService:
         """Merge a task's feature branch into its base branch based on codebase merge method.
 
         Validates, pre-checks, then delegates to the appropriate MergeStrategy.
+        Only used for LOCAL_MERGE branch handling — base branch is always expected to be a local branch.
         """
+        if task.base_branch.startswith("origin/"):
+            raise ValueError(
+                f"merge_task_feature_branch() requires a local base branch, got remote: '{task.base_branch}'"
+            )
+
         merge_method = MergeMethod(task.codebase.merge_method)
         git = GitRepoIntegration(task.codebase.local_path)
 
@@ -196,6 +202,16 @@ class TaskGitService:
         release_result = await git.release_branch_from_worktree(task.branch_name)
         if release_result.worktree_path:
             logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
+
+        checkout_path = await git.get_checked_out_location(task.base_branch)
+        if checkout_path:
+            base_git = GitRepoIntegration(checkout_path)
+            if await base_git.has_uncommitted_changes():
+                return MergeResult(
+                    outcome=MergeOutcome.ERROR,
+                    merge_method=merge_method,
+                    message=f"Cannot merge: the base branch '{task.base_branch}' working directory at '{checkout_path}' has uncommitted changes. Please commit or stash your changes first.",
+                )
 
         strategy = get_merge_strategy(merge_method)
         try:

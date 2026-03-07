@@ -89,24 +89,21 @@ class SquashMerge(MergeStrategy):
 
         if checkout_path:
             worktree_git = GitRepoIntegration(checkout_path)
-            worktree_stash = await worktree_git.stash("DevBoard: temp stash for merge")
-            try:
-                merge_commit = await worktree_git.merge_squash(
-                    source=task.branch_name,
-                    target=base_branch,
-                    title=task.title,
-                )
-                return merge_commit
-            finally:
-                if worktree_stash:
-                    await worktree_git.stash_pop()
-        else:
-            merge_commit = await git.merge_squash(
+            return await worktree_git.merge_squash(
                 source=task.branch_name,
                 target=base_branch,
                 title=task.title,
             )
-            return merge_commit
+        else:
+            current_branch = await git.get_current_branch()
+            try:
+                return await git.merge_squash(
+                    source=task.branch_name,
+                    target=base_branch,
+                    title=task.title,
+                )
+            finally:
+                await git.checkout_branch(current_branch)
 
     async def _squash_merge_to_remote_base(self, task: Task, git: GitRepoIntegration) -> str:
         local_base = task.base_branch.replace("origin/", "")
@@ -146,10 +143,14 @@ class RebaseMerge(MergeStrategy):
                         target=task.base_branch,
                     )
                 else:
-                    merge_commit = await git.fast_forward_merge(
-                        source=task.branch_name,
-                        target=task.base_branch,
-                    )
+                    current_branch = await git.get_current_branch()
+                    try:
+                        merge_commit = await git.fast_forward_merge(
+                            source=task.branch_name,
+                            target=task.base_branch,
+                        )
+                    finally:
+                        await git.checkout_branch(current_branch)
 
             await git.delete_branch(task.branch_name, force=True)
             if await git.is_branch_pushed(task.branch_name):
@@ -209,12 +210,7 @@ class MergeCommitMerge(MergeStrategy):
                 checkout_path = await git.get_checked_out_location(task.base_branch)
                 if checkout_path:
                     worktree_git = GitRepoIntegration(checkout_path)
-                    worktree_stash = await worktree_git.stash("DevBoard: temp stash")
-                    try:
-                        merge_commit = await worktree_git.merge_branch(task.branch_name, task.base_branch, no_ff=True)
-                    finally:
-                        if worktree_stash:
-                            await worktree_git.stash_pop()
+                    merge_commit = await worktree_git.merge_branch(task.branch_name, task.base_branch, no_ff=True)
                 else:
                     current_branch = await git.get_current_branch()
                     await git.checkout_branch(task.base_branch)
