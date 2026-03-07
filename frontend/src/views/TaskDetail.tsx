@@ -23,13 +23,13 @@ import { ChangesTab } from '../components/task/ChangesTab'
 import { SummaryTab } from '../components/task/SummaryTab'
 
 const WORKFLOW_ACTION_LABELS: Record<string, string> = {
-  'task.create_implementation_plan': 'Generate a technical implementation plan from the task specification',
-  'task.start_implementation': 'Start implementing the approved plan',
-  'task.rebase_branch': 'Rebase task branch onto base branch',
-  'task.approve_and_merge': 'Approve changes and merge locally',
-  'task.approve_and_create_pr': 'Approve changes and create PR',
-  'task.merge_and_finalise': 'Merge PR and complete task',
-  'task.complete_no_merge': 'Complete task (no merge)',
+  'task.create_implementation_plan': 'Create Implementation Plan',
+  'task.begin_implementation': 'Begin Implementation',
+  'task.rebase_branch': 'Rebase Branch',
+  'task.approve_and_merge': 'Approve & Merge',
+  'task.approve_and_create_pr': 'Approve & Create PR',
+  'task.merge_and_finalise': 'Merge PR & Complete',
+  'task.finalise': 'Complete Task',
 }
 
 interface TaskDetailProps {
