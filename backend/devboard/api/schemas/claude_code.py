@@ -20,6 +20,8 @@ class ClaudeCodeSessionResponse(BaseModel):
     label: str
     last_activity: datetime
     file_size: int
+    linked_session_id: str | None = None
+    session_role: str | None = None
 
 
 class SessionSearchResultResponse(BaseModel):

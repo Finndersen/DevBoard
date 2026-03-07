@@ -39,6 +39,8 @@ class ClaudeCodeSessionInfo:
     label: str
     last_activity: datetime
     file_size: int
+    linked_session_id: str | None = None
+    session_role: str | None = None  # "plan" | "implementation" | None
 
 
 @dataclass
@@ -128,6 +130,20 @@ class ClaudeSessionManager:
         jsonl_files = list(project_dir.glob("*.jsonl"))
         custom_titles = await self._resolve_custom_titles(project_dir)
 
+        # Map filename stem → internal sessionId for linkage detection
+        file_to_internal_id: dict[str, str] = {}
+        for jsonl_file in jsonl_files:
+            internal_id = self._extract_internal_session_id(jsonl_file)
+            if internal_id is not None:
+                file_to_internal_id[jsonl_file.stem] = internal_id
+
+        # Build plan_id → impl_id mapping for files where internal id ≠ filename stem
+        all_session_ids = {f.stem for f in jsonl_files}
+        plan_to_impl: dict[str, str] = {}
+        for filename_stem, internal_id in file_to_internal_id.items():
+            if filename_stem != internal_id and internal_id in all_session_ids:
+                plan_to_impl[internal_id] = filename_stem
+
         sessions: list[ClaudeCodeSessionInfo] = []
         for jsonl_file in jsonl_files:
             session_id = jsonl_file.stem
@@ -140,17 +156,51 @@ class ClaudeSessionManager:
             else:
                 label = self._extract_first_user_message_label(jsonl_file)
 
+            # Determine session role and linked session
+            if session_id in plan_to_impl:
+                session_role: str | None = "plan"
+                linked_session_id: str | None = plan_to_impl[session_id]
+            elif file_to_internal_id.get(session_id, session_id) != session_id:
+                # This is an implementation file (internal_id ≠ filename_stem)
+                # Only annotate if the referenced plan session exists
+                internal_id = file_to_internal_id[session_id]
+                if internal_id in all_session_ids:
+                    session_role = "implementation"
+                    linked_session_id = internal_id
+                else:
+                    session_role = None
+                    linked_session_id = None
+            else:
+                session_role = None
+                linked_session_id = None
+
             sessions.append(
                 ClaudeCodeSessionInfo(
                     session_id=session_id,
                     label=label,
                     last_activity=last_activity,
                     file_size=file_size,
+                    linked_session_id=linked_session_id,
+                    session_role=session_role,
                 )
             )
 
         sessions.sort(key=lambda s: s.last_activity, reverse=True)
         return sessions
+
+    def _extract_internal_session_id(self, jsonl_file: Path) -> str | None:
+        """Read the first JSON entry of a JSONL file and return its sessionId field."""
+        try:
+            with jsonl_file.open("r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    entry = json.loads(line)
+                    return entry.get("sessionId")
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+        return None
 
     def _extract_first_user_message_label(self, jsonl_file: Path) -> str:
         """Read the first genuine user message text from a session file as a label."""

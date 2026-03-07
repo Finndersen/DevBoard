@@ -615,6 +615,8 @@ export interface ClaudeCodeSession {
   label: string
   last_activity: string
   file_size: number
+  linked_session_id: string | null
+  session_role: 'plan' | 'implementation' | null
 }
 
 export interface SessionSearchResult {

@@ -148,7 +148,10 @@ export default function SessionsTab() {
             <p className={`text-xs ${textColors.muted} font-mono truncate`}>{selectedSessionId}</p>
           </div>
           <div className="flex-1 overflow-hidden">
-            <SessionConversationViewer sessionId={selectedSessionId} />
+            <SessionConversationViewer
+              sessionId={selectedSessionId}
+              linkedSessionId={sessions.find(s => s.session_id === selectedSessionId)?.linked_session_id ?? null}
+            />
           </div>
         </div>
       ) : selectedProjectPath ? (

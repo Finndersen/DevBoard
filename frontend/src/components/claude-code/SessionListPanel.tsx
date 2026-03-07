@@ -39,7 +39,9 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
     )
   }
 
-  if (sessions.length === 0) {
+  const visibleSessions = sessions.filter(s => s.session_role !== 'implementation')
+
+  if (visibleSessions.length === 0) {
     return (
       <div className="text-center py-8 px-4">
         <DocumentTextIcon className="w-10 h-10 mx-auto text-gray-400 mb-3" />
@@ -50,7 +52,7 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
 
   return (
     <div className="divide-y divide-gray-200 dark:divide-gray-700">
-      {sessions.map(session => {
+      {visibleSessions.map(session => {
         const isSelected = session.session_id === selectedSessionId
         return (
           <button
@@ -68,6 +70,12 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
                 <span>{formatRelativeTime(session.last_activity)}</span>
                 <span>·</span>
                 <span>{formatFileSize(session.file_size)}</span>
+                {session.session_role === 'plan' && (
+                  <>
+                    <span>·</span>
+                    <span className="text-blue-500 dark:text-blue-400 font-medium">Plan + Implement</span>
+                  </>
+                )}
               </div>
             </div>
           </button>

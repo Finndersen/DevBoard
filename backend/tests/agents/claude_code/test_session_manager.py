@@ -304,6 +304,81 @@ class TestListSessions:
             await manager.list_sessions("-nonexistent-project")
 
 
+class TestLinkedSessions:
+    @pytest.mark.asyncio
+    async def test_detects_plan_and_implementation_pair(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "plan-id.jsonl", [_make_user_entry("Plan message", session_id="plan-id")])
+        _write_jsonl(project_dir / "impl-id.jsonl", [_make_user_entry("Impl message", session_id="plan-id")])
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        by_id = {s.session_id: s for s in sessions}
+        assert by_id["plan-id"].session_role == "plan"
+        assert by_id["plan-id"].linked_session_id == "impl-id"
+        assert by_id["impl-id"].session_role == "implementation"
+        assert by_id["impl-id"].linked_session_id == "plan-id"
+
+    @pytest.mark.asyncio
+    async def test_standalone_session_has_no_role(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "sess-1.jsonl", [_make_user_entry("Hello", session_id="sess-1")])
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        assert len(sessions) == 1
+        assert sessions[0].session_role is None
+        assert sessions[0].linked_session_id is None
+
+    @pytest.mark.asyncio
+    async def test_orphaned_implementation_treated_as_standalone(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        # impl-id references missing-plan-id, but that file doesn't exist
+        _write_jsonl(
+            project_dir / "impl-id.jsonl",
+            [_make_user_entry("Impl message", session_id="missing-plan-id")],
+        )
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        assert len(sessions) == 1
+        assert sessions[0].session_role is None
+        assert sessions[0].linked_session_id is None
+
+    @pytest.mark.asyncio
+    async def test_mixed_standalone_and_paired_sessions(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "standalone.jsonl", [_make_user_entry("Standalone", session_id="standalone")])
+        _write_jsonl(project_dir / "plan-id.jsonl", [_make_user_entry("Plan", session_id="plan-id")])
+        _write_jsonl(project_dir / "impl-id.jsonl", [_make_user_entry("Impl", session_id="plan-id")])
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        by_id = {s.session_id: s for s in sessions}
+        assert by_id["standalone"].session_role is None
+        assert by_id["standalone"].linked_session_id is None
+        assert by_id["plan-id"].session_role == "plan"
+        assert by_id["plan-id"].linked_session_id == "impl-id"
+        assert by_id["impl-id"].session_role == "implementation"
+        assert by_id["impl-id"].linked_session_id == "plan-id"
+
+
 class TestSearchSessions:
     @pytest.mark.asyncio
     async def test_parses_ripgrep_json_output(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:
