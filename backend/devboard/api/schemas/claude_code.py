@@ -15,6 +15,12 @@ class ClaudeCodeProjectResponse(BaseModel):
     session_count: int
 
 
+class SessionTaskInfoResponse(BaseModel):
+    task_id: int
+    task_title: str
+    agent_role: str
+
+
 class ClaudeCodeSessionResponse(BaseModel):
     session_id: str
     label: str
@@ -23,6 +29,7 @@ class ClaudeCodeSessionResponse(BaseModel):
     is_empty: bool
     linked_session_id: str | None = None
     session_role: str | None = None
+    task_info: SessionTaskInfoResponse | None = None
 
 
 class SessionSearchResultResponse(BaseModel):

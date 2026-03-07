@@ -1,14 +1,17 @@
 """Claude Code session viewer API endpoints."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.agents.engines.claude_code.session.manager import ClaudeSessionManager
 from devboard.agents.events import ConversationEvent
+from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.schemas.claude_code import (
     ClaudeCodeProjectResponse,
     ClaudeCodeSessionResponse,
     SessionSearchResultResponse,
+    SessionTaskInfoResponse,
 )
+from devboard.db.repositories.conversation import ConversationRepository
 
 router = APIRouter()
 
@@ -26,14 +29,34 @@ async def list_projects() -> list[ClaudeCodeProjectResponse]:
 
 
 @router.get("/projects/{encoded_project_path}/sessions", response_model=list[ClaudeCodeSessionResponse])
-async def list_sessions(encoded_project_path: str) -> list[ClaudeCodeSessionResponse]:
+async def list_sessions(
+    encoded_project_path: str,
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> list[ClaudeCodeSessionResponse]:
     """List sessions for a Claude Code project, ordered by last activity."""
     manager = _get_manager()
     try:
         sessions = await manager.list_sessions(encoded_project_path)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    return [ClaudeCodeSessionResponse.model_validate(s.__dict__) for s in sessions]
+
+    session_ids = {s.session_id for s in sessions}
+    task_info_by_session = conversation_repo.get_task_info_by_session_ids(session_ids)
+
+    results = []
+    for s in sessions:
+        task_info_data = task_info_by_session.get(s.session_id)
+        task_info = (
+            SessionTaskInfoResponse(
+                task_id=task_info_data["task_id"],
+                task_title=task_info_data["task_title"],
+                agent_role=task_info_data["agent_role"],
+            )
+            if task_info_data
+            else None
+        )
+        results.append(ClaudeCodeSessionResponse(**s.__dict__, task_info=task_info))
+    return results
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ConversationEvent])
