@@ -132,6 +132,12 @@ class WorktreePoolManager:
                         )
                         return self.worktree_slot_repo.lock_slot(slot, task)
                     else:
+                        if slot.last_used_by_task_id == task.id:
+                            logfire.warn(
+                                f"Re-acquiring stale lock on slot {slot.id} for task {task.id} "
+                                f"(branch {task.branch_name} already checked out there)"
+                            )
+                            return self.worktree_slot_repo.lock_slot(slot, task)
                         raise BranchInUseException(
                             f"Branch '{task.branch_name}' is already in use by task {slot.last_used_by_task_id}"
                         )

@@ -8,7 +8,7 @@ from devboard.agents.tools.rebase_tools import (
     _format_commit_details,
     _get_commits_for_conflicted_files,
 )
-from devboard.integrations.types import GitLogEntry
+from devboard.integrations.types import FileDiff, GitLogEntry
 from devboard.services.task_git_service import BaseBranchChanges
 
 
@@ -87,7 +87,11 @@ class TestGetCommitsForConflictedFiles:
         """Test that commits are filtered by conflicted files."""
         base_branch_changes = BaseBranchChanges(
             commits=[],
-            files_changed=["file1.py", "file2.py", "file3.py"],
+            files_changed=[
+                FileDiff(file_path="file1.py", diff_content="", additions=40, deletions=20),
+                FileDiff(file_path="file2.py", diff_content="", additions=30, deletions=15),
+                FileDiff(file_path="file3.py", diff_content="", additions=30, deletions=15),
+            ],
             additions=100,
             deletions=50,
             fork_point="fork123",

@@ -88,7 +88,7 @@ class TaskRebaseCoordinator:
                 diff = await git.get_structured_diff(fork_point, base_head_current)
                 base_branch_changes = BaseBranchChanges(
                     commits=commits,
-                    files_changed=[f.file_path for f in diff.files],
+                    files_changed=diff.files,
                     additions=diff.additions,
                     deletions=diff.deletions,
                     fork_point=fork_point,

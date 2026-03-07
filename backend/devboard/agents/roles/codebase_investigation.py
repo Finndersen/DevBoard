@@ -85,6 +85,11 @@ class CodebaseInvestigationAgentRole(AgentRole):
             create_file_read_tool(self._codebase_integration),
         ]
 
+    @property
+    def allowed_builtin_tools(self) -> list[str]:
+        """List of allowed engine internal tools for this role."""
+        return ["Bash"]
+
     async def get_context_content(self) -> str:
         """Get context content for codebase investigation role.
 

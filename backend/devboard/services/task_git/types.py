@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 from devboard.db.models.codebase import MergeMethod
-from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
+from devboard.integrations.types import CommitDiff, FileDiff, GitLogEntry, StructuredDiff
 
 
 class TaskDiffView(StrEnum):
@@ -64,11 +64,19 @@ class BaseBranchChanges:
     """
 
     commits: list[GitLogEntry]
-    files_changed: list[str]
+    files_changed: list[FileDiff]
     additions: int
     deletions: int
     fork_point: str
     base_head: str
+
+    def _format_file_entry(self, f: FileDiff) -> str:
+        line = f"  - {f.file_path} (+{f.additions}/-{f.deletions})"
+        if f.is_new_file:
+            line += " (new)"
+        elif f.is_deleted:
+            line += " (deleted)"
+        return line
 
     def format_summary(self, base_branch: str, max_files: int = 20) -> str:
         """Format a human-readable summary of the base branch changes.
@@ -81,7 +89,7 @@ class BaseBranchChanges:
             Formatted markdown summary of the changes
         """
         commit_list = "\n".join(f"  - {c.hash[:7]}: {c.subject}" for c in self.commits)
-        file_list = "\n".join(f"  - {f}" for f in self.files_changed[:max_files])
+        file_list = "\n".join(self._format_file_entry(f) for f in self.files_changed[:max_files])
         if len(self.files_changed) > max_files:
             file_list += f"\n  - ... and {len(self.files_changed) - max_files} more files"
 
