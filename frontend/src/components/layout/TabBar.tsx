@@ -33,7 +33,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+    <div className="flex items-center flex-1 overflow-x-auto">
       {/* Tabs */}
       <div className="flex flex-1 overflow-x-auto">
         {tabs.map((tab) => (

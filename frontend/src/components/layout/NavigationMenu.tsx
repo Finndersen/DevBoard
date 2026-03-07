@@ -58,35 +58,28 @@ export default function NavigationMenu() {
         className={`${panelWidth} shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-200 flex flex-col
           fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto`}
       >
-        {/* Header */}
-        <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between'} p-3 border-b border-gray-200 dark:border-gray-700`}>
+        {/* Logo header */}
+        <div className={`h-16 flex items-center ${isCompact ? 'justify-center px-2' : 'px-3'} border-b border-gray-200 dark:border-gray-700 flex-shrink-0`}>
+          <Link to="/" className={`flex items-center ${isCompact ? '' : 'gap-3'}`}>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <span className="text-white font-bold text-sm">DB</span>
+            </div>
+            {!isCompact && (
+              <span className="text-base font-bold text-gray-900 dark:text-white">
+                DevBoard
+              </span>
+            )}
+          </Link>
+          {/* Close button on small screens */}
           {!isCompact && (
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-              DevBoard
-            </h2>
-          )}
-          <div className="flex items-center gap-1">
-            {/* Close button on small screens */}
             <button
               onClick={() => setNavigationMenuOpen(false)}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded lg:hidden"
+              className="ml-auto p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded lg:hidden"
               aria-label="Close menu"
             >
               <XMarkIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
-            {/* Compact mode toggle on large screens */}
-            <button
-              onClick={toggleNavigationCompactMode}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded hidden lg:block"
-              aria-label={isCompact ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {isCompact ? (
-                <ChevronRightIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-              ) : (
-                <ChevronLeftIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-              )}
-            </button>
-          </div>
+          )}
         </div>
 
         {/* Navigation Items */}
@@ -119,6 +112,24 @@ export default function NavigationMenu() {
             )
           })}
         </nav>
+
+        {/* Footer: collapse toggle (desktop only) */}
+        <div className="border-t border-gray-200 dark:border-gray-700 p-2">
+          <button
+            onClick={toggleNavigationCompactMode}
+            className={`w-full flex items-center ${isCompact ? 'justify-center' : 'gap-2'} px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md hidden lg:flex`}
+            aria-label={isCompact ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCompact ? (
+              <ChevronRightIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            ) : (
+              <>
+                <ChevronLeftIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                <span className="text-xs text-gray-500 dark:text-gray-400">Collapse</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </>
   )
