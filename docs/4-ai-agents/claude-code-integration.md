@@ -216,6 +216,17 @@ This ensures that internal tool events use **canonical tool names** matching the
 - Converts to PromptResponse (MESSAGE or TOOL_REQUEST)
 - Tool requests: tool_name as tool_call_id
 
+## Session Viewer
+
+The Claude Code Session Viewer exposes session JSONL files through the DevBoard UI. The `ClaudeSessionManager` reads session files directly from disk and serves them via REST endpoints. Sessions are enriched with task association data by looking up `Conversation` records that have a matching `external_session_id`.
+
+See [Claude Code Session Viewer](../2-features/claude-code-session-viewer.md) for full feature documentation.
+
+**Key components**:
+- `ClaudeSessionManager` (`session/manager.py`): Orchestrates project and session listing, label extraction, and linked-session detection
+- `ClaudeCodeSessionService` (`session/service.py`): Low-level JSONL file reading and todo list loading
+- `ConversationRepository.get_task_info_by_session_ids()`: Batch-fetches task associations for a set of session IDs in one query
+
 ## Files
 
 **Core**:

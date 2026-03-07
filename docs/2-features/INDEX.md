@@ -26,6 +26,9 @@ Unified settings management for integrations, agent configuration, codebase regi
 ### [Document Collaboration](./document-collaboration.md)
 Structured document editing with AI agents through approval workflows, conflict detection, and template-based schemas. Learn how to collaboratively develop specifications and plans.
 
+### [Claude Code Session Viewer](./claude-code-session-viewer.md)
+Browse, search, and inspect Claude Code conversation sessions from the DevBoard UI. Sessions are organized by project and enriched with task association links when linked to a DevBoard task.
+
 ## Feature Status
 
 All core features are production-ready and fully functional:
@@ -37,6 +40,7 @@ All core features are production-ready and fully functional:
 - ✅ Document Collaboration
 - ✅ AI Agent Conversations
 - ✅ Context Provider Integrations
+- ✅ Claude Code Session Viewer
 
 ## Related Sections
 
