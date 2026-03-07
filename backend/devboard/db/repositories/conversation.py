@@ -1,6 +1,7 @@
 """Repository for conversation and message data access operations."""
 
 import datetime
+from typing import TypedDict
 
 from pydantic_ai.messages import ModelMessage
 from sqlalchemy import delete, select
@@ -9,6 +10,13 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ConversationMessage, MessageType, ParentEntityType
 from devboard.db.repositories.base import BaseRepository
+
+
+class SessionTaskInfo(TypedDict):
+    external_session_id: str
+    task_id: int
+    task_title: str
+    agent_role: str
 
 
 class NoActiveConversationError(Exception):
@@ -134,6 +142,39 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation.is_active = False
             conversation.archived_at = datetime.datetime.now(datetime.UTC)
             self.db.flush()
+
+    def get_task_info_by_session_ids(self, session_ids: set[str]) -> dict[str, SessionTaskInfo]:
+        """Get task association info for a set of session IDs.
+
+        Returns a dict keyed by external_session_id for efficient O(1) lookup.
+        Only returns entries for sessions linked to Task conversations (not Project/Codebase).
+        """
+        from devboard.db.models.task import Task
+
+        stmt = (
+            select(
+                Conversation.external_session_id,
+                Conversation.agent_role,
+                Task.id,
+                Task.title,
+            )
+            .join(Task, Task.id == Conversation.parent_entity_id)
+            .where(
+                Conversation.external_session_id.in_(session_ids),
+                Conversation.parent_entity_type == ParentEntityType.TASK,
+                Conversation.parent_conversation_id.is_(None),
+            )
+        )
+        rows = self.db.execute(stmt).all()
+        return {
+            row.external_session_id: SessionTaskInfo(
+                external_session_id=row.external_session_id,
+                task_id=row.id,
+                task_title=row.title,
+                agent_role=row.agent_role.value if hasattr(row.agent_role, "value") else row.agent_role,
+            )
+            for row in rows
+        }
 
     def update_external_session_id(self, conversation: Conversation, session_id: str | None) -> None:
         """Update the external session ID for a conversation.

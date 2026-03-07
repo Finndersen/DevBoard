@@ -97,7 +97,10 @@ class Conversation(Base):
     )
 
     # Index for efficiently querying active conversations
-    __table_args__ = (Index("idx_active_conversations", "parent_entity_type", "parent_entity_id", "is_active"),)
+    __table_args__ = (
+        Index("idx_active_conversations", "parent_entity_type", "parent_entity_id", "is_active"),
+        Index("idx_conversation_external_session_id", "external_session_id"),
+    )
 
     def get_parent_entity(self) -> "Task | Project | Codebase":
         """Get the parent entity (Task, Project, or Codebase) for this conversation.
