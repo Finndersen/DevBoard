@@ -12,7 +12,9 @@ from devboard.agents.engines.internal.conversation_history import convert_messag
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.models.task import TaskStatus
+from devboard.db.repositories import ConversationRepository, DocumentRepository, TaskRepository
+from devboard.db.repositories.conversation import SessionTaskInfo
 from devboard.db.repositories.project import ProjectRepository
 
 
@@ -184,3 +186,141 @@ class TestConversationRepository:
         assert len(converted) == 1
         assert isinstance(converted[0], ModelRequest)
         assert converted[0].parts[0].content == "Test message"
+
+
+class TestGetTaskInfoBySessionIds:
+    """Tests for ConversationRepository.get_task_info_by_session_ids."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def task(self, db_session: Session, test_codebase) -> object:
+        """Create a test task."""
+        document_repo = DocumentRepository(db_session)
+        project_repo = ProjectRepository(db_session)
+        task_repo = TaskRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="My Task",
+            status=TaskStatus.PLANNING,
+            specification=task_spec_doc,
+            base_branch="main",
+            branch_name="",
+            codebase_id=test_codebase.id,
+        )
+        db_session.flush()
+        return task
+
+    def test_returns_task_info_for_matching_session(self, repo: ConversationRepository, task, db_session):
+        """Sessions linked to a task conversation return correct task info."""
+        repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="session-abc",
+        )
+        db_session.flush()
+
+        result = repo.get_task_info_by_session_ids({"session-abc"})
+
+        assert result == {
+            "session-abc": SessionTaskInfo(
+                external_session_id="session-abc",
+                task_id=task.id,
+                task_title="My Task",
+                agent_role="task_planning",
+            )
+        }
+
+    def test_returns_empty_for_no_matches(self, repo: ConversationRepository):
+        """Returns empty dict when no sessions match."""
+        result = repo.get_task_info_by_session_ids({"nonexistent-session"})
+        assert result == {}
+
+    def test_returns_empty_for_empty_input(self, repo: ConversationRepository):
+        """Returns empty dict for empty input set."""
+        result = repo.get_task_info_by_session_ids(set())
+        assert result == {}
+
+    def test_ignores_non_task_conversations(self, repo: ConversationRepository, task, db_session):
+        """Conversations linked to Projects (not Tasks) are not returned."""
+        document_repo = DocumentRepository(db_session)
+        project_repo = ProjectRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Other Project", description="", specification=spec_doc)
+
+        repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="session-project",
+        )
+        db_session.flush()
+
+        result = repo.get_task_info_by_session_ids({"session-project"})
+        assert result == {}
+
+    def test_ignores_sub_conversations(self, repo: ConversationRepository, task, db_session):
+        """Sub-conversations (with parent_conversation_id) are not returned."""
+        parent = repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="parent-session",
+        )
+        db_session.flush()
+
+        sub = Conversation(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="sub-session",
+            parent_conversation_id=parent.id,
+        )
+        db_session.add(sub)
+        db_session.flush()
+
+        result = repo.get_task_info_by_session_ids({"sub-session"})
+        assert result == {}
+
+    def test_returns_multiple_sessions(self, repo: ConversationRepository, task, db_session):
+        """Multiple session IDs are looked up in one call."""
+        repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="session-1",
+        )
+        repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_IMPLEMENTATION,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            external_session_id="session-2",
+        )
+        db_session.flush()
+
+        result = repo.get_task_info_by_session_ids({"session-1", "session-2", "session-other"})
+
+        assert set(result.keys()) == {"session-1", "session-2"}
+        assert result["session-1"]["agent_role"] == "task_planning"
+        assert result["session-2"]["agent_role"] == "task_implementation"
