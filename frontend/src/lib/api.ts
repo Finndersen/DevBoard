@@ -614,6 +614,12 @@ export interface ClaudeCodeProject {
   session_count: number
 }
 
+export interface SessionTaskInfo {
+  task_id: number
+  task_title: string
+  agent_role: string
+}
+
 export interface ClaudeCodeSession {
   session_id: string
   label: string
@@ -622,6 +628,7 @@ export interface ClaudeCodeSession {
   is_empty: boolean
   linked_session_id: string | null
   session_role: 'plan' | 'implementation' | null
+  task_info: SessionTaskInfo | null
 }
 
 export interface SessionSearchResult {

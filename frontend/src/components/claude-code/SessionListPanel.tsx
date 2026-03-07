@@ -1,4 +1,5 @@
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
+import { useNavigate } from 'react-router-dom'
 import { textColors } from '../../styles/designSystem'
 import type { ClaudeCodeSession } from '../../lib/api'
 
@@ -8,6 +9,12 @@ interface SessionListPanelProps {
   loading: boolean
   onSelect: (session: ClaudeCodeSession) => void
   matchCounts?: Map<string, number>
+}
+
+const AGENT_ROLE_LABELS: Record<string, string> = {
+  task_planning: 'Planning',
+  task_implementation: 'Implementation',
+  task_pr_review: 'PR Review',
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -32,6 +39,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export function SessionListPanel({ sessions, selectedSessionId, loading, onSelect, matchCounts }: SessionListPanelProps) {
+  const navigate = useNavigate()
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -83,6 +92,30 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
                   </>
                 )}
               </div>
+              {session.task_info && (
+                <div className="mt-1 flex items-center gap-1.5 text-xs">
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer truncate"
+                    onClick={e => {
+                      e.stopPropagation()
+                      navigate(`/tasks/${session.task_info!.task_id}`)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation()
+                        navigate(`/tasks/${session.task_info!.task_id}`)
+                      }
+                    }}
+                  >
+                    {session.task_info.task_title}
+                  </span>
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    {AGENT_ROLE_LABELS[session.task_info.agent_role] ?? session.task_info.agent_role}
+                  </span>
+                </div>
+              )}
             </div>
           </button>
         )
