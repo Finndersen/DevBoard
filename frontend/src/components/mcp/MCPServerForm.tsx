@@ -27,6 +27,9 @@ interface FormData {
   url: string
   auth_type: HttpAuthType
   bearer_token: string
+  client_id: string
+  client_secret: string
+  scopes: string
 }
 
 export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps) {
@@ -44,7 +47,10 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
           env: config.env ? Object.entries(config.env).map(([k, v]) => `${k}=${v}`).join('\n') : '',
           url: '',
           auth_type: 'none',
-          bearer_token: ''
+          bearer_token: '',
+          client_id: '',
+          client_secret: '',
+          scopes: ''
         }
       } else if (server.server_type === 'http' && 'url' in server.config_json) {
         const config = server.config_json as HttpMCPConfig
@@ -56,7 +62,10 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
           env: '',
           url: config.url,
           auth_type: config.auth_type || 'none',
-          bearer_token: config.bearer_token || ''
+          bearer_token: config.bearer_token || '',
+          client_id: config.client_id || '',
+          client_secret: config.client_secret || '',
+          scopes: config.scopes || ''
         }
       }
     }
@@ -68,7 +77,10 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
       env: '',
       url: '',
       auth_type: 'none',
-      bearer_token: ''
+      bearer_token: '',
+      client_id: '',
+      client_secret: '',
+      scopes: ''
     }
   })
 
@@ -135,7 +147,10 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
         configJson = {
           url: formData.url.trim(),
           auth_type: formData.auth_type,
-          bearer_token: formData.auth_type === 'bearer' ? formData.bearer_token : null
+          bearer_token: formData.auth_type === 'bearer' ? formData.bearer_token : null,
+          client_id: formData.auth_type === 'oauth' && formData.client_id.trim() ? formData.client_id.trim() : null,
+          client_secret: formData.auth_type === 'oauth' && formData.client_secret.trim() ? formData.client_secret.trim() : null,
+          scopes: formData.auth_type === 'oauth' && formData.scopes.trim() ? formData.scopes.trim() : null
         }
       }
 
@@ -254,6 +269,7 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
               >
                 <option value="none">None</option>
                 <option value="bearer">Bearer Token</option>
+                <option value="oauth">OAuth 2.0</option>
               </select>
             </div>
 
@@ -265,6 +281,36 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
                 onChange={(e) => handleChange('bearer_token', e.target.value)}
                 placeholder="Enter your bearer token"
               />
+            )}
+
+            {formData.auth_type === 'oauth' && (
+              <div className="space-y-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  OAuth will be initiated when you verify the server. Leave fields blank for automatic discovery and registration.
+                </p>
+                <Input
+                  label="Client ID"
+                  value={formData.client_id}
+                  onChange={(e) => handleChange('client_id', e.target.value)}
+                  placeholder="Leave blank for auto-registration"
+                  helpText="Only needed if the server doesn't support Dynamic Client Registration"
+                />
+                <Input
+                  label="Client Secret"
+                  type="password"
+                  value={formData.client_secret}
+                  onChange={(e) => handleChange('client_secret', e.target.value)}
+                  placeholder="Leave blank for auto-registration"
+                  helpText="Only needed if the server doesn't support Dynamic Client Registration"
+                />
+                <Input
+                  label="Scopes"
+                  value={formData.scopes}
+                  onChange={(e) => handleChange('scopes', e.target.value)}
+                  placeholder="read write"
+                  helpText="Space-separated list of OAuth scopes"
+                />
+              </div>
             )}
           </>
         )}

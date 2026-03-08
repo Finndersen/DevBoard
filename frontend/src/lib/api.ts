@@ -509,6 +509,9 @@ export interface HttpMCPConfig {
   url: string
   auth_type?: HttpAuthType
   bearer_token?: string | null
+  client_id?: string | null
+  client_secret?: string | null
+  scopes?: string | null
 }
 
 export type MCPConfigJson = StdioMCPConfig | HttpMCPConfig
@@ -553,6 +556,12 @@ export interface MCPToolUpdate {
   description: string | null
 }
 
+export interface OAuthStatus {
+  has_tokens: boolean
+  token_expired: boolean
+  has_client_info: boolean
+}
+
 export interface MCPServerDetail {
   id: number
   name: string
@@ -562,6 +571,7 @@ export interface MCPServerDetail {
   last_verified_success: boolean | null
   last_verified_error: string | null
   tools: MCPTool[]
+  oauth_status?: OAuthStatus | null
 }
 
 export interface VerifyResult {

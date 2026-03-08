@@ -8,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { Button, ConfirmDialog } from '../ui'
 import { textColors } from '../../styles/designSystem'
-import type { MCPServerDetail as MCPServerDetailType, MCPTool } from '../../lib/api'
+import type { MCPServerDetail as MCPServerDetailType, MCPTool, HttpMCPConfig } from '../../lib/api'
 import { ToolTestModal } from './ToolTestModal'
 
 interface MCPServerDetailProps {
@@ -136,6 +136,39 @@ function VerificationStatusIndicator({ server }: { server: MCPServerDetailType }
   )
 }
 
+function OAuthStatusIndicator({ server }: { server: MCPServerDetailType }) {
+  const config = server.config_json as HttpMCPConfig
+  if (config.auth_type !== 'oauth' || !server.oauth_status) return null
+
+  const { has_tokens, token_expired, has_client_info } = server.oauth_status
+
+  if (has_tokens && !token_expired) {
+    return (
+      <span className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full bg-green-500" />
+        <span className="text-xs text-green-600 dark:text-green-400 font-medium">OAuth: Authenticated</span>
+      </span>
+    )
+  }
+
+  if (has_tokens && token_expired) {
+    return (
+      <span className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full bg-amber-500" />
+        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">OAuth: Token expired — verify to re-authorize</span>
+      </span>
+    )
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <span className="w-2 h-2 rounded-full bg-gray-400" />
+      <span className={`text-xs ${textColors.secondary} font-medium`}>OAuth: Not authenticated — verify to authorize</span>
+      {has_client_info && <span className={`text-xs ${textColors.secondary}`}>(Registered)</span>}
+    </span>
+  )
+}
+
 export function MCPServerDetail({
   server,
   onEdit,
@@ -171,6 +204,7 @@ export function MCPServerDetail({
                 {server.name}
               </h2>
               <VerificationStatusIndicator server={server} />
+              {server.server_type === 'http' && <OAuthStatusIndicator server={server} />}
             </div>
             <div className={`flex items-center gap-3 text-sm ${textColors.secondary} mt-1`}>
               <span>
