@@ -123,6 +123,32 @@ class SystemEvent(BaseModel):
     timestamp: datetime.datetime
 
 
+def describe_event(event: "ConversationEvent") -> str:
+    """Generate a concise single-line description of a conversation event."""
+    if isinstance(event, TextMessage):
+        return f"TextMessage(role={event.role}, {len(event.text_content)} chars)"
+    elif isinstance(event, ToolCall):
+        args_desc = ""
+        if event.tool_args:
+            first_key, first_val = next(iter(event.tool_args.items()))
+            val_str = str(first_val)
+            if len(val_str) > 40:
+                val_str = val_str[:40] + "…"
+            args_desc = f", {first_key}={val_str!r}"
+        return f"ToolCall(tool={event.tool_name}{args_desc})"
+    elif isinstance(event, ToolResult):
+        status = "error" if event.is_error else "ok"
+        return f"ToolResult(tool_call_id={event.tool_call_id[-8:]}, {status}, {len(event.result_content)} chars)"
+    elif isinstance(event, ToolCallRequest):
+        return f"ToolCallRequest(tool={event.tool_name})"
+    elif isinstance(event, MetaMessage):
+        return f"MetaMessage(type={event.meta_type})"
+    elif isinstance(event, SystemEvent):
+        return f"SystemEvent(type={event.type})"
+    else:
+        return type(event).__name__
+
+
 # Union type for all conversation events
 type ConversationEvent = Annotated[
     TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage,

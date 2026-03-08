@@ -39,6 +39,13 @@ def _configure_sqlite_connection(dbapi_connection, connection_record):
 if is_sqlite:
     event.listen(engine, "connect", _configure_sqlite_connection)
 
+
+def _log_sql_query(conn, cursor, statement, parameters, context, executemany):
+    logfire.debug("SQL: {statement}", statement=statement)
+
+
+event.listen(engine, "before_cursor_execute", _log_sql_query)
+
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 

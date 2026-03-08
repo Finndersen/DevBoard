@@ -469,7 +469,7 @@ class ClaudeClient:
 
                         async for message in client.receive_response():
                             message_desc = describe_message(message)
-                            logfire.info(f"Received message: {message_desc}", message=message)
+                            logfire.info(f"Received message: {message_desc}")
                             await self._start_running_any_mcp_tools(message)
                             await queue.put(message)
 

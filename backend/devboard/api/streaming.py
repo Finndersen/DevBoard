@@ -10,7 +10,7 @@ import logfire
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, describe_event
 
 
 @asynccontextmanager
@@ -71,7 +71,7 @@ def stream_conversation_events(
         try:
             async with cancel_on_disconnect(request):
                 async for event in event_stream:
-                    logfire.info(f"Streaming conversation event: {repr(event)}")
+                    logfire.info("Streaming conversation event: {event_desc}", event_desc=describe_event(event))
                     yield json.dumps(event.model_dump(mode="json")) + "\n"
         except asyncio.CancelledError:
             logfire.info("Stream cancelled due to client disconnect")
