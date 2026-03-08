@@ -263,6 +263,50 @@ In addition to acting as an MCP server, DevBoard can also connect to external MC
 3. Click "Verify" to test connection and discover available tools
 4. Tools are stored in the database for assignment to agent roles
 
+### Authentication
+
+External MCP servers support three authentication methods:
+
+| Method | Description |
+|--------|-------------|
+| **None** | No authentication (default) |
+| **Bearer Token** | Static bearer token sent in Authorization header |
+| **OAuth 2.0** | Full OAuth 2.1 flow with auto-discovery, Dynamic Client Registration, and PKCE |
+
+#### OAuth 2.0
+
+OAuth authentication uses the MCP SDK's built-in `OAuthClientProvider`, which handles the complete OAuth 2.1 flow transparently:
+
+1. **Auto-discovery** (RFC 9728 Protected Resource Metadata)
+2. **Dynamic Client Registration** (RFC 7591) — automatically registers DevBoard as an OAuth client
+3. **PKCE Authorization** — opens the browser for user consent
+4. **Token Exchange & Refresh** — manages access/refresh tokens automatically
+
+**Basic setup (recommended):** Select "OAuth 2.0" as the authentication type and provide only the server URL. The SDK handles discovery and registration automatically.
+
+**Manual credentials (advanced):** If the server doesn't support Dynamic Client Registration, you can provide a pre-configured Client ID and Client Secret. These are stored and used to skip the registration step.
+
+**Scopes** can optionally be specified as a space-separated string (e.g., `read write admin`).
+
+#### OAuth Flow During Verification
+
+When you click "Verify" on an OAuth-configured server:
+1. DevBoard constructs an OAuth provider with the server URL and configuration
+2. The MCP SDK discovers the server's OAuth endpoints
+3. If needed, DevBoard registers as an OAuth client via DCR
+4. Your browser opens to the authorization page for consent
+5. After approval, the callback delivers the authorization code to DevBoard
+6. Tokens are exchanged and stored for future use
+
+Subsequent connections (during tool execution) reuse stored tokens. The SDK automatically refreshes expired access tokens using the refresh token. If the refresh token itself expires, the server detail view shows a warning and re-verification (re-authorization) is needed.
+
+#### OAuth Status
+
+The server detail view displays OAuth status for OAuth-configured servers:
+- **Authenticated** (green) — valid tokens are stored
+- **Token expired** (amber) — re-verification needed
+- **Not authenticated** (gray) — initial authorization pending
+
 ### Assigning MCP Tools to Agents
 
 1. Navigate to Settings → Agents
