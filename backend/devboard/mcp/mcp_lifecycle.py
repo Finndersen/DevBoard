@@ -12,6 +12,7 @@ from typing import IO, Any
 import httpx
 import logfire
 from mcp import ClientSession
+from mcp.client.auth import OAuthClientProvider
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
@@ -38,11 +39,18 @@ class MCPLifecycleManager:
     e.g., setup in one tool call task, teardown later by agent context exit.
     """
 
-    def __init__(self, server_config: MCPServerConfig, *, capture_stderr: bool = False):
+    def __init__(
+        self,
+        server_config: MCPServerConfig,
+        oauth_provider: OAuthClientProvider | None = None,
+        *,
+        capture_stderr: bool = False,
+    ):
         """Initialize with an MCP server configuration.
 
         Args:
             server_config: The MCP server configuration.
+            oauth_provider: Optional OAuth provider for OAuth-authenticated HTTP servers.
             capture_stderr: If True, capture stderr output from stdio servers
                 instead of forwarding to sys.stderr.
 
@@ -50,6 +58,7 @@ class MCPLifecycleManager:
             ValueError: If the server config type is unknown.
         """
         self._server_config = server_config
+        self._oauth_provider = oauth_provider
         self._stderr_file: IO[str] | None = None
         if capture_stderr:
             self._stderr_file = tempfile.TemporaryFile(mode="w+")
@@ -92,6 +101,10 @@ class MCPLifecycleManager:
             )
 
         if isinstance(typed_config, HttpMCPConfig):
+            if typed_config.auth_type == "oauth" and self._oauth_provider:
+                http_client = httpx.AsyncClient(auth=self._oauth_provider)
+                return streamable_http_client(typed_config.url, http_client=http_client)
+
             headers: dict[str, str] = {}
             if typed_config.auth_type == "bearer" and typed_config.bearer_token:
                 headers["Authorization"] = f"Bearer {typed_config.bearer_token}"

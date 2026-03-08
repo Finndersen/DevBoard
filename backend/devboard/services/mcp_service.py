@@ -4,26 +4,36 @@ Provides business logic for managing MCP server configurations including
 CRUD operations and connectivity verification.
 """
 
+import os
 from typing import Any
 
 from devboard.api.schemas.mcp import (
     MCPServerDetailResponse,
     MCPToolInfo,
     MCPToolUpdate,
+    OAuthStatusResponse,
     VerifyResult,
 )
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
 from devboard.db.models import MCPServerConfig, MCPTool
+from devboard.db.models.mcp_server import HttpMCPConfig
 from devboard.db.repositories.mcp_server import MCPServerRepository
 from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
+from devboard.mcp.mcp_oauth_adapter import create_oauth_provider
+from devboard.services.oauth_service import OAuthService
 
 
 class MCPService:
     """Service for MCP server configuration management."""
 
-    def __init__(self, mcp_server_repository: MCPServerRepository):
+    def __init__(
+        self,
+        mcp_server_repository: MCPServerRepository,
+        oauth_service: OAuthService | None = None,
+    ):
         self.repository = mcp_server_repository
+        self._oauth_service = oauth_service
 
     def get_all(self) -> list[MCPServerConfig]:
         """Get all MCP server configurations."""
@@ -33,9 +43,14 @@ class MCPService:
         """Get an MCP server configuration by ID."""
         return self.repository.get_by_id(server_id)
 
-    def get_server_detail(self, server_id: int) -> MCPServerConfig | None:
-        """Get an MCP server configuration with tools loaded."""
-        return self.repository.get_by_id_with_tools(server_id)
+    def get_server_detail(self, server_id: int) -> MCPServerDetailResponse | None:
+        """Get an MCP server detail response with tools and OAuth status."""
+        server = self.repository.get_by_id_with_tools(server_id)
+        if not server:
+            return None
+        response = MCPServerDetailResponse.model_validate(server)
+        response.oauth_status = self._get_oauth_status(server)
+        return response
 
     def create(self, data: MCPServerConfigCreate) -> MCPServerConfig:
         """Create a new MCP server configuration."""
@@ -72,6 +87,52 @@ class MCPService:
             tool.description = data.description
         return self.repository.update_tool(tool)
 
+    def _get_oauth_status(self, server: MCPServerConfig) -> OAuthStatusResponse | None:
+        """Get OAuth status for a server if it uses OAuth auth."""
+        typed_config = server.config
+        if not isinstance(typed_config, HttpMCPConfig) or typed_config.auth_type != "oauth":
+            return None
+        if not self._oauth_service:
+            return None
+
+        provider_key = OAuthService.generate_mcp_provider_key(server.id)
+        has_tokens = self._oauth_service.get_tokens(provider_key) is not None
+        token_expired = self._oauth_service.is_token_expired(provider_key) if has_tokens else False
+        has_client_info = self._oauth_service.get_client_info(provider_key) is not None
+
+        return OAuthStatusResponse(
+            has_tokens=has_tokens,
+            token_expired=token_expired,
+            has_client_info=has_client_info,
+        )
+
+    def _build_detail_response(self, server_id: int) -> MCPServerDetailResponse:
+        """Build an MCPServerDetailResponse with OAuth status if applicable."""
+        server = self.repository.get_by_id_with_tools(server_id)
+        response = MCPServerDetailResponse.model_validate(server)
+        if server:
+            response.oauth_status = self._get_oauth_status(server)
+        return response
+
+    async def _create_lifecycle_manager(
+        self, config: MCPServerConfig, *, capture_stderr: bool = False
+    ) -> MCPLifecycleManager:
+        """Create an MCPLifecycleManager, with OAuth provider if needed."""
+        typed_config = config.config
+        if isinstance(typed_config, HttpMCPConfig) and typed_config.auth_type == "oauth" and self._oauth_service:
+            backend_base_url = os.environ.get("DEVBOARD_BACKEND_URL", "http://localhost:8000")
+            oauth_provider = await create_oauth_provider(
+                server_id=config.id,
+                server_url=typed_config.url,
+                oauth_service=self._oauth_service,
+                backend_base_url=backend_base_url,
+                client_id=typed_config.client_id,
+                client_secret=typed_config.client_secret,
+                scopes=typed_config.scopes,
+            )
+            return MCPLifecycleManager(config, oauth_provider=oauth_provider, capture_stderr=capture_stderr)
+        return MCPLifecycleManager(config, capture_stderr=capture_stderr)
+
     def _sync_tools(self, server: MCPServerConfig, server_tools: list[MCPToolInfo]) -> None:
         """Sync tools from server response to database cache.
 
@@ -106,8 +167,9 @@ class MCPService:
         if not config:
             raise ValueError("Server not found")
 
+        lifecycle: MCPLifecycleManager | None = None
         try:
-            lifecycle = MCPLifecycleManager(config, capture_stderr=True)
+            lifecycle = await self._create_lifecycle_manager(config, capture_stderr=True)
             async with lifecycle as session:
                 result = await session.list_tools()
                 tools = [
@@ -134,7 +196,7 @@ class MCPService:
                 self.repository.expire(config)
 
                 self.repository.update_verification_status(config, success=True, error=None)
-                return MCPServerDetailResponse.model_validate(self.repository.get_by_id_with_tools(server_id))
+                return self._build_detail_response(server_id)
 
         except Exception as e:
             error = str(e)
@@ -151,7 +213,7 @@ class MCPService:
             return VerifyResult(success=False, error="Server not found")
 
         try:
-            lifecycle = MCPLifecycleManager(config)
+            lifecycle = await self._create_lifecycle_manager(config)
             async with lifecycle as session:
                 result = await session.list_tools()
                 tools = [
@@ -180,7 +242,7 @@ class MCPService:
         if not tool or tool.server_id != server_id:
             raise ValueError("Tool not found")
 
-        lifecycle = MCPLifecycleManager(config)
+        lifecycle = await self._create_lifecycle_manager(config)
         async with lifecycle as session:
             result = await session.call_tool(tool.name, arguments=arguments or {})
 

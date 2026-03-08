@@ -4,36 +4,59 @@ Provides an interface for agents to initialize MCP servers from tool names
 and get pydantic_ai.Tool instances that wrap MCP tool calls.
 """
 
+import os
 from typing import Any
 
 from mcp import ClientSession
 from pydantic_ai import Tool
 
 from devboard.db.models import MCPTool
+from devboard.db.models.mcp_server import HttpMCPConfig
 from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
+from devboard.mcp.mcp_oauth_adapter import create_oauth_provider
+from devboard.services.oauth_service import OAuthService
 
 
 class MCPToolFactory:
     """Context manager that initializes MCP servers and provides pydantic_ai Tools."""
 
-    def __init__(self, mcp_tools: list[MCPTool]):
+    def __init__(self, mcp_tools: list[MCPTool], oauth_service: OAuthService | None = None):
         """Initialize the factory.
 
         Args:
             mcp_tools: List of MCPTool models to enable. Server configs are extracted
                 automatically from the tool relationships.
+            oauth_service: Optional OAuthService for OAuth-authenticated servers.
         """
         # Filter to only include tools from verified servers
         self._mcp_tools = [tool for tool in mcp_tools if tool.server.last_verified_success]
+        self._oauth_service = oauth_service
         self._lifecycle_managers: dict[int, MCPLifecycleManager] = {}
         self._tools: list[Tool[Any]] = []
+
+    async def _create_lifecycle_manager(self, server_config: Any) -> MCPLifecycleManager:
+        """Create an MCPLifecycleManager, with OAuth provider if needed."""
+        typed_config = server_config.config
+        if isinstance(typed_config, HttpMCPConfig) and typed_config.auth_type == "oauth" and self._oauth_service:
+            backend_base_url = os.environ.get("DEVBOARD_BACKEND_URL", "http://localhost:8000")
+            oauth_provider = await create_oauth_provider(
+                server_id=server_config.id,
+                server_url=typed_config.url,
+                oauth_service=self._oauth_service,
+                backend_base_url=backend_base_url,
+                client_id=typed_config.client_id,
+                client_secret=typed_config.client_secret,
+                scopes=typed_config.scopes,
+            )
+            return MCPLifecycleManager(server_config, oauth_provider=oauth_provider)
+        return MCPLifecycleManager(server_config)
 
     async def __aenter__(self) -> "MCPToolFactory":
         """Set up MCP connections and create tool wrappers."""
         for mcp_tool in self._mcp_tools:
             if mcp_tool.server_id not in self._lifecycle_managers:
-                lifecycle = MCPLifecycleManager(mcp_tool.server)
+                lifecycle = await self._create_lifecycle_manager(mcp_tool.server)
                 await lifecycle.setup()
                 self._lifecycle_managers[mcp_tool.server_id] = lifecycle
 
