@@ -650,6 +650,42 @@ export interface SessionSearchResult {
   text_snippet: string | null
 }
 
+// GitHub PR Status types
+export interface OpenPRItem {
+  pr_number: number
+  title: string
+  repo_full_name: string
+  codebase_id: number
+  pr_url: string
+  mergeable_state: string | null
+  task_id: number | null
+  task_title: string | null
+}
+
+export interface OpenPRsResponse {
+  prs: OpenPRItem[]
+  errors: string[]
+}
+
+export interface PRCheckItem {
+  name: string
+  state: string
+  description: string | null
+}
+
+export interface PRReviewItem {
+  author: string
+  state: string
+  body: string
+}
+
+export interface PRDetailResponse {
+  ci_status: string | null
+  checks: PRCheckItem[]
+  reviews: PRReviewItem[]
+  review_comment_count: number
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -1158,6 +1194,15 @@ export class ApiClient {
       params.set('project_path', projectPath)
     }
     return this.request<SessionSearchResult[]>(`/api/claude-code/sessions/search?${params.toString()}`)
+  }
+
+  // GitHub PR Status
+  async getOpenPRs(): Promise<OpenPRsResponse> {
+    return this.request<OpenPRsResponse>('/api/github/open-prs')
+  }
+
+  async getPRDetail(codebaseId: number, prNumber: number): Promise<PRDetailResponse> {
+    return this.request<PRDetailResponse>(`/api/github/prs/${codebaseId}/${prNumber}/detail`)
   }
 }
 

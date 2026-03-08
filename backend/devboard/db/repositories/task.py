@@ -165,6 +165,14 @@ class TaskRepository(BaseRepository[Task]):
 
         return list(self.db.execute(stmt).scalars().all())
 
+    def get_tasks_with_open_prs(self, codebase_ids: list[int]) -> list[Task]:
+        """Get tasks that have a GitHub PR number set, filtered by codebase IDs."""
+        stmt = select(Task).where(
+            Task.github_pr_number.isnot(None),
+            Task.codebase_id.in_(codebase_ids),
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def get_tasks_filtered(
         self,
         project_id: int,

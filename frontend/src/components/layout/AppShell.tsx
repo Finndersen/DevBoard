@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import TabBar from './TabBar'
 import NavigationMenu from './NavigationMenu'
 import NotificationsPanel from '../notifications/NotificationsPanel'
+import GitHubPRStatusBar from '../github/GitHubPRStatusBar'
 
 interface AppShellProps {
   children: ReactNode
@@ -16,7 +17,8 @@ export default function AppShell({ children }: AppShellProps) {
       {/* Right column */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Top strip - matches sidebar logo height */}
-        <div className="h-16 flex items-center justify-end px-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
+        <div className="h-16 flex items-center px-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 gap-2">
+          <GitHubPRStatusBar />
           <NotificationsPanel />
         </div>
 

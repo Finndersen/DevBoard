@@ -435,6 +435,11 @@ class GitHubRepository:
         branches = await _github_api_call(self._repo.get_branches)
         return list(branches)
 
+    async def list_open_pulls(self) -> list[PullRequest]:
+        """List all open pull requests for this repository."""
+        pulls = await _github_api_call(self._repo.get_pulls, state="open")
+        return list(pulls)
+
     async def find_pull_request_for_branch(self, head_branch: str) -> PullRequest | None:
         """Find an existing open PR for the given head branch.
 
