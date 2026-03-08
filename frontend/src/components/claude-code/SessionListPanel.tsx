@@ -1,5 +1,4 @@
-import { DocumentTextIcon } from '@heroicons/react/24/outline'
-import { useNavigate } from 'react-router-dom'
+import { DocumentTextIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
 import type { ClaudeCodeSession } from '../../lib/api'
 
@@ -11,7 +10,7 @@ interface SessionListPanelProps {
   matchCounts?: Map<string, number>
 }
 
-const AGENT_ROLE_LABELS: Record<string, string> = {
+export const AGENT_ROLE_LABELS: Record<string, string> = {
   task_planning: 'Planning',
   task_implementation: 'Implementation',
   task_pr_review: 'PR Review',
@@ -39,8 +38,6 @@ function formatFileSize(bytes: number): string {
 }
 
 export function SessionListPanel({ sessions, selectedSessionId, loading, onSelect, matchCounts }: SessionListPanelProps) {
-  const navigate = useNavigate()
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -94,21 +91,8 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
               </div>
               {session.task_info && (
                 <div className="mt-1 flex items-center gap-1.5 text-xs">
-                  <span
-                    role="link"
-                    tabIndex={0}
-                    className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer truncate"
-                    onClick={e => {
-                      e.stopPropagation()
-                      navigate(`/tasks/${session.task_info!.task_id}`)
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.stopPropagation()
-                        navigate(`/tasks/${session.task_info!.task_id}`)
-                      }
-                    }}
-                  >
+                  <ClipboardDocumentListIcon className="w-3 h-3 shrink-0 text-gray-400" />
+                  <span className={`truncate ${textColors.secondary}`}>
                     {session.task_info.task_title}
                   </span>
                   <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">

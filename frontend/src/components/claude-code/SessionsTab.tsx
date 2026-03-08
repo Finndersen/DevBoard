@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ClaudeCodeProject, ClaudeCodeSession, SessionSearchResult } from '../../lib/api'
 import { ProjectListPanel } from './ProjectListPanel'
-import { SessionListPanel } from './SessionListPanel'
+import { SessionListPanel, AGENT_ROLE_LABELS } from './SessionListPanel'
 import { SessionConversationViewer } from './SessionConversationViewer'
 import { SessionSearch } from './SessionSearch'
 
 export default function SessionsTab() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const selectedProjectPath = searchParams.get('project')
@@ -24,6 +25,7 @@ export default function SessionsTab() {
   const [searchQuery, setSearchQuery] = useState('')
 
   const selectedProject = projects.find(p => p.encoded_path === selectedProjectPath) ?? null
+  const selectedSession = sessions.find(s => s.session_id === selectedSessionId) ?? null
   const filteredSessions = excludeEmpty ? sessions.filter(s => !s.is_empty) : sessions
 
   const isSearchActive = searchQuery.trim().length > 0
@@ -174,7 +176,7 @@ export default function SessionsTab() {
 
       {/* Middle panel: Sessions */}
       {selectedProjectPath && (
-        <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+        <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
             <h2 className={`text-sm font-semibold ${textColors.primary}`}>Sessions</h2>
           </div>
@@ -195,14 +197,32 @@ export default function SessionsTab() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
             <h2 className={`text-sm font-semibold ${textColors.primary}`}>
-              {sessions.find(s => s.session_id === selectedSessionId)?.label ?? 'Session'}
+              {selectedSession?.label ?? 'Session'}
             </h2>
-            <p className={`text-xs ${textColors.muted} font-mono truncate`}>{selectedSessionId}</p>
+            <div className={`flex items-center gap-2 text-xs ${textColors.muted} min-w-0`}>
+              <span className="font-mono truncate">{selectedSessionId}</span>
+              {selectedSession?.task_info && (
+                <>
+                  <span className="shrink-0">·</span>
+                  <span className="shrink-0">Task #{selectedSession.task_info.task_id}</span>
+                  <span className="shrink-0">·</span>
+                  <button
+                    onClick={() => navigate(`/tasks/${selectedSession.task_info!.task_id}`)}
+                    className="text-blue-600 dark:text-blue-400 hover:underline truncate"
+                  >
+                    {selectedSession.task_info.task_title}
+                  </button>
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    {AGENT_ROLE_LABELS[selectedSession.task_info.agent_role] ?? selectedSession.task_info.agent_role}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-hidden">
             <SessionConversationViewer
               sessionId={selectedSessionId}
-              linkedSessionId={sessions.find(s => s.session_id === selectedSessionId)?.linked_session_id ?? null}
+              linkedSessionId={selectedSession?.linked_session_id ?? null}
               highlightUuids={highlightUuids}
             />
           </div>

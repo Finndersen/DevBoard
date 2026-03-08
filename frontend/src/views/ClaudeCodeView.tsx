@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CommandLineIcon } from '@heroicons/react/24/outline'
+import { CommandLineIcon, QueueListIcon } from '@heroicons/react/24/outline'
+import type { ForwardRefExoticComponent, SVGProps, RefAttributes } from 'react'
 import SessionsTab from '../components/claude-code/SessionsTab'
 import ViewHeader from '../components/layout/ViewHeader'
 
@@ -8,8 +9,8 @@ type ClaudeCodeTab = 'session-viewer'
 
 const VALID_TABS: ClaudeCodeTab[] = ['session-viewer']
 
-const TAB_LABELS: Record<ClaudeCodeTab, string> = {
-  'session-viewer': 'Session Viewer',
+const TAB_CONFIG: Record<ClaudeCodeTab, { label: string; icon: ForwardRefExoticComponent<SVGProps<SVGSVGElement> & RefAttributes<SVGSVGElement>> }> = {
+  'session-viewer': { label: 'Session Viewer', icon: QueueListIcon },
 }
 
 export default function ClaudeCodeView() {
@@ -27,20 +28,26 @@ export default function ClaudeCodeView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <ViewHeader icon={CommandLineIcon} title="Claude Code" />
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 px-6 bg-white dark:bg-gray-800 shrink-0">
-        {VALID_TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
-                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
+      <div className="border-b border-gray-200 dark:border-gray-700 px-6 shrink-0">
+        <nav className="-mb-px flex space-x-8">
+          {VALID_TABS.map(tab => {
+            const { label, icon: Icon } = TAB_CONFIG[tab]
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
+                  activeTab === tab
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{label}</span>
+              </button>
+            )
+          })}
+        </nav>
       </div>
       <div className="flex-1 overflow-hidden">
         {activeTab === 'session-viewer' && <SessionsTab />}
