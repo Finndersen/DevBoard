@@ -106,7 +106,7 @@ export default function TasksList() {
         }
       />
 
-      <div className="flex-1 overflow-auto py-6 space-y-6">
+      <div className="flex-1 flex flex-col overflow-hidden py-6 min-h-0">
       {tasksLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className={loadingSpinner}></div>
@@ -116,17 +116,17 @@ export default function TasksList() {
       {tasksError && <ErrorMessage error={tasksError} retry={refetchTasks} className="mb-4" />}
 
       {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {STATUS_COLUMNS.map((status) => (
-          <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800">
-            <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between`}>
+          <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800 flex flex-col overflow-hidden">
+            <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between flex-shrink-0`}>
               {STATUS_LABELS[status] ?? status}
               <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
                 {taskGroups[status]?.length || 0}
               </span>
             </h3>
 
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
               {taskGroups[status]?.map((task) => (
                 <Link
                   key={task.id}
