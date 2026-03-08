@@ -38,6 +38,10 @@ class HttpMCPConfig(BaseModel):
     url: str
     auth_type: Literal["none", "bearer", "oauth"] = "none"
     bearer_token: str | None = None
+    # OAuth fields (only relevant when auth_type == "oauth")
+    client_id: str | None = None
+    client_secret: str | None = None
+    scopes: str | None = None
 
 
 # Database Models

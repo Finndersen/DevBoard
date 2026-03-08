@@ -3,6 +3,15 @@
 from devboard.config.base import BaseConfig
 
 
+class DevBoardConfig(BaseConfig):
+    """Configuration for DevBoard application settings."""
+
+    config_key = "devboard.main"
+    env_prefix = "DEVBOARD_"
+
+    backend_base_url: str = "http://localhost:8000"
+
+
 class GitHubIntegrationConfig(BaseConfig):
     """Configuration for GitHub integration."""
 
