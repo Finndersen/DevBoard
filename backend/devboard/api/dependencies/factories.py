@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import HTTPException
 from pydantic_ai import Tool
 
@@ -16,6 +18,7 @@ from devboard.db.models import Conversation, CustomFieldDefinition, Project, Tas
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
+from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
@@ -136,6 +139,7 @@ def create_agent_execution_service(
     conversation_repo: ConversationRepository,
     agent_config_service: AgentConfigService,
     additional_tools: list[Tool] | None = None,
+    oauth_service: OAuthService | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
 
@@ -167,6 +171,7 @@ def create_agent_execution_service(
             history_service=history_service,
             agent_config_service=agent_config_service,
             additional_tools=additional_tools,
+            oauth_service=oauth_service,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
         return ClaudeCodeAgentExecutionService(
@@ -176,6 +181,7 @@ def create_agent_execution_service(
             history_service=history_service,
             agent_config_service=agent_config_service,
             additional_tools=additional_tools,
+            oauth_service=oauth_service,
         )
     else:
         raise HTTPException(

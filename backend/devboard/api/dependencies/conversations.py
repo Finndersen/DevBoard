@@ -18,12 +18,14 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
+    get_oauth_service,
     get_task_git_service,
     get_task_service,
 )
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository, CustomFieldRepository, DocumentRepository
 from devboard.services.integration_service import IntegrationService
+from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
@@ -80,6 +82,7 @@ def get_agent_execution_service(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     role: AgentRole = Depends(get_agent_role_for_conversation),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
+    oauth_service: OAuthService = Depends(get_oauth_service),
 ) -> AgentExecutionService:
     """Get agent execution service instance.
 
@@ -103,4 +106,5 @@ def get_agent_execution_service(
         role=role,
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
+        oauth_service=oauth_service,
     )

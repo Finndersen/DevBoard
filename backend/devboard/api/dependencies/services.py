@@ -177,6 +177,7 @@ def get_oauth_service(
 
 def get_mcp_service(
     mcp_server_repo: MCPServerRepository = Depends(get_mcp_server_repository),
+    oauth_service: OAuthService = Depends(get_oauth_service),
 ) -> MCPService:
     """Get MCPService instance."""
-    return MCPService(mcp_server_repository=mcp_server_repo)
+    return MCPService(mcp_server_repository=mcp_server_repo, oauth_service=oauth_service)

@@ -21,6 +21,7 @@ from devboard.db.models import Conversation, ParentEntityType, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
+from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
@@ -48,6 +49,7 @@ class TaskWorkflowAction(ABC):
         document_repository: DocumentRepository,
         workspace_allocation_service: WorkspaceAllocationService,
         integration_service: IntegrationService,
+        oauth_service: OAuthService | None = None,
     ):
         """Initialize the action with required services.
 
@@ -60,6 +62,7 @@ class TaskWorkflowAction(ABC):
             document_repository: Repository for document database operations
             workspace_allocation_service: Service for workspace allocation
             integration_service: Service for external integrations (GitHub, etc.)
+            oauth_service: Optional OAuthService for OAuth-authenticated MCP servers
         """
         self.task = task
         self.task_service = task_service
@@ -67,6 +70,7 @@ class TaskWorkflowAction(ABC):
         self.conversation_repo = conversation_repo
         self.agent_config_service = agent_config_service
         self.document_repository = document_repository
+        self._oauth_service = oauth_service
         self.conversation_service = ConversationService(
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
@@ -108,6 +112,7 @@ class TaskWorkflowAction(ABC):
             conversation_repo=self.conversation_repo,
             agent_config_service=self.agent_config_service,
             additional_tools=additional_tools,
+            oauth_service=self._oauth_service,
         )
 
     async def _stream_agent_response(

@@ -16,6 +16,7 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
+    get_oauth_service,
     get_resource_service,
     get_task_git_service,
     get_task_service,
@@ -54,6 +55,7 @@ from devboard.db.repositories import (
 )
 from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment
 from devboard.services.integration_service import IntegrationService
+from devboard.services.oauth_service import OAuthService
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
@@ -328,6 +330,7 @@ async def execute_workflow_action(
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
     integration_service: IntegrationService = Depends(get_integration_service),
+    oauth_service: OAuthService = Depends(get_oauth_service),
 ) -> StreamingResponse:
     """Stream a task workflow action.
 
@@ -358,6 +361,7 @@ async def execute_workflow_action(
         document_repository=document_repo,
         workspace_allocation_service=workspace_allocation_service,
         integration_service=integration_service,
+        oauth_service=oauth_service,
     )
 
     # Define exception handler to convert task transition errors to HTTP exceptions

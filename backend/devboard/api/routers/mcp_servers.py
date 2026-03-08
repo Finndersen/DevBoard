@@ -37,10 +37,10 @@ async def get_mcp_server(
     mcp_service: MCPService = Depends(get_mcp_service),
 ) -> MCPServerDetailResponse:
     """Get a specific MCP server configuration with tools and verification status."""
-    server = mcp_service.get_server_detail(server_id)
-    if not server:
+    detail = mcp_service.get_server_detail(server_id)
+    if not detail:
         raise HTTPException(status_code=404, detail="MCP server not found")
-    return MCPServerDetailResponse.model_validate(server)
+    return detail
 
 
 @router.post("/", response_model=MCPServerConfigResponse)

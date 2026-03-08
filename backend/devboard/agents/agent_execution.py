@@ -14,6 +14,7 @@ from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
 from devboard.mcp.mcp_tool_factory import MCPToolFactory
+from devboard.services.oauth_service import OAuthService
 
 if TYPE_CHECKING:
     from devboard.agents.agent_config_service import AgentConfigService
@@ -47,6 +48,7 @@ class AgentExecutionService(ABC):
         history_service: ConversationHistoryService,
         agent_config_service: "AgentConfigService",
         additional_tools: list[Tool] | None = None,
+        oauth_service: OAuthService | None = None,
     ):
         """Initialize the agent execution service.
 
@@ -58,6 +60,7 @@ class AgentExecutionService(ABC):
             agent_config_service: Service for loading agent configuration
             additional_tools: Optional list of additional tools to provide to the agent,
                 beyond those defined by the role. Used for workflow-action-specific tools.
+            oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
         """
         self.conversation = conversation
         self.role = role
@@ -65,6 +68,7 @@ class AgentExecutionService(ABC):
         self._history_service = history_service
         self._agent_config_service = agent_config_service
         self._additional_tools = additional_tools or []
+        self._oauth_service = oauth_service
 
     def get_custom_instructions(self) -> str | None:
         """Get custom instructions for this agent role from config service."""
@@ -122,7 +126,7 @@ class AgentExecutionService(ABC):
             is_approval=is_approval,
         ):
             mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
-            async with MCPToolFactory(mcp_tool_configs) as mcp_factory:
+            async with MCPToolFactory(mcp_tool_configs, oauth_service=self._oauth_service) as mcp_factory:
                 # MCP server tools for the role plus any others added dynamically for the specific run
                 extra_tools = self._additional_tools + mcp_factory.get_tools()
                 async for event in self._stream_events_impl(message_or_approvals, extra_tools):
