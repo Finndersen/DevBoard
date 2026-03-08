@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import ParentEntityType, Task
-from devboard.db.models.codebase import BranchHandling
+from devboard.db.models.codebase import BranchHandling, MergeMethod
 from devboard.db.models.conversation import AgentRoleType
 from devboard.db.models.task import TaskStatus
 from devboard.integrations.github import GitHubIntegration
@@ -128,7 +128,7 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     KEY = "task.begin_implementation"
 
-    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to execute the implementation plan, launching parallel sub-agents where appropriate."
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to execute the implementation plan, launching sub-agents to implement each step."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -334,16 +334,32 @@ class ApproveAndMergeAction(TaskWorkflowAction):
     """
 
     KEY = "task.approve_and_merge"
-    PROMPT_TEMPLATE = (
-        _FINALISATION_PREAMBLE
-        + """
+
+    _COMMIT_INSTRUCTIONS: dict[str, str] = {
+        MergeMethod.SQUASH: "If there are uncommitted changes, commit them — a single commit is fine since all commits will be squashed into one at merge time.",
+        MergeMethod.REBASE: "If there are uncommitted changes, create logical, atomic commits with clear commit messages — each commit will be individually replayed onto the base branch and preserved in the history.",
+        MergeMethod.MERGE_COMMIT: "If there are uncommitted changes, create appropriate commit(s) with clear commit messages — each commit will be preserved in the full merge history.",
+    }
+
+    @staticmethod
+    def _build_prompt(merge_method: str, changes_context: str) -> str:
+        commit_instruction = ApproveAndMergeAction._COMMIT_INSTRUCTIONS.get(
+            merge_method,
+            "If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.",
+        )
+        return f"""## Git Status
+{changes_context}
+
+## Instructions
+IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
+
+{commit_instruction}
 
 Once all changes are committed, use the `complete_task_with_local_merge` tool to merge the feature branch and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs
 - Testing considerations or known limitations"""
-    )
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -363,7 +379,7 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
             ConversationEvent objects from agent interaction
         """
         changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
-        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+        prompt = self._build_prompt(self.task.codebase.merge_method, changes_context)
 
         conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
         async for event in self._stream_agent_response(conversation, prompt):

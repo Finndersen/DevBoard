@@ -2,8 +2,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.types import FileDiff, GitLogEntry, StructuredDiff
-from devboard.workflow_actions.task_workflows import _get_task_changes_prompt_context
+from devboard.workflow_actions.task_workflows import ApproveAndMergeAction, _get_task_changes_prompt_context
 
 
 @pytest.fixture
@@ -94,3 +95,34 @@ class TestGetTaskChangesPromptContext:
         assert "No commits on task branch yet" in result
         assert "Uncommitted changes" in result
         assert "src/foo.py (+5/-2)" in result
+
+
+class TestApproveAndMergePrompt:
+    CHANGES_CONTEXT = "```\nNo commits on task branch yet.\n\nUncommitted changes:\n  src/foo.py (+5/-2)\n```"
+
+    @pytest.mark.parametrize(
+        "merge_method,expected_phrases",
+        [
+            (MergeMethod.SQUASH, ["single commit", "squashed"]),
+            (MergeMethod.REBASE, ["atomic commits", "replayed"]),
+            (MergeMethod.MERGE_COMMIT, ["appropriate commit(s)", "preserved"]),
+        ],
+    )
+    def test_commit_instruction_by_merge_method(self, merge_method: MergeMethod, expected_phrases: list[str]):
+        prompt = ApproveAndMergeAction._build_prompt(merge_method, self.CHANGES_CONTEXT)
+
+        for phrase in expected_phrases:
+            assert phrase in prompt
+
+    @pytest.mark.parametrize("merge_method", list(MergeMethod))
+    def test_always_includes_complete_task_tool(self, merge_method: MergeMethod):
+        prompt = ApproveAndMergeAction._build_prompt(merge_method, self.CHANGES_CONTEXT)
+
+        assert "complete_task_with_local_merge" in prompt
+
+    def test_unknown_merge_method_uses_fallback(self):
+        prompt = ApproveAndMergeAction._build_prompt("unknown_method", self.CHANGES_CONTEXT)
+
+        assert "appropriate commit(s)" in prompt
+        assert "clear commit messages" in prompt
+        assert "complete_task_with_local_merge" in prompt
