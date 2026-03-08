@@ -41,6 +41,14 @@ class MCPToolUpdate(BaseModel):
     description: str | None = None
 
 
+class OAuthStatusResponse(BaseModel):
+    """OAuth authentication status for an MCP server."""
+
+    has_tokens: bool
+    token_expired: bool
+    has_client_info: bool
+
+
 class MCPServerDetailResponse(BaseModel):
     """Response schema for MCP server detail including tools and verification status."""
 
@@ -52,6 +60,7 @@ class MCPServerDetailResponse(BaseModel):
     last_verified_success: bool | None = None
     last_verified_error: str | None = None
     tools: list[MCPToolResponse] = []
+    oauth_status: OAuthStatusResponse | None = None
 
     model_config = {"from_attributes": True}
 

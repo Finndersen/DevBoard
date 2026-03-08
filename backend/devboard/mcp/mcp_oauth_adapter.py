@@ -4,10 +4,11 @@ import datetime
 import json
 import urllib.parse
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import logfire
-from mcp.shared.auth import OAuthClientInformationFull
+from mcp.client.auth import OAuthClientProvider
+from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
 from mcp.shared.auth import OAuthToken as MCPOAuthToken
 
 from devboard.services.oauth_service import OAuthService, TokenData
@@ -116,7 +117,7 @@ def create_mcp_redirect_handler(
     provider_key: str,
     oauth_service: OAuthService,
     redirect_uri: str,
-) -> Callable[[str], None]:
+) -> Callable[[str], Awaitable[None]]:
     """Create a redirect handler for MCP OAuth flow.
 
     The redirect handler opens the authorization URL in the user's browser
@@ -131,12 +132,8 @@ def create_mcp_redirect_handler(
         Async function that handles redirects
     """
 
-    def handle_redirect(authorization_url: str) -> None:
-        """Handle redirect by opening browser and creating pending record.
-
-        Args:
-            authorization_url: The authorization URL to redirect to
-        """
+    async def handle_redirect(authorization_url: str) -> None:
+        """Handle redirect by opening browser and creating pending record."""
         # Parse the authorization URL to extract state parameter
         parsed = urllib.parse.urlparse(authorization_url)
         query_params = urllib.parse.parse_qs(parsed.query)
@@ -161,7 +158,7 @@ async def create_mcp_callback_handler(
     provider_key: str,
     oauth_service: OAuthService,
     timeout_seconds: float = 60.0,
-) -> Callable[[], tuple[str, str | None]]:
+) -> Callable[[], Awaitable[tuple[str, str | None]]]:
     """Create a callback handler for MCP OAuth flow.
 
     The callback handler polls for the authorization code that gets stored
@@ -191,3 +188,51 @@ async def create_mcp_callback_handler(
         )
 
     return handle_callback
+
+
+async def create_oauth_provider(
+    server_id: int,
+    server_url: str,
+    oauth_service: OAuthService,
+    backend_base_url: str,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    scopes: str | None = None,
+) -> OAuthClientProvider:
+    """Create an OAuthClientProvider for an MCP server.
+
+    When client_id/client_secret are provided, they are pre-seeded into storage
+    so the SDK skips Dynamic Client Registration.
+    """
+    provider_key = OAuthService.generate_mcp_provider_key(server_id)
+    redirect_uri = f"{backend_base_url}/api/oauth/callback/{provider_key}"
+
+    client_metadata = OAuthClientMetadata(
+        client_name="DevBoard",
+        redirect_uris=[redirect_uri],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        scope=scopes,
+    )
+
+    storage = MCPTokenStorageAdapter(oauth_service, provider_key)
+
+    # Pre-seed client info if manual credentials are provided
+    if client_id:
+        client_info = OAuthClientInformationFull(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uris=[redirect_uri],
+        )
+        await storage.set_client_info(client_info)
+
+    redirect_handler = create_mcp_redirect_handler(provider_key, oauth_service, redirect_uri)
+    callback_handler = await create_mcp_callback_handler(provider_key, oauth_service)
+
+    return OAuthClientProvider(
+        server_url=server_url,
+        client_metadata=client_metadata,
+        storage=storage,
+        redirect_handler=redirect_handler,
+        callback_handler=callback_handler,
+    )
