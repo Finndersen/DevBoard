@@ -103,7 +103,8 @@ class SquashMerge(MergeStrategy):
                     title=task.title,
                 )
             finally:
-                await git.checkout_branch(current_branch)
+                if current_branch != task.branch_name:
+                    await git.checkout_branch(current_branch)
 
     async def _squash_merge_to_remote_base(self, task: Task, git: GitRepoIntegration) -> str:
         local_base = task.base_branch.replace("origin/", "")
@@ -150,7 +151,8 @@ class RebaseMerge(MergeStrategy):
                             target=task.base_branch,
                         )
                     finally:
-                        await git.checkout_branch(current_branch)
+                        if current_branch != task.branch_name:
+                            await git.checkout_branch(current_branch)
 
             await git.delete_branch(task.branch_name, force=True)
             if await git.is_branch_pushed(task.branch_name):
@@ -205,7 +207,8 @@ class MergeCommitMerge(MergeStrategy):
                     merge_commit = await git.merge_branch(task.branch_name, local_base, no_ff=True)
                     await git.push_branch(local_base, set_upstream=False)
                 finally:
-                    await git.checkout_branch(current_branch)
+                    if current_branch != task.branch_name:
+                        await git.checkout_branch(current_branch)
             else:
                 checkout_path = await git.get_checked_out_location(task.base_branch)
                 if checkout_path:
@@ -217,7 +220,8 @@ class MergeCommitMerge(MergeStrategy):
                     try:
                         merge_commit = await git.merge_branch(task.branch_name, task.base_branch, no_ff=True)
                     finally:
-                        await git.checkout_branch(current_branch)
+                        if current_branch != task.branch_name:
+                            await git.checkout_branch(current_branch)
 
             await git.delete_branch(task.branch_name, force=True)
             if await git.is_branch_pushed(task.branch_name):

@@ -180,29 +180,87 @@ async def test_merge_commit_no_stash_in_worktree_path(mock_task, mock_git, mock_
 
 
 @pytest.mark.asyncio
-async def test_squash_merge_restores_original_branch_when_base_not_checked_out(mock_task, mock_git):
-    """SquashMerge saves and restores the original branch when base not checked out in worktree."""
+async def test_squash_merge_does_not_restore_branch_on_success_when_base_not_checked_out(mock_task, mock_git):
+    """SquashMerge leaves repo on base branch after successful merge in no-worktree path."""
     mock_git.get_checked_out_location = AsyncMock(return_value=None)
-    mock_git.get_current_branch = AsyncMock(return_value="my-feature")
+    mock_git.get_current_branch = AsyncMock(return_value=mock_task.branch_name)
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
         result = await SquashMerge().execute(mock_task, mock_git)
 
     mock_git.get_current_branch.assert_called()
-    mock_git.checkout_branch.assert_called_with("my-feature")
+    mock_git.checkout_branch.assert_not_called()
     assert result.outcome == MergeOutcome.SUCCESS
 
 
 @pytest.mark.asyncio
-async def test_rebase_merge_restores_original_branch_when_base_not_checked_out(mock_task, mock_git):
-    """RebaseMerge saves and restores the original branch when base not checked out in worktree."""
-    mock_task.codebase.merge_method = MergeMethod.REBASE
+async def test_squash_merge_restores_original_branch_on_failure_when_base_not_checked_out(mock_task, mock_git):
+    """SquashMerge restores original branch when merge fails in no-worktree path."""
     mock_git.get_checked_out_location = AsyncMock(return_value=None)
     mock_git.get_current_branch = AsyncMock(return_value="my-feature")
+    mock_git.merge_squash = AsyncMock(side_effect=Exception("merge failed"))
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        with pytest.raises(Exception, match="merge failed"):
+            await SquashMerge().execute(mock_task, mock_git)
+
+    mock_git.checkout_branch.assert_called_with("my-feature")
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_does_not_restore_branch_on_success_when_base_not_checked_out(mock_task, mock_git):
+    """RebaseMerge leaves repo on base branch after successful merge in no-worktree path."""
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(return_value=mock_task.branch_name)
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
         result = await RebaseMerge().execute(mock_task, mock_git)
 
     mock_git.get_current_branch.assert_called()
-    mock_git.checkout_branch.assert_called_with("my-feature")
+    mock_git.checkout_branch.assert_not_called()
     assert result.outcome == MergeOutcome.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_restores_original_branch_on_failure_when_base_not_checked_out(mock_task, mock_git):
+    """RebaseMerge restores original branch when fast-forward merge fails in no-worktree path."""
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(return_value="my-feature")
+    mock_git.fast_forward_merge = AsyncMock(side_effect=Exception("ff merge failed"))
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        with pytest.raises(Exception, match="ff merge failed"):
+            await RebaseMerge().execute(mock_task, mock_git)
+
+    mock_git.checkout_branch.assert_called_with("my-feature")
+
+
+@pytest.mark.asyncio
+async def test_squash_merge_does_not_restore_branch_on_failure_when_feature_branch_was_current(mock_task, mock_git):
+    """SquashMerge does not restore branch when merge fails and current branch was the feature branch."""
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(return_value=mock_task.branch_name)
+    mock_git.merge_squash = AsyncMock(side_effect=Exception("merge failed"))
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        with pytest.raises(Exception, match="merge failed"):
+            await SquashMerge().execute(mock_task, mock_git)
+
+    mock_git.checkout_branch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_does_not_restore_branch_on_failure_when_feature_branch_was_current(mock_task, mock_git):
+    """RebaseMerge does not restore branch when ff merge fails and current branch was the feature branch."""
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(return_value=mock_task.branch_name)
+    mock_git.fast_forward_merge = AsyncMock(side_effect=Exception("ff merge failed"))
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        with pytest.raises(Exception, match="ff merge failed"):
+            await RebaseMerge().execute(mock_task, mock_git)
+
+    mock_git.checkout_branch.assert_not_called()
