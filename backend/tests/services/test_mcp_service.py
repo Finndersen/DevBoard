@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.api.schemas.mcp import MCPServerDetailResponse, MCPToolUpdate
+from devboard.api.schemas.mcp import MCPServerDetailResponse, MCPToolUpdate, OAuthStatusResponse
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
 from devboard.db.models.mcp_server import (
     HttpMCPConfig,
@@ -15,6 +15,7 @@ from devboard.db.models.mcp_server import (
 )
 from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.services.mcp_service import MCPService
+from devboard.services.oauth_service import OAuthService
 
 
 @pytest.fixture
@@ -727,3 +728,248 @@ class TestMCPServiceRunTool:
             result = await mcp_service.run_tool(1, 1, {"param": "value"})
 
         assert result == "Success result"
+
+
+class TestMCPServiceOAuth:
+    """Tests for MCPService OAuth functionality."""
+
+    @pytest.fixture
+    def mock_oauth_service(self):
+        """Create a mock OAuthService."""
+        return Mock(spec=OAuthService)
+
+    @pytest.fixture
+    def mcp_service_with_oauth(self, mock_repository, mock_oauth_service):
+        """Create an MCPService instance with mocked repository and OAuth service."""
+        return MCPService(mcp_server_repository=mock_repository, oauth_service=mock_oauth_service)
+
+    @pytest.fixture
+    def sample_oauth_http_config(self):
+        """Create a sample HTTP MCP server configuration with OAuth."""
+        config = Mock(spec=MCPServerConfig)
+        config.id = 3
+        config.name = "Test OAuth Server"
+        config.server_type = MCPServerType.HTTP
+        oauth_config = HttpMCPConfig(
+            url="https://oauth.example.com",
+            auth_type="oauth",
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            scopes="read write",
+        )
+        config.config = oauth_config
+        config.config_json = oauth_config.model_dump()
+        config.last_verified_at = None
+        config.last_verified_success = None
+        config.last_verified_error = None
+        config.tools = []
+        return config
+
+    @pytest.mark.asyncio
+    async def test_create_lifecycle_manager_without_oauth_for_stdio(self, mcp_service_with_oauth, sample_stdio_config):
+        """Test that _create_lifecycle_manager creates MCPLifecycleManager without OAuth for STDIO configs."""
+        sample_stdio_config.config = StdioMCPConfig(command="npx", args=["-y", "@test/server"])
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_lifecycle_class:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle_class.return_value = mock_lifecycle
+
+            result = await mcp_service_with_oauth._create_lifecycle_manager(sample_stdio_config)
+
+            assert result == mock_lifecycle
+            mock_lifecycle_class.assert_called_once_with(sample_stdio_config, capture_stderr=False)
+
+    @pytest.mark.asyncio
+    async def test_create_lifecycle_manager_without_oauth_for_non_oauth_http(
+        self, mcp_service_with_oauth, sample_http_config
+    ):
+        """Test that _create_lifecycle_manager creates MCPLifecycleManager without OAuth for non-OAuth HTTP configs."""
+        sample_http_config.config = HttpMCPConfig(url="https://example.com", auth_type="bearer", bearer_token="token")
+
+        with patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_lifecycle_class:
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle_class.return_value = mock_lifecycle
+
+            result = await mcp_service_with_oauth._create_lifecycle_manager(sample_http_config)
+
+            assert result == mock_lifecycle
+            mock_lifecycle_class.assert_called_once_with(sample_http_config, capture_stderr=False)
+
+    @pytest.mark.asyncio
+    async def test_create_lifecycle_manager_with_oauth_provider(
+        self, mcp_service_with_oauth, mock_oauth_service, sample_oauth_http_config
+    ):
+        """Test that _create_lifecycle_manager creates MCPLifecycleManager with OAuth provider for OAuth HTTP configs."""
+        mock_oauth_provider = Mock()
+
+        with (
+            patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_lifecycle_class,
+            patch("devboard.services.mcp_service.create_oauth_provider") as mock_create_oauth,
+        ):
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle_class.return_value = mock_lifecycle
+            mock_create_oauth.return_value = mock_oauth_provider
+
+            result = await mcp_service_with_oauth._create_lifecycle_manager(sample_oauth_http_config)
+
+            assert result == mock_lifecycle
+            mock_create_oauth.assert_called_once_with(
+                server_id=3,
+                server_url="https://oauth.example.com",
+                oauth_service=mock_oauth_service,
+                backend_base_url="http://localhost:8000",
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                scopes="read write",
+            )
+            mock_lifecycle_class.assert_called_once_with(
+                sample_oauth_http_config, oauth_provider=mock_oauth_provider, capture_stderr=False
+            )
+
+    def test_get_oauth_status_returns_none_for_stdio_server(self, mcp_service_with_oauth, sample_stdio_config):
+        """Test that _get_oauth_status returns None for non-OAuth servers (STDIO)."""
+        sample_stdio_config.config = StdioMCPConfig(command="npx", args=["-y", "@test/server"])
+
+        result = mcp_service_with_oauth._get_oauth_status(sample_stdio_config)
+
+        assert result is None
+
+    def test_get_oauth_status_returns_none_for_non_oauth_http_server(self, mcp_service_with_oauth, sample_http_config):
+        """Test that _get_oauth_status returns None for non-OAuth HTTP servers."""
+        sample_http_config.config = HttpMCPConfig(url="https://example.com", auth_type="bearer", bearer_token="token")
+
+        result = mcp_service_with_oauth._get_oauth_status(sample_http_config)
+
+        assert result is None
+
+    def test_get_oauth_status_with_tokens_not_expired(
+        self, mcp_service_with_oauth, mock_oauth_service, sample_oauth_http_config
+    ):
+        """Test that _get_oauth_status returns correct status when tokens exist and are not expired."""
+        with patch.object(OAuthService, "generate_mcp_provider_key", return_value="mcp_server_3"):
+            mock_oauth_service.get_tokens.return_value = Mock()  # Tokens exist
+            mock_oauth_service.is_token_expired.return_value = False
+            mock_oauth_service.get_client_info.return_value = Mock()  # Client info exists
+
+            result = mcp_service_with_oauth._get_oauth_status(sample_oauth_http_config)
+
+            assert result == OAuthStatusResponse(
+                has_tokens=True,
+                token_expired=False,
+                has_client_info=True,
+            )
+            mock_oauth_service.get_tokens.assert_called_once_with("mcp_server_3")
+            mock_oauth_service.is_token_expired.assert_called_once_with("mcp_server_3")
+            mock_oauth_service.get_client_info.assert_called_once_with("mcp_server_3")
+
+    def test_get_oauth_status_with_tokens_expired(
+        self, mcp_service_with_oauth, mock_oauth_service, sample_oauth_http_config
+    ):
+        """Test that _get_oauth_status returns correct status when tokens exist but are expired."""
+        with patch.object(OAuthService, "generate_mcp_provider_key", return_value="mcp_server_3"):
+            mock_oauth_service.get_tokens.return_value = Mock()  # Tokens exist
+            mock_oauth_service.is_token_expired.return_value = True
+            mock_oauth_service.get_client_info.return_value = None  # No client info
+
+            result = mcp_service_with_oauth._get_oauth_status(sample_oauth_http_config)
+
+            assert result == OAuthStatusResponse(
+                has_tokens=True,
+                token_expired=True,
+                has_client_info=False,
+            )
+
+    def test_get_oauth_status_without_tokens(
+        self, mcp_service_with_oauth, mock_oauth_service, sample_oauth_http_config
+    ):
+        """Test that _get_oauth_status returns correct status when no tokens exist."""
+        with patch.object(OAuthService, "generate_mcp_provider_key", return_value="mcp_server_3"):
+            mock_oauth_service.get_tokens.return_value = None  # No tokens
+            mock_oauth_service.get_client_info.return_value = None
+
+            result = mcp_service_with_oauth._get_oauth_status(sample_oauth_http_config)
+
+            assert result == OAuthStatusResponse(
+                has_tokens=False,
+                token_expired=False,
+                has_client_info=False,
+            )
+            # is_token_expired should not be called when no tokens exist
+            mock_oauth_service.is_token_expired.assert_not_called()
+
+    def test_get_oauth_status_returns_none_when_no_oauth_service(self, mock_repository, sample_oauth_http_config):
+        """Test that _get_oauth_status returns None when MCPService has no OAuth service."""
+        mcp_service_no_oauth = MCPService(mcp_server_repository=mock_repository, oauth_service=None)
+
+        result = mcp_service_no_oauth._get_oauth_status(sample_oauth_http_config)
+
+        assert result is None
+
+    def test_get_server_detail_includes_oauth_status(
+        self, mcp_service_with_oauth, mock_repository, mock_oauth_service, sample_oauth_http_config
+    ):
+        """Test that get_server_detail includes oauth_status for OAuth servers."""
+        mock_repository.get_by_id_with_tools.return_value = sample_oauth_http_config
+
+        with patch.object(OAuthService, "generate_mcp_provider_key", return_value="mcp_server_3"):
+            mock_oauth_service.get_tokens.return_value = Mock()
+            mock_oauth_service.is_token_expired.return_value = False
+            mock_oauth_service.get_client_info.return_value = Mock()
+
+            result = mcp_service_with_oauth.get_server_detail(3)
+
+            assert result is not None
+            assert result.oauth_status is not None
+            assert result.oauth_status == OAuthStatusResponse(
+                has_tokens=True,
+                token_expired=False,
+                has_client_info=True,
+            )
+
+    def test_get_server_detail_no_oauth_status_for_stdio(
+        self, mcp_service_with_oauth, mock_repository, sample_stdio_config
+    ):
+        """Test that get_server_detail does not include oauth_status for STDIO servers."""
+        sample_stdio_config.config = StdioMCPConfig(command="npx", args=["-y", "@test/server"])
+        mock_repository.get_by_id_with_tools.return_value = sample_stdio_config
+
+        result = mcp_service_with_oauth.get_server_detail(1)
+
+        assert result is not None
+        assert result.oauth_status is None
+
+    @pytest.mark.asyncio
+    async def test_verify_uses_create_lifecycle_manager(
+        self, mcp_service_with_oauth, mock_repository, sample_oauth_http_config, mock_oauth_service
+    ):
+        """Test that verify() uses _create_lifecycle_manager for OAuth servers."""
+        mock_repository.get_by_id.return_value = sample_oauth_http_config
+        mock_repository.get_by_id_with_tools.return_value = sample_oauth_http_config
+        mock_repository.get_tools_by_server_id.return_value = []
+
+        mock_session = AsyncMock()
+        mock_list_result = Mock()
+        mock_list_result.tools = []
+        mock_session.list_tools.return_value = mock_list_result
+
+        mock_oauth_provider = Mock()
+
+        with (
+            patch("devboard.services.mcp_service.MCPLifecycleManager") as mock_lifecycle_class,
+            patch("devboard.services.mcp_service.create_oauth_provider") as mock_create_oauth,
+        ):
+            mock_lifecycle = AsyncMock()
+            mock_lifecycle.__aenter__.return_value = mock_session
+            mock_lifecycle.__aexit__.return_value = None
+            mock_lifecycle_class.return_value = mock_lifecycle
+            mock_create_oauth.return_value = mock_oauth_provider
+
+            result = await mcp_service_with_oauth.verify(3)
+
+            # Verify that create_oauth_provider was called
+            mock_create_oauth.assert_called_once()
+            # Verify that MCPLifecycleManager was created with oauth_provider and capture_stderr
+            mock_lifecycle_class.assert_called_once_with(
+                sample_oauth_http_config, oauth_provider=mock_oauth_provider, capture_stderr=True
+            )
+            assert isinstance(result, MCPServerDetailResponse)
