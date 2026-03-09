@@ -702,13 +702,15 @@ class GitRepoIntegration:
         return await self._run_git_command(["rev-parse", "HEAD"])
 
     async def has_uncommitted_changes(self) -> bool:
-        """Check if there are uncommitted changes in the working directory.
+        """Check if there are staged or unstaged changes in the working directory.
+
+        Untracked files are excluded since they don't block git operations like merge or checkout.
 
         Returns:
             True if there are uncommitted changes, False otherwise
         """
         output = await self._run_git_command(
-            ["status", "--porcelain"],
+            ["status", "--porcelain", "-uno"],
             raise_on_error=False,
         )
         return bool(output)

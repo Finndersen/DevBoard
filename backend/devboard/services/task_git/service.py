@@ -199,10 +199,9 @@ class TaskGitService:
                 message=f"Branch {task.branch_name} has no new commits - already merged or up-to-date with {task.base_branch}",
             )
 
-        release_result = await git.release_branch_from_worktree(task.branch_name)
-        if release_result.worktree_path:
-            logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
-
+        # Check for uncommitted changes in base branch workdir BEFORE releasing
+        # the feature branch, to avoid leaving the worktree in detached HEAD state
+        # if this check fails.
         checkout_path = await git.get_checked_out_location(task.base_branch)
         if checkout_path:
             base_git = GitRepoIntegration(checkout_path)
@@ -212,6 +211,10 @@ class TaskGitService:
                     merge_method=merge_method,
                     message=f"Cannot merge: the base branch '{task.base_branch}' working directory at '{checkout_path}' has uncommitted changes. Please commit or stash your changes first.",
                 )
+
+        release_result = await git.release_branch_from_worktree(task.branch_name)
+        if release_result.worktree_path:
+            logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
 
         strategy = get_merge_strategy(merge_method)
         try:

@@ -94,6 +94,8 @@ async def test_merge_blocked_when_base_branch_workdir_has_uncommitted_changes(
         message="Cannot merge: the base branch 'main' working directory at '/worktrees/main' has uncommitted changes. Please commit or stash your changes first.",
     )
     mock_worktree_git.has_uncommitted_changes.assert_called_once()
+    # Branch should NOT be released when the check fails (would leave worktree in detached HEAD)
+    mock_git.release_branch_from_worktree.assert_not_called()
 
 
 @pytest.mark.asyncio
