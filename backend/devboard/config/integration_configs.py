@@ -1,5 +1,7 @@
 """Configuration classes for external service integrations."""
 
+from typing import Literal
+
 from devboard.config.base import BaseConfig
 
 
@@ -10,6 +12,7 @@ class DevBoardConfig(BaseConfig):
     env_prefix = "DEVBOARD_"
 
     backend_base_url: str = "http://localhost:8000"
+    worktree_directory: Literal["central", "alongside"] = "central"
 
 
 class GitHubIntegrationConfig(BaseConfig):

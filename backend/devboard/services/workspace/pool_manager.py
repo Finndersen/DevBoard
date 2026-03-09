@@ -1,6 +1,7 @@
 """Worktree pool manager for allocating, releasing and managing worktree slots."""
 
 import datetime
+import os
 from pathlib import Path
 
 import logfire
@@ -23,8 +24,9 @@ from devboard.services.workspace.types import (
 class WorktreePoolManager:
     """Manages the pool of worktree slots for a codebase."""
 
-    def __init__(self, worktree_slot_repo: WorktreeSlotRepository):
+    def __init__(self, worktree_slot_repo: WorktreeSlotRepository, worktree_directory: str = "central"):
         self.worktree_slot_repo = worktree_slot_repo
+        self.worktree_directory = worktree_directory
 
     def bootstrap_main_repo_slot(self, codebase: Codebase) -> WorktreeSlot:
         """Create the main repository slot (slot 0) if it doesn't exist."""
@@ -40,13 +42,20 @@ class WorktreePoolManager:
         )
 
     def _generate_new_worktree_path(self, codebase: Codebase) -> str:
-        """Generate a unique worktree path as sibling to main repo."""
-        path = Path(codebase.local_path)
-        parent = path.parent
-        base_name = path.name
-
+        """Generate a unique worktree path based on the configured worktree_directory setting."""
+        repo_path = Path(codebase.local_path)
+        repo_name = repo_path.name
         slot_number = len(self.worktree_slot_repo.get_by_codebase(codebase.id))
-        worktree_path = parent / f"{base_name}.worktree-{slot_number}"
+
+        if self.worktree_directory == "alongside":
+            worktree_path = repo_path.parent / f"{repo_name}.worktree-{slot_number}"
+        else:
+            # Default: central mode — place under DEVBOARD_HOME/worktrees/
+            devboard_home = Path(os.environ.get("DEVBOARD_HOME", str(Path.home() / ".devboard")))
+            central_base = devboard_home / "worktrees"
+            central_base.mkdir(parents=True, exist_ok=True)
+            worktree_path = central_base / f"{codebase.id}_{repo_name}.worktree-{slot_number}"
+
         return str(worktree_path)
 
     async def _create_worktree_for_slot(self, slot: WorktreeSlot, task: Task) -> None:

@@ -7,13 +7,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      # Application data persistence
-      - ~/.devboard/data:/app/data
+      # DevBoard data directory (database, worktrees, etc.)
+      - ~/.devboard:/devboard
       # Mount user's codebase directory (example - user will configure)
       - ./:/code/devboard
     environment:
-      - DATABASE_URL=sqlite:///app/data/devboard.db
+      - DEVBOARD_HOME=/devboard
+      - DATABASE_URL=sqlite:////devboard/data/devboard.db
     develop:
       watch:
         - action: sync

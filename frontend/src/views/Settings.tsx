@@ -52,6 +52,8 @@ export default function Settings() {
   const [configStatuses, setConfigStatuses] = useState<Record<string, { isValid: boolean; errors?: string[] }>>({})
   const [configDetailsCache, setConfigDetailsCache] = useState<Record<string, ConfigurationDetailResponse>>({})
   const [loadingStatuses, setLoadingStatuses] = useState(false)
+  const [devboardConfig, setDevboardConfig] = useState<ConfigurationDetailResponse | null>(null)
+  const [loadingDevboardConfig, setLoadingDevboardConfig] = useState(false)
 
   const handleConfigurationSave = (config: ConfigurationDetailResponse) => {
     console.log('Configuration saved:', config)
@@ -114,6 +116,19 @@ export default function Settings() {
     }
   }
 
+  const loadDevboardConfig = async () => {
+    try {
+      setLoadingDevboardConfig(true)
+      const configs = await apiClient.listConfigurations('devboard.')
+      const config = configs.find(c => c.key === 'devboard.main')
+      if (config) setDevboardConfig(config)
+    } catch (error) {
+      console.error('Failed to load devboard config:', error)
+    } finally {
+      setLoadingDevboardConfig(false)
+    }
+  }
+
   // Update URL when tab changes
   const handleTabChange = (newTab: 'integrations' | 'agents' | 'custom-fields' | 'general') => {
     setActiveTab(newTab)
@@ -129,6 +144,10 @@ export default function Settings() {
     } else {
       setSelectedConfig(null)
     }
+
+    if (newTab === 'general') {
+      loadDevboardConfig()
+    }
   }
 
   // Update activeTab when URL changes
@@ -141,6 +160,9 @@ export default function Settings() {
   useEffect(() => {
     if (activeTab === 'integrations') {
       loadConfigurationStatuses()
+    }
+    if (activeTab === 'general') {
+      loadDevboardConfig()
     }
   }, [activeTab])
 
@@ -328,6 +350,26 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+          </Card>
+
+          <Card padding="none">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className={`text-lg font-medium ${textColors.primary}`}>Workspace Configuration</h3>
+              <p className={`text-sm ${textColors.secondary} mt-1`}>Configure how task workspaces are managed</p>
+            </div>
+            {loadingDevboardConfig ? (
+              <div className="p-6 animate-pulse">
+                <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : devboardConfig ? (
+              <ConfigurationForm
+                config={devboardConfig}
+                title=""
+                onSave={(config) => setDevboardConfig(config)}
+              />
+            ) : (
+              <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Failed to load configuration.</div>
+            )}
           </Card>
         </div>
       )}

@@ -34,12 +34,13 @@ class WorkspaceAllocationService:
         worktree_slot_repo: WorktreeSlotRepository,
         task_repo: TaskRepository,
         conversation_repo: ConversationRepository,
+        worktree_directory: str = "central",
     ):
         self.worktree_slot_repo = worktree_slot_repo
         self.task_repo = task_repo
         self.conversation_repo = conversation_repo
         self.task_git_service = TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
-        self._pool_manager = WorktreePoolManager(worktree_slot_repo)
+        self._pool_manager = WorktreePoolManager(worktree_slot_repo, worktree_directory=worktree_directory)
 
     # Slot utility methods
 

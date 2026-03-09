@@ -13,8 +13,8 @@ COPY devboard/ ./devboard/
 # Install dependencies
 RUN uv sync --frozen
 
-# Create data directory for persistence
-RUN mkdir -p /app/data
+# Create devboard data directory (used as fallback if volume not mounted)
+RUN mkdir -p /devboard
 
 # Expose port
 EXPOSE 8000

@@ -2,7 +2,7 @@
 
 import json
 import os
-from typing import Any, TypeVar, Union, get_args, get_origin
+from typing import Any, Literal, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError, computed_field
 from pydantic.fields import FieldInfo
@@ -29,7 +29,7 @@ class ConfigurationFieldInfo(BaseModel):
     """Information about a single configuration field with explicit value sources."""
 
     name: str
-    type: str  # "string", "boolean", "integer", "number"
+    type: str  # "string", "boolean", "integer", "number", "enum"
     required: bool
     description: str | None = None
     env_value: Any | None = None  # Value from environment variable
@@ -37,6 +37,7 @@ class ConfigurationFieldInfo(BaseModel):
     default_value: Any | None = None  # Value from schema default
     is_secret: bool = False
     env_var_name: str | None = None
+    enum_values: list[str] | None = None
 
     @computed_field
     @property
@@ -204,10 +205,13 @@ class ConfigService:
             db_value = db_data.get(field_name) if field_name in db_data else None
             default_value = field_info.default if field_info.default is not PydanticUndefined else None
 
+            field_type = self._get_field_type(field_info)
+            enum_values = self._get_enum_values(field_info) if field_type == "enum" else None
+
             fields.append(
                 ConfigurationFieldInfo(
                     name=field_name,
-                    type=self._get_field_type(field_info),
+                    type=field_type,
                     required=field_info.is_required(),
                     description=field_info.description,
                     env_value=env_value,
@@ -215,6 +219,7 @@ class ConfigService:
                     default_value=default_value,
                     is_secret=self._is_secret_field(field_name),
                     env_var_name=env_var_name,
+                    enum_values=enum_values,
                 )
             )
 
@@ -250,8 +255,11 @@ class ConfigService:
             non_none_args = [arg for arg in args if arg is not type(None)]
             if len(non_none_args) == 1:
                 annotation = non_none_args[0]
+                origin = get_origin(annotation)
 
-        if annotation is str:
+        if origin is Literal:
+            return "enum"
+        elif annotation is str:
             return "string"
         elif annotation is bool:
             return "boolean"
@@ -261,6 +269,19 @@ class ConfigService:
             return "number"
         else:
             return "string"  # Default fallback
+
+    def _get_enum_values(self, field_info: FieldInfo) -> list[str]:
+        """Get the allowed values for a Literal-typed field."""
+        annotation = field_info.annotation
+        origin = get_origin(annotation)
+
+        if origin is Union:
+            args = get_args(annotation)
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            if len(non_none_args) == 1:
+                annotation = non_none_args[0]
+
+        return [str(v) for v in get_args(annotation)]
 
     def _is_secret_field(self, field_name: str) -> bool:
         """Check if a field contains secret/sensitive data."""

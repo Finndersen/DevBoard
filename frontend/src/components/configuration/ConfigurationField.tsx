@@ -84,6 +84,22 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
             }}
           />
         )
+      case 'enum':
+        return (
+          <select
+            id={field.name}
+            name={field.name}
+            required={field.required}
+            disabled={isInputDisabled}
+            className={baseClasses}
+            value={typeof value === 'boolean' ? String(value) : (value || '')}
+            onChange={(e) => onChange(field.name, e.target.value)}
+          >
+            {field.enum_values?.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        )
       case 'string':
       default:
         if (field.is_secret) {

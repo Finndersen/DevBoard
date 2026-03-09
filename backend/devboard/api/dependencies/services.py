@@ -17,6 +17,7 @@ from devboard.api.dependencies.repositories import (
     get_task_repository,
     get_worktree_slot_repository,
 )
+from devboard.config.integration_configs import DevBoardConfig
 from devboard.context_providers.registry import context_provider_registry
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
@@ -122,21 +123,28 @@ def get_task_git_service(
 
 def get_pool_manager(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+    config_service: ConfigService = Depends(get_config_service),
 ) -> WorktreePoolManager:
     """Get WorktreePoolManager instance."""
-    return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo)
+    config = config_service.get_config(DevBoardConfig)
+    worktree_directory = config.worktree_directory if config else "central"
+    return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_directory=worktree_directory)
 
 
 def get_workspace_allocation_service(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    config_service: ConfigService = Depends(get_config_service),
 ) -> WorkspaceAllocationService:
     """Get WorkspaceAllocationService instance."""
+    config = config_service.get_config(DevBoardConfig)
+    worktree_directory = config.worktree_directory if config else "central"
     return WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
         task_repo=task_repo,
         conversation_repo=conversation_repo,
+        worktree_directory=worktree_directory,
     )
 
 

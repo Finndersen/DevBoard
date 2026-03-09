@@ -1,6 +1,7 @@
 """Tests for ConfigService."""
 
 import json
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -241,3 +242,71 @@ class TestConfigService:
         assert len(configs) == 2
         assert "test.simple" in configs
         assert "test.complex" in configs
+
+
+# =============================================================================
+# Enum field support tests
+# =============================================================================
+
+
+class EnumTestConfig(BaseConfig):
+    """Test configuration with an enum field."""
+
+    mode: Literal["central", "alongside"] = "central"
+
+    env_prefix = "ENUM_TEST_"
+    config_key = "test.enum"
+
+
+class TestEnumFieldSupport:
+    """Test enum/Literal field type detection and enum_values population."""
+
+    @pytest.fixture
+    def enum_registry(self):
+        registry = MagicMock()
+        registry.get.return_value = EnumTestConfig
+        registry.list_keys.return_value = ["test.enum"]
+        return registry
+
+    def test_get_field_type_returns_enum_for_literal(self, mock_config_repository, enum_registry):
+        """_get_field_type returns 'enum' for Literal-annotated fields."""
+        mock_config_repository.get_by_key.return_value = None
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=enum_registry,
+            env_vars={},
+        )
+
+        result = service.get_config_details(EnumTestConfig)
+
+        mode_field = next(f for f in result.fields if f.name == "mode")
+        assert mode_field.type == "enum"
+
+    def test_get_config_details_populates_enum_values(self, mock_config_repository, enum_registry):
+        """get_config_details populates enum_values from Literal args."""
+        mock_config_repository.get_by_key.return_value = None
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=enum_registry,
+            env_vars={},
+        )
+
+        result = service.get_config_details(EnumTestConfig)
+
+        mode_field = next(f for f in result.fields if f.name == "mode")
+        assert mode_field.enum_values == ["central", "alongside"]
+
+    def test_non_enum_field_has_no_enum_values(self, mock_config_repository, mock_registry):
+        """Non-enum fields have enum_values=None."""
+        mock_config_repository.get_by_key.return_value = None
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=mock_registry,
+            env_vars={"TEST_API_TOKEN": "token"},
+        )
+
+        result = service.get_config_details(SimpleTestConfig)
+
+        api_token_field = next(f for f in result.fields if f.name == "api_token")
+        assert api_token_field.type == "string"
+        assert api_token_field.enum_values is None

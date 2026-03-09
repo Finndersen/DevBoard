@@ -413,7 +413,7 @@ export interface ArchitectureGenerationResponse {
 
 export interface ConfigurationFieldInfo {
   name: string
-  type: 'string' | 'boolean' | 'integer' | 'number'
+  type: 'string' | 'boolean' | 'integer' | 'number' | 'enum'
   required: boolean
   description?: string
   env_value?: unknown
@@ -423,6 +423,7 @@ export interface ConfigurationFieldInfo {
   env_var_name?: string
   is_overridden: boolean
   effective_value: unknown
+  enum_values?: string[]
 }
 
 export interface ConfigurationDetailResponse {
