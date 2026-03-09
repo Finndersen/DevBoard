@@ -277,7 +277,7 @@ class TestClaudeClient:
         pydantic_tool = Tool(simple_tool, name="simple_tool")
 
         # Create wrapper using a ClaudeClient instance
-        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        client = ClaudeClient(load_settings=False)
         wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test the wrapper
@@ -302,7 +302,7 @@ class TestClaudeClient:
         pydantic_tool = Tool(dict_tool, name="dict_tool")
 
         # Create wrapper using a ClaudeClient instance
-        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        client = ClaudeClient(load_settings=False)
         wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test the wrapper
@@ -326,7 +326,7 @@ class TestClaudeClient:
         pydantic_tool = Tool(typed_tool, name="typed_tool")
 
         # Create wrapper using a ClaudeClient instance
-        client = ClaudeClient(enable_concurrent_execution=False, load_settings=False)
+        client = ClaudeClient(load_settings=False)
         wrapper = client._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
         # Test with valid arguments

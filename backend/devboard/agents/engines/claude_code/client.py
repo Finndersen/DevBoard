@@ -8,20 +8,18 @@ from typing import Any, TypedDict
 
 import logfire
 from claude_agent_sdk import (
-    AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
     Message,
     ResultMessage,
-    ToolUseBlock,
     create_sdk_mcp_server,
     tool,
 )
 from claude_agent_sdk.types import McpSdkServerConfig, PermissionMode, SystemPromptPreset
+from mcp.types import ToolAnnotations
 from pydantic_ai import Tool
-from pydantic_core import ValidationError
 
-from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, load_env_from_settings, normalize_tool_name
+from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, load_env_from_settings
 
 # All Claude Code builtin tools
 CLAUDE_BUILTIN_TOOLS: set[str] = {
@@ -86,7 +84,6 @@ class ClaudeClient:
     - Custom system prompts
     - Tool filtering via allowed_builtin_tools
     - Streaming and non-streaming execution modes
-    - Parallel tool execution for concurrent tool calls
     """
 
     def __init__(
@@ -100,7 +97,6 @@ class ClaudeClient:
         cwd: str | None = None,
         plan_mode: bool = False,
         load_settings: bool = True,
-        enable_concurrent_execution: bool = True,
     ):
         """Initialize Claude Code client.
 
@@ -113,15 +109,9 @@ class ClaudeClient:
             model: Optional model to use (e.g., "claude-sonnet-4-5-20250929")
             cwd: Optional working directory for Claude Code operations
             load_settings: Whether to load local, project and user-level .settings.json and CLAUDE.md files
-            enable_concurrent_execution: Enable concurrent execution of multiple tool calls
         """
         self.session_id = session_id
         self._tools = tools or []
-        self._enable_concurrent_execution = enable_concurrent_execution
-
-        # Concurrent execution tracking
-        self._tool_execution_cache: dict[str, asyncio.Future[ClaudeToolContent]] = {}
-        self._tool_execution_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
         # Validate allowed_builtin_tools
         if allowed_builtin_tools:
@@ -207,16 +197,17 @@ class ClaudeClient:
             tool_name = pydantic_tool.name
 
             # Create wrapper that converts the function to Claude Code format
-            if self._enable_concurrent_execution:
-                wrapper_func = self._create_tool_result_retrieval_func(pydantic_tool)
-            else:
-                wrapper_func = self._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
+            wrapper_func = self._create_tool_execution_wrapper(pydantic_tool, validate_args=True)
 
             # Wrap with the @tool decorator
+            # readOnlyHint=True signals to the CLI that these tools don't modify their
+            # environment, enabling concurrent execution of multiple tool calls.
+            # All function tools are read-only by design (write operations go through virtual tools).
             sdk_tool = tool(
                 name=tool_name,
                 description=pydantic_tool.description,
                 input_schema=pydantic_tool.function_schema.json_schema,
+                annotations=ToolAnnotations(readOnlyHint=True),
             )(wrapper_func)
             sdk_tools.append(sdk_tool)
             custom_tool_names.append(f"mcp__{BUILTIN_TOOLS_MCP_NAME}__{tool_name}")
@@ -265,125 +256,6 @@ class ClaudeClient:
                     return {"content": [{"type": "text", "text": str(result)}]}
 
         return normal_wrapper
-
-    def _create_tool_result_retrieval_func(
-        self,
-        pydantic_tool: Tool,
-    ) -> Callable[[dict[str, Any]], Awaitable[ClaudeToolContent]]:
-        """
-        Create a tool function that does not actually execute the tool but retrieves its result from the tool task.
-        :param pydantic_tool:
-        :return:
-        """
-
-        # Concurrent execution wrapper - returns cached results
-        async def retrieve_tool_result(args: dict[str, Any]) -> ClaudeToolContent:
-            # Get the tool_use_id from the queue (order-based correlation)
-            tool_name_expected, tool_use_id = await self._tool_execution_queue.get()
-            with logfire.span(
-                f"Retrieving result for tool: {pydantic_tool.name}()",
-                tool_call_id=tool_use_id,
-            ):
-                # Verify tool name matches
-                if tool_name_expected != pydantic_tool.name:
-                    error_msg = (
-                        f"Tool name mismatch in MCP call: expected {tool_name_expected}, got {pydantic_tool.name}"
-                    )
-                    logfire.error(error_msg, tool_use_id=tool_use_id)
-                    raise RuntimeError(error_msg)
-
-                # Get cached result
-                if tool_use_id not in self._tool_execution_cache:
-                    error_msg = f"No cached result found for tool_use_id {tool_use_id}"
-                    logfire.error(error_msg, tool_name=pydantic_tool.name)
-                    raise RuntimeError(error_msg)
-
-                # Wait for the result (may already be complete)
-                result = await self._tool_execution_cache[tool_use_id]
-
-                # Clean up the cache entry
-                del self._tool_execution_cache[tool_use_id]
-
-                return result
-
-        return retrieve_tool_result
-
-    def _find_tool_by_name(self, tool_name: str) -> Tool | None:
-        """Find a tool by its name, handling MCP prefixes.
-
-        Args:
-            tool_name: Tool name, possibly with MCP prefix (e.g., "mcp__builtin_tools__search")
-
-        Returns:
-            Tool instance if found, None otherwise
-        """
-        # Remove MCP prefix if present (e.g., "mcp__builtin_tools__search" -> "search")
-        clean_name = normalize_tool_name(tool_name)
-
-        for pydantic_tool in self._tools:
-            if pydantic_tool.name == clean_name:
-                return pydantic_tool
-        return None
-
-    async def _execute_tool_concurrently(
-        self,
-        tool: Tool,
-        tool_args: dict[str, Any],
-    ) -> ClaudeToolContent:
-        """Execute a tool asynchronously so its result can be retrieved later.
-
-        Args:
-            tool: PydanticAI Tool instance to execute
-            tool_args: Validated input arguments for the tool
-
-        Returns:
-            Tool execution result in Claude Code format
-        """
-        wrapper = self._create_tool_execution_wrapper(tool, validate_args=False)
-        formatted_result = await wrapper(tool_args)
-        return formatted_result
-
-    async def _execute_concurrent_mcp_tool(self, tool_block: ToolUseBlock) -> None:
-        """
-        Launch async execution for a single tool use block.
-        If tool name or arguments are invalid, do not create a task since the MCP client should also fail validation
-        and not actually make the tool call.
-
-        Args:
-            tool_block: ToolUseBlock to execute concurrently
-        """
-        # Find the tool
-        tool = self._find_tool_by_name(tool_block.name)
-        if not tool:
-            logfire.warn(f"Invalid tool name: '{tool_block.name}'", tool_use_id=tool_block.id)
-            return
-
-        try:
-            validated_args = tool.function_schema.validator.validate_python(tool_block.input)
-        except ValidationError as e:
-            logfire.warn(f"Invalid arguments for tool '{tool_block.name}'", tool_use_id=tool_block.id, error=e)
-            return
-
-        logfire.debug(
-            "Launching concurrent execution for tool",
-            tool_use_id=tool_block.id,
-            tool_name=tool_block.name,
-        )
-
-        # Create async task for this tool execution with pre-validated args
-        task = asyncio.create_task(
-            self._execute_tool_concurrently(
-                tool=tool,
-                tool_args=validated_args,
-            )
-        )
-
-        # Cache the task (future) by tool_use_id
-        self._tool_execution_cache[tool_block.id] = task
-
-        # Add to queue for order-based correlation
-        # Store (tool_name, tool_use_id) so we can match MCP calls
-        await self._tool_execution_queue.put((normalize_tool_name(tool_block.name), tool_block.id))
 
     async def run(self, user_query: str) -> ClaudeCodeResult:
         """Execute a query and return a single result.
@@ -471,7 +343,6 @@ class ClaudeClient:
                             async for message in client.receive_response():
                                 message_desc = describe_message(message)
                                 logfire.info(f"Received message: {message_desc}")
-                                await self._start_running_any_mcp_tools(message)
                                 await queue.put(message)
                         except asyncio.CancelledError:
                             # Consumer disconnected during streaming.
@@ -511,17 +382,6 @@ class ClaudeClient:
                 task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-
-    async def _start_running_any_mcp_tools(self, message: Message):
-        # Launch concurrent tool executions if enabled
-        if self._enable_concurrent_execution and isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, ToolUseBlock) and self._is_mcp_tool(block.name):
-                    await self._execute_concurrent_mcp_tool(block)
-
-    @staticmethod
-    def _is_mcp_tool(tool_name: str) -> bool:
-        return "__" in tool_name and tool_name.split("__")[0] == "mcp"
 
     @staticmethod
     async def _wait_for_subprocess_flush(client: ClaudeSDKClient, timeout: float = 5.0) -> None:
