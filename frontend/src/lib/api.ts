@@ -655,7 +655,7 @@ export interface OpenPRItem {
   pr_number: number
   title: string
   repo_full_name: string
-  codebase_id: number
+  codebase_id: number | null
   pr_url: string
   mergeable_state: string | null
   task_id: number | null

@@ -27,7 +27,6 @@ export interface TabState {
 interface UIState {
   tabs: TabState[]
   activeTabId: string | null
-  navigationMenuOpen: boolean
   navigationCompactMode: boolean
   visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
   shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
@@ -43,8 +42,6 @@ interface UIActions {
   markTabVisited: (tabId: string) => void
 
   // Navigation menu
-  toggleNavigationMenu: () => void
-  setNavigationMenuOpen: (open: boolean) => void
   setNavigationCompactMode: (compact: boolean) => void
   toggleNavigationCompactMode: () => void
 
@@ -68,7 +65,6 @@ export const useUIStore = create<UIStore>()(
       // Initial state
       tabs: [],
       activeTabId: null,
-      navigationMenuOpen: true,
       navigationCompactMode: false,
       visitedTabs: new Set<string>(),
       shouldPushHistory: false,
@@ -191,18 +187,6 @@ export const useUIStore = create<UIStore>()(
       },
 
       // Navigation menu
-      toggleNavigationMenu: () => {
-        set((draft) => {
-          draft.navigationMenuOpen = !draft.navigationMenuOpen
-        })
-      },
-
-      setNavigationMenuOpen: (open) => {
-        set((draft) => {
-          draft.navigationMenuOpen = open
-        })
-      },
-
       setNavigationCompactMode: (compact) => {
         set((draft) => {
           draft.navigationCompactMode = compact
@@ -259,7 +243,6 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
-        navigationMenuOpen: state.navigationMenuOpen,
         navigationCompactMode: state.navigationCompactMode
       })
     }

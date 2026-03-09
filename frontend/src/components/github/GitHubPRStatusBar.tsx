@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowPathIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { useOpenPRs } from '../../hooks/useGitHubPRs'
 import { useUIStore } from '../../stores/uiStore'
@@ -6,11 +7,11 @@ import { apiClient } from '../../lib/api'
 import type { OpenPRItem, PRDetailResponse } from '../../lib/api'
 
 function getStatusDotClass(mergeableState: string | null): string {
-  switch (mergeableState) {
-    case 'clean':
+  switch (mergeableState?.toUpperCase()) {
+    case 'CLEAN':
       return 'bg-green-500'
-    case 'dirty':
-    case 'unstable':
+    case 'DIRTY':
+    case 'UNSTABLE':
       return 'bg-red-500'
     default:
       return 'bg-yellow-500'
@@ -24,14 +25,26 @@ function getRepoShortName(fullName: string): string {
 
 interface PRDetailPopoverProps {
   pr: OpenPRItem
+  anchorRef: React.RefObject<HTMLElement | null>
   onClose: () => void
 }
 
-function PRDetailPopover({ pr, onClose }: PRDetailPopoverProps) {
+function PRDetailPopover({ pr, anchorRef, onClose }: PRDetailPopoverProps) {
   const [detail, setDetail] = useState<PRDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  useEffect(() => {
+    if (anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+      })
+    }
+  }, [anchorRef])
 
   useEffect(() => {
     let cancelled = false
@@ -99,10 +112,13 @@ function PRDetailPopover({ pr, onClose }: PRDetailPopoverProps) {
     }
   }
 
-  return (
+  if (!position) return null
+
+  return createPortal(
     <div
       ref={popoverRef}
-      className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 p-3"
+      className="fixed w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 p-3"
+      style={{ top: position.top, left: position.left }}
     >
       {loading && (
         <div className="flex items-center justify-center py-4">
@@ -164,15 +180,16 @@ function PRDetailPopover({ pr, onClose }: PRDetailPopoverProps) {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
 export default function GitHubPRStatusBar() {
   const { data, loading, error, refetch } = useOpenPRs()
   const openTab = useUIStore(s => s.openTab)
-  const [expandedPR, setExpandedPR] = useState<{ codebaseId: number; prNumber: number } | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [expandedPR, setExpandedPR] = useState<string | null>(null)
+  const pillRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   const handleRefresh = useCallback(() => {
     setExpandedPR(null)
@@ -180,10 +197,13 @@ export default function GitHubPRStatusBar() {
   }, [refetch])
 
   const handlePillClick = (pr: OpenPRItem) => {
-    if (expandedPR?.codebaseId === pr.codebase_id && expandedPR?.prNumber === pr.pr_number) {
+    // Detail popover requires codebase_id to fetch CI/review status
+    if (pr.codebase_id === null) return
+    const key = getPillKey(pr)
+    if (expandedPR === key) {
       setExpandedPR(null)
     } else {
-      setExpandedPR({ codebaseId: pr.codebase_id, prNumber: pr.pr_number })
+      setExpandedPR(key)
     }
   }
 
@@ -193,10 +213,16 @@ export default function GitHubPRStatusBar() {
     }
   }
 
+  const getPillKey = (pr: OpenPRItem) => `${pr.repo_full_name}#${pr.pr_number}`
+
   if (!data && !loading && !error) return null
 
+  const expandedPRData = expandedPR && data
+    ? data.prs.find(pr => getPillKey(pr) === expandedPR)
+    : null
+
   return (
-    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden" ref={containerRef}>
+    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
       {/* Refresh button */}
       <button
         onClick={handleRefresh}
@@ -218,24 +244,36 @@ export default function GitHubPRStatusBar() {
         <span className="text-xs text-gray-500 dark:text-gray-400">Loading PRs...</span>
       )}
 
+      {/* Error-only state (no PRs returned, only errors) */}
+      {data && data.prs.length === 0 && data.errors.length > 0 && !loading && (
+        <span className="text-xs text-red-500 dark:text-red-400" title={data.errors.join('\n')}>
+          PR status unavailable
+        </span>
+      )}
+
       {/* Empty state */}
-      {data && data.prs.length === 0 && !loading && (
+      {data && data.prs.length === 0 && data.errors.length === 0 && !loading && (
         <span className="text-xs text-gray-500 dark:text-gray-400">No open PRs</span>
       )}
 
       {/* PR pills */}
       {data && data.prs.length > 0 && (
         <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap min-w-0">
-          {data.prs.map(pr => (
-            <div key={`${pr.codebase_id}-${pr.pr_number}`} className="relative flex-shrink-0">
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
+          {data.prs.map(pr => {
+            const key = getPillKey(pr)
+            return (
+              <div
+                key={key}
+                ref={el => { if (el) pillRefs.current.set(key, el); else pillRefs.current.delete(key) }}
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-xs flex-shrink-0"
+              >
                 {/* Status dot */}
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDotClass(pr.mergeable_state)}`} />
 
-                {/* Clickable PR info */}
+                {/* Clickable PR info (expandable only when codebase is linked) */}
                 <button
                   onClick={() => handlePillClick(pr)}
-                  className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-gray-700 dark:text-gray-300 max-w-48"
+                  className={`flex items-center gap-1 transition-colors text-gray-700 dark:text-gray-300 max-w-48 ${pr.codebase_id !== null ? 'hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer' : 'cursor-default'}`}
                 >
                   <span className="font-medium whitespace-nowrap">{getRepoShortName(pr.repo_full_name)} #{pr.pr_number}</span>
                   <span className="truncate text-gray-500 dark:text-gray-400">{pr.title}</span>
@@ -260,14 +298,18 @@ export default function GitHubPRStatusBar() {
                   </button>
                 )}
               </div>
-
-              {/* Expanded detail popover */}
-              {expandedPR?.codebaseId === pr.codebase_id && expandedPR?.prNumber === pr.pr_number && (
-                <PRDetailPopover pr={pr} onClose={() => setExpandedPR(null)} />
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
+      )}
+
+      {/* Detail popover rendered via portal (only for PRs with a linked codebase) */}
+      {expandedPRData && expandedPRData.codebase_id !== null && (
+        <PRDetailPopover
+          pr={expandedPRData}
+          anchorRef={{ current: pillRefs.current.get(getPillKey(expandedPRData)) ?? null }}
+          onClose={() => setExpandedPR(null)}
+        />
       )}
     </div>
   )
