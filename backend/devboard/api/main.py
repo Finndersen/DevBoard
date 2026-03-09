@@ -1,13 +1,15 @@
 """Main FastAPI application."""
 
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import logfire
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from devboard.api.routers import (
     agents,
@@ -113,6 +115,20 @@ async def cleanup_stale_locks_on_startup():
         db.close()
 
 
+class RequestLifecycleMiddleware(BaseHTTPMiddleware):
+    """Log when requests arrive and complete with elapsed time."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        method = request.method
+        path = request.url.path
+        logfire.info(f"Request started: {method} {path}")
+        start = time.monotonic()
+        response = await call_next(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logfire.info(f"Request finished: {method} {path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
+        return response
+
+
 app = FastAPI(
     title="DevBoard API",
     description="AI-powered developer command centre",
@@ -130,6 +146,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(RequestLifecycleMiddleware)
 
 # Include routers
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])

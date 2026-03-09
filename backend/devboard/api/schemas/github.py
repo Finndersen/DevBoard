@@ -7,7 +7,7 @@ class OpenPRItem(BaseModel):
     pr_number: int
     title: str
     repo_full_name: str
-    codebase_id: int
+    codebase_id: int | None
     pr_url: str
     mergeable_state: str | None
     task_id: int | None

@@ -16,7 +16,7 @@ from devboard.api.schemas.github import (
 )
 from devboard.db.repositories import CodebaseRepository, TaskRepository
 from devboard.integrations.base import IntegrationConfigurationError, IntegrationError
-from devboard.integrations.github import GitHubIntegration, GitHubRepository
+from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
 
 router = APIRouter()
@@ -28,77 +28,58 @@ async def get_open_prs(
     task_repo: TaskRepository = Depends(get_task_repository),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> OpenPRsResponse:
-    """Get all open PRs across all GitHub-connected codebases."""
-    codebases = codebase_repo.get_all()
-    github_codebases = [cb for cb in codebases if cb.repository_url]
-
-    if not github_codebases:
-        return OpenPRsResponse(prs=[], errors=[])
-
+    """Get all non-draft open PRs authored by the current user."""
     # Get GitHub integration instance
     try:
         github = integration_service.get_integration_instance(GitHubIntegration)
     except IntegrationConfigurationError as e:
         return OpenPRsResponse(prs=[], errors=[str(e)])
 
-    # Fetch open PRs from all repos in parallel
-    async def fetch_prs_for_codebase(
-        cb_id: int, cb_name: str, repo_url: str
-    ) -> tuple[int, str, list[tuple[int, str, str, str | None]], str | None]:
-        try:
-            github_repo: GitHubRepository = await github.get_repository_from_url(repo_url)
-            pulls = await github_repo.list_open_pulls()
-            pr_data: list[tuple[int, str, str, str | None]] = [
-                (pr.number, pr.title, pr.html_url, pr.mergeable_state) for pr in pulls
-            ]
-            return cb_id, github_repo.full_name, pr_data, None
-        except Exception as e:
-            logfire.error(f"Error fetching PRs for codebase {cb_name}: {e}")
-            return cb_id, cb_name, [], str(e)
+    # Fetch all user's open PRs in a single GraphQL call
+    try:
+        all_user_prs = await github.get_user_open_pull_requests()
+    except Exception as e:
+        logfire.error(f"Error fetching user open PRs: {e}")
+        return OpenPRsResponse(prs=[], errors=[str(e)])
 
-    results = await asyncio.gather(
-        *[
-            fetch_prs_for_codebase(cb.id, cb.name, cb.repository_url)  # type: ignore[arg-type]
-            for cb in github_codebases
-        ],
-    )
+    # Build repo name → codebase_id lookup from configured codebases
+    codebases = codebase_repo.get_all()
+    github_codebases = [cb for cb in codebases if cb.repository_url]
 
-    # Build task lookup
+    repo_to_codebase: dict[str, int] = {}
+    for cb in github_codebases:
+        owner, repo = GitHubIntegration.parse_repo_url(cb.repository_url)  # type: ignore[arg-type]
+        repo_to_codebase[f"{owner}/{repo}".lower()] = cb.id
+
+    # Build task lookup for codebases we know about
     codebase_ids = [cb.id for cb in github_codebases]
-    tasks_with_prs = task_repo.get_tasks_with_open_prs(codebase_ids)
-    task_lookup: dict[tuple[int, int], tuple[int, str]] = {
-        (t.codebase_id, t.github_pr_number): (t.id, t.title)  # type: ignore[index]
-        for t in tasks_with_prs
-    }
+    task_lookup: dict[tuple[int, int], tuple[int, str]] = {}
+    if codebase_ids:
+        tasks_with_prs = task_repo.get_tasks_with_open_prs(codebase_ids)
+        task_lookup = {
+            (t.codebase_id, t.github_pr_number): (t.id, t.title)  # type: ignore[index]
+            for t in tasks_with_prs
+        }
 
+    # Include all PRs, enriching with codebase/task info when available
     prs: list[OpenPRItem] = []
-    errors: list[str] = []
-
-    for result in results:
-        if isinstance(result, Exception):
-            errors.append(str(result))
-            continue
-
-        cb_id, repo_full_name, pr_data, error = result
-        if error:
-            errors.append(f"{repo_full_name}: {error}")
-
-        for pr_number, title, pr_url, mergeable_state in pr_data:
-            task_info = task_lookup.get((cb_id, pr_number))
-            prs.append(
-                OpenPRItem(
-                    pr_number=pr_number,
-                    title=title,
-                    repo_full_name=repo_full_name,
-                    codebase_id=cb_id,
-                    pr_url=pr_url,
-                    mergeable_state=mergeable_state,
-                    task_id=task_info[0] if task_info else None,
-                    task_title=task_info[1] if task_info else None,
-                )
+    for pr in all_user_prs:
+        cb_id = repo_to_codebase.get(pr.repo_full_name.lower())
+        task_info = task_lookup.get((cb_id, pr.number)) if cb_id is not None else None
+        prs.append(
+            OpenPRItem(
+                pr_number=pr.number,
+                title=pr.title,
+                repo_full_name=pr.repo_full_name,
+                codebase_id=cb_id,
+                pr_url=pr.html_url,
+                mergeable_state=pr.mergeable_state,
+                task_id=task_info[0] if task_info else None,
+                task_title=task_info[1] if task_info else None,
             )
+        )
 
-    return OpenPRsResponse(prs=prs, errors=errors)
+    return OpenPRsResponse(prs=prs, errors=[])
 
 
 @router.get("/prs/{codebase_id}/{pr_number}/detail", response_model=PRDetailResponse)

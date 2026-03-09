@@ -1,18 +1,21 @@
 """Tests for GitHub integration methods."""
 
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from github import UnknownObjectException
 from github.PullRequestComment import PullRequestComment
 from github.PullRequestReview import PullRequestReview
 
-from devboard.integrations.base import ResourceNotFoundError
+from devboard.config.integration_configs import GitHubIntegrationConfig
+from devboard.integrations.base import IntegrationError, ResourceNotFoundError
 from devboard.integrations.github import (
     CommentThread,
+    GitHubIntegration,
     GitHubPR,
     GitHubRepository,
+    OpenPullRequest,
     PRFeedback,
     ReviewComment,
     ReviewWithComments,
@@ -648,3 +651,149 @@ class TestGitHubPRGetFeedback:
         assert thread.replies[0].id == 2  # Early reply
         assert thread.replies[1].id == 4  # Middle reply
         assert thread.replies[2].id == 3  # Late reply
+
+
+class TestGetUserOpenPullRequests:
+    """Tests for GitHubIntegration.get_user_open_pull_requests()."""
+
+    @pytest.fixture
+    def github_integration(self) -> GitHubIntegration:
+        config = GitHubIntegrationConfig(api_token="ghp_test_token", base_url="https://api.github.com")
+        with patch("devboard.integrations.github.Github"):
+            return GitHubIntegration(config)
+
+    @pytest.mark.asyncio
+    async def test_returns_open_prs(self, github_integration: GitHubIntegration):
+        graphql_response = {
+            "data": {
+                "search": {
+                    "nodes": [
+                        {
+                            "number": 42,
+                            "title": "Fix the thing",
+                            "url": "https://github.com/owner/repo/pull/42",
+                            "mergeable": "MERGEABLE",
+                            "mergeStateStatus": "CLEAN",
+                            "repository": {"nameWithOwner": "owner/repo"},
+                        },
+                        {
+                            "number": 7,
+                            "title": "Add feature",
+                            "url": "https://github.com/owner/other/pull/7",
+                            "mergeable": "CONFLICTING",
+                            "mergeStateStatus": "DIRTY",
+                            "repository": {"nameWithOwner": "owner/other"},
+                        },
+                    ]
+                }
+            }
+        }
+
+        mock_response = Mock()
+        mock_response.json.return_value = graphql_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await github_integration.get_user_open_pull_requests()
+
+        assert result == [
+            OpenPullRequest(
+                number=42,
+                title="Fix the thing",
+                html_url="https://github.com/owner/repo/pull/42",
+                mergeable_state="CLEAN",
+                repo_full_name="owner/repo",
+            ),
+            OpenPullRequest(
+                number=7,
+                title="Add feature",
+                html_url="https://github.com/owner/other/pull/7",
+                mergeable_state="DIRTY",
+                repo_full_name="owner/other",
+            ),
+        ]
+
+        mock_client.post.assert_called_once()
+        call_kwargs = mock_client.post.call_args
+        assert call_kwargs[0][0] == "https://api.github.com/graphql"
+        assert call_kwargs[1]["headers"]["Authorization"] == "Bearer ghp_test_token"
+
+    @pytest.mark.asyncio
+    async def test_skips_null_nodes(self, github_integration: GitHubIntegration):
+        graphql_response = {
+            "data": {
+                "search": {
+                    "nodes": [
+                        None,
+                        {
+                            "number": 1,
+                            "title": "Valid PR",
+                            "url": "https://github.com/owner/repo/pull/1",
+                            "mergeable": "MERGEABLE",
+                            "mergeStateStatus": "CLEAN",
+                            "repository": {"nameWithOwner": "owner/repo"},
+                        },
+                        None,
+                    ]
+                }
+            }
+        }
+
+        mock_response = Mock()
+        mock_response.json.return_value = graphql_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await github_integration.get_user_open_pull_requests()
+
+        assert len(result) == 1
+        assert result[0].number == 1
+
+    @pytest.mark.asyncio
+    async def test_graphql_errors_raise_integration_error(self, github_integration: GitHubIntegration):
+        graphql_response = {"errors": [{"message": "Something went wrong"}]}
+
+        mock_response = Mock()
+        mock_response.json.return_value = graphql_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(IntegrationError, match="GraphQL error"):
+                await github_integration.get_user_open_pull_requests()
+
+    @pytest.mark.asyncio
+    async def test_ghe_graphql_url(self):
+        config = GitHubIntegrationConfig(api_token="ghp_test", base_url="https://github.example.com/api/v3")
+        with patch("devboard.integrations.github.Github"):
+            integration = GitHubIntegration(config)
+
+        graphql_response = {"data": {"search": {"nodes": []}}}
+        mock_response = Mock()
+        mock_response.json.return_value = graphql_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await integration.get_user_open_pull_requests()
+
+        call_kwargs = mock_client.post.call_args
+        assert call_kwargs[0][0] == "https://github.example.com/api/graphql"

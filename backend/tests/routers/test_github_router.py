@@ -8,7 +8,7 @@ from devboard.db.models import Codebase, Configuration
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import CodebaseRepository, ConfigurationRepository
 from devboard.integrations.base import IntegrationConfigurationError, IntegrationError
-from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, PRStatus
+from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, OpenPullRequest, PRStatus
 
 
 @pytest.fixture
@@ -52,25 +52,15 @@ def codebase_with_repo(db_session, tmp_path):
     return codebase
 
 
-def _make_mock_pr(number: int, title: str, mergeable_state: str = "clean") -> Mock:
-    """Create a mock PyGithub PullRequest."""
-    pr = Mock()
-    pr.number = number
-    pr.title = title
-    pr.html_url = f"https://github.com/owner/repo/pull/{number}"
-    pr.mergeable_state = mergeable_state
-    return pr
+def _mock_github_with_prs(prs: list[OpenPullRequest]) -> Mock:
+    """Create a mock GitHubIntegration with get_user_open_pull_requests configured."""
+    mock_github = Mock()
+    mock_github.get_user_open_pull_requests = AsyncMock(return_value=prs)
+    return mock_github
 
 
 class TestGetOpenPRs:
-    def test_no_codebases_with_repo_url(self, client):
-        """Returns empty list when no codebases have repository_url."""
-        response = client.get("/api/github/open-prs")
-        assert response.status_code == 200
-        data = response.json()
-        assert data == {"prs": [], "errors": []}
-
-    def test_github_not_configured(self, client, codebase_with_repo):
+    def test_github_not_configured(self, client):
         """Returns error when GitHub integration is not configured."""
         response = client.get("/api/github/open-prs")
         assert response.status_code == 200
@@ -79,19 +69,26 @@ class TestGetOpenPRs:
         assert len(data["errors"]) == 1
         assert "configuration" in data["errors"][0].lower()
 
-    @patch("devboard.api.routers.github.GitHubIntegration")
-    def test_returns_open_prs(self, MockGitHubIntegration, client, codebase_with_repo, github_config):
-        """Returns open PRs from all codebases."""
-        mock_github = Mock()
-        mock_repo = Mock(spec=GitHubRepository)
-        mock_repo.full_name = "owner/repo"
-        mock_repo.list_open_pulls = AsyncMock(
-            return_value=[
-                _make_mock_pr(1, "Fix bug", "clean"),
-                _make_mock_pr(2, "Add feature", "dirty"),
+    def test_returns_open_prs(self, client, codebase_with_repo, github_config):
+        """Returns open PRs authored by the current user."""
+        mock_github = _mock_github_with_prs(
+            [
+                OpenPullRequest(
+                    number=1,
+                    title="Fix bug",
+                    html_url="https://github.com/owner/repo/pull/1",
+                    mergeable_state="CLEAN",
+                    repo_full_name="owner/repo",
+                ),
+                OpenPullRequest(
+                    number=2,
+                    title="Add feature",
+                    html_url="https://github.com/owner/repo/pull/2",
+                    mergeable_state="DIRTY",
+                    repo_full_name="owner/repo",
+                ),
             ]
         )
-        mock_github.get_repository_from_url = AsyncMock(return_value=mock_repo)
 
         with patch(
             "devboard.api.routers.github.IntegrationService.get_integration_instance",
@@ -111,19 +108,51 @@ class TestGetOpenPRs:
             "repo_full_name": "owner/repo",
             "codebase_id": codebase_with_repo.id,
             "pr_url": "https://github.com/owner/repo/pull/1",
-            "mergeable_state": "clean",
+            "mergeable_state": "CLEAN",
             "task_id": None,
             "task_title": None,
         }
 
         pr2 = data["prs"][1]
         assert pr2["pr_number"] == 2
-        assert pr2["mergeable_state"] == "dirty"
+        assert pr2["mergeable_state"] == "DIRTY"
 
-    @patch("devboard.api.routers.github.GitHubIntegration")
-    def test_correlates_prs_with_tasks(
-        self, MockGitHubIntegration, client, db_session, codebase_with_repo, github_config
-    ):
+    def test_enriches_prs_with_codebase_info(self, client, codebase_with_repo, github_config):
+        """PRs from configured codebases get codebase_id, others get null."""
+        mock_github = _mock_github_with_prs(
+            [
+                OpenPullRequest(
+                    number=1,
+                    title="Our repo PR",
+                    html_url="https://github.com/owner/repo/pull/1",
+                    mergeable_state="CLEAN",
+                    repo_full_name="owner/repo",
+                ),
+                OpenPullRequest(
+                    number=5,
+                    title="Other repo PR",
+                    html_url="https://github.com/other/project/pull/5",
+                    mergeable_state="CLEAN",
+                    repo_full_name="other/project",
+                ),
+            ]
+        )
+
+        with patch(
+            "devboard.api.routers.github.IntegrationService.get_integration_instance",
+            return_value=mock_github,
+        ):
+            response = client.get("/api/github/open-prs")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["prs"]) == 2
+        assert data["prs"][0]["pr_number"] == 1
+        assert data["prs"][0]["codebase_id"] == codebase_with_repo.id
+        assert data["prs"][1]["pr_number"] == 5
+        assert data["prs"][1]["codebase_id"] is None
+
+    def test_correlates_prs_with_tasks(self, client, db_session, codebase_with_repo, github_config):
         """PRs are correlated with DevBoard tasks by pr_number + codebase_id."""
         from devboard.db.models.document import DocumentType
         from devboard.db.repositories import DocumentRepository, ProjectRepository, TaskRepository
@@ -148,11 +177,17 @@ class TestGetOpenPRs:
         task.github_pr_number = 1
         db_session.commit()
 
-        mock_github = Mock()
-        mock_repo = Mock(spec=GitHubRepository)
-        mock_repo.full_name = "owner/repo"
-        mock_repo.list_open_pulls = AsyncMock(return_value=[_make_mock_pr(1, "Fix bug")])
-        mock_github.get_repository_from_url = AsyncMock(return_value=mock_repo)
+        mock_github = _mock_github_with_prs(
+            [
+                OpenPullRequest(
+                    number=1,
+                    title="Fix bug",
+                    html_url="https://github.com/owner/repo/pull/1",
+                    mergeable_state="CLEAN",
+                    repo_full_name="owner/repo",
+                ),
+            ]
+        )
 
         with patch(
             "devboard.api.routers.github.IntegrationService.get_integration_instance",
@@ -166,53 +201,12 @@ class TestGetOpenPRs:
         assert data["prs"][0]["task_id"] == task.id
         assert data["prs"][0]["task_title"] == "My Task"
 
-    @patch("devboard.api.routers.github.GitHubIntegration")
-    def test_per_codebase_error_handling(
-        self, MockGitHubIntegration, client, db_session, codebase_with_repo, github_config, tmp_path
-    ):
-        """Errors from one codebase don't prevent results from others."""
-        import subprocess
-
-        # Create a second codebase
-        codebase_path2 = tmp_path / "test-repo-2"
-        codebase_path2.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "init", "-b", "main"], cwd=str(codebase_path2), check=True, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@example.com"],
-            cwd=str(codebase_path2),
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(codebase_path2), check=True, capture_output=True)
-        (codebase_path2 / "README.md").write_text("# Test 2")
-        subprocess.run(["git", "add", "."], cwd=str(codebase_path2), check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=str(codebase_path2), check=True, capture_output=True)
-
-        codebase_repo = CodebaseRepository(db_session)
-        codebase2 = Codebase(
-            name="Test Repo 2",
-            description="Test 2",
-            local_path=str(codebase_path2),
-            repository_url="https://github.com/owner/repo2.git",
-        )
-        codebase2 = codebase_repo.create(codebase2)
-        db_session.commit()
-
+    def test_graphql_error_returns_error(self, client, codebase_with_repo, github_config):
+        """GraphQL errors are returned in the errors list."""
         mock_github = Mock()
-        mock_repo_ok = Mock(spec=GitHubRepository)
-        mock_repo_ok.full_name = "owner/repo"
-        mock_repo_ok.list_open_pulls = AsyncMock(return_value=[_make_mock_pr(1, "Good PR")])
-
-        call_count = 0
-
-        async def side_effect(url):
-            nonlocal call_count
-            call_count += 1
-            if "repo2" in url:
-                raise IntegrationError("API error")
-            return mock_repo_ok
-
-        mock_github.get_repository_from_url = AsyncMock(side_effect=side_effect)
+        mock_github.get_user_open_pull_requests = AsyncMock(
+            side_effect=IntegrationError("GitHub GraphQL error: rate limited")
+        )
 
         with patch(
             "devboard.api.routers.github.IntegrationService.get_integration_instance",
@@ -222,8 +216,7 @@ class TestGetOpenPRs:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data["prs"]) == 1
-        assert data["prs"][0]["title"] == "Good PR"
+        assert data["prs"] == []
         assert len(data["errors"]) == 1
 
 
@@ -239,8 +232,7 @@ class TestGetPRDetail:
         assert response.status_code == 400
         assert "repository URL" in response.json()["detail"]
 
-    @patch("devboard.api.routers.github.GitHubIntegration")
-    def test_returns_pr_detail(self, MockGitHubIntegration, client, codebase_with_repo, github_config):
+    def test_returns_pr_detail(self, client, codebase_with_repo, github_config):
         """Returns detailed PR status with CI checks and reviews."""
         mock_github = Mock()
         mock_repo = Mock(spec=GitHubRepository)
@@ -284,8 +276,7 @@ class TestGetPRDetail:
             "review_comment_count": 2,
         }
 
-    @patch("devboard.api.routers.github.GitHubIntegration")
-    def test_github_not_configured(self, MockGitHubIntegration, client, codebase_with_repo):
+    def test_github_not_configured(self, client, codebase_with_repo):
         """Returns 400 when GitHub integration is not configured."""
         with patch(
             "devboard.api.routers.github.IntegrationService.get_integration_instance",

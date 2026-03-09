@@ -3,10 +3,12 @@
 import asyncio
 import re
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+import httpx
 import logfire
 from github import (
     BadCredentialsException,
@@ -37,38 +39,35 @@ from .base import (
     ResourceNotFoundError,
 )
 
+# Dedicated thread pool for GitHub API calls to prevent thread pool starvation.
+# PyGithub calls can hang on 404 redirects/network issues, and if they share FastAPI's
+# default executor, they block all sync operations (including DB queries) for other endpoints.
+_github_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="github-api")
+
 PRState = Literal["open", "closed"]
 MergeableState = Literal["clean", "dirty", "blocked", "behind", "unstable", "unknown", "has_hooks"]
 CIState = Literal["success", "pending", "failure", "error"]
 
 
-async def _github_api_call[T](method: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+async def _github_api_call[T](method: Callable[..., T], *args: Any, label: str | None = None, **kwargs: Any) -> T:
     """Execute a synchronous PyGithub API call asynchronously in a thread pool.
 
     Wraps sync PyGithub methods to run in a thread pool executor, enabling proper
     async behavior and consistent error handling across all GitHub API calls.
-
-    Args:
-        method: The PyGithub method to call
-        *args: Positional arguments to pass to the method
-        **kwargs: Keyword arguments to pass to the method
-
-    Returns:
-        The result of the API call
-
-    Raises:
-        AuthenticationError: If GitHub authentication fails
-        RateLimitError: If GitHub rate limit exceeded
-        ResourceNotFoundError: If resource not found
-        IntegrationError: For other GitHub errors
     """
+    call_label = label or getattr(method, "__name__", "<unknown>")
 
     def _call() -> T:
         return method(*args, **kwargs)
 
     try:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _call)
+        return await asyncio.wait_for(
+            loop.run_in_executor(_github_executor, _call),
+            timeout=30.0,
+        )
+    except TimeoutError:
+        raise IntegrationError(f"GitHub API call timed out: {call_label}") from None
     except BadCredentialsException as e:
         raise AuthenticationError(f"GitHub authentication failed: {e}") from e
     except RateLimitExceededException as e:
@@ -76,7 +75,7 @@ async def _github_api_call[T](method: Callable[..., T], *args: Any, **kwargs: An
     except UnknownObjectException as e:
         raise ResourceNotFoundError(f"Resource not found: {e}") from e
     except GithubException as e:
-        logfire.error(f"GitHub API error in {method.__name__}: {e}")
+        logfire.error(f"GitHub API error in {call_label}: {e}")
         raise IntegrationError(f"GitHub error: {e}") from e
 
 
@@ -153,6 +152,17 @@ class PRFeedback:
     standalone_threads: list[CommentThread]
 
 
+@dataclass
+class OpenPullRequest:
+    """A user's open pull request fetched via GraphQL."""
+
+    number: int
+    title: str
+    html_url: str
+    mergeable_state: str | None
+    repo_full_name: str
+
+
 class GitHubPR:
     """Wrapper around PyGithub PullRequest with enhanced methods."""
 
@@ -183,8 +193,7 @@ class GitHubPR:
 
     async def get_comments(self) -> list[PullRequestComment]:
         """Get inline review comments for the pull request."""
-        comments = await _github_api_call(self._pr.get_review_comments)
-        return list(comments)
+        return await _github_api_call(lambda: list(self._pr.get_review_comments()), label="get_review_comments")
 
     async def get_reviews(self) -> list[PullRequestReview]:
         """Get reviews for the pull request.
@@ -192,8 +201,7 @@ class GitHubPR:
         Returns reviews with state (APPROVED, CHANGES_REQUESTED, COMMENTED, etc.),
         reviewer info, and review body.
         """
-        reviews = await _github_api_call(self._pr.get_reviews)
-        return list(reviews)
+        return await _github_api_call(lambda: list(self._pr.get_reviews()), label="get_reviews")
 
     async def get_feedback(self) -> PRFeedback:
         """Get comprehensive PR feedback including reviews with associated comment threads.
@@ -206,8 +214,8 @@ class GitHubPR:
         Returns:
             PRFeedback containing reviews with their comment threads and standalone threads
         """
-        raw_reviews = list(await _github_api_call(self._pr.get_reviews))
-        raw_comments = list(await _github_api_call(self._pr.get_review_comments))
+        raw_reviews = await _github_api_call(lambda: list(self._pr.get_reviews()), label="get_reviews")
+        raw_comments = await _github_api_call(lambda: list(self._pr.get_review_comments()), label="get_review_comments")
 
         # Convert raw comments to ReviewComment dataclass
         def to_review_comment(c: PullRequestComment) -> ReviewComment:
@@ -432,13 +440,11 @@ class GitHubRepository:
 
     async def list_branches(self) -> list[Branch]:
         """List branches in the repository."""
-        branches = await _github_api_call(self._repo.get_branches)
-        return list(branches)
+        return await _github_api_call(lambda: list(self._repo.get_branches()), label="list_branches")
 
     async def list_open_pulls(self) -> list[PullRequest]:
         """List all open pull requests for this repository."""
-        pulls = await _github_api_call(self._repo.get_pulls, state="open")
-        return list(pulls)
+        return await _github_api_call(lambda: list(self._repo.get_pulls(state="open")), label="list_open_pulls")
 
     async def find_pull_request_for_branch(self, head_branch: str) -> PullRequest | None:
         """Find an existing open PR for the given head branch.
@@ -451,10 +457,13 @@ class GitHubRepository:
         """
         # PyGithub expects head in format "owner:branch" for cross-repo PRs
         head = f"{self._repo.owner.login}:{head_branch}"
-        pulls = await _github_api_call(self._repo.get_pulls, state="open", head=head)
-        for pr in pulls:
-            return pr  # Return first match
-        return None
+
+        def _find_pr() -> PullRequest | None:
+            for pr in self._repo.get_pulls(state="open", head=head):
+                return pr
+            return None
+
+        return await _github_api_call(_find_pr)
 
     async def create_pull_request(
         self,
@@ -560,11 +569,61 @@ class GitHubIntegration(BaseIntegration):
         owner, repo = self.parse_repo_url(url)
         return await self.get_repository(owner, repo)
 
+    async def get_user_open_pull_requests(self) -> list[OpenPullRequest]:
+        """Fetch all open PRs authored by the authenticated user via GraphQL."""
+        query = """
+        {
+          search(query: "type:pr state:open author:@me draft:false", type: ISSUE, first: 100) {
+            nodes {
+              ... on PullRequest {
+                number
+                title
+                url
+                mergeable
+                mergeStateStatus
+                repository { nameWithOwner }
+              }
+            }
+          }
+        }
+        """
+        config = cast(GitHubIntegrationConfig, self.config)
+        base_url = config.base_url.rstrip("/")
+        if base_url == "https://api.github.com":
+            graphql_url = "https://api.github.com/graphql"
+        else:
+            graphql_url = base_url.replace("/api/v3", "/api/graphql")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                graphql_url,
+                json={"query": query},
+                headers={"Authorization": f"Bearer {config.api_token}"},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        if "errors" in data:
+            raise IntegrationError(f"GitHub GraphQL error: {data['errors']}")
+
+        nodes = data["data"]["search"]["nodes"]
+        return [
+            OpenPullRequest(
+                number=node["number"],
+                title=node["title"],
+                html_url=node["url"],
+                mergeable_state=node.get("mergeStateStatus"),
+                repo_full_name=node["repository"]["nameWithOwner"],
+            )
+            for node in nodes
+            if node
+        ]
+
     async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> list[Issue]:
         """Search issues across GitHub."""
         search_query = query
         if owner and repo:
             search_query += f" repo:{owner}/{repo}"
 
-        results = await _github_api_call(self.client.search_issues, search_query)
-        return list(results)
+        return await _github_api_call(lambda: list(self.client.search_issues(search_query)), label="search_issues")
