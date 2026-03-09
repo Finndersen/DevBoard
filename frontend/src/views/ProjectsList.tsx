@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PlusIcon, FolderIcon } from '@heroicons/react/24/outline'
-import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useProjects, useCreateProject } from '../hooks'
 import type { Project } from '../lib/api'
@@ -12,16 +11,11 @@ import ViewHeader from '../components/layout/ViewHeader'
 export default function ProjectsList() {
   const navigate = useNavigate()
   const { openTab } = useUIStore()
-  const { fetchProjects } = useDataStore()
 
   const { data: projects, loading, error, refetch } = useProjects()
   const { mutate: createProject, loading: creatingProject } = useCreateProject()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({ name: '', description: '' })
-
-  useEffect(() => {
-    fetchProjects()
-  }, [fetchProjects])
 
   const handleOpenProject = (project: Project) => {
     openTab({
@@ -48,7 +42,6 @@ export default function ProjectsList() {
         default_conversation_id: null
       })
       await refetch()
-      await fetchProjects()
       setShowCreateModal(false)
       setNewProject({ name: '', description: '' })
       navigate(`/projects/${createdProject.id}?tab=settings`)

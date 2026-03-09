@@ -31,9 +31,11 @@ export function useTaskEventHandlers({
   const specificationHandler = useCallback(async (toolName: string, _result: unknown) => {
     if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
       try {
+        console.log('[TaskDetail] specificationHandler: refetching spec and task')
         await refetchSpecification()
         await refetch()
         setActiveTab('specification')
+        console.log('[TaskDetail] specificationHandler: completed successfully')
       } catch (error) {
         console.error('Failed to refetch specification document:', error)
       }

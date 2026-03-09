@@ -31,7 +31,6 @@ interface DataState {
 interface DataActions {
   // Projects
   fetchProject: (projectId: string) => Promise<Project>
-  fetchProjects: () => Promise<Project[]>
   updateProject: (projectId: string, updates: Partial<Project>) => Promise<Project>
   deleteProject: (projectId: string) => Promise<void>
   setProject: (project: Project) => void
@@ -107,16 +106,6 @@ export const useDataStore = create<DataStore>()(
         })
         throw error
       }
-    },
-
-    fetchProjects: async () => {
-      const projects = await apiClient.getProjects()
-      set((draft) => {
-        projects.forEach(project => {
-          draft.projects.set(String(project.id), project)
-        })
-      })
-      return projects
     },
 
     updateProject: async (projectId, updates) => {

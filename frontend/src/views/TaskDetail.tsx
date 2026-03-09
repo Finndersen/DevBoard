@@ -124,6 +124,20 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }, [task?.conversation_id, eventHandlerRegistry, updateEventHandlerRegistry])
 
+  // Auto-migrate stream if conversation_id changes unexpectedly (e.g. from a refetch)
+  const prevTaskConversationIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    const currentId = task?.conversation_id ?? null
+    const prevId = prevTaskConversationIdRef.current
+    if (prevId !== null && currentId !== null && prevId !== currentId) {
+      console.warn('[TaskDetail] conversation_id changed unexpectedly, auto-migrating:', {
+        from: prevId, to: currentId
+      })
+      migrateStream(prevId, currentId)
+    }
+    prevTaskConversationIdRef.current = currentId
+  }, [task?.conversation_id, migrateStream])
+
   // Fetch task when id changes (supports both initial mount and tab switching with keep-mounted components)
   useEffect(() => {
     refetch()

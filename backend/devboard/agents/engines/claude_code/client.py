@@ -467,19 +467,31 @@ class ClaudeClient:
                         with logfire.span("claude_client.send_query", query=user_query):
                             await client.query(user_query)
 
-                        async for message in client.receive_response():
-                            message_desc = describe_message(message)
-                            logfire.info(f"Received message: {message_desc}")
-                            await self._start_running_any_mcp_tools(message)
-                            await queue.put(message)
+                        try:
+                            async for message in client.receive_response():
+                                message_desc = describe_message(message)
+                                logfire.info(f"Received message: {message_desc}")
+                                await self._start_running_any_mcp_tools(message)
+                                await queue.put(message)
+                        except asyncio.CancelledError:
+                            # Consumer disconnected during streaming.
+                            # Don't propagate - this would trigger __aexit__ cleanup that
+                            # closes stdin while MCP tool requests are still pending,
+                            # causing "Tool permission stream closed" errors in the session.
+                            logfire.info("SDK consumer cancelled during streaming")
 
                         await self._wait_for_subprocess_flush(client)
+            except asyncio.CancelledError:
+                # Second cancellation from consumer's finally block during
+                # _wait_for_subprocess_flush - expected and harmless since the
+                # SDK context has already exited cleanly above.
+                pass
             except Exception as e:
                 # Propagate exceptions to the consumer via the queue
                 await queue.put(e)
             finally:
-                # Signal completion (None sentinel) so consumer knows to stop
-                await queue.put(None)
+                with contextlib.suppress(asyncio.CancelledError):
+                    await queue.put(None)
 
         task = asyncio.create_task(_consume_sdk())
         try:
@@ -495,7 +507,8 @@ class ClaudeClient:
         finally:
             # If consumer stops early (e.g., client disconnect), cancel the SDK task.
             # The SDK task will handle its own cleanup in its own task context.
-            task.cancel()
+            if not task.done():
+                task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
@@ -527,6 +540,17 @@ class ClaudeClient:
             transport = getattr(query, "transport", None)
             if not transport:
                 return
+            # Wait for any in-flight SDK control request handlers to finish
+            # writing responses to the CLI before we close stdin.
+            # The SDK Query tracks pending responses in pending_control_responses.
+            pending = getattr(query, "pending_control_responses", None)
+            if isinstance(pending, dict) and pending:
+                logfire.debug(f"Waiting for {len(pending)} pending control responses before closing stdin")
+                for _ in range(50):  # Up to 5 seconds (50 * 0.1s)
+                    if not pending:
+                        break
+                    await asyncio.sleep(0.1)
+
             await transport.end_input()
             process = getattr(transport, "_process", None)
             if process and process.returncode is None:

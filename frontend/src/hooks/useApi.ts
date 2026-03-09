@@ -38,7 +38,7 @@ export function useApi<T>(
       setState({ data, loading: false, error: null })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      setState({ data: null, loading: false, error: errorMessage })
+      setState(prev => ({ ...prev, loading: false, error: errorMessage }))
     } finally {
       inFlightRef.current = false
     }

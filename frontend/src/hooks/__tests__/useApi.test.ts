@@ -124,6 +124,33 @@ describe('useApi', () => {
     expect(result.current.error).toBeNull()
   })
 
+  it('preserves existing data when refetch fails', async () => {
+    let callCount = 0
+    const apiCall = vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) return Promise.resolve({ id: 1, name: 'Original' })
+      return Promise.reject(new Error('Transient network error'))
+    })
+
+    const { result } = renderHook(() => useApi(apiCall))
+
+    // Initial load succeeds
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+    expect(result.current.data).toEqual({ id: 1, name: 'Original' })
+    expect(result.current.error).toBeNull()
+
+    // Refetch fails - data should be preserved
+    await act(async () => {
+      await result.current.refetch()
+    })
+
+    expect(result.current.data).toEqual({ id: 1, name: 'Original' })
+    expect(result.current.error).toBe('Transient network error')
+    expect(result.current.loading).toBe(false)
+  })
+
   it('allows setting data directly via setData', async () => {
     const apiCall = vi.fn().mockResolvedValue({ id: 1 })
 
