@@ -42,6 +42,12 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **read_codebase_files**: Read by path. No approval (read-only). Params: `file_paths`, `codebase_id`. Used by: All roles
 
+### Sub-Agent Tools
+
+**investigate_codebase**: Delegates codebase investigation queries to a specialised `CodebaseInvestigationAgentRole` sub-agent. No approval (read-only). Params: `codebase_name` (Literal of available codebases), `query` (specific question), `session_id` (optional, for session resumption). Used by: TaskImplementationRole. Returns JSON `{"result": ..., "session_id": ...}`.
+
+**review_code_changes**: Performs a comprehensive code review of all task changes via a `CodeReviewAgentRole` sub-agent. No approval. No params (context assembled from captured task). Used by: TaskImplementationRole. Evaluates plan alignment, code quality, architecture, test coverage, edge cases, and cross-component impact. Returns JSON `{"result": ..., "session_id": null}`.
+
 ### Shell Commands
 
 **execute_shell_command**: Execute with approval. Approval required. Params: `command`. Used by: TaskPlanningRole, TaskImplementationRole

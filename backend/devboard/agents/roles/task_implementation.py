@@ -14,7 +14,7 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
     create_text_search_tool,
 )
-from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
+from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import CustomFieldDefinition, Task
 from devboard.db.models.codebase import BranchHandling
@@ -46,6 +46,7 @@ WORKFLOW:
 - Make incremental changes following the plan's steps, updating the internal to-do list as progress is made
 - Validate changes through testing where appropriate
 - If docs/ directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating and missing or incorrect documentation
+- Once implementation is complete (including tests and docs), call `review_code_changes` to perform a self-review before finalisation. Address any Critical or Important findings before proceeding.
 
 IMPORTANT BEHAVIOUR GUIDELINES:
 - When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
@@ -119,6 +120,7 @@ class TaskImplementationAgentRole(AgentRole):
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
             create_task_codebase_investigation_tool(self.task, self.agent_config_service),
+            create_code_review_tool(self.task, self.agent_config_service, self.task_git_service),
             # Rebase tool for updating branch with latest base branch changes
             create_rebase_task_branch_tool(self.task, self.task_git_service),
         ]

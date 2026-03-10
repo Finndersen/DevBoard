@@ -7,12 +7,16 @@ from pydantic_ai import ModelRetry, Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
-from devboard.agents.roles import AgentRoleType
+from devboard.agents.roles import AgentRole, AgentRoleType
+from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
+from devboard.services.task_git.diff_service import TaskDiffService
 
-_active_investigation_sessions: set[str] = set()
+_active_sub_agent_sessions: set[str] = set()
+# Backwards-compatibility alias used by existing tests
+_active_investigation_sessions = _active_sub_agent_sessions
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
 Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
@@ -21,9 +25,91 @@ Query: {query}"""
 
 
 @dataclass
+class SubAgentResult:
+    """Result of a sub-agent execution."""
+
+    result: str
+    session_id: str | None
+
+
+@dataclass
 class CodebaseInvestigationContext:
     codebase: Codebase
     working_dir: str  # Allows specifying worktree working dir for the codebase
+
+
+async def run_sub_agent(
+    role: AgentRole,
+    role_type: AgentRoleType,
+    prompt: str,
+    agent_config_service: AgentConfigService,
+    working_dir: str,
+    session_id: str | None = None,
+) -> SubAgentResult:
+    """Execute a sub-agent with the given role and prompt.
+
+    Args:
+        role: The agent role instance defining the sub-agent's behaviour
+        role_type: Role type used for engine/model config resolution
+        prompt: The prompt to send to the sub-agent
+        agent_config_service: For resolving effective engine/model config
+        working_dir: Workspace directory (used by ClaudeCodeAgent)
+        session_id: Optional session ID for resuming a prior ClaudeCodeAgent session
+
+    Returns:
+        SubAgentResult with the final text response and optional session_id
+    """
+    if session_id is not None:
+        if session_id in _active_sub_agent_sessions:
+            raise ModelRetry(
+                f"session_id '{session_id}' is already in use by a concurrent investigation. "
+                "Concurrent calls with the same session_id are not supported. "
+                "Either wait for the previous investigation to complete before making a follow-up call with this session_id, "
+                "or omit session_id to start independent parallel investigations."
+            )
+        _active_sub_agent_sessions.add(session_id)
+
+    try:
+        config = agent_config_service.get_effective_config(role_type)
+
+        if config.engine == AgentEngine.INTERNAL:
+            # Lazy import to avoid circular dependency
+            from devboard.agents.engines.internal.agent import InternalAgent
+
+            if config.model is None:
+                raise ValueError(
+                    f"Error: Could not find language model '{config.model_id}' for internal {role_type} agent"
+                )
+            agent = InternalAgent(role=role, model=config.model)
+        elif config.engine == AgentEngine.CLAUDE_CODE:
+            # Lazy import to avoid circular dependency
+            from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+
+            agent = ClaudeCodeAgent(
+                role=role,
+                model=config.model,
+                working_dir=working_dir,
+                session_id=session_id,
+            )
+        else:
+            raise ValueError(f"Error: Unsupported engine '{config.engine}' for {role_type} agent")
+
+        events = await agent.run(prompt)
+
+        final_response = events[-1]
+        if not (isinstance(final_response, TextMessage) and final_response.role == MessageRole.AGENT):
+            raise ValueError(
+                f"Expected final response from {role_type} agent to be TextMessage, but got {final_response}"
+            )
+
+        result_session_id: str | None = None
+        if config.engine == AgentEngine.CLAUDE_CODE:
+            result_session_id = agent.session_id  # type: ignore[union-attr]
+
+        return SubAgentResult(result=final_response.text_content, session_id=result_session_id)
+    finally:
+        if session_id is not None:
+            _active_sub_agent_sessions.discard(session_id)
 
 
 def create_multi_codebase_investigation_tool(
@@ -96,79 +182,19 @@ def create_multi_codebase_investigation_tool(
             - `result`: The investigation answer with file paths, code references, and implementation details.
             - `session_id`: An opaque session identifier to pass back on follow-up calls, or null if unavailable.
         """
-        if session_id is not None:
-            if session_id in _active_investigation_sessions:
-                raise ModelRetry(
-                    f"session_id '{session_id}' is already in use by a concurrent investigation. "
-                    "Concurrent calls with the same session_id are not supported. "
-                    "Either wait for the previous investigation to complete before making a follow-up call with this session_id, "
-                    "or omit session_id to start independent parallel investigations."
-                )
-            _active_investigation_sessions.add(session_id)
-
-        try:
-            # Get the selected codebase
-            codebase_config = codebase_map[codebase_name]
-            working_dir = codebase_config.working_dir
-            # Get investigation agent configuration
-            config = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
-
-            # Create investigation role with selected codebase
-            investigation_role = CodebaseInvestigationAgentRole(
-                codebase=codebase_config.codebase, worktree_dir=working_dir
-            )
-
-            # Create and run investigation agent
-            if config.engine == AgentEngine.INTERNAL:
-                # Lazy import to avoid circular dependency
-                from devboard.agents.engines.internal.agent import InternalAgent
-
-                # NOTE: Session resumption is not supported for InternalAgent. To support it, one would
-                # need to store and return `investigation_agent.conversation_history` (a `list[ModelMessage]`)
-                # keyed by an investigation ID (e.g. in-memory cache with TTL, or a `Conversation` DB
-                # record via `AgentExecutionService`), and pass it back on subsequent calls.
-                if config.model is None:
-                    raise ValueError(
-                        f"Error: Could not find language model '{config.model_id}' for internal investigation agent"
-                    )
-                investigation_agent = InternalAgent(
-                    role=investigation_role,
-                    model=config.model,
-                )
-            elif config.engine == AgentEngine.CLAUDE_CODE:
-                # Lazy import to avoid circular dependency
-                from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
-
-                investigation_agent = ClaudeCodeAgent(
-                    role=investigation_role,
-                    model=config.model,
-                    working_dir=working_dir,
-                    session_id=session_id,
-                )
-            else:
-                raise ValueError(f"Error: Unsupported engine '{config.engine}' for investigation agent")
-
-            # Execute investigation
-            prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
-            events = await investigation_agent.run(prompt)
-
-            # Extract final text response from events
-            # Look for the last agent message
-            final_response = events[-1]
-            if not (isinstance(final_response, TextMessage) and final_response.role == MessageRole.AGENT):
-                raise ValueError(
-                    f"Expected final response from investigation agent to be TextMessage, but got {final_response}"
-                )
-
-            # Extract session_id for ClaudeCodeAgent (populated during streaming from SystemMessage)
-            result_session_id: str | None = None
-            if config.engine == AgentEngine.CLAUDE_CODE:
-                result_session_id = investigation_agent.session_id  # type: ignore[union-attr]
-
-            return json.dumps({"result": final_response.text_content, "session_id": result_session_id})
-        finally:
-            if session_id is not None:
-                _active_investigation_sessions.discard(session_id)
+        codebase_config = codebase_map[codebase_name]
+        working_dir = codebase_config.working_dir
+        investigation_role = CodebaseInvestigationAgentRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
+        prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
+        sub_agent_result = await run_sub_agent(
+            role=investigation_role,
+            role_type=AgentRoleType.INVESTIGATION,
+            prompt=prompt,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+            session_id=session_id,
+        )
+        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.session_id})
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
@@ -211,3 +237,80 @@ def create_task_codebase_investigation_tool(
             )
 
     return create_multi_codebase_investigation_tool(codebase_contexts, agent_config_service)
+
+
+def create_code_review_tool(
+    task: Task,
+    agent_config_service: AgentConfigService,
+    task_diff_service: TaskDiffService,
+) -> Tool:
+    """Create a code review tool that performs a self-review of all task changes.
+
+    Args:
+        task: The task being reviewed
+        agent_config_service: AgentConfigService for getting configured LLM
+        task_diff_service: Service for retrieving the full task diff
+    """
+
+    async def review_code_changes() -> str:
+        """Perform a comprehensive code review of all changes made so far in this task.
+
+        Use this tool after completing initial implementation to get a thorough review
+        of all code changes before finalisation (e.g. before creating a PR or merging).
+
+        The review agent will evaluate:
+        - Alignment with the task specification and implementation plan
+        - Code quality, patterns, and conventions
+        - Architecture and design decisions
+        - Test coverage adequacy
+        - Potential issues, edge cases, and risks
+        - Cross-component impact
+
+        Returns:
+            A JSON string with:
+            - `result`: Structured review with Summary and Findings (Critical/Important/Suggestions)
+            - `session_id`: Always null (code review is single-shot)
+        """
+        working_dir = task.get_current_workspace_dir()
+        diff = await task_diff_service.get_task_all_changes(task)
+
+        if not diff.files:
+            return json.dumps({"result": "No changes to review — the task diff is empty.", "session_id": None})
+
+        full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
+
+        role = CodeReviewAgentRole(codebase=task.codebase, worktree_dir=working_dir)
+
+        assert task.implementation_plan is not None, "Task must have an implementation plan for code review"
+
+        prompt = f"""Please review the following task changes.
+
+## Task Specification
+
+{task.specification.content}
+
+## Implementation Plan
+
+{task.implementation_plan.content}
+
+## Diff Summary
+
+{diff.format_summary()}
+
+## Full Unified Diff
+
+```diff
+{full_diff_content}
+```
+"""
+
+        sub_agent_result = await run_sub_agent(
+            role=role,
+            role_type=AgentRoleType.CODE_REVIEW,
+            prompt=prompt,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+        )
+        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.session_id})
+
+    return Tool(function=review_code_changes, name="review_code_changes")

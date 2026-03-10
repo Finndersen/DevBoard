@@ -10,6 +10,7 @@ from .github_tools import create_get_pr_feedback_tool, create_github_pr_tool
 from .rebase_tools import create_rebase_task_branch_tool
 from .render_html import create_render_html_tool
 from .sub_agent_tools import (
+    create_code_review_tool,
     create_multi_codebase_investigation_tool,
 )
 from .task_completion_tools import (
@@ -32,6 +33,7 @@ __all__ = [
     "create_list_tasks_tool",
     "create_merge_pr_and_complete_task_tool",
     "create_github_pr_tool",
+    "create_code_review_tool",
     "create_multi_codebase_investigation_tool",
     "create_directory_tree_tool",
     "create_document_edit_tool",

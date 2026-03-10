@@ -120,6 +120,20 @@ Roles define agent behavior independently of the execution engine, encapsulating
 - Engine Support: CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_pr_review.py`
 
+**CodebaseInvestigationRole** (sub-agent only):
+- Purpose: Investigate codebase implementation details in response to `investigate_codebase` tool calls
+- Context: Codebase metadata and directory tree; query passed at run time
+- Tools: `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file`
+- Engine Support: INTERNAL or CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/codebase_investigation.py`
+
+**CodeReviewRole** (sub-agent only):
+- Purpose: Perform self-review of task implementation changes before finalisation
+- Context: Codebase metadata; task spec, implementation plan, and full unified diff passed at run time
+- Tools: `search_file_content`, `search_files_by_name`, `search_code_structure`, `show_directory_tree`, `read_file` (read-only)
+- Engine Support: INTERNAL or CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/code_review.py`
+
 ### Dynamic Role Selection
 
 The system automatically selects the appropriate role based on entity type and state.
