@@ -230,9 +230,9 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 h-full overflow-auto">
+    <div className="max-w-4xl mx-auto flex flex-col h-full gap-6">
       {/* Header */}
-      <div className="space-y-2">
+      <div className="space-y-2 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Codebase Details</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           View and manage codebase information
@@ -245,6 +245,9 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+
+      {/* Tab Content - scrollable area */}
+      <div className="flex-1 overflow-auto min-h-0">
 
       {/* Details Tab Content */}
       {activeTab === 'details' && (
@@ -869,6 +872,8 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
       {activeTab === 'worktrees' && (
         <WorktreeSlotsTab codebaseId={id} />
       )}
+
+      </div>
     </div>
   )
 }
