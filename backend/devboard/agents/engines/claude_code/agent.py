@@ -1,6 +1,7 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
 import datetime
+import difflib
 from collections.abc import AsyncIterator
 
 import logfire
@@ -79,10 +80,17 @@ def _verify_result_message(result: str | None, last_assistant_text: str | None) 
             result_preview=result[:300],
         )
     elif result.strip() != last_assistant_text.strip():
+        diff = "".join(
+            difflib.unified_diff(
+                last_assistant_text.splitlines(keepends=True),
+                result.splitlines(keepends=True),
+                fromfile="last_assistant_text",
+                tofile="result",
+            )
+        )
         logfire.error(
             "ResultMessage.result differs from last AssistantMessage text - final answer may be lost",
-            result_preview=result[:300],
-            last_text_preview=last_assistant_text[:300],
+            diff=diff,
         )
 
 

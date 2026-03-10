@@ -353,9 +353,8 @@ class ClaudeClient:
 
                         await self._wait_for_subprocess_flush(client)
             except asyncio.CancelledError:
-                # Second cancellation from consumer's finally block during
-                # _wait_for_subprocess_flush - expected and harmless since the
-                # SDK context has already exited cleanly above.
+                # Consumer cancelled this task (e.g. client disconnect) before
+                # streaming completed. The SDK context exits cleanly via __aexit__.
                 pass
             except Exception as e:
                 # Propagate exceptions to the consumer via the queue
@@ -391,7 +390,7 @@ class ClaudeClient:
         which can kill the subprocess before it finishes writing the session file.
         By closing stdin early and waiting (shielded from cancellation), we let
         the subprocess flush and exit naturally. If this coroutine is cancelled,
-        we defer the cancellation until after the subprocess wait completes.
+        we still wait for the subprocess before returning.
         """
         try:
             query = getattr(client, "_query", None)
@@ -418,14 +417,16 @@ class ClaudeClient:
                 try:
                     await asyncio.wait_for(asyncio.shield(wait_task), timeout=timeout)
                 except asyncio.CancelledError:
-                    # Defer cancellation: let subprocess finish naturally before propagating.
-                    # Task.cancel() delivers only one CancelledError, so this await is safe.
+                    # Consumer cancelled us while we were waiting for the subprocess.
+                    # Wait for it to finish naturally — subprocess flush is the goal,
+                    # not propagating the cancellation.
                     with contextlib.suppress(TimeoutError, Exception):
                         await asyncio.wait_for(wait_task, timeout=timeout)
-                    raise
                 except TimeoutError:
                     pass
-        except asyncio.CancelledError:
-            raise
-        except Exception:
+        except (asyncio.CancelledError, Exception):
+            # Swallow all errors including CancelledError. Catching CancelledError here
+            # is critical: it consumes the cancellation (decrements _num_cancels_requested),
+            # so ClaudeSDKClient.__aexit__ can disconnect cleanly without hitting a second
+            # CancelledError and producing a cascading exception chain.
             pass
