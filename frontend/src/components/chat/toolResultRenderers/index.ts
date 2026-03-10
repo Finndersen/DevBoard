@@ -11,6 +11,7 @@ import type { ToolCall, ToolResult } from '../../../lib/api'
 
 import CreateTaskResultRenderer from './CreateTaskResultRenderer'
 import RenderHtmlToolDisplay from './RenderHtmlToolDisplay'
+import SubAgentResultRenderer from './SubAgentResultRenderer'
 
 /**
  * Props passed to all rich result renderer components.
@@ -33,6 +34,8 @@ export type RichResultRenderer = ComponentType<RichResultRendererProps>
  */
 const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
+  investigate_codebase: SubAgentResultRenderer,
+  review_code_changes: SubAgentResultRenderer,
 }
 
 /**

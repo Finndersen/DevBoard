@@ -661,6 +661,117 @@ describe('ToolCallDisplay', () => {
     })
   })
 
+  describe('Sub-Agent Result Renderers', () => {
+    const investigateToolCall: ToolCall = {
+      event_type: 'tool_call',
+      tool_call_id: 'call_investigate',
+      tool_name: 'investigate_codebase',
+      tool_args: { query: 'How does auth work?' },
+      timestamp: '2024-01-01T10:00:00Z',
+    }
+
+    const subAgentResult = (toolCall: ToolCall, resultContent: string, isError = false): ToolResult => ({
+      event_type: 'tool_result',
+      tool_call_id: toolCall.tool_call_id,
+      result_content: resultContent,
+      is_error: isError,
+      timestamp: '2024-01-01T10:00:05Z',
+    })
+
+    const validResultContent = JSON.stringify({
+      result: '## Summary\n\nThe auth module handles JWT tokens.\n\n- Token validation\n- User lookup',
+      session_id: 'session-abc-123',
+    })
+
+    it('renders investigate_codebase result as markdown when expanded', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByRole('heading', { name: 'Summary' })).toBeInTheDocument()
+      expect(screen.getByText(/auth module handles JWT tokens/)).toBeInTheDocument()
+    })
+
+    it('renders review_code_changes result as markdown when expanded', async () => {
+      const user = userEvent.setup()
+      const reviewToolCall: ToolCall = {
+        ...investigateToolCall,
+        tool_call_id: 'call_review',
+        tool_name: 'review_code_changes',
+      }
+      const reviewResult = JSON.stringify({
+        result: '## Review\n\nCode looks good.',
+        session_id: null,
+      })
+
+      render(<ToolCallDisplay toolCall={reviewToolCall} toolResult={subAgentResult(reviewToolCall, reviewResult)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+      expect(screen.getByText('Code looks good.')).toBeInTheDocument()
+    })
+
+    it('displays session_id when present', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Session: session-abc-123')).toBeInTheDocument()
+    })
+
+    it('does not display session_id when null', async () => {
+      const user = userEvent.setup()
+      const resultWithNullSession = JSON.stringify({
+        result: '## Summary\n\nSome result text.',
+        session_id: null,
+      })
+
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, resultWithNullSession)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.queryByText(/^Session:/)).not.toBeInTheDocument()
+    })
+
+    it('falls back to formatted JSON when result content has invalid shape', async () => {
+      const user = userEvent.setup()
+      const invalidShapeContent = JSON.stringify({
+        result: 123,  // Wrong type - should be string
+        session_id: 'session-abc-123',
+      })
+
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, invalidShapeContent)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText(/"result": 123/)).toBeInTheDocument()
+      expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+    })
+
+    it('falls back to plain text when result_content is not valid JSON', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, 'Not valid JSON')} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Not valid JSON')).toBeInTheDocument()
+      expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+    })
+
+    it('falls back to plain text for error results', async () => {
+      const user = userEvent.setup()
+      render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent, true)} />)
+
+      await user.click(screen.getByRole('button'))
+
+      expect(screen.getByText('Error:')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Summary' })).not.toBeInTheDocument()
+    })
+  })
+
   describe('Custom Tool Displays', () => {
     const renderHtmlToolCall: ToolCall = {
       event_type: 'tool_call',
