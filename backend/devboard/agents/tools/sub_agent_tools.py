@@ -287,15 +287,21 @@ def create_code_review_tool(
 
 ## Task Specification
 
+```
 {task.specification.content}
+```
 
 ## Implementation Plan
 
+```
 {task.implementation_plan.content}
+```
 
 ## Diff Summary
 
+```
 {diff.format_summary()}
+```
 
 ## Full Unified Diff
 
