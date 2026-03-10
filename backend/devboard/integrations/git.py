@@ -701,19 +701,34 @@ class GitRepoIntegration:
         # Return the new HEAD commit hash
         return await self._run_git_command(["rev-parse", "HEAD"])
 
-    async def has_uncommitted_changes(self) -> bool:
+    async def has_uncommitted_changes(self, include_untracked: bool = False) -> bool:
         """Check if there are staged or unstaged changes in the working directory.
 
-        Untracked files are excluded since they don't block git operations like merge or checkout.
+        Args:
+            include_untracked: When True, also detect untracked files. Default is False,
+                which excludes untracked files (e.g. allocation logic intentionally ignores them).
 
         Returns:
             True if there are uncommitted changes, False otherwise
         """
-        output = await self._run_git_command(
-            ["status", "--porcelain", "-uno"],
-            raise_on_error=False,
-        )
+        args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
+        output = await self._run_git_command(args, raise_on_error=False)
         return bool(output)
+
+    async def get_uncommitted_change_count(self, include_untracked: bool = False) -> int:
+        """Get the number of uncommitted changes in the working directory.
+
+        Args:
+            include_untracked: When True, also count untracked files.
+
+        Returns:
+            Number of changed/untracked files (0 means clean)
+        """
+        args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
+        output = await self._run_git_command(args, raise_on_error=False)
+        if not output:
+            return 0
+        return len([line for line in output.splitlines() if line.strip()])
 
     async def get_conflicted_files(self) -> list[str]:
         """Get list of files with unmerged conflicts.

@@ -272,6 +272,9 @@ class WorktreePoolManager:
                     title=slot.last_used_by_task.title,
                 )
 
+            slot_git = GitRepoIntegration(slot.path)
+            uncommitted_change_count = await slot_git.get_uncommitted_change_count(include_untracked=True)
+
             slot_data.append(
                 SlotInfo(
                     id=slot.id,
@@ -282,6 +285,8 @@ class WorktreePoolManager:
                     last_used_at=slot.last_used_at.isoformat() if slot.last_used_at else None,
                     locked_by_task=locked_by_task,
                     last_used_by_task=last_used_by_task,
+                    has_uncommitted_changes=uncommitted_change_count > 0,
+                    uncommitted_change_count=uncommitted_change_count,
                 )
             )
 

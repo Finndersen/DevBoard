@@ -7,8 +7,9 @@ from devboard.api.dependencies.repositories import (
     get_mcp_server_repository,
     get_project_repository,
     get_task_repository,
+    get_worktree_slot_repository,
 )
-from devboard.db.models import Codebase, Conversation, Document, MCPServerConfig, Project, Task
+from devboard.db.models import Codebase, Conversation, Document, MCPServerConfig, Project, Task, WorktreeSlot
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
@@ -16,6 +17,7 @@ from devboard.db.repositories import (
     MCPServerRepository,
     ProjectRepository,
     TaskRepository,
+    WorktreeSlotRepository,
 )
 
 
@@ -83,3 +85,14 @@ def get_verified_mcp_server_config(
     if not mcp_server_config:
         raise HTTPException(status_code=404, detail="MCP server config not found")
     return mcp_server_config
+
+
+def get_verified_worktree_slot(
+    slot_id: int,
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+) -> WorktreeSlot:
+    """Get a worktree slot by ID, raising 404 if not found."""
+    slot = worktree_slot_repo.get_by_id(slot_id)
+    if not slot:
+        raise HTTPException(status_code=404, detail="Worktree slot not found")
+    return slot

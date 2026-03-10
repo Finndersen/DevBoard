@@ -42,6 +42,8 @@ class SlotInfo:
     last_used_at: str | None
     locked_by_task: LockedByTaskInfo | None = None
     last_used_by_task: LastUsedByTaskInfo | None = None
+    has_uncommitted_changes: bool = False
+    uncommitted_change_count: int = 0
 
 
 @dataclass

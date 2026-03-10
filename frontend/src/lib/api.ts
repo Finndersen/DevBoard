@@ -327,7 +327,8 @@ export interface WorktreeSlot {
   last_used_at: string | null
   locked_by_task: TaskInfoSimple | null
   last_used_by_task: TaskInfoSimple | null
-  locked_at: string | null
+  has_uncommitted_changes: boolean
+  uncommitted_change_count: number
 }
 
 export interface TaskInfo {
@@ -1104,12 +1105,6 @@ export class ApiClient {
   async deleteWorktreeSlot(slotId: number | string, force: boolean = false): Promise<void> {
     return this.request<void>(`/api/worktree-slots/${slotId}?force=${force}`, {
       method: 'DELETE',
-    })
-  }
-
-  async reconcileWorktreePool(codebaseId: number | string): Promise<void> {
-    return this.request<void>(`/api/codebases/${codebaseId}/worktree-pool/reconcile`, {
-      method: 'POST',
     })
   }
 

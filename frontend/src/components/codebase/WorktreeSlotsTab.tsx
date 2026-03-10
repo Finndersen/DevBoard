@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { TrashIcon } from '@heroicons/react/24/outline'
 import { apiClient, type WorktreePoolStatus, type WorktreeSlot } from '../../lib/api'
-import { Card, StatusBadge } from '../ui'
+import { Card, StatusBadge, ConfirmDialog } from '../ui'
 import { textColors } from '../../styles/designSystem'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -13,6 +14,9 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
   const [poolStatus, setPoolStatus] = useState<WorktreePoolStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingSlotId, setDeletingSlotId] = useState<number | null>(null)
+  const [slotToDelete, setSlotToDelete] = useState<WorktreeSlot | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const loadPoolStatus = useCallback(async () => {
     setLoading(true)
@@ -44,8 +48,31 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
     return worktreeNumber ? `Worktree #${worktreeNumber}` : 'Worktree'
   }
 
+  const getDeleteTooltip = (slot: WorktreeSlot): string | undefined => {
+    if (slot.status === 'locked') return 'Cannot delete: slot is locked by a task'
+    if (slot.has_uncommitted_changes) return 'Cannot delete: worktree has uncommitted changes'
+    return undefined
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!slotToDelete) return
+    setDeletingSlotId(slotToDelete.id)
+    setDeleteError(null)
+    try {
+      await apiClient.deleteWorktreeSlot(slotToDelete.id)
+      setSlotToDelete(null)
+      await loadPoolStatus()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete worktree slot')
+    } finally {
+      setDeletingSlotId(null)
+    }
+  }
+
   const renderSlotCard = (slot: WorktreeSlot) => {
     const isLocked = slot.status === 'locked'
+    const isDeleteDisabled = isLocked || slot.has_uncommitted_changes || deletingSlotId === slot.id
+    const deleteTooltip = getDeleteTooltip(slot)
 
     return (
       <Card key={slot.id} className="border border-gray-200 dark:border-gray-700">
@@ -60,8 +87,23 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                 <StatusBadge variant={isLocked ? 'warning' : 'success'} size="sm">
                   {isLocked ? 'Locked' : 'Available'}
                 </StatusBadge>
+                {slot.has_uncommitted_changes && (
+                  <StatusBadge variant="warning" size="sm">
+                    {slot.uncommitted_change_count} uncommitted {slot.uncommitted_change_count === 1 ? 'change' : 'changes'}
+                  </StatusBadge>
+                )}
               </div>
             </div>
+            {!slot.is_main_repo && (
+              <button
+                onClick={() => !isDeleteDisabled && setSlotToDelete(slot)}
+                disabled={isDeleteDisabled}
+                title={deleteTooltip}
+                className="ml-2 p-1.5 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
+              >
+                <TrashIcon className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Path */}
@@ -90,28 +132,16 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
               </span>
             </div>
 
-            {isLocked && slot.locked_at && (
-              <div className="flex items-center justify-between">
-                <span className={textColors.secondary}>Locked since:</span>
-                <span className={textColors.secondary}>
-                  {formatTimestamp(slot.locked_at)}
-                </span>
-              </div>
-            )}
-
             {/* Show locked task OR last used task (not both) */}
             {isLocked && slot.locked_by_task && (
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                 <span className={`${textColors.secondary} block mb-1`}>Locked by task:</span>
                 <div
-                  className="bg-orange-50 dark:bg-orange-900/20 rounded p-2 space-y-1 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+                  className="bg-orange-50 dark:bg-orange-900/20 rounded p-2 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
                   onClick={() => openTab({ type: 'task', entityId: String(slot.locked_by_task!.id), title: slot.locked_by_task!.title })}
                 >
                   <div className="font-medium text-orange-700 dark:text-orange-300">
-                    {slot.locked_by_task.title}
-                  </div>
-                  <div className="text-orange-600 dark:text-orange-400">
-                    <span>Task ID: {slot.locked_by_task.id}</span>
+                    Task {slot.locked_by_task.id}: {slot.locked_by_task.title}
                   </div>
                 </div>
               </div>
@@ -121,14 +151,11 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                 <span className={`${textColors.secondary} block mb-1`}>Last active task:</span>
                 <div
-                  className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 space-y-1 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                  className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                   onClick={() => openTab({ type: 'task', entityId: String(slot.last_used_by_task!.id), title: slot.last_used_by_task!.title })}
                 >
                   <div className="font-medium text-blue-700 dark:text-blue-300">
-                    {slot.last_used_by_task.title}
-                  </div>
-                  <div className="text-blue-600 dark:text-blue-400">
-                    <span>Task ID: {slot.last_used_by_task.id}</span>
+                    Task {slot.last_used_by_task.id}: {slot.last_used_by_task.title}
                   </div>
                 </div>
               </div>
@@ -149,7 +176,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
             <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
           </div>
         </Card>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {[1, 2].map((i) => (
             <Card key={i}>
               <div className="animate-pulse space-y-3">
@@ -224,9 +251,16 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
         </div>
       </Card>
 
-      {/* Slots Grid */}
+      {/* Delete error */}
+      {deleteError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+          <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+        </div>
+      )}
+
+      {/* Slots List */}
       {poolStatus.slots.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {poolStatus.slots.map(renderSlotCard)}
         </div>
       ) : (
@@ -236,6 +270,18 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
           </p>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={slotToDelete !== null}
+        onClose={() => { setSlotToDelete(null); setDeleteError(null) }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Worktree"
+        message="Are you sure you want to delete this worktree? The directory will be removed from disk."
+        confirmText="Delete"
+        variant="danger"
+        loading={deletingSlotId !== null}
+      />
     </div>
   )
 }

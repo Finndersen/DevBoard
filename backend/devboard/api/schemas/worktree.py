@@ -32,6 +32,8 @@ class WorktreeSlotWithTaskInfo(BaseModel):
     last_used_by_task: dict | None = (
         None  # {"id": int, "title": str} - only present if available and was previously used
     )
+    has_uncommitted_changes: bool = False
+    uncommitted_change_count: int = 0
 
 
 class WorktreePoolStatusResponse(BaseModel):
