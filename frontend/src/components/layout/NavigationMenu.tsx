@@ -9,6 +9,7 @@ import {
   CommandLineIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -33,6 +34,7 @@ export default function NavigationMenu() {
   const {
     navigationCompactMode,
     toggleNavigationCompactMode,
+    openCreateTaskModal,
   } = useUIStore()
 
   const isCompact = navigationCompactMode
@@ -74,7 +76,20 @@ export default function NavigationMenu() {
             >
               <section.icon className="w-5 h-5 shrink-0" />
               {!isCompact && (
-                <span className="font-medium text-sm">{section.label}</span>
+                <span className="font-medium text-sm flex-1">{section.label}</span>
+              )}
+              {!isCompact && section.label === 'Tasks' && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    openCreateTaskModal()
+                  }}
+                  className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                  title="New task"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                </button>
               )}
             </Link>
           )

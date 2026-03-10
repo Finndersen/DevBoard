@@ -3,12 +3,16 @@ import TabBar from './TabBar'
 import NavigationMenu from './NavigationMenu'
 import NotificationsPanel from '../notifications/NotificationsPanel'
 import GitHubPRDropdown from '../github/GitHubPRDropdown'
+import CreateTaskModal from '../modals/CreateTaskModal'
+import { useUIStore } from '../../stores/uiStore'
 
 interface AppShellProps {
   children: ReactNode
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  const { createTaskModalOpen, closeCreateTaskModal } = useUIStore()
+
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-row">
       {/* Left: Navigation Sidebar */}
@@ -33,6 +37,7 @@ export default function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      <CreateTaskModal isOpen={createTaskModalOpen} onClose={closeCreateTaskModal} />
     </div>
   )
 }

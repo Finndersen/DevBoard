@@ -30,6 +30,7 @@ interface UIState {
   navigationCompactMode: boolean
   visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
   shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
+  createTaskModalOpen: boolean
 }
 
 interface UIActions {
@@ -44,6 +45,10 @@ interface UIActions {
   // Navigation menu
   setNavigationCompactMode: (compact: boolean) => void
   toggleNavigationCompactMode: () => void
+
+  // Create task modal
+  openCreateTaskModal: () => void
+  closeCreateTaskModal: () => void
 
   // Activity status updates
   setTabActivityStatus: (tabId: string, status: ActivityStatus) => void
@@ -68,6 +73,7 @@ export const useUIStore = create<UIStore>()(
       navigationCompactMode: false,
       visitedTabs: new Set<string>(),
       shouldPushHistory: false,
+      createTaskModalOpen: false,
 
       // Tab management actions
       openTab: (tabData, options = {}) => {
@@ -196,6 +202,18 @@ export const useUIStore = create<UIStore>()(
       toggleNavigationCompactMode: () => {
         set((draft) => {
           draft.navigationCompactMode = !draft.navigationCompactMode
+        })
+      },
+
+      openCreateTaskModal: () => {
+        set((draft) => {
+          draft.createTaskModalOpen = true
+        })
+      },
+
+      closeCreateTaskModal: () => {
+        set((draft) => {
+          draft.createTaskModalOpen = false
         })
       },
 
