@@ -103,25 +103,17 @@ describe('ToolCallDisplay', () => {
       expect(chevron).not.toHaveClass('rotate-180')
     })
 
-    it('applies correct border color for running state', () => {
-      render(<ToolCallDisplay toolCall={mockToolCall} />)
+    it('uses neutral gray styling regardless of state', () => {
+      const { rerender } = render(<ToolCallDisplay toolCall={mockToolCall} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('border-blue-600', 'bg-blue-50', 'dark:bg-blue-900/10')
-    })
+      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
 
-    it('applies correct border color for complete state', () => {
-      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
+      rerender(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
+      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
 
-      const button = screen.getByRole('button')
-      expect(button).toHaveClass('border-green-600', 'bg-green-50', 'dark:bg-green-900/10')
-    })
-
-    it('applies correct border color for error state', () => {
-      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockErrorResult} />)
-
-      const button = screen.getByRole('button')
-      expect(button).toHaveClass('border-red-600', 'bg-red-50', 'dark:bg-red-900/10')
+      rerender(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockErrorResult} />)
+      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
     })
   })
 

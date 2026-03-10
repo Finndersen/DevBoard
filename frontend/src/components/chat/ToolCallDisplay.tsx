@@ -55,18 +55,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
     }
   }
 
-  const getStatusColor = () => {
-    if (status === 'running') return 'border-blue-600 bg-blue-50 dark:bg-blue-900/10'
-    if (status === 'error') return 'border-red-600 bg-red-50 dark:bg-red-900/10'
-    return 'border-green-600 bg-green-50 dark:bg-green-900/10'
-  }
-
   return (
     <div className="flex w-full min-w-0">
       {/* Collapsed Tool Call Card */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-lg border ${getStatusColor()} overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30 overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">

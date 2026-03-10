@@ -37,6 +37,19 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
       .join(', ')
   }, [items])
 
+  const resultCounts = useMemo(() => {
+    let succeeded = 0
+    let failed = 0
+    for (const { message, index } of items) {
+      const cacheKey = `${message.timestamp}-tool_call-${index}`
+      const result = toolResultMap.get(cacheKey)
+      if (result) {
+        result.is_error ? failed++ : succeeded++
+      }
+    }
+    return { succeeded, failed }
+  }, [items, toolResultMap])
+
   // Aggregate status across all tool calls in the group
   const status = useMemo(() => {
     let allHaveResults = true
@@ -116,6 +129,9 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
             {/* Count badge */}
             <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
               {items.length} tool calls
+              {status !== 'running' && resultCounts.failed > 0 && (
+                <> · <span className="text-red-600 dark:text-red-400">({resultCounts.failed} failed)</span></>
+              )}
             </span>
           </div>
           {/* Chevron */}
@@ -132,7 +148,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
 
       {/* Expanded individual tool calls */}
       {isExpanded && (
-        <div className="space-y-1 mt-1">
+        <div className="space-y-1 mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
           {items.map(({ message, index }) => {
             const cacheKey = `${message.timestamp}-tool_call-${index}`
             const toolResult = toolResultMap.get(cacheKey)
