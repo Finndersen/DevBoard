@@ -53,6 +53,7 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
+from devboard.integrations.base import IntegrationError
 from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment
 from devboard.services.integration_service import IntegrationService
 from devboard.services.oauth_service import OAuthService
@@ -610,37 +611,35 @@ async def get_task_pr_status(
     if not task.codebase.repository_url:
         raise HTTPException(status_code=404, detail="Task codebase has no repository URL configured")
 
-    # Get GitHub integration and repository wrapper
     try:
         github = integration_service.get_integration_instance(GitHubIntegration)
-        github_repo = await github.get_repository_from_url(task.codebase.repository_url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"GitHub integration not configured: {e}") from e
 
     try:
-        github_pr = await github_repo.get_pull_request(task.github_pr_number)
+        owner, repo = GitHubIntegration.parse_repo_url(task.codebase.repository_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid repository URL: {e}") from e
+
+    try:
+        pr = await github.get_pull_request_status(owner, repo, task.github_pr_number)
+    except IntegrationError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg) from e
+        raise HTTPException(status_code=500, detail=f"Failed to fetch PR status: {e}") from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch PR status: {e}") from e
 
-    pr = github_pr.pr
-    # Determine aggregate checks status from mergeable_state
-    checks_status = None
-    if pr.mergeable_state:
-        if pr.mergeable_state == "clean":
-            checks_status = "success"
-        elif pr.mergeable_state in ("blocked", "behind", "dirty"):
-            checks_status = "pending"
-        elif pr.mergeable_state == "unstable":
-            checks_status = "failure"
-
     return GitHubPRStatusResponse(
-        merged=pr.merged,
-        mergeable=pr.mergeable,
-        mergeable_state=pr.mergeable_state or "unknown",
-        state=pr.state,
-        review_comments_count=pr.review_comments,
-        checks_status=checks_status,
+        pr_number=pr.number,
         pr_url=pr.html_url,
+        state=pr.state,
+        merged=pr.state == "MERGED",
+        mergeable_state=pr.mergeable_state,
+        review_decision=pr.review_decision,
+        ci_status=pr.ci_status,
+        comment_count=pr.comment_count,
     )
 
 

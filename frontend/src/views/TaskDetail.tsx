@@ -56,15 +56,18 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // PR status for tasks in PR_OPEN state (used to disable merge button when not mergeable)
   const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
+  const [prStatusLoading, setPrStatusLoading] = useState(false)
   // PR feedback (reviews and comments) for tasks in PR_OPEN state
   const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
 
   // Fetch PR status and feedback when task is in PR_OPEN state
   useEffect(() => {
     if (task?.status === 'pr_open' && task?.id) {
+      setPrStatusLoading(true)
       apiClient.getTaskPRStatus(task.id)
         .then(setPrStatus)
         .catch(() => setPrStatus(null))
+        .finally(() => setPrStatusLoading(false))
       apiClient.getTaskPRFeedback(task.id)
         .then(setPrFeedback)
         .catch(() => setPrFeedback(null))
@@ -73,6 +76,15 @@ function TaskDetail({ id }: TaskDetailProps) {
       setPrFeedback(null)
     }
   }, [task?.id, task?.status])
+
+  const handleRefreshPrStatus = useCallback(() => {
+    if (!task?.id) return
+    setPrStatusLoading(true)
+    apiClient.getTaskPRStatus(task.id)
+      .then(setPrStatus)
+      .catch(() => setPrStatus(null))
+      .finally(() => setPrStatusLoading(false))
+  }, [task?.id])
 
   // Handle initial message from navigation state (passed when creating task with description)
   const [pendingInitialMessage, setPendingInitialMessage] = useState<string | null>(null)
@@ -369,7 +381,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       'task.merge_and_finalise': {
         loadingMessage: 'Merging PR and completing...',
         className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
-        isDisabled: () => prStatus !== null && !prStatus.merged && prStatus.mergeable_state !== 'clean',
+        isDisabled: () => prStatus !== null && !prStatus.merged && prStatus.mergeable_state !== 'CLEAN',
       },
       'task.finalise': {
         loadingMessage: 'Completing task...',
@@ -460,6 +472,8 @@ function TaskDetail({ id }: TaskDetailProps) {
         gitStatus={gitStatus}
         branchStatusLoading={branchStatusLoading}
         prStatus={prStatus}
+        prStatusLoading={prStatusLoading}
+        onRefreshPrStatus={handleRefreshPrStatus}
         workflowActionButtons={getWorkflowActionButtons()}
         onCodebaseSelect={handleCodebaseSelect}
         onOpenBranchStatusModal={handleOpenBranchStatusModal}

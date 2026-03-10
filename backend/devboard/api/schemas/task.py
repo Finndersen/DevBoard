@@ -175,13 +175,14 @@ class GitHubPRStatusResponse(BaseModel):
     Used by the frontend to enable/disable merge actions and display PR status.
     """
 
-    merged: bool
-    mergeable: bool | None
-    mergeable_state: str
-    state: str
-    review_comments_count: int
-    checks_status: str | None
+    pr_number: int
     pr_url: str
+    state: str
+    merged: bool
+    mergeable_state: str | None
+    review_decision: str | None
+    ci_status: str | None
+    comment_count: int
 
 
 class PRFeedbackCommentResponse(BaseModel):

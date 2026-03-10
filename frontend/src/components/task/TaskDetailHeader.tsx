@@ -9,14 +9,14 @@ import {
   TrashIcon,
   TagIcon,
   FolderIcon,
+  ChatBubbleLeftIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import {
   CheckCircleIcon,
-  ClockIcon,
-  XCircleIcon,
-  MinusCircleIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
+import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, CustomFieldDefinition } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
@@ -51,6 +51,8 @@ interface TaskDetailHeaderProps {
   gitStatus: TaskGitStatus | null
   branchStatusLoading: boolean
   prStatus: GitHubPRStatusResponse | null
+  prStatusLoading: boolean
+  onRefreshPrStatus: () => void
   workflowActionButtons: React.ReactElement | null
   onCodebaseSelect: (codebaseId: number | null) => void
   onOpenBranchStatusModal: () => void
@@ -82,6 +84,8 @@ export function TaskDetailHeader({
   gitStatus,
   branchStatusLoading,
   prStatus,
+  prStatusLoading,
+  onRefreshPrStatus,
   workflowActionButtons,
   onCodebaseSelect,
   onOpenBranchStatusModal,
@@ -275,27 +279,41 @@ export function TaskDetailHeader({
               </button>
             )}
 
-            {/* PR Status Button - shown when task is in PR_OPEN state */}
-            {task.status === 'pr_open' && prStatus && (
-              <button
-                onClick={() => window.open(prStatus.pr_url, '_blank')}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ${textColors.secondary}`}
-                title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
-              >
-                <GitHubIcon className="w-4 h-4" />
-                {prStatus.merged ? (
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
-                ) : prStatus.checks_status === 'success' ? (
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                ) : prStatus.checks_status === 'pending' ? (
-                  <ClockIcon className="w-3.5 h-3.5 text-yellow-500" />
-                ) : (prStatus.checks_status === 'failure' || prStatus.checks_status === 'error') ? (
-                  <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                ) : (
-                  <MinusCircleIcon className="w-3.5 h-3.5 text-gray-400" />
+            {/* PR Status - shown when task is in PR_OPEN state */}
+            {task.status === 'pr_open' && (prStatus || prStatusLoading) && (
+              <div className="flex items-center">
+                {prStatus && (
+                  <button
+                    onClick={() => window.open(prStatus.pr_url, '_blank')}
+                    className={`flex items-center space-x-1.5 px-2 py-1 rounded-l text-sm border border-r-0 transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ${textColors.secondary}`}
+                    title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
+                  >
+                    <GitHubIcon className="w-4 h-4" />
+                    {prStatus.merged ? (
+                      <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
+                    ) : (
+                      <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
+                    )}
+                    <span className="font-medium">#{prStatus.pr_number}</span>
+                    <ReviewBadge decision={prStatus.review_decision} />
+                    {prStatus.comment_count > 0 && (
+                      <span className="flex items-center space-x-0.5">
+                        <ChatBubbleLeftIcon className="w-3.5 h-3.5" />
+                        <span>{prStatus.comment_count}</span>
+                      </span>
+                    )}
+                    <ArrowTopRightOnSquareIcon className="w-3 h-3 opacity-60" />
+                  </button>
                 )}
-                <ArrowTopRightOnSquareIcon className="w-3 h-3 opacity-60" />
-              </button>
+                <button
+                  onClick={onRefreshPrStatus}
+                  disabled={prStatusLoading}
+                  className={`flex items-center px-1.5 py-1 rounded-r text-sm border transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed ${textColors.secondary} ${!prStatus ? 'rounded-l' : ''}`}
+                  title="Refresh PR status"
+                >
+                  <ArrowPathIcon className={`w-3.5 h-3.5 ${prStatusLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             )}
 
             {/* Custom Fields Button - only shown when task has custom fields */}

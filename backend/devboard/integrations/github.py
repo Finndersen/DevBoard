@@ -165,6 +165,7 @@ class OpenPullRequest:
     review_decision: str | None
     ci_status: str | None
     comment_count: int
+    state: str = "OPEN"
 
 
 class GitHubPR:
@@ -584,6 +585,30 @@ class GitHubIntegration(BaseIntegration):
         owner, repo = self.parse_repo_url(url)
         return await self.get_repository(owner, repo)
 
+    async def _graphql_request(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+        """Execute a GitHub GraphQL request and return the response data."""
+        config = cast(GitHubIntegrationConfig, self.config)
+        base_url = config.base_url.rstrip("/")
+        if base_url == "https://api.github.com":
+            graphql_url = "https://api.github.com/graphql"
+        else:
+            graphql_url = base_url.replace("/api/v3", "/api/graphql")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                graphql_url,
+                json={"query": query, "variables": variables},
+                headers={"Authorization": f"Bearer {config.api_token}"},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        if "errors" in data:
+            raise IntegrationError(f"GitHub GraphQL error: {data['errors']}")
+
+        return data
+
     async def get_user_open_pull_requests(self, updated_since_days: int = 30) -> list[OpenPullRequest]:
         """Fetch all open PRs authored by the authenticated user via GraphQL."""
         cutoff = (datetime.now(tz=UTC) - timedelta(days=updated_since_days)).strftime("%Y-%m-%d")
@@ -617,26 +642,7 @@ class GitHubIntegration(BaseIntegration):
           }
         }
         """
-        config = cast(GitHubIntegrationConfig, self.config)
-        base_url = config.base_url.rstrip("/")
-        if base_url == "https://api.github.com":
-            graphql_url = "https://api.github.com/graphql"
-        else:
-            graphql_url = base_url.replace("/api/v3", "/api/graphql")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                graphql_url,
-                json={"query": query, "variables": {"q": search_query}},
-                headers={"Authorization": f"Bearer {config.api_token}"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        if "errors" in data:
-            raise IntegrationError(f"GitHub GraphQL error: {data['errors']}")
-
+        data = await self._graphql_request(query, {"q": search_query})
         nodes = data["data"]["search"]["nodes"]
         return [
             OpenPullRequest(
@@ -653,6 +659,55 @@ class GitHubIntegration(BaseIntegration):
             for node in nodes
             if node
         ]
+
+    async def get_pull_request_status(self, owner: str, repo: str, pr_number: int) -> OpenPullRequest:
+        """Fetch status of a single PR via GraphQL."""
+        query = """
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              number
+              title
+              url
+              updatedAt
+              state
+              mergeStateStatus
+              mergeQueueEntry { id }
+              reviewDecision
+              totalCommentsCount
+              commits(last: 1) {
+                nodes {
+                  commit {
+                    statusCheckRollup {
+                      state
+                    }
+                  }
+                }
+              }
+              repository { nameWithOwner }
+            }
+          }
+        }
+        """
+        data = await self._graphql_request(query, {"owner": owner, "name": repo, "number": pr_number})
+        repository = data["data"].get("repository")
+        if not repository:
+            raise IntegrationError(f"Repository {owner}/{repo} not found or inaccessible")
+        node = repository.get("pullRequest")
+        if not node:
+            raise IntegrationError(f"Pull request #{pr_number} not found in {owner}/{repo}")
+        return OpenPullRequest(
+            number=node["number"],
+            title=node["title"],
+            html_url=node["url"],
+            state=node["state"],
+            mergeable_state="QUEUED" if node.get("mergeQueueEntry") else node.get("mergeStateStatus"),
+            repo_full_name=node["repository"]["nameWithOwner"],
+            updated_at=datetime.fromisoformat(node["updatedAt"]),
+            review_decision=node.get("reviewDecision"),
+            ci_status=_extract_ci_status(node),
+            comment_count=node.get("totalCommentsCount", 0),
+        )
 
     async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> list[Issue]:
         """Search issues across GitHub."""

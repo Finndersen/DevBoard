@@ -39,13 +39,14 @@ export interface TaskListItem {
 }
 
 export interface GitHubPRStatusResponse {
-  merged: boolean
-  mergeable: boolean | null
-  mergeable_state: string
-  state: string
-  review_comments_count: number
-  checks_status: string | null
+  pr_number: number
   pr_url: string
+  state: string
+  merged: boolean
+  mergeable_state: string | null
+  review_decision: string | null
+  ci_status: string | null
+  comment_count: number
 }
 
 export interface PRFeedbackComment {

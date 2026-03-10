@@ -77,7 +77,7 @@ export function useWorkflowActions({ task, prStatus, specificationContent }: Use
       'task.merge_and_finalise': {
         loadingMessage: 'Merging PR and completing...',
         className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
-        isDisabled: () => prStatus !== null && !prStatus.merged && prStatus.mergeable_state !== 'clean',
+        isDisabled: () => prStatus !== null && !prStatus.merged && prStatus.mergeable_state !== 'CLEAN',
       },
       'task.finalise': {
         loadingMessage: 'Completing task...',
