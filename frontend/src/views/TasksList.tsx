@@ -1,13 +1,15 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusIcon, ListBulletIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects } from '../hooks'
 import { useModal } from '../hooks/useModal'
+import { useOpenPRs } from '../hooks/useGitHubPRs'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
-import type { TaskListItem } from '../lib/api'
+import type { TaskListItem, OpenPRItem } from '../lib/api'
 import ViewHeader from '../components/layout/ViewHeader'
+import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
 
 const STATUS_COLUMNS = ['planning', 'implementing', 'pr_open', 'complete']
 
@@ -37,7 +39,20 @@ export default function TasksList() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined)
   const { data: tasks, loading: tasksLoading, error: tasksError, refetch: refetchTasks } = useAllTasks(selectedProjectId)
   const { data: projects } = useProjects()
+  const { data: openPRsData } = useOpenPRs()
   const createTaskModal = useModal()
+
+  const prByTaskId = useMemo(() => {
+    const map = new Map<number, OpenPRItem>()
+    if (openPRsData) {
+      for (const pr of openPRsData.prs) {
+        if (pr.task_id !== null) {
+          map.set(pr.task_id, pr)
+        }
+      }
+    }
+    return map
+  }, [openPRsData])
 
   // Refetch when project filter changes
   useEffect(() => {
@@ -127,25 +142,49 @@ export default function TasksList() {
             </h3>
 
             <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
-              {taskGroups[status]?.map((task) => (
-                <Link
-                  key={task.id}
-                  to={`/tasks/${task.id}`}
-                  className="block bg-white dark:bg-gray-700 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
-                >
-                  <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
-                    {task.title}
-                  </h4>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                      {task.status}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {task.project_name}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+              {taskGroups[status]?.map((task) => {
+                const pr = status === 'pr_open' ? prByTaskId.get(task.id) : undefined
+                return (
+                  <Link
+                    key={task.id}
+                    to={`/tasks/${task.id}`}
+                    className="block bg-white dark:bg-gray-700 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
+                  >
+                    <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
+                      {task.title}
+                    </h4>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                        {task.status}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {task.project_name}
+                      </span>
+                    </div>
+                    {pr && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <StatusIndicator mergeableState={pr.mergeable_state} ciStatus={pr.ci_status} />
+                        <a
+                          href={pr.pr_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          #{pr.pr_number}
+                        </a>
+                        <ReviewBadge decision={pr.review_decision} />
+                        {pr.comment_count > 0 && (
+                          <span className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-gray-500" title={`${pr.comment_count} comment${pr.comment_count !== 1 ? 's' : ''}`}>
+                            <ChatBubbleLeftIcon className="w-3 h-3" />
+                            {pr.comment_count}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </Link>
+                )
+              })}
               {!taskGroups[status]?.length && (
                 <p className="text-sm text-gray-400 dark:text-gray-500 italic text-center py-4">
                   No tasks
