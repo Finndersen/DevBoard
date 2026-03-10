@@ -102,7 +102,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
     <div className="flex flex-col w-full min-w-0">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30 overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left hover:bg-gray-100 dark:hover:bg-gray-800/30 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -148,7 +148,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
 
       {/* Expanded individual tool calls */}
       {isExpanded && (
-        <div className="space-y-1 mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+        <div className="mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
           {items.map(({ message, index }) => {
             const cacheKey = `${message.timestamp}-tool_call-${index}`
             const toolResult = toolResultMap.get(cacheKey)

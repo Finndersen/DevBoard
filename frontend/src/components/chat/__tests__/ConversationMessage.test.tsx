@@ -48,7 +48,7 @@ describe('ConversationMessage', () => {
       expect(container).toBeInTheDocument()
     })
 
-    it('renders agent message with correct styling (gray bubble)', () => {
+    it('renders agent message as plain text without bubble', () => {
       const agentMessage: ConversationMessage = {
         event_type: 'message',
         role: 'agent',
@@ -61,14 +61,10 @@ describe('ConversationMessage', () => {
       const messageText = screen.getByText('I am doing well, thank you!')
       expect(messageText).toBeInTheDocument()
 
-      // Check that the message is inside a gray bubble (note: uses dark mode classes)
+      // Agent messages should render as plain text — no gray bubble
       const markdownElement = screen.getByTestId('markdown')
-      const messageBubble = markdownElement.closest('.bg-gray-100')
-      expect(messageBubble).toBeInTheDocument()
-
-      // Check alignment (agent messages should be left-aligned)
-      const container = messageBubble?.closest('.justify-start')
-      expect(container).toBeInTheDocument()
+      expect(markdownElement.closest('.bg-gray-100')).not.toBeInTheDocument()
+      expect(markdownElement.closest('.bg-blue-600')).not.toBeInTheDocument()
     })
 
     it('passes forceWhiteText prop to Markdown for user messages', () => {
@@ -96,7 +92,8 @@ describe('ConversationMessage', () => {
       render(<ConversationMessageComponent message={agentMessage} />)
 
       const markdown = screen.getByTestId('markdown')
-      expect(markdown).toHaveAttribute('data-force-white-text', 'false')
+      // Agent messages do not pass forceWhiteText — attribute should not be present
+      expect(markdown).not.toHaveAttribute('data-force-white-text', 'true')
     })
 
     it('handles user messages with timestamps', () => {
@@ -245,15 +242,12 @@ describe('ConversationMessage', () => {
 
       render(<ConversationMessageComponent message={toolCallRequest} />)
 
-      // Check for yellow styling classes on the outer card
+      // Check the approval header contains the warning icon and text
       const awaitingText = screen.getByText(/Awaiting Approval/i)
-      const cardElement = awaitingText.closest('.rounded-lg')
-      expect(cardElement).toBeInTheDocument()
-      expect(cardElement).toHaveClass('border-yellow-600')
-      expect(cardElement).toHaveClass('bg-yellow-900/10')
+      expect(awaitingText).toBeInTheDocument()
 
       // Check for warning icon (SVG) - it's a sibling of the text, in the header div
-      const headerDiv = awaitingText.closest('.bg-yellow-800\\/20')
+      const headerDiv = awaitingText.closest('div')
       const svg = headerDiv?.querySelector('svg')
       expect(svg).toBeInTheDocument()
       expect(svg).toHaveClass('text-yellow-400')
@@ -360,8 +354,8 @@ describe('ConversationMessage', () => {
       const outerContainer = container.querySelector('.flex.w-full')
       expect(outerContainer).toBeTruthy()
 
-      // Check for the card with yellow styling
-      const card = container.querySelector('.rounded-lg.border-yellow-600')
+      // Check for the card container with rounded styling
+      const card = container.querySelector('.rounded-md')
       expect(card).toBeTruthy()
     })
   })

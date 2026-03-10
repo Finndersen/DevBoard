@@ -6,7 +6,11 @@ import type { ConversationEvent, ToolCall, ToolResult } from '../../../lib/api'
 
 vi.mock('../ConversationMessage', () => ({
   default: ({ message }: { message: ConversationEvent }) => (
-    <div data-testid="conversation-message" data-event-type={message.event_type} />
+    <div
+      data-testid="conversation-message"
+      data-event-type={message.event_type}
+      data-role={(message as { role?: string }).role}
+    />
   ),
 }))
 
@@ -31,6 +35,15 @@ function makeMessage(id: string): ConversationEvent {
     event_type: 'message',
     role: 'agent',
     text_content: `Message ${id}`,
+    timestamp: `2024-01-01T10:00:${id}Z`,
+  }
+}
+
+function makeUserMessage(id: string): ConversationEvent {
+  return {
+    event_type: 'message',
+    role: 'user',
+    text_content: `User message ${id}`,
     timestamp: `2024-01-01T10:00:${id}Z`,
   }
 }
@@ -190,6 +203,86 @@ describe('ConversationMessageList', () => {
       // Three messages (01, 04, 06) + one single tool call (05) + two trailing tool calls (07, 08)
       // = 6 conversation-message elements
       expect(screen.getAllByTestId('conversation-message')).toHaveLength(6)
+    })
+  })
+
+  describe('Agent block grouping', () => {
+    it('wraps consecutive agent messages and tool calls in a single agent block', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeToolCall('02'),
+        makeMessage('03'),
+      ]
+
+      const { container } = render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      // All non-user items grouped into one agent block div
+      const agentBlocks = container.querySelectorAll('.flex.flex-col')
+      expect(agentBlocks).toHaveLength(1)
+    })
+
+    it('user messages break agent blocks', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeUserMessage('02'),
+        makeMessage('03'),
+      ]
+
+      const { container } = render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      // Two separate agent blocks (before and after the user message)
+      const agentBlocks = container.querySelectorAll('.flex.flex-col')
+      expect(agentBlocks).toHaveLength(2)
+    })
+
+    it('renders user messages as direct siblings of agent blocks (not inside them)', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeUserMessage('02'),
+        makeMessage('03'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const userMessages = document.querySelectorAll('[data-role="user"]')
+      expect(userMessages).toHaveLength(1)
+      // User message should not be inside an agent block div
+      expect(userMessages[0].closest('.flex.flex-col')).toBeNull()
+    })
+
+    it('groups multiple turns correctly', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeToolCall('02'),
+        makeUserMessage('03'),
+        makeMessage('04'),
+        makeUserMessage('05'),
+        makeMessage('06'),
+      ]
+
+      const { container } = render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      // Three agent blocks: [msg01+tc02], [msg04], [msg06]
+      const agentBlocks = container.querySelectorAll('.flex.flex-col')
+      expect(agentBlocks).toHaveLength(3)
+
+      const userMessages = document.querySelectorAll('[data-role="user"]')
+      expect(userMessages).toHaveLength(2)
+    })
+
+    it('handles conversation starting with a user message', () => {
+      const messages: ConversationEvent[] = [
+        makeUserMessage('01'),
+        makeMessage('02'),
+      ]
+
+      const { container } = render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const agentBlocks = container.querySelectorAll('.flex.flex-col')
+      expect(agentBlocks).toHaveLength(1)
+
+      const userMessages = document.querySelectorAll('[data-role="user"]')
+      expect(userMessages).toHaveLength(1)
     })
   })
 

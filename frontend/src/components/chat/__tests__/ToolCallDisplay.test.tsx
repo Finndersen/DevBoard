@@ -103,17 +103,17 @@ describe('ToolCallDisplay', () => {
       expect(chevron).not.toHaveClass('rotate-180')
     })
 
-    it('uses neutral gray styling regardless of state', () => {
+    it('uses neutral hover styling regardless of state', () => {
       const { rerender } = render(<ToolCallDisplay toolCall={mockToolCall} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
+      expect(button).toHaveClass('rounded-md', 'overflow-hidden')
 
       rerender(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
-      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
+      expect(button).toHaveClass('rounded-md', 'overflow-hidden')
 
       rerender(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockErrorResult} />)
-      expect(button).toHaveClass('border-gray-300', 'bg-gray-50')
+      expect(button).toHaveClass('rounded-md', 'overflow-hidden')
     })
   })
 
@@ -515,18 +515,19 @@ describe('ToolCallDisplay', () => {
       ).toBeInTheDocument()
     })
 
-    it('has appropriate shadow and border styling', () => {
+    it('has minimal borderless styling', () => {
       render(<ToolCallDisplay toolCall={mockToolCall} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('shadow-sm', 'border', 'overflow-hidden')
+      expect(button).toHaveClass('rounded-md', 'overflow-hidden')
+      expect(button).not.toHaveClass('border', 'shadow-sm')
     })
 
-    it('applies hover effect to button', () => {
+    it('applies hover background effect to button', () => {
       render(<ToolCallDisplay toolCall={mockToolCall} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('hover:opacity-80', 'transition-opacity')
+      expect(button).toHaveClass('transition-colors')
     })
   })
 

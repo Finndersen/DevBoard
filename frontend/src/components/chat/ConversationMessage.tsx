@@ -66,51 +66,72 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
       setNeedsExpansion(height > MAX_COLLAPSED_HEIGHT)
     }, [message.text_content, isLatest])
 
-    return (
-      <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
-        {/* Message bubble with content-based width */}
-        <div className={`${getMessageBubbleClasses(isUser)} max-w-full min-w-[200px] rounded-lg ${highlightRing}`}>
-          <div className="relative">
-            <div
-              ref={contentRef}
-              className={`overflow-hidden transition-all duration-300 ${
-                !isExpanded && needsExpansion ? 'max-h-60' : ''
-              }`}
-              style={{
-                maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
-              }}
-            >
-              <Markdown forceWhiteText={isUser}>
-                {message.text_content}
-              </Markdown>
-            </div>
-            {/* Fade overlay when collapsed */}
-            {needsExpansion && !isExpanded && (
+    if (isUser) {
+      return (
+        <div className="flex w-full justify-end">
+          <div className={`${getMessageBubbleClasses(true)} max-w-full min-w-[200px] rounded-lg ${highlightRing}`}>
+            <div className="relative">
               <div
-                className={`absolute bottom-0 left-0 right-0 h-16 pointer-events-none ${
-                  isUser
-                    ? 'bg-gradient-to-t from-blue-600 to-transparent'
-                    : 'bg-gradient-to-t from-gray-100 dark:from-gray-700 to-transparent'
+                ref={contentRef}
+                className={`overflow-hidden transition-all duration-300 ${
+                  !isExpanded && needsExpansion ? 'max-h-60' : ''
                 }`}
-              />
+                style={{
+                  maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
+                }}
+              >
+                <Markdown forceWhiteText={true}>
+                  {message.text_content}
+                </Markdown>
+              </div>
+              {needsExpansion && !isExpanded && (
+                <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-blue-600 to-transparent" />
+              )}
+            </div>
+            {needsExpansion && (
+              <div className="flex justify-center mt-1">
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-xs font-medium hover:underline text-blue-100 hover:text-white"
+                >
+                  {isExpanded ? '▲ Show less' : '▼ Show more'}
+                </button>
+              </div>
             )}
           </div>
-          {/* Show more/less button (centered) */}
-          {needsExpansion && (
-            <div className="flex justify-center mt-1">
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={`text-xs font-medium hover:underline ${
-                  isUser
-                    ? 'text-blue-100 hover:text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                {isExpanded ? '▲ Show less' : '▼ Show more'}
-              </button>
-            </div>
+        </div>
+      )
+    }
+
+    // Agent message — plain text, no bubble
+    return (
+      <div className={`w-full text-sm ${highlightRing}`}>
+        <div className="relative">
+          <div
+            ref={contentRef}
+            className={`overflow-hidden transition-all duration-300 ${
+              !isExpanded && needsExpansion ? 'max-h-60' : ''
+            }`}
+            style={{
+              maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
+            }}
+          >
+            <Markdown>{message.text_content}</Markdown>
+          </div>
+          {needsExpansion && !isExpanded && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-white dark:from-gray-900 to-transparent" />
           )}
         </div>
+        {needsExpansion && (
+          <div className="flex justify-center mt-1">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-xs font-medium hover:underline text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              {isExpanded ? '▲ Show less' : '▼ Show more'}
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -132,8 +153,8 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     return (
       <div className="flex w-full min-w-0">
-        <div className={`rounded-lg border border-yellow-600 bg-yellow-900/10 overflow-hidden shadow-sm max-w-full min-w-[300px] ${highlightRing}`}>
-          <div className="px-3 py-1.5 bg-yellow-800/20 border-b border-yellow-600 flex items-center gap-2 min-w-0">
+        <div className={`rounded-md overflow-hidden max-w-full min-w-[300px] ${highlightRing}`}>
+          <div className="px-3 py-1.5 flex items-center gap-2 min-w-0">
             <svg
               className="w-4 h-4 text-yellow-400 flex-shrink-0"
               fill="none"

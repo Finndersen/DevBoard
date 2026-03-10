@@ -28,6 +28,19 @@ interface GroupRenderItem {
 
 type RenderItem = SingleRenderItem | GroupRenderItem
 
+interface AgentBlockItem {
+  type: 'agent_block'
+  items: RenderItem[]
+}
+
+interface UserMessageItem {
+  type: 'user_message'
+  message: ConversationEvent
+  index: number
+}
+
+type OuterRenderItem = UserMessageItem | AgentBlockItem
+
 // Memoized message component to prevent unnecessary re-renders
 const MemoizedMessageComponent = memo(ConversationMessageComponent)
 
@@ -127,6 +140,31 @@ function ConversationMessageList({
     return result
   }, [messages])
 
+  // Group consecutive non-user items into agent blocks, separated by user messages.
+  const outerRenderItems = useMemo((): OuterRenderItem[] => {
+    const result: OuterRenderItem[] = []
+    let agentBuffer: RenderItem[] = []
+
+    const flushAgentBuffer = () => {
+      if (agentBuffer.length > 0) {
+        result.push({ type: 'agent_block', items: agentBuffer })
+        agentBuffer = []
+      }
+    }
+
+    for (const item of renderItems) {
+      if (item.type === 'single' && item.message.event_type === 'message' && item.message.role === 'user') {
+        flushAgentBuffer()
+        result.push({ type: 'user_message', message: item.message, index: item.index })
+      } else {
+        agentBuffer.push(item)
+      }
+    }
+
+    flushAgentBuffer()
+    return result
+  }, [renderItems])
+
   if (showEmptyState) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -136,39 +174,73 @@ function ConversationMessageList({
     )
   }
 
+  const renderInnerItem = (item: RenderItem) => {
+    if (item.type === 'group') {
+      const groupKey = item.items.map(({ message, index }) => `${message.timestamp}-tool_call-${index}`).join('|')
+      return (
+        <ToolCallGroupDisplay
+          key={groupKey}
+          items={item.items}
+          toolResultMap={toolResultMap}
+          highlightSet={highlightSet}
+          codebaseLocalPath={codebaseLocalPath}
+        />
+      )
+    }
+
+    const messageKey = `${item.message.timestamp}-${item.message.event_type}-${item.index}`
+    const toolResult = item.message.event_type === 'tool_call'
+      ? toolResultMap.get(messageKey)
+      : undefined
+    const isLatest = item.index === lastMessageIndex
+    const uuid = (item.message as { uuid?: string }).uuid
+    const isHighlighted = uuid ? highlightSet.has(uuid) : false
+
+    return (
+      <div key={messageKey} id={uuid ? `msg-${uuid}` : undefined}>
+        <MemoizedMessageComponent
+          message={item.message}
+          toolResult={toolResult}
+          isLatest={isLatest}
+          isHighlighted={isHighlighted}
+          codebaseLocalPath={codebaseLocalPath}
+        />
+      </div>
+    )
+  }
+
   return (
     <>
-      {renderItems.map((item) => {
-        if (item.type === 'group') {
-          const groupKey = item.items.map(({ message, index }) => `${message.timestamp}-tool_call-${index}`).join('|')
+      {outerRenderItems.map((outerItem, outerIndex) => {
+        if (outerItem.type === 'user_message') {
+          const messageKey = `${outerItem.message.timestamp}-${outerItem.message.event_type}-${outerItem.index}`
+          const uuid = (outerItem.message as { uuid?: string }).uuid
+          const isHighlighted = uuid ? highlightSet.has(uuid) : false
           return (
-            <ToolCallGroupDisplay
-              key={groupKey}
-              items={item.items}
-              toolResultMap={toolResultMap}
-              highlightSet={highlightSet}
-              codebaseLocalPath={codebaseLocalPath}
-            />
+            <div key={messageKey} id={uuid ? `msg-${uuid}` : undefined}>
+              <MemoizedMessageComponent
+                message={outerItem.message}
+                toolResult={undefined}
+                isLatest={outerItem.index === lastMessageIndex}
+                isHighlighted={isHighlighted}
+                codebaseLocalPath={codebaseLocalPath}
+              />
+            </div>
           )
         }
 
-        const messageKey = `${item.message.timestamp}-${item.message.event_type}-${item.index}`
-        const toolResult = item.message.event_type === 'tool_call'
-          ? toolResultMap.get(messageKey)
-          : undefined
-        const isLatest = item.index === lastMessageIndex
-        const uuid = (item.message as { uuid?: string }).uuid
-        const isHighlighted = uuid ? highlightSet.has(uuid) : false
+        const blockKey = outerItem.items.length > 0
+          ? (() => {
+              const first = outerItem.items[0]
+              return first.type === 'group'
+                ? `agent-block-${first.items[0].message.timestamp}-tool_call-${first.items[0].index}`
+                : `agent-block-${first.message.timestamp}-${first.message.event_type}-${first.index}`
+            })()
+          : `agent-block-${outerIndex}`
 
         return (
-          <div key={messageKey} id={uuid ? `msg-${uuid}` : undefined}>
-            <MemoizedMessageComponent
-              message={item.message}
-              toolResult={toolResult}
-              isLatest={isLatest}
-              isHighlighted={isHighlighted}
-              codebaseLocalPath={codebaseLocalPath}
-            />
+          <div key={blockKey} className="flex flex-col">
+            {outerItem.items.map(renderInnerItem)}
           </div>
         )
       })}

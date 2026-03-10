@@ -60,7 +60,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
       {/* Collapsed Tool Call Card */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30 overflow-hidden shadow-sm max-w-full min-w-[300px] text-left hover:opacity-80 transition-opacity ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left hover:bg-gray-100 dark:hover:bg-gray-800/30 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
