@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, CodeBracketIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -16,6 +16,7 @@ import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
 import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
+import { useCodeReviewStatus } from './hooks/useCodeReviewStatus'
 import { TaskDetailHeader } from '../components/task/TaskDetailHeader'
 import { SpecificationTab } from '../components/task/SpecificationTab'
 import { PlanTab } from '../components/task/PlanTab'
@@ -319,6 +320,12 @@ function TaskDetail({ id }: TaskDetailProps) {
     agentChatRef.current?.sendMessage(message)
   }, [])
 
+  const handleAutoReview = useCallback(() => {
+    agentChatRef.current?.sendMessage('Run review_code_changes tool to review your code changes')
+  }, [])
+
+  const { status: codeReviewStatus } = useCodeReviewStatus(task?.conversation_id ?? null)
+
   // Cleanup diff refresh timeout on unmount
   useEffect(() => {
     return () => {
@@ -509,6 +516,12 @@ function TaskDetail({ id }: TaskDetailProps) {
                     >
                       <tab.icon className="w-4 h-4" />
                       <span>{tab.name}</span>
+                      {tab.id === 'changes' && codeReviewStatus === 'reviewed' && (
+                        <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                      )}
+                      {tab.id === 'changes' && codeReviewStatus === 'stale' && (
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-500" />
+                      )}
                     </button>
                   ))}
                 </nav>
@@ -609,6 +622,9 @@ function TaskDetail({ id }: TaskDetailProps) {
                 prFeedback={prFeedback}
                 onRefresh={handleDiffRefresh}
                 onSubmitComments={handleSubmitReviewComments}
+                codeReviewStatus={codeReviewStatus}
+                onAutoReview={handleAutoReview}
+                isStreaming={isConversationStreaming}
               />
             )}
 

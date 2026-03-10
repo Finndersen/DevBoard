@@ -1,4 +1,5 @@
 import type { TaskBranchInfo, TaskDiffResponse, PRFeedbackResponse } from '../../lib/api'
+import type { CodeReviewStatus } from '../../views/hooks/useCodeReviewStatus'
 import AllFilesDiffViewer from '../documents/AllFilesDiffViewer'
 
 interface ChangesTabProps {
@@ -10,6 +11,9 @@ interface ChangesTabProps {
   prFeedback: PRFeedbackResponse | null
   onRefresh: (view: string) => Promise<void>
   onSubmitComments: (message: string) => void
+  codeReviewStatus: CodeReviewStatus
+  onAutoReview: () => void
+  isStreaming: boolean
 }
 
 export function ChangesTab({
@@ -21,6 +25,9 @@ export function ChangesTab({
   prFeedback,
   onRefresh,
   onSubmitComments,
+  codeReviewStatus,
+  onAutoReview,
+  isStreaming,
 }: ChangesTabProps) {
   return (
     <div className="h-full overflow-hidden">
@@ -32,6 +39,9 @@ export function ChangesTab({
         lastUpdated={lastDiffUpdate}
         onSubmitComments={onSubmitComments}
         prFeedback={prFeedback}
+        codeReviewStatus={codeReviewStatus}
+        onAutoReview={onAutoReview}
+        isStreaming={isStreaming}
       />
     </div>
   )

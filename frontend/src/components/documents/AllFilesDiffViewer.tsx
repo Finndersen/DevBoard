@@ -1,6 +1,7 @@
-import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useState, useMemo } from 'react'
 import type { TaskDiffResponse, TaskBranchInfo, PRFeedbackResponse, PRFeedbackCommentThread } from '../../lib/api'
+import type { CodeReviewStatus } from '../../views/hooks/useCodeReviewStatus'
 import { DiffReviewProvider, type CommentSubmitHandler } from '../../contexts/DiffReviewContext'
 import GitDiffViewer from './GitDiffViewer'
 import PRGeneralComments from './PRGeneralComments'
@@ -15,6 +16,9 @@ interface AllFilesDiffViewerProps {
   className?: string
   onSubmitComments?: CommentSubmitHandler
   prFeedback?: PRFeedbackResponse | null
+  codeReviewStatus?: CodeReviewStatus
+  onAutoReview?: () => void
+  isStreaming?: boolean
 }
 
 function AllFilesDiffViewerContent({
@@ -25,7 +29,10 @@ function AllFilesDiffViewerContent({
   lastUpdated,
   className = '',
   onSubmitComments,
-  prFeedback
+  prFeedback,
+  codeReviewStatus,
+  onAutoReview,
+  isStreaming,
 }: AllFilesDiffViewerProps) {
   // Track selected view
   const [selectedView, setSelectedView] = useState<string>('all')
@@ -156,12 +163,39 @@ function AllFilesDiffViewerContent({
             )}
           </div>
           <div className="flex items-center space-x-3">
+            {/* Code review status badge */}
+            {onAutoReview && codeReviewStatus === 'reviewed' && (
+              <span className="inline-flex items-center space-x-1 text-xs text-green-600 dark:text-green-400">
+                <CheckCircleIcon className="w-3.5 h-3.5" />
+                <span>Self-reviewed</span>
+              </span>
+            )}
+            {onAutoReview && codeReviewStatus === 'stale' && (
+              <span className="inline-flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400">
+                <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                <span>Review outdated</span>
+              </span>
+            )}
+            {onAutoReview && codeReviewStatus === 'not_reviewed' && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">Not self-reviewed</span>
+            )}
             {/* Submit All Comments Button - only visible when there are pending comments */}
             {onSubmitComments && <SubmitAllCommentsButton />}
             {lastUpdated && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 Last updated: {formatTimestamp(lastUpdated)}
               </span>
+            )}
+            {/* Auto-Review button */}
+            {onAutoReview && (
+              <button
+                onClick={onAutoReview}
+                disabled={isStreaming}
+                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <EyeIcon className="w-4 h-4 mr-1.5" />
+                Auto-Review
+              </button>
             )}
             <button
               onClick={() => onRefresh(selectedView)}
