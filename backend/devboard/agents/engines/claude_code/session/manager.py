@@ -8,6 +8,7 @@ from pathlib import Path
 
 from devboard.agents.engines.claude_code.config_parser import ClaudeConfigParser
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
+from devboard.agents.engines.claude_code.session.file_locator import find_session_file
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
 from devboard.agents.engines.claude_code.session.service import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
@@ -283,6 +284,15 @@ class ClaudeSessionManager:
                 continue
 
         return titles
+
+    def locate_session(self, session_id: str) -> str:
+        """Return the encoded project path for a given session ID.
+
+        Raises:
+            FileNotFoundError: If the session file cannot be found.
+        """
+        session_file = find_session_file(session_id, self.claude_projects_dir)
+        return session_file.parent.name
 
     async def get_session_messages(self, session_id: str) -> list[ConversationEvent]:
         """Load full conversation events for a session.

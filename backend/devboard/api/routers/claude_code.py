@@ -8,6 +8,7 @@ from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.schemas.claude_code import (
     ClaudeCodeProjectResponse,
     ClaudeCodeSessionResponse,
+    SessionLocateResponse,
     SessionSearchResultResponse,
     SessionTaskInfoResponse,
 )
@@ -57,6 +58,17 @@ async def list_sessions(
         )
         results.append(ClaudeCodeSessionResponse(**s.__dict__, task_info=task_info))
     return results
+
+
+@router.get("/sessions/{session_id}/locate", response_model=SessionLocateResponse)
+async def locate_session(session_id: str) -> SessionLocateResponse:
+    """Locate a session's project by session ID."""
+    manager = _get_manager()
+    try:
+        project_encoded_path = manager.locate_session(session_id)
+        return SessionLocateResponse(project_encoded_path=project_encoded_path)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ConversationEvent])

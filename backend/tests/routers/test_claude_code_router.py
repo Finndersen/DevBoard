@@ -1,7 +1,7 @@
 """Tests for Claude Code session viewer router."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -112,5 +112,30 @@ class TestListSessionsEndpoint:
             new=AsyncMock(side_effect=FileNotFoundError("Project not found")),
         ):
             response = client.get("/api/claude-code/projects/nonexistent/sessions")
+
+        assert response.status_code == 404
+
+
+class TestLocateSessionEndpoint:
+    """Tests for GET /api/claude-code/sessions/{session_id}/locate."""
+
+    def test_returns_project_encoded_path_for_found_session(self, client):
+        """Returns 200 with project_encoded_path when session exists."""
+        with patch(
+            "devboard.api.routers.claude_code.ClaudeSessionManager.locate_session",
+            new=Mock(return_value="-Users-foo-myproject"),
+        ):
+            response = client.get("/api/claude-code/sessions/sess-abc/locate")
+
+        assert response.status_code == 200
+        assert response.json() == {"project_encoded_path": "-Users-foo-myproject"}
+
+    def test_returns_404_when_session_not_found(self, client):
+        """Returns 404 when session file cannot be found."""
+        with patch(
+            "devboard.api.routers.claude_code.ClaudeSessionManager.locate_session",
+            new=Mock(side_effect=FileNotFoundError("Session not found")),
+        ):
+            response = client.get("/api/claude-code/sessions/nonexistent/locate")
 
         assert response.status_code == 404

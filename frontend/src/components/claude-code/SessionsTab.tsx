@@ -7,6 +7,7 @@ import { ProjectListPanel } from './ProjectListPanel'
 import { SessionListPanel, AGENT_ROLE_LABELS } from './SessionListPanel'
 import { SessionConversationViewer } from './SessionConversationViewer'
 import { SessionSearch } from './SessionSearch'
+import { GoToSession } from './GoToSession'
 
 export default function SessionsTab() {
   const navigate = useNavigate()
@@ -126,6 +127,16 @@ export default function SessionsTab() {
     }, { replace: true })
   }
 
+  const handleGoToSession = (sessionId: string, projectEncodedPath: string) => {
+    setSearchResults([])
+    setSearchQuery('')
+    setSearchParams(prev => {
+      prev.set('project', projectEncodedPath)
+      prev.set('session', sessionId)
+      return prev
+    }, { replace: true })
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Global toolbar */}
@@ -137,6 +148,9 @@ export default function SessionsTab() {
           <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
           Hide empty
         </label>
+        <div className="w-64 shrink-0">
+          <GoToSession onLocated={handleGoToSession} />
+        </div>
         <div className="w-80 shrink-0">
           <SessionSearch onResults={(results, query) => {
             setSearchResults(results)

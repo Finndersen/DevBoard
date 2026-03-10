@@ -32,6 +32,10 @@ class ClaudeCodeSessionResponse(BaseModel):
     task_info: SessionTaskInfoResponse | None = None
 
 
+class SessionLocateResponse(BaseModel):
+    project_encoded_path: str
+
+
 class SessionSearchResultResponse(BaseModel):
     session_id: str
     project_encoded_path: str

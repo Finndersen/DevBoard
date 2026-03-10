@@ -431,6 +431,23 @@ class TestLinkedSessions:
         assert by_id["impl-id"].linked_session_id == "plan-id"
 
 
+class TestLocateSession:
+    def test_returns_encoded_project_path_for_existing_session(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-myproject"
+        project_dir.mkdir()
+        (project_dir / "sess-abc.jsonl").write_text("{}\n")
+
+        result = manager.locate_session("sess-abc")
+
+        assert result == "-Users-foo-myproject"
+
+    def test_raises_file_not_found_for_missing_session(self, manager: ClaudeSessionManager) -> None:
+        with pytest.raises(FileNotFoundError):
+            manager.locate_session("nonexistent-session-id")
+
+
 class TestSearchSessions:
     @pytest.mark.asyncio
     async def test_parses_ripgrep_json_output(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:

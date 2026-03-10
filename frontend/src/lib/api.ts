@@ -1193,6 +1193,10 @@ export class ApiClient {
     return this.request<ConversationEvent[]>(`/api/claude-code/sessions/${encodeURIComponent(sessionId)}/messages`)
   }
 
+  async locateClaudeCodeSession(sessionId: string): Promise<{ project_encoded_path: string }> {
+    return this.request<{ project_encoded_path: string }>(`/api/claude-code/sessions/${encodeURIComponent(sessionId)}/locate`)
+  }
+
   async searchClaudeCodeSessions(query: string, projectPath?: string): Promise<SessionSearchResult[]> {
     const params = new URLSearchParams({ query })
     if (projectPath) {
