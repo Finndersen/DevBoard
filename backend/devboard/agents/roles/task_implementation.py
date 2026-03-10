@@ -16,7 +16,7 @@ from devboard.agents.tools import (
 )
 from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
-from devboard.db.models import CustomFieldDefinition, Task
+from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
@@ -79,7 +79,6 @@ class TaskImplementationAgentRole(AgentRole):
         task_service: TaskService,
         task_git_service: TaskGitService,
         github_integration: GitHubIntegration,
-        custom_field_definitions: list[CustomFieldDefinition] | None = None,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -87,7 +86,6 @@ class TaskImplementationAgentRole(AgentRole):
         self.task_service = task_service
         self.task_git_service = task_git_service
         self.github_integration = github_integration
-        self.custom_field_definitions = custom_field_definitions
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -136,7 +134,7 @@ class TaskImplementationAgentRole(AgentRole):
         # For MANUAL branch handling, no completion tools are provided
 
         # Add create_task tool for creating related tasks
-        tools.append(create_create_task_tool(self.task.project, self.task_service, self.custom_field_definitions))
+        tools.append(create_create_task_tool(self.task.project, self.task_service))
 
         return tools
 

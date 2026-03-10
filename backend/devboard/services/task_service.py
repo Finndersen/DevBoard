@@ -11,8 +11,11 @@ import logfire
 
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
+from devboard.db.models.custom_field import CustomFieldDefinition
 from devboard.db.models.document import DocumentType
+from devboard.db.models.enums import EntityType
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
+from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
@@ -34,6 +37,7 @@ class TaskService:
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
         worktree_slot_repo: WorktreeSlotRepository,
+        custom_field_repo: CustomFieldRepository,
     ):
         """Initialize service.
 
@@ -42,11 +46,13 @@ class TaskService:
             document_repo: Repository for document operations
             task_repo: Repository for task operations
             worktree_slot_repo: Repository for worktree slot operations
+            custom_field_repo: Repository for custom field operations
         """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
         self.worktree_slot_repo = worktree_slot_repo
+        self.custom_field_repo = custom_field_repo
 
     def _generate_branch_name(self, title: str) -> str:
         """Generate a branch name from a task title.
@@ -422,3 +428,11 @@ class TaskService:
             created_before=created_before,
             codebase_name=codebase_name,
         )
+
+    def get_custom_fields(self) -> list[CustomFieldDefinition]:
+        """Get all custom field definitions."""
+        return self.custom_field_repo.get_all(entity_type=EntityType.TASK)
+
+    def get_mandatory_custom_fields(self) -> list[CustomFieldDefinition]:
+        """Get all mandatory custom field definitions."""
+        return self.custom_field_repo.get_mandatory_fields(entity_type=EntityType.TASK)

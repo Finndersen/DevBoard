@@ -12,7 +12,6 @@ from devboard.api.dependencies.factories import (
 )
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
-    get_custom_field_repository,
     get_document_repository,
 )
 from devboard.api.dependencies.services import (
@@ -23,7 +22,7 @@ from devboard.api.dependencies.services import (
     get_task_service,
 )
 from devboard.db.models import Conversation
-from devboard.db.repositories import ConversationRepository, CustomFieldRepository, DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.integration_service import IntegrationService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
@@ -37,10 +36,8 @@ async def get_agent_role_for_conversation(
     integration_service: IntegrationService = Depends(get_integration_service),
     task_service: TaskService = Depends(get_task_service),
     task_git_service: TaskGitService = Depends(get_task_git_service),
-    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ) -> AgentRole:
     """Get agent role for a conversation."""
-    custom_field_definitions = custom_field_repo.get_all()
     return await create_agent_role_for_conversation(
         conversation,
         document_repo,
@@ -48,7 +45,6 @@ async def get_agent_role_for_conversation(
         integration_service=integration_service,
         task_service=task_service,
         task_git_service=task_git_service,
-        custom_field_definitions=custom_field_definitions,
     )
 
 

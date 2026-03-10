@@ -51,13 +51,23 @@ def mock_worktree_slot_repo():
 
 
 @pytest.fixture
-def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, mock_worktree_slot_repo):
+def mock_custom_field_repo():
+    """Mock CustomFieldRepository."""
+    repo = MagicMock()
+    return repo
+
+
+@pytest.fixture
+def task_service(
+    mock_conversation_service, mock_document_repo, mock_task_repo, mock_worktree_slot_repo, mock_custom_field_repo
+):
     """Create TaskService instance with mocked dependencies."""
     return TaskService(
         conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         task_repo=mock_task_repo,
         worktree_slot_repo=mock_worktree_slot_repo,
+        custom_field_repo=mock_custom_field_repo,
     )
 
 

@@ -10,6 +10,7 @@ from devboard.api.dependencies.repositories import (
     get_configuration_repository,
     get_context_provider_resource_repository,
     get_conversation_repository,
+    get_custom_field_repository,
     get_document_repository,
     get_mcp_server_repository,
     get_oauth_repository,
@@ -24,6 +25,7 @@ from devboard.db.repositories import (
     ConfigurationRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
+    CustomFieldRepository,
     DocumentRepository,
     MCPServerRepository,
     OAuthRepository,
@@ -153,6 +155,7 @@ def get_task_service(
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
     """Get TaskService instance."""
     return TaskService(
@@ -160,6 +163,7 @@ def get_task_service(
         document_repo=document_repo,
         task_repo=task_repo,
         worktree_slot_repo=worktree_slot_repo,
+        custom_field_repo=custom_field_repo,
     )
 
 

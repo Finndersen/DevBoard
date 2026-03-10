@@ -14,7 +14,7 @@ from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
-from devboard.db.models import Conversation, CustomFieldDefinition, Project, Task
+from devboard.db.models import Conversation, Project, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
@@ -30,7 +30,6 @@ async def create_agent_role_for_conversation(
     integration_service: IntegrationService,
     task_service: TaskService,
     task_git_service: TaskGitService,
-    custom_field_definitions: list[CustomFieldDefinition] | None = None,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
@@ -45,7 +44,6 @@ async def create_agent_role_for_conversation(
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
-                custom_field_definitions=custom_field_definitions,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -57,7 +55,6 @@ async def create_agent_role_for_conversation(
                 task_service=task_service,
                 task_git_service=task_git_service,
                 github_integration=github_integration,
-                custom_field_definitions=custom_field_definitions,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -67,7 +64,6 @@ async def create_agent_role_for_conversation(
                     task=parent_entity,
                     task_service=task_service,
                     github_integration=github_integration,
-                    custom_field_definitions=custom_field_definitions,
                 )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
@@ -84,7 +80,6 @@ async def create_agent_role_for_conversation(
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
-                custom_field_definitions=custom_field_definitions,
             )
         else:
             raise HTTPException(

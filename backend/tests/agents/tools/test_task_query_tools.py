@@ -88,6 +88,7 @@ def mock_task_service():
     service = Mock(spec=TaskService)
     service.task_repo = Mock()
     service.task_repo.db = Mock()
+    service.get_custom_fields.return_value = []
     return service
 
 
@@ -745,7 +746,8 @@ class TestToolSchemas:
 
         definitions = [priority_def, notes_def, is_urgent_def]
 
-        tool = create_create_task_tool(mock_project, mock_task_service, custom_field_definitions=definitions)
+        mock_task_service.get_custom_fields.return_value = definitions
+        tool = create_create_task_tool(mock_project, mock_task_service)
         schema = tool.tool_def.parameters_json_schema
         props = schema["properties"]
 
@@ -789,7 +791,8 @@ class TestToolSchemas:
 
         definitions = [team_def]
 
-        tool = create_create_task_tool(mock_project, mock_task_service, custom_field_definitions=definitions)
+        mock_task_service.get_custom_fields.return_value = definitions
+        tool = create_create_task_tool(mock_project, mock_task_service)
         schema = tool.tool_def.parameters_json_schema
         cf_anyof = schema["properties"]["custom_fields"]["anyOf"]
         cf_schema = [s for s in cf_anyof if s.get("type") == "object"][0]
@@ -951,9 +954,8 @@ class TestEditTaskToolSchemas:
         notes_def.description = None
         notes_def.mandatory = False
 
-        tool = create_edit_task_tool(
-            mock_project, mock_task_service, custom_field_definitions=[priority_def, notes_def]
-        )
+        mock_task_service.get_custom_fields.return_value = [priority_def, notes_def]
+        tool = create_edit_task_tool(mock_project, mock_task_service)
         schema = tool.tool_def.parameters_json_schema
 
         assert "custom_fields" in schema["properties"]

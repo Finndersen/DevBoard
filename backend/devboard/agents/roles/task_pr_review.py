@@ -12,7 +12,7 @@ from devboard.agents.tools import (
     create_merge_pr_and_complete_task_tool,
 )
 from devboard.agents.tools.task_tools import create_create_task_tool
-from devboard.db.models import CustomFieldDefinition, Task
+from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration, PRStatus
 from devboard.services.task_service import TaskService
@@ -82,7 +82,6 @@ class TaskPRReviewAgentRole(AgentRole):
         task: Task,
         task_service: TaskService,
         github_integration: GitHubIntegration,
-        custom_field_definitions: list[CustomFieldDefinition] | None = None,
     ):
         if not task.github_pr_number:
             raise ValueError("Task does not have a github_pr_number set")
@@ -92,7 +91,6 @@ class TaskPRReviewAgentRole(AgentRole):
         self.task = task
         self._task_service = task_service
         self._github_integration = github_integration
-        self._custom_field_definitions = custom_field_definitions
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for PR review role."""
@@ -114,7 +112,7 @@ class TaskPRReviewAgentRole(AgentRole):
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
             create_merge_pr_and_complete_task_tool(self.task, self._task_service, self._github_integration),
-            create_create_task_tool(self.task.project, self._task_service, self._custom_field_definitions),
+            create_create_task_tool(self.task.project, self._task_service),
         ]
 
     async def get_context_content(self) -> str:

@@ -373,14 +373,12 @@ def _build_edit_task_json_schema(
 def create_edit_task_tool(
     project: Project,
     task_service: TaskService,
-    custom_field_definitions: list[CustomFieldDefinition] | None = None,
 ) -> Tool:
     """Create a tool for editing task metadata within a project.
 
     Args:
         project: The project context (for security validation)
         task_service: Service for task operations
-        custom_field_definitions: Custom field definitions to expose in the tool schema
     """
 
     async def edit_task(
@@ -412,7 +410,7 @@ def create_edit_task_tool(
         except Exception as e:
             raise ModelRetry(f"Failed to update task: {e}") from e
 
-    json_schema = _build_edit_task_json_schema(custom_field_definitions or [])
+    json_schema = _build_edit_task_json_schema(task_service.get_custom_fields())
 
     return Tool.from_schema(
         function=edit_task,
@@ -425,14 +423,12 @@ def create_edit_task_tool(
 def create_create_task_tool(
     project: Project,
     task_service: TaskService,
-    custom_field_definitions: list[CustomFieldDefinition] | None = None,
 ) -> Tool:
     """Create a tool for creating new tasks within a project.
 
     Args:
         project: The project to create tasks in
         task_service: Service for task creation
-        custom_field_definitions: Custom field definitions to expose in the tool schema
     """
     # Build codebase name -> Codebase mapping for lookup
     codebase_map: dict[str, Codebase] = {cb.name: cb for cb in project.codebases} if project.codebases else {}
@@ -481,7 +477,7 @@ def create_create_task_tool(
         except Exception as e:
             raise ModelRetry(f"Failed to create task: {e}") from e
 
-    json_schema = _build_create_task_json_schema(codebase_names, custom_field_definitions or [])
+    json_schema = _build_create_task_json_schema(codebase_names, task_service.get_custom_fields())
 
     return Tool.from_schema(
         function=create_task,

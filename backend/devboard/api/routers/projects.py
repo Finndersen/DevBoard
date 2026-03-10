@@ -9,7 +9,6 @@ from devboard.api.dependencies.entities import get_verified_codebase, get_verifi
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
-    get_custom_field_repository,
     get_document_repository,
     get_project_repository,
     get_task_repository,
@@ -38,7 +37,6 @@ from devboard.db.models.project import Project
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
-    CustomFieldRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
@@ -208,7 +206,6 @@ async def create_project_task(
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
-    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
     """Create a new task under a project with initial conversation."""
 
@@ -220,7 +217,7 @@ async def create_project_task(
     codebase = get_verified_codebase(task.codebase_id, codebase_repo)
 
     # Validate mandatory custom fields
-    mandatory_fields = custom_field_repo.get_mandatory_fields()
+    mandatory_fields = task_service.get_mandatory_custom_fields()
     if mandatory_fields:
         custom_fields = task.custom_fields or {}
         missing_fields = []
