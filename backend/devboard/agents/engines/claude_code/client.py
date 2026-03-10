@@ -162,6 +162,7 @@ class ClaudeClient:
             permission_mode=permission_mode,
             setting_sources=["local", "project", "user"] if load_settings else None,
             env=env_vars,
+            stderr=lambda line: logfire.warning("Claude CLI stderr: {line}", line=line),
         )
 
     def _build_system_prompt(
@@ -247,7 +248,15 @@ class ClaudeClient:
                 else:
                     validated_args = args
 
-                result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
+                try:
+                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
+                except Exception as e:
+                    logfire.error(
+                        f"Tool execution failed: {pydantic_tool.name}",
+                        tool_name=pydantic_tool.name,
+                        exc_info=True,
+                    )
+                    return {"content": [{"type": "text", "text": f"An error occurred during tool execution: {e}"}]}
 
                 # Convert result to Claude Code format
                 if isinstance(result, dict) and "content" in result:
