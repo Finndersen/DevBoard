@@ -67,7 +67,7 @@ class TestListProjects:
             )
         ]
         manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-")
+            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
         )
 
         projects = manager.list_projects()
@@ -96,7 +96,7 @@ class TestListProjects:
             )
         ]
         manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-")
+            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
         )
 
         projects = manager.list_projects()
@@ -114,7 +114,7 @@ class TestListProjects:
             )
         ]
         manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-")
+            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
         )
 
         projects = manager.list_projects()
@@ -158,7 +158,7 @@ class TestListProjects:
             ),
         ]
         manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-")
+            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
         )
 
         projects = manager.list_projects()
@@ -480,7 +480,7 @@ class TestSearchSessions:
         self, manager: ClaudeSessionManager, claude_projects_dir: Path
     ) -> None:
         manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-")
+            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
         )
 
         with patch("devboard.agents.engines.claude_code.session.manager.execute_shell_command") as mock_cmd:

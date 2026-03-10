@@ -20,7 +20,7 @@ class ClaudeCodeSessionMigrator:
     @staticmethod
     def encode_path_for_claude_projects(path: str) -> str:
         """Encode a filesystem path to Claude's project directory format."""
-        return "-" + path.lstrip("/").replace("/", "-").replace(".", "-")
+        return "-" + path.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
 
     def _extract_cwd_from_session_file(self, session_file: Path) -> str:
         """Extract the working directory from a session file."""

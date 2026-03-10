@@ -634,6 +634,25 @@ class TestClaudeCodeSessionService:
         assert todos[2].priority == TodoPriority.LOW
 
 
+class TestEncodePathForClaudeProjects:
+    """Tests for ClaudeCodeSessionMigrator.encode_path_for_claude_projects."""
+
+    def test_encodes_simple_path(self):
+        result = ClaudeCodeSessionMigrator.encode_path_for_claude_projects("/Users/foo/myproject")
+        assert result == "-Users-foo-myproject"
+
+    def test_replaces_dots(self):
+        result = ClaudeCodeSessionMigrator.encode_path_for_claude_projects("/Users/foo/my.project")
+        assert result == "-Users-foo-my-project"
+
+    def test_replaces_underscores(self):
+        """Underscores must be encoded as dashes to match Claude CLI behaviour."""
+        result = ClaudeCodeSessionMigrator.encode_path_for_claude_projects(
+            "/Users/finn.andersen/.devboard/worktrees/1_DevBoard.worktree-4"
+        )
+        assert result == "-Users-finn-andersen--devboard-worktrees-1-DevBoard-worktree-4"
+
+
 class TestClaudeCodeSessionMigratorExtractCwd:
     """Tests for ClaudeCodeSessionMigrator._extract_cwd_from_session_file."""
 
