@@ -77,16 +77,21 @@ export function useSendConversationMessage({
       // User message is added when first event is received (via onFirstEvent)
       // This prevents duplicate display of pending message + user message
       // Event handler registry is looked up from the store's internal map
+      let firstEventFired = false
       await startStream(
         conversationId,
         stream,
         () => {
+          firstEventFired = true
           // First event received - add user message and remove pending
           addEvent(conversationId, userMessage)
           removeMessage(pendingKey, pendingMessageId)
         },
         abortController
       )
+      if (!firstEventFired) {
+        updateMessageStatus(pendingKey, pendingMessageId, 'failed', 'No response received. Please try again.')
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
       let errorMessage = 'Failed to send message'
