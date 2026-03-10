@@ -45,7 +45,7 @@ from .base import (
 _github_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="github-api")
 
 PRState = Literal["open", "closed"]
-MergeableState = Literal["clean", "dirty", "blocked", "behind", "unstable", "unknown", "has_hooks"]
+MergeableState = Literal["clean", "dirty", "blocked", "behind", "unstable", "unknown", "has_hooks", "queued"]
 CIState = Literal["success", "pending", "failure", "error"]
 
 
@@ -599,6 +599,7 @@ class GitHubIntegration(BaseIntegration):
                 updatedAt
                 mergeable
                 mergeStateStatus
+                mergeQueueEntry { id }
                 reviewDecision
                 totalCommentsCount
                 commits(last: 1) {
@@ -642,7 +643,7 @@ class GitHubIntegration(BaseIntegration):
                 number=node["number"],
                 title=node["title"],
                 html_url=node["url"],
-                mergeable_state=node.get("mergeStateStatus"),
+                mergeable_state="QUEUED" if node.get("mergeQueueEntry") else node.get("mergeStateStatus"),
                 repo_full_name=node["repository"]["nameWithOwner"],
                 updated_at=datetime.fromisoformat(node["updatedAt"]),
                 review_decision=node.get("reviewDecision"),

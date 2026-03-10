@@ -201,4 +201,39 @@ describe('GitHubPRDropdown', () => {
     expect(conflictIndicator).toBeInTheDocument()
     expect(conflictIndicator.className).toContain('text-red-500')
   })
+
+  it('shows queued indicator for PR in merge queue', () => {
+    vi.mocked(useOpenPRs).mockReturnValue({
+      data: {
+        prs: [
+          {
+            pr_number: 3,
+            title: 'Queued PR',
+            repo_full_name: 'owner/DevBoard',
+            codebase_id: 10,
+            pr_url: 'https://github.com/owner/DevBoard/pull/3',
+            mergeable_state: 'QUEUED',
+            task_id: null,
+            task_title: null,
+            review_decision: 'APPROVED',
+            ci_status: 'SUCCESS',
+            comment_count: 0,
+            updated_at: '2026-03-01T12:00:00Z',
+          },
+        ],
+        errors: [],
+      },
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+      setData: vi.fn(),
+    })
+
+    render(<GitHubPRDropdown />)
+    openDropdown()
+
+    const queuedIndicator = screen.getByTitle('Queued for merge')
+    expect(queuedIndicator).toBeInTheDocument()
+    expect(queuedIndicator.className).toContain('text-blue-500')
+  })
 })

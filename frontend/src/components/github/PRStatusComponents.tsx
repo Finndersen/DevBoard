@@ -20,6 +20,11 @@ export function getStatusInfo(mergeableState: string | null, ciStatus: string | 
     return { icon: '○', colorClass: 'text-yellow-500', tooltip: 'CI checks pending' }
   }
 
+  // PR is in the merge queue
+  if (mergeableState?.toUpperCase() === 'QUEUED') {
+    return { icon: '⏎', colorClass: 'text-blue-500', tooltip: 'Queued for merge' }
+  }
+
   // Branch behind or blocked (no CI issue but not ready)
   if (mergeableState?.toUpperCase() === 'BEHIND') {
     return { icon: '↓', colorClass: 'text-yellow-500', tooltip: 'Branch is behind base' }
