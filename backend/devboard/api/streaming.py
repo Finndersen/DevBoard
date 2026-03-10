@@ -85,7 +85,13 @@ def stream_conversation_events(
             if exception_handler:
                 exception_handler(e)
             else:
-                raise
+                logfire.error("Unhandled exception during event streaming", exc_info=True)
+                error_event = SystemEvent(
+                    type=SystemEventType.STREAM_ERROR,
+                    data={"message": "An error occurred while processing your request. Please try again."},
+                    timestamp=datetime.now(UTC),
+                )
+                yield json.dumps(error_event.model_dump(mode="json")) + "\n"
         finally:
             if hasattr(event_stream, "aclose"):
                 await event_stream.aclose()
