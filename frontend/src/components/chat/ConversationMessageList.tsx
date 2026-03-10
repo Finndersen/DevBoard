@@ -1,7 +1,8 @@
 import { memo, useMemo } from 'react'
-import type { ConversationEvent, ToolResult } from '../../lib/api'
+import type { ConversationEvent, ToolCall, ToolResult } from '../../lib/api'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
+import ToolCallGroupDisplay from './ToolCallGroupDisplay'
 import type { PendingMessage } from '../../contexts/PendingMessagesContext'
 
 interface ConversationMessageListProps {
@@ -13,6 +14,19 @@ interface ConversationMessageListProps {
   codebaseLocalPath?: string
   highlightUuids?: string[]
 }
+
+interface SingleRenderItem {
+  type: 'single'
+  message: ConversationEvent
+  index: number
+}
+
+interface GroupRenderItem {
+  type: 'group'
+  items: Array<{ message: ToolCall; index: number }>
+}
+
+type RenderItem = SingleRenderItem | GroupRenderItem
 
 // Memoized message component to prevent unnecessary re-renders
 const MemoizedMessageComponent = memo(ConversationMessageComponent)
@@ -31,13 +45,10 @@ function ConversationMessageList({
 }: ConversationMessageListProps) {
   // Compute tool result mappings using useMemo
   // This creates a Map of cache keys to ToolResults, recomputed only when messages change
-  // Using useMemo ensures React knows to re-render when this changes
   const toolResultMap = useMemo(() => {
     const map = new Map<string, ToolResult>()
 
-    // Helper function to find matching tool result for a tool call
     const findToolResult = (toolCallId: string, toolCallIndex: number): ToolResult | undefined => {
-      // Search only messages that come after the tool call
       for (let i = toolCallIndex + 1; i < messages.length; i++) {
         const msg = messages[i]
         if (msg.event_type === 'tool_result' && msg.tool_call_id === toolCallId) {
@@ -72,6 +83,50 @@ function ConversationMessageList({
     return -1
   }, [messages])
 
+  // Group consecutive tool_call events into GroupRenderItems.
+  // tool_result events are skipped (they are hidden and paired via toolResultMap).
+  // Any other event type breaks the current group.
+  // Trailing tool calls (at end of list, not followed by a non-tool event) stay as individual items.
+  const renderItems = useMemo((): RenderItem[] => {
+    const result: RenderItem[] = []
+    let toolCallBuffer: Array<{ message: ToolCall; index: number }> = []
+
+    const flushBuffer = (asGroup: boolean) => {
+      if (toolCallBuffer.length === 0) return
+
+      if (asGroup && toolCallBuffer.length >= 2) {
+        result.push({ type: 'group', items: toolCallBuffer })
+      } else {
+        for (const item of toolCallBuffer) {
+          result.push({ type: 'single', message: item.message, index: item.index })
+        }
+      }
+      toolCallBuffer = []
+    }
+
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+
+      if (message.event_type === 'tool_result') {
+        // Skip tool_result events — they are rendered inside their paired tool_call
+        continue
+      }
+
+      if (message.event_type === 'tool_call') {
+        toolCallBuffer.push({ message: message as ToolCall, index: i })
+      } else {
+        // Non-tool event: flush buffer as a group, then add this event
+        flushBuffer(true)
+        result.push({ type: 'single', message, index: i })
+      }
+    }
+
+    // Trailing tool calls are NOT grouped — keep them as individual items
+    flushBuffer(false)
+
+    return result
+  }, [messages])
+
   if (showEmptyState) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -83,20 +138,32 @@ function ConversationMessageList({
 
   return (
     <>
-      {/* Render confirmed messages with memoization to avoid unnecessary re-renders */}
-      {messages.map((message, index) => {
-        const messageKey = `${message.timestamp}-${message.event_type}-${index}`
-        const toolResult = message.event_type === 'tool_call'
+      {renderItems.map((item) => {
+        if (item.type === 'group') {
+          const groupKey = item.items.map(({ message, index }) => `${message.timestamp}-tool_call-${index}`).join('|')
+          return (
+            <ToolCallGroupDisplay
+              key={groupKey}
+              items={item.items}
+              toolResultMap={toolResultMap}
+              highlightSet={highlightSet}
+              codebaseLocalPath={codebaseLocalPath}
+            />
+          )
+        }
+
+        const messageKey = `${item.message.timestamp}-${item.message.event_type}-${item.index}`
+        const toolResult = item.message.event_type === 'tool_call'
           ? toolResultMap.get(messageKey)
           : undefined
-        const isLatest = index === lastMessageIndex
-        const uuid = (message as { uuid?: string }).uuid
+        const isLatest = item.index === lastMessageIndex
+        const uuid = (item.message as { uuid?: string }).uuid
         const isHighlighted = uuid ? highlightSet.has(uuid) : false
 
         return (
           <div key={messageKey} id={uuid ? `msg-${uuid}` : undefined}>
             <MemoizedMessageComponent
-              message={message}
+              message={item.message}
               toolResult={toolResult}
               isLatest={isLatest}
               isHighlighted={isHighlighted}
@@ -106,7 +173,7 @@ function ConversationMessageList({
         )
       })}
 
-      {/* Render pending message if exists (memoized to prevent unnecessary re-renders) */}
+      {/* Render pending message if exists */}
       {pendingMessage && (
         <MemoizedPendingMessage
           key={pendingMessage.id}
