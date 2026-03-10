@@ -78,6 +78,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         model_id: str | None,
         external_session_id: str | None = None,
         is_active: bool = True,
+        parent_conversation_id: int | None = None,
     ) -> Conversation:
         """Create a conversation with all parameters specified (low-level method).
 
@@ -93,6 +94,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             model_id: Model identifier (e.g., "anthropic:claude-sonnet-4") or None for default
             external_session_id: Optional external session ID for Claude Code/Gemini
             is_active: Whether this is the active conversation (default True)
+            parent_conversation_id: Optional ID of parent conversation for sub-conversations
 
         Returns:
             New Conversation instance
@@ -105,6 +107,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             model_id=model_id,
             external_session_id=external_session_id,
             is_active=is_active,
+            parent_conversation_id=parent_conversation_id,
         )
 
         self.db.add(conversation)
@@ -244,7 +247,10 @@ class ConversationRepository(BaseRepository[Conversation]):
         return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]
 
     def delete_by_id(self, conversation_id: int) -> bool:
-        """Delete a conversation and its messages by ID.
+        """Delete a conversation, its sub-conversations, and all messages by ID.
+
+        Deletes sub-conversations first to avoid FK constraint violations when
+        deleting the parent (e.g., called by ConversationService.reset_conversation()).
 
         Args:
             conversation_id: ID of the conversation to delete
@@ -252,6 +258,18 @@ class ConversationRepository(BaseRepository[Conversation]):
         Returns:
             True if conversation was deleted, False if not found
         """
+        # Find and delete all sub-conversations first (FK constraint)
+        sub_conv_stmt = select(Conversation.id).where(Conversation.parent_conversation_id == conversation_id)
+        sub_conv_ids = list(self.db.execute(sub_conv_stmt).scalars().all())
+
+        if sub_conv_ids:
+            # Delete sub-conversation messages
+            msg_stmt = delete(ConversationMessage).where(ConversationMessage.conversation_id.in_(sub_conv_ids))
+            self.db.execute(msg_stmt)
+            # Delete sub-conversations
+            del_stmt = delete(Conversation).where(Conversation.id.in_(sub_conv_ids))
+            self.db.execute(del_stmt)
+
         # Delete messages first (SQL delete bypasses cascade)
         self.delete_messages(conversation_id)
 

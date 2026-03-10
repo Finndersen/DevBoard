@@ -12,7 +12,7 @@ from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
-from devboard.db.repositories import DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 from tests.conftest import create_mock_task
 
@@ -46,7 +46,9 @@ class TestTaskPlanningRoleWithSpec:
     @pytest.fixture
     def mock_task_service(self):
         """Create a mock task service."""
-        return Mock(spec=TaskService)
+        service = Mock(spec=TaskService)
+        service.get_custom_fields.return_value = []
+        return service
 
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service, mock_task_service):
@@ -56,6 +58,8 @@ class TestTaskPlanningRoleWithSpec:
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
+            conversation_repo=Mock(spec=ConversationRepository),
+            parent_conversation_id=None,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -74,14 +78,15 @@ class TestTaskPlanningRoleWithSpec:
         """Test role creates correct tools when no implementation plan exists."""
         tools = role.get_tools()
 
-        # Should have set_content for spec, edit for spec, codebase investigation tool, and create_task
-        assert len(tools) == 4
+        # Should have set_content for spec, edit for spec, codebase investigation tool, create_task, edit_task
+        assert len(tools) == 5
         tool_names = [tool.name for tool in tools]
 
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
+        assert "edit_task" in tool_names
 
         # Should NOT have plan tools (no plan exists yet)
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
@@ -127,7 +132,9 @@ class TestTaskPlanningRoleWithPlan:
     @pytest.fixture
     def mock_task_service(self):
         """Create a mock task service."""
-        return Mock(spec=TaskService)
+        service = Mock(spec=TaskService)
+        service.get_custom_fields.return_value = []
+        return service
 
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service, mock_task_service):
@@ -137,6 +144,8 @@ class TestTaskPlanningRoleWithPlan:
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
+            conversation_repo=Mock(spec=ConversationRepository),
+            parent_conversation_id=None,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -154,8 +163,8 @@ class TestTaskPlanningRoleWithPlan:
         """Test role creates tools for both documents in planning."""
         tools = role.get_tools()
 
-        # Should have: set_content for spec, edit for spec, set_content for plan, edit for plan, investigate, create_task
-        assert len(tools) == 6
+        # Should have: set_content for spec, edit for spec, set_content for plan, edit for plan, investigate, create_task, edit_task
+        assert len(tools) == 7
 
         tool_names = [tool.name for tool in tools]
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
@@ -164,6 +173,7 @@ class TestTaskPlanningRoleWithPlan:
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
+        assert "edit_task" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content_with_implementation_plan(self, role, mock_task):
@@ -439,7 +449,9 @@ class TestRoleToolSelection:
     @pytest.fixture
     def mock_task_service(self):
         """Create a mock task service."""
-        return Mock(spec=TaskService)
+        service = Mock(spec=TaskService)
+        service.get_custom_fields.return_value = []
+        return service
 
     def test_planning_role_provides_set_content_only_for_empty_spec(
         self, mock_task_with_blank_spec_and_plan, mock_document_repo, mock_agent_config_service, mock_task_service
@@ -450,16 +462,19 @@ class TestRoleToolSelection:
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
+            conversation_repo=Mock(spec=ConversationRepository),
+            parent_conversation_id=None,
         )
 
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # Should have set_content for spec, set_content for plan, investigation tool, and create_task
+        # Should have set_content for spec, set_content for plan, investigation tool, create_task, edit_task
         assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
+        assert "edit_task" in tool_names
 
         # Should NOT have edit tools (documents are empty)
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" not in tool_names
@@ -474,6 +489,8 @@ class TestRoleToolSelection:
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
+            conversation_repo=Mock(spec=ConversationRepository),
+            parent_conversation_id=None,
         )
 
         tools = role.get_tools()
@@ -495,6 +512,8 @@ class TestRoleToolSelection:
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
+            conversation_repo=Mock(spec=ConversationRepository),
+            parent_conversation_id=None,
         )
 
         tools = role.get_tools()

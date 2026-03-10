@@ -5,18 +5,20 @@ from typing import Literal
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
+from devboard.db.models.conversation import ParentEntityType
+from devboard.db.repositories import ConversationRepository
 from devboard.services.task_git.diff_service import TaskDiffService
 
-_active_sub_agent_sessions: set[str] = set()
+_active_sub_agent_conversations: set[int] = set()
 # Backwards-compatibility alias used by existing tests
-_active_investigation_sessions = _active_sub_agent_sessions
+_active_investigation_sessions = _active_sub_agent_conversations
+_active_sub_agent_sessions = _active_sub_agent_conversations
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
 Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
@@ -29,7 +31,7 @@ class SubAgentResult:
     """Result of a sub-agent execution."""
 
     result: str
-    session_id: str | None
+    conversation_id: int
 
 
 @dataclass
@@ -43,78 +45,84 @@ async def run_sub_agent(
     role_type: AgentRoleType,
     prompt: str,
     agent_config_service: AgentConfigService,
-    working_dir: str,
-    session_id: str | None = None,
+    conversation_repo: ConversationRepository,
+    parent_entity_type: ParentEntityType,
+    parent_entity_id: int,
+    parent_conversation_id: int | None = None,
+    conversation_id: int | None = None,
 ) -> SubAgentResult:
     """Execute a sub-agent with the given role and prompt.
 
-    Args:
-        role: The agent role instance defining the sub-agent's behaviour
-        role_type: Role type used for engine/model config resolution
-        prompt: The prompt to send to the sub-agent
-        agent_config_service: For resolving effective engine/model config
-        working_dir: Workspace directory (used by ClaudeCodeAgent)
-        session_id: Optional session ID for resuming a prior ClaudeCodeAgent session
-
-    Returns:
-        SubAgentResult with the final text response and optional session_id
+    Creates a Conversation record for the sub-agent and executes via AgentExecutionService,
+    enabling engine-agnostic message persistence and session resumption.
     """
-    if session_id is not None:
-        if session_id in _active_sub_agent_sessions:
+    if conversation_id is not None:
+        # Resumption path: validate and guard against concurrent use
+        if conversation_id in _active_sub_agent_conversations:
             raise ModelRetry(
-                f"session_id '{session_id}' is already in use by a concurrent investigation. "
+                f"session_id '{conversation_id}' is already in use by a concurrent investigation. "
                 "Concurrent calls with the same session_id are not supported. "
                 "Either wait for the previous investigation to complete before making a follow-up call with this session_id, "
                 "or omit session_id to start independent parallel investigations."
             )
-        _active_sub_agent_sessions.add(session_id)
+        conversation = conversation_repo.get_by_id(conversation_id)
+        if conversation is None:
+            raise ModelRetry(
+                f"session_id '{conversation_id}' not found. Start a new investigation by omitting session_id."
+            )
+        if conversation.parent_conversation_id != parent_conversation_id:
+            raise ModelRetry(f"session_id '{conversation_id}' does not belong to this conversation context.")
+        _active_sub_agent_conversations.add(conversation_id)
+    else:
+        # New conversation path
+        config = agent_config_service.get_effective_config(role_type)
+        conversation = conversation_repo.create(
+            parent_entity_type=parent_entity_type,
+            parent_entity_id=parent_entity_id,
+            agent_role=role_type,
+            engine=config.engine,
+            model_id=config.model_id,
+            is_active=False,
+            parent_conversation_id=parent_conversation_id,
+        )
+        # Commit eagerly so that ClaudeCodeAgentExecutionService session_id updates don't fail
+        conversation_repo.commit()
 
     try:
-        config = agent_config_service.get_effective_config(role_type)
+        # Lazy import to avoid circular dependency:
+        # sub_agent_tools → api.dependencies.factories → roles → sub_agent_tools
+        from devboard.api.dependencies.factories import create_agent_execution_service
 
-        if config.engine == AgentEngine.INTERNAL:
-            # Lazy import to avoid circular dependency
-            from devboard.agents.engines.internal.agent import InternalAgent
+        execution_service = create_agent_execution_service(
+            conversation=conversation,
+            role=role,
+            conversation_repo=conversation_repo,
+            agent_config_service=agent_config_service,
+        )
 
-            if config.model is None:
-                raise ValueError(
-                    f"Error: Could not find language model '{config.model_id}' for internal {role_type} agent"
-                )
-            agent = InternalAgent(role=role, model=config.model)
-        elif config.engine == AgentEngine.CLAUDE_CODE:
-            # Lazy import to avoid circular dependency
-            from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
+        events = await execution_service.send_message_or_approval(prompt)
 
-            agent = ClaudeCodeAgent(
-                role=role,
-                model=config.model,
-                working_dir=working_dir,
-                session_id=session_id,
-            )
-        else:
-            raise ValueError(f"Error: Unsupported engine '{config.engine}' for {role_type} agent")
+        final_response = next(
+            (e for e in reversed(events) if isinstance(e, TextMessage) and e.role == MessageRole.AGENT),
+            None,
+        )
+        if final_response is None:
+            raise ValueError(f"Expected a TextMessage response from {role_type} agent, but none was found in events")
 
-        events = await agent.run(prompt)
-
-        final_response = events[-1]
-        if not (isinstance(final_response, TextMessage) and final_response.role == MessageRole.AGENT):
-            raise ValueError(
-                f"Expected final response from {role_type} agent to be TextMessage, but got {final_response}"
-            )
-
-        result_session_id: str | None = None
-        if config.engine == AgentEngine.CLAUDE_CODE:
-            result_session_id = agent.session_id  # type: ignore[union-attr]
-
-        return SubAgentResult(result=final_response.text_content, session_id=result_session_id)
+        conversation_repo.commit()
+        return SubAgentResult(result=final_response.text_content, conversation_id=conversation.id)
     finally:
-        if session_id is not None:
-            _active_sub_agent_sessions.discard(session_id)
+        if conversation_id is not None:
+            _active_sub_agent_conversations.discard(conversation_id)
 
 
 def create_multi_codebase_investigation_tool(
     codebases: list[CodebaseInvestigationContext],
     agent_config_service: AgentConfigService,
+    conversation_repo: ConversationRepository,
+    parent_conversation_id: int | None,
+    parent_entity_type: ParentEntityType,
+    parent_entity_id: int,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
 
@@ -134,6 +142,10 @@ def create_multi_codebase_investigation_tool(
     Args:
         codebases: List of CodebaseInvestigationContext instances. Must contain at least one codebase.
         agent_config_service: AgentConfigService for getting configured LLM
+        conversation_repo: Repository for creating/loading conversation records
+        parent_conversation_id: ID of the invoking agent's conversation
+        parent_entity_type: Entity type for sub-conversation records
+        parent_entity_id: Entity ID for sub-conversation records
 
     Raises:
         ValueError: If codebases list is empty
@@ -146,7 +158,7 @@ def create_multi_codebase_investigation_tool(
         cb_config.codebase.name: cb_config for cb_config in codebases
     }
 
-    async def investigate_codebase(codebase_name: str, query: str, session_id: str | None = None) -> str:
+    async def investigate_codebase(codebase_name: str, query: str, session_id: int | None = None) -> str:
         """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
 
         Use this tool when you need detailed information about:
@@ -166,7 +178,7 @@ def create_multi_codebase_investigation_tool(
           **independent** investigations (each with no `session_id`, or with **different** `session_id` values).
         - **IMPORTANT**: Do NOT make concurrent calls with the same `session_id`. Concurrent calls sharing a `session_id`
           will fail. When continuing a previous investigation session, calls must be sequential — wait for the previous
-          call to return before making a follow-up call with the same `session_id`.
+          call to return before making a follow-up call with this `session_id`.
         - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
           focus its analysis and provide more accurate and targeted answers.
         - Indicate specific directories or files to focus on if possible.
@@ -183,18 +195,22 @@ def create_multi_codebase_investigation_tool(
             - `session_id`: An opaque session identifier to pass back on follow-up calls, or null if unavailable.
         """
         codebase_config = codebase_map[codebase_name]
-        working_dir = codebase_config.working_dir
-        investigation_role = CodebaseInvestigationAgentRole(codebase=codebase_config.codebase, worktree_dir=working_dir)
+        investigation_role = CodebaseInvestigationAgentRole(
+            codebase=codebase_config.codebase, worktree_dir=codebase_config.working_dir
+        )
         prompt = CODEBASE_INVESTIGATION_PROMPT.format(query=query)
         sub_agent_result = await run_sub_agent(
             role=investigation_role,
             role_type=AgentRoleType.INVESTIGATION,
             prompt=prompt,
             agent_config_service=agent_config_service,
-            working_dir=working_dir,
-            session_id=session_id,
+            conversation_repo=conversation_repo,
+            parent_entity_type=parent_entity_type,
+            parent_entity_id=parent_entity_id,
+            parent_conversation_id=parent_conversation_id,
+            conversation_id=session_id,
         )
-        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.session_id})
+        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.conversation_id})
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
@@ -209,6 +225,8 @@ def create_multi_codebase_investigation_tool(
 def create_task_codebase_investigation_tool(
     task: Task,
     agent_config_service: AgentConfigService,
+    conversation_repo: ConversationRepository,
+    parent_conversation_id: int | None,
 ) -> Tool:
     """Create a codebase investigation tool for a task.
 
@@ -236,13 +254,22 @@ def create_task_codebase_investigation_tool(
                 )
             )
 
-    return create_multi_codebase_investigation_tool(codebase_contexts, agent_config_service)
+    return create_multi_codebase_investigation_tool(
+        codebase_contexts,
+        agent_config_service,
+        conversation_repo=conversation_repo,
+        parent_conversation_id=parent_conversation_id,
+        parent_entity_type=ParentEntityType.TASK,
+        parent_entity_id=task.id,
+    )
 
 
 def create_code_review_tool(
     task: Task,
     agent_config_service: AgentConfigService,
     task_diff_service: TaskDiffService,
+    conversation_repo: ConversationRepository,
+    parent_conversation_id: int | None,
 ) -> Tool:
     """Create a code review tool that performs a self-review of all task changes.
 
@@ -250,6 +277,8 @@ def create_code_review_tool(
         task: The task being reviewed
         agent_config_service: AgentConfigService for getting configured LLM
         task_diff_service: Service for retrieving the full task diff
+        conversation_repo: Repository for creating conversation records
+        parent_conversation_id: ID of the invoking agent's conversation
     """
 
     async def review_code_changes() -> str:
@@ -315,8 +344,11 @@ def create_code_review_tool(
             role_type=AgentRoleType.CODE_REVIEW,
             prompt=prompt,
             agent_config_service=agent_config_service,
-            working_dir=working_dir,
+            conversation_repo=conversation_repo,
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            parent_conversation_id=parent_conversation_id,
         )
-        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.session_id})
+        return json.dumps({"result": sub_agent_result.result, "session_id": None})
 
     return Tool(function=review_code_changes, name="review_code_changes")

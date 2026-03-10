@@ -103,6 +103,7 @@ class TaskWorkflowAction(ABC):
             integration_service=self.integration_service,
             task_service=self.task_service,
             task_git_service=self.task_git_service,
+            conversation_repo=self.conversation_repo,
         )
 
         # Create service with role and additional tools

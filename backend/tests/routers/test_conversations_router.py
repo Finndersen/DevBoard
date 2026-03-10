@@ -50,6 +50,8 @@ def mock_agent_execution_service(
         document_repository=document_repo,
         agent_config_service=mock_agent_config_service,
         task_service=mock_task_service,
+        conversation_repo=conversation_repo,
+        parent_conversation_id=None,
     )
 
     service = PydanticAIAgentExecutionService(

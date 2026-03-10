@@ -17,7 +17,8 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Project
-from devboard.db.repositories import DocumentRepository
+from devboard.db.models.conversation import ParentEntityType
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 
 PROJECT_QA_ROLE_PROMPT = """
@@ -92,11 +93,15 @@ class ProjectQAAgentRole(AgentRole):
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService,
         task_service: TaskService,
+        conversation_repo: ConversationRepository,
+        parent_conversation_id: int | None,
     ):
         self.project = project
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
         self.task_service = task_service
+        self.conversation_repo = conversation_repo
+        self.parent_conversation_id = parent_conversation_id
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for project Q&A role."""
@@ -129,6 +134,10 @@ class ProjectQAAgentRole(AgentRole):
                         for cb in self.project.codebases
                     ],
                     self.agent_config_service,
+                    conversation_repo=self.conversation_repo,
+                    parent_conversation_id=self.parent_conversation_id,
+                    parent_entity_type=ParentEntityType.PROJECT,
+                    parent_entity_id=self.project.id,
                 )
             )
 

@@ -18,7 +18,7 @@ from devboard.agents.tools.sub_agent_tools import create_code_review_tool, creat
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
-from devboard.db.repositories import DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_git_service import TaskGitService
@@ -79,6 +79,8 @@ class TaskImplementationAgentRole(AgentRole):
         task_service: TaskService,
         task_git_service: TaskGitService,
         github_integration: GitHubIntegration,
+        conversation_repo: ConversationRepository,
+        parent_conversation_id: int | None,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -86,6 +88,8 @@ class TaskImplementationAgentRole(AgentRole):
         self.task_service = task_service
         self.task_git_service = task_git_service
         self.github_integration = github_integration
+        self.conversation_repo = conversation_repo
+        self.parent_conversation_id = parent_conversation_id
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -117,8 +121,19 @@ class TaskImplementationAgentRole(AgentRole):
             create_file_search_tool(codebase_integration),
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
-            create_task_codebase_investigation_tool(self.task, self.agent_config_service),
-            create_code_review_tool(self.task, self.agent_config_service, self.task_git_service),
+            create_task_codebase_investigation_tool(
+                self.task,
+                self.agent_config_service,
+                conversation_repo=self.conversation_repo,
+                parent_conversation_id=self.parent_conversation_id,
+            ),
+            create_code_review_tool(
+                self.task,
+                self.agent_config_service,
+                self.task_git_service,
+                conversation_repo=self.conversation_repo,
+                parent_conversation_id=self.parent_conversation_id,
+            ),
             # Rebase tool for updating branch with latest base branch changes
             create_rebase_task_branch_tool(self.task, self.task_git_service),
         ]

@@ -10,7 +10,7 @@ from devboard.agents.tools import (
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_task_tool
 from devboard.db.models import Task
-from devboard.db.repositories import DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 
 PLANNING_ROLE_PROMPT = """
@@ -88,11 +88,15 @@ class TaskPlanningAgentRole(AgentRole):
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService,
         task_service: TaskService,
+        conversation_repo: ConversationRepository,
+        parent_conversation_id: int | None,
     ):
         self.task = task
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
         self.task_service = task_service
+        self.conversation_repo = conversation_repo
+        self.parent_conversation_id = parent_conversation_id
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
@@ -133,7 +137,14 @@ class TaskPlanningAgentRole(AgentRole):
                 )
 
         # Add codebase investigation tool
-        tools.append(create_task_codebase_investigation_tool(self.task, self.agent_config_service))
+        tools.append(
+            create_task_codebase_investigation_tool(
+                self.task,
+                self.agent_config_service,
+                conversation_repo=self.conversation_repo,
+                parent_conversation_id=self.parent_conversation_id,
+            )
+        )
 
         # Add create_task tool
         tools.append(create_create_task_tool(self.task.project, self.task_service))

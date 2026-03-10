@@ -36,6 +36,7 @@ async def get_agent_role_for_conversation(
     integration_service: IntegrationService = Depends(get_integration_service),
     task_service: TaskService = Depends(get_task_service),
     task_git_service: TaskGitService = Depends(get_task_git_service),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> AgentRole:
     """Get agent role for a conversation."""
     return await create_agent_role_for_conversation(
@@ -45,6 +46,7 @@ async def get_agent_role_for_conversation(
         integration_service=integration_service,
         task_service=task_service,
         task_git_service=task_git_service,
+        conversation_repo=conversation_repo,
     )
 
 

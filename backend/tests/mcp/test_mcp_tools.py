@@ -227,6 +227,7 @@ class TestInvestigateCodebase:
         with (
             patch("devboard.mcp.server.get_mcp_db_session") as mock_session,
             patch("devboard.mcp.server.CodebaseRepository") as mock_repo_class,
+            patch("devboard.mcp.server.ConversationRepository") as mock_conv_repo_class,
             patch("devboard.mcp.server.create_agent_config_service") as mock_agent_service,
             patch("devboard.mcp.server.create_multi_codebase_investigation_tool") as mock_create_tool,
         ):
@@ -237,6 +238,9 @@ class TestInvestigateCodebase:
             mock_repo = Mock()
             mock_repo.get_by_name.return_value = mock_codebase
             mock_repo_class.return_value = mock_repo
+
+            mock_conv_repo = Mock()
+            mock_conv_repo_class.return_value = mock_conv_repo
 
             mock_agent_service.return_value = Mock()
 
@@ -256,6 +260,7 @@ class TestInvestigateCodebase:
             # Verify dependencies were called correctly
             mock_repo.get_by_name.assert_called_once_with("Test Codebase")
             mock_agent_service.assert_called_once_with(mock_db)
+            mock_conv_repo_class.assert_called_once_with(mock_db)
             mock_create_tool.assert_called_once()
             mock_tool.function.assert_called_once_with(
                 codebase_name="Test Codebase", query="How is authentication implemented?"
@@ -290,6 +295,7 @@ class TestInvestigateCodebase:
         with (
             patch("devboard.mcp.server.get_mcp_db_session") as mock_session,
             patch("devboard.mcp.server.CodebaseRepository") as mock_repo_class,
+            patch("devboard.mcp.server.ConversationRepository"),
             patch("devboard.mcp.server.create_agent_config_service") as mock_agent_service,
             patch("devboard.mcp.server.create_multi_codebase_investigation_tool") as mock_create_tool,
         ):

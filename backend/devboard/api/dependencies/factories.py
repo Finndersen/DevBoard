@@ -30,12 +30,14 @@ async def create_agent_role_for_conversation(
     integration_service: IntegrationService,
     task_service: TaskService,
     task_git_service: TaskGitService,
+    conversation_repo: ConversationRepository,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
     Non-dependency helper that can be called directly from any context.
     """
     parent_entity = conversation.get_parent_entity()
+    parent_conversation_id = conversation.id
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
         if conversation.agent_role == AgentRoleType.TASK_PLANNING:
@@ -44,6 +46,8 @@ async def create_agent_role_for_conversation(
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
+                conversation_repo=conversation_repo,
+                parent_conversation_id=parent_conversation_id,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -55,6 +59,8 @@ async def create_agent_role_for_conversation(
                 task_service=task_service,
                 task_git_service=task_git_service,
                 github_integration=github_integration,
+                conversation_repo=conversation_repo,
+                parent_conversation_id=parent_conversation_id,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -80,6 +86,8 @@ async def create_agent_role_for_conversation(
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
+                conversation_repo=conversation_repo,
+                parent_conversation_id=parent_conversation_id,
             )
         else:
             raise HTTPException(
@@ -141,23 +149,14 @@ def create_agent_execution_service(
     Non-dependency helper that can be called directly from any context.
     Internally creates the appropriate history service.
 
-    Args:
-        conversation: The conversation instance
-        role: The role defining agent behavior
-        conversation_repo: Repository for conversation operations
-        agent_config_service: Service for loading agent configuration
-        additional_tools: Optional extra tools beyond those defined by the role
-
     Returns:
         AgentExecutionService instance (PydanticAI or ClaudeCode)
 
     Raises:
         HTTPException: If engine type is unsupported
     """
-    # Create history service first
     history_service = create_conversation_history_service(conversation, conversation_repo)
 
-    # Create execution service based on engine type
     if conversation.engine == AgentEngine.INTERNAL:
         return PydanticAIAgentExecutionService(
             conversation=conversation,

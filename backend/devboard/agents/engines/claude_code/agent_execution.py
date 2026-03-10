@@ -95,28 +95,22 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
             )
 
     def _get_agent(self, extra_tools: list[Tool] | None = None) -> ClaudeCodeAgent:
-        """Create agent with session_id and optional extra tools.
-
-        Args:
-            extra_tools: Combined MCP and dynamically-added tools
-
-        Returns:
-            ClaudeCodeAgent instance configured with role, model, and tools
-        """
+        """Create agent with session_id and optional extra tools."""
         model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
+
         conversation_parent = self.conversation.get_parent_entity()
         if isinstance(conversation_parent, Task):
-            codebase_path = conversation_parent.get_current_workspace_dir()
+            working_dir = conversation_parent.get_current_workspace_dir()
         elif isinstance(conversation_parent, Codebase):
-            codebase_path = conversation_parent.local_path
+            working_dir = conversation_parent.local_path
         else:
-            codebase_path = None
+            working_dir = None
 
         return ClaudeCodeAgent(
             role=self.role,
             model=model,
             session_id=self.conversation.external_session_id,
-            working_dir=codebase_path,
+            working_dir=working_dir,
             additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),
         )
