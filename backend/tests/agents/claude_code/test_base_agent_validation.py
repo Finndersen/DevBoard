@@ -59,7 +59,7 @@ def test_agent(mock_edit_tool):
     model = LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.REASONING,
+        type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     )
     role = MockAgentRole(tools=[mock_edit_tool])

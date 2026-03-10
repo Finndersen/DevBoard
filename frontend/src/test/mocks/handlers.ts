@@ -397,16 +397,16 @@ export const handlers = [
     return HttpResponse.json({
       models_by_engine: {
         'internal': [
-          { id: 'openai:gpt-4', name: 'OpenAI GPT-4', provider: 'openai', model_type: 'reasoning' },
+          { id: 'openai:gpt-4', name: 'OpenAI GPT-4', provider: 'openai', model_type: 'standard' },
           { id: 'openai:gpt-3.5-turbo', name: 'OpenAI GPT-3.5 Turbo', provider: 'openai', model_type: 'fast' },
-          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'reasoning' },
+          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'standard' },
         ],
         'claude_code': [
-          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'reasoning' },
-          { id: 'anthropic:claude-opus-4.1', name: 'Claude Opus 4.1', provider: 'anthropic', model_type: 'reasoning' },
+          { id: 'anthropic:claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', model_type: 'standard' },
+          { id: 'anthropic:claude-opus-4.1', name: 'Claude Opus 4.1', provider: 'anthropic', model_type: 'advanced' },
         ],
         'gemini_cli': [
-          { id: 'google:gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', model_type: 'reasoning' },
+          { id: 'google:gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', model_type: 'standard' },
           { id: 'google:gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', model_type: 'fast' },
         ]
       }

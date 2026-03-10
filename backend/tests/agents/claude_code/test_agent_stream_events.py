@@ -156,7 +156,7 @@ def mock_model() -> LanguageModel:
     return LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.REASONING,
+        type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     )
 

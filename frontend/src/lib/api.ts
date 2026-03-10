@@ -445,7 +445,7 @@ export interface ModelInfo {
   id: string
   provider: string
   name: string
-  model_type: 'reasoning' | 'fast'
+  model_type: 'fast' | 'standard' | 'advanced'
 }
 
 export interface AgentEngineInfo {

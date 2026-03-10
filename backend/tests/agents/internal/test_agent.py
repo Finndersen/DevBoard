@@ -36,7 +36,7 @@ class TestInternalAgent:
         return LanguageModel(
             provider=LLMProvider.OPENAI,
             name="gpt-4",
-            type=ModelType.REASONING,
+            type=ModelType.STANDARD,
         )
 
     @pytest.fixture

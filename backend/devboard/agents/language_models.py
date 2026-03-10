@@ -8,8 +8,9 @@ from devboard.core.registry import Registry
 class ModelType(StrEnum):
     """Types of language models."""
 
-    REASONING = "reasoning"
     FAST = "fast"
+    STANDARD = "standard"
+    ADVANCED = "advanced"
 
 
 class LLMProvider(StrEnum):
@@ -42,33 +43,33 @@ class LanguageModel:
 
 ALL_MODELS = [
     # OpenAI Models
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5", type=ModelType.REASONING),
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4.1", type=ModelType.REASONING),
+    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5", type=ModelType.STANDARD),
+    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4.1", type=ModelType.STANDARD),
     LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5-mini", type=ModelType.FAST),
     LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5-nano", type=ModelType.FAST),
     # Anthropic Models (with full names for Claude Code)
     LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4.5",
-        type=ModelType.REASONING,
+        type=ModelType.STANDARD,
         full_name="claude-sonnet-4-5-20250929",
     ),
     LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-opus-4.1",
-        type=ModelType.REASONING,
+        type=ModelType.ADVANCED,
         full_name="claude-opus-4-1-20250805",
     ),
     LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-opus-4",
-        type=ModelType.REASONING,
+        type=ModelType.ADVANCED,
         full_name="claude-opus-4-20250514",
     ),
     LanguageModel(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.REASONING,
+        type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     ),
     LanguageModel(
@@ -78,7 +79,7 @@ ALL_MODELS = [
         full_name="claude-haiku-4-5-20251001",
     ),
     # Google Models
-    LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-pro", type=ModelType.REASONING),
+    LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-pro", type=ModelType.STANDARD),
     LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-flash", type=ModelType.FAST),
     LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-flash-lite", type=ModelType.FAST),
 ]
@@ -135,12 +136,12 @@ class LLMRegistry(Registry[LanguageModel]):
 
 # Recommended model types for different agent roles
 RECOMMENDED_AGENT_MODEL_TYPES = {
-    AgentRoleType.PROJECT: ModelType.REASONING,
-    AgentRoleType.TASK_PLANNING: ModelType.REASONING,
-    AgentRoleType.TASK_IMPLEMENTATION: ModelType.REASONING,
-    AgentRoleType.TASK_PR_REVIEW: ModelType.REASONING,
+    AgentRoleType.PROJECT: ModelType.STANDARD,
+    AgentRoleType.TASK_PLANNING: ModelType.ADVANCED,
+    AgentRoleType.TASK_IMPLEMENTATION: ModelType.ADVANCED,
+    AgentRoleType.TASK_PR_REVIEW: ModelType.STANDARD,
+    AgentRoleType.CODE_REVIEW: ModelType.STANDARD,
     AgentRoleType.INVESTIGATION: ModelType.FAST,
-    AgentRoleType.CODE_REVIEW: ModelType.REASONING,
 }
 # Global default LLM registry instance
 llm_registry = LLMRegistry(ALL_MODELS)

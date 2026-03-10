@@ -55,7 +55,7 @@ class ModelInfo(BaseModel):
         id: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4.5")
         provider: The LLM provider (e.g., anthropic, openai, google)
         name: Human-readable model name
-        model_type: Type of model (reasoning or fast)
+        model_type: Type of model (fast, standard, or advanced)
     """
 
     id: str

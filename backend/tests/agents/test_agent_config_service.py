@@ -95,16 +95,16 @@ class TestAgentConfigService:
 
     def test_get_default_model_for_agent_role(self, agent_config_service):
         """_get_default_model_for_agent_role should select model based on agent role's recommended type."""
-        # PROJECT role recommends REASONING models (INTERNAL engine requires selection)
+        # PROJECT role recommends STANDARD models (INTERNAL engine requires selection)
         project_default = agent_config_service._get_default_model_for_agent_role_and_engine(
             AgentRoleType.PROJECT, AgentEngine.INTERNAL
         )
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
-        # Verify it's a REASONING model
+        # Verify it's a STANDARD model
         model = agent_config_service._llm_registry.get(project_default)
         assert model is not None
-        assert model.type == ModelType.REASONING
+        assert model.type == ModelType.STANDARD
 
         # INVESTIGATION role recommends FAST models (INTERNAL engine requires selection)
         investigation_default = agent_config_service._get_default_model_for_agent_role_and_engine(

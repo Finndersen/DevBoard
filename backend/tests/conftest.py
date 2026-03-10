@@ -279,7 +279,7 @@ def mock_agent_config_service():
     """Mock AgentConfigService to avoid database dependencies."""
     mock_service = Mock()
     # Return an AgentEngineModelConfig with a resolved LanguageModel
-    mock_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.REASONING)
+    mock_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.STANDARD)
     default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model=mock_model)
     mock_service.get_effective_config.return_value = default_config
     # Mock methods for custom instructions and MCP tools
