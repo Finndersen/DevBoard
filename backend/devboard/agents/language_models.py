@@ -138,7 +138,9 @@ RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentRoleType.PROJECT: ModelType.REASONING,
     AgentRoleType.TASK_PLANNING: ModelType.REASONING,
     AgentRoleType.TASK_IMPLEMENTATION: ModelType.REASONING,
+    AgentRoleType.TASK_PR_REVIEW: ModelType.REASONING,
     AgentRoleType.INVESTIGATION: ModelType.FAST,
+    AgentRoleType.CODE_REVIEW: ModelType.REASONING,
 }
 # Global default LLM registry instance
 llm_registry = LLMRegistry(ALL_MODELS)

@@ -45,6 +45,7 @@ export default function Settings() {
     { key: 'task_implementation', name: 'Task Implementation Agent', description: 'Provides implementation guidance and code suggestions' },
     { key: 'task_pr_review', name: 'Task PR Review Agent', description: 'Reviews pull requests and provides feedback' },
     { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
+    { key: 'code_review', name: 'Code Review Agent', description: 'Reviews code changes and provides detailed feedback' },
   ]
   
   const [selectedConfig, setSelectedConfig] = useState<string | null>(integrationConfigs[0]?.key || null)
