@@ -99,16 +99,16 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
   }
 
   return (
-    <div className="flex flex-col w-full min-w-0">
+    <div className="flex flex-col items-start min-w-0">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left hover:bg-gray-100 dark:hover:bg-gray-800/30 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Wrench icon */}
             <svg
-              className="w-4 h-4 text-gray-600 dark:text-gray-400 flex-shrink-0"
+              className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth={1.5}
@@ -121,7 +121,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
               />
             </svg>
             {/* Summary text */}
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap">
+            <span className="text-xs font-medium text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap">
               {summaryText}
             </span>
             {/* Status icon */}
@@ -148,7 +148,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
 
       {/* Expanded individual tool calls */}
       {isExpanded && (
-        <div className="mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+        <div className="w-full mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
           {items.map(({ message, index }) => {
             const cacheKey = `${message.timestamp}-tool_call-${index}`
             const toolResult = toolResultMap.get(cacheKey)

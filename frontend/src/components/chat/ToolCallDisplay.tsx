@@ -60,14 +60,14 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
       {/* Collapsed Tool Call Card */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left hover:bg-gray-100 dark:hover:bg-gray-800/30 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Tool Icon */}
             <svg
-              className="w-4 h-4 text-gray-600 dark:text-gray-400 flex-shrink-0"
+              className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth={1.5}
@@ -81,10 +81,10 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
             </svg>
             {/* Tool Name and Details */}
             <span
-              className="text-sm text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
+              className="text-xs text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap"
               title={formatToolDisplayLabel(displayLabel)}
             >
-              <span className="font-semibold">{displayLabel.toolName}</span>
+              <span className="font-medium">{displayLabel.toolName}</span>
               {displayLabel.details && (
                 <span className="font-normal italic text-gray-600 dark:text-gray-400">: {displayLabel.details}</span>
               )}

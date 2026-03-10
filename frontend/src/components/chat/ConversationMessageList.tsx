@@ -3,6 +3,7 @@ import type { ConversationEvent, ToolCall, ToolResult } from '../../lib/api'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
 import ToolCallGroupDisplay from './ToolCallGroupDisplay'
+import AgentBlockDisplay from './AgentBlockDisplay'
 import type { PendingMessage } from '../../contexts/PendingMessagesContext'
 
 interface ConversationMessageListProps {
@@ -165,6 +166,13 @@ function ConversationMessageList({
     return result
   }, [renderItems])
 
+  const lastAgentBlockIndex = useMemo(() => {
+    for (let i = outerRenderItems.length - 1; i >= 0; i--) {
+      if (outerRenderItems[i].type === 'agent_block') return i
+    }
+    return -1
+  }, [outerRenderItems])
+
   if (showEmptyState) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -239,9 +247,9 @@ function ConversationMessageList({
           : `agent-block-${outerIndex}`
 
         return (
-          <div key={blockKey} className="flex flex-col">
+          <AgentBlockDisplay key={blockKey} isLatest={outerIndex === lastAgentBlockIndex}>
             {outerItem.items.map(renderInnerItem)}
-          </div>
+          </AgentBlockDisplay>
         )
       })}
 
