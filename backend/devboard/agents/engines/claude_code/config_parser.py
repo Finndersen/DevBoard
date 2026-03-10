@@ -12,7 +12,6 @@ class ClaudeConfigProject:
     """Structured representation of a project entry from ~/.claude.json."""
 
     path: str
-    last_session_id: str | None
     last_cost: float | None
     last_duration: int | None
     last_lines_added: int | None
@@ -50,7 +49,6 @@ class ClaudeConfigParser:
             result.append(
                 ClaudeConfigProject(
                     path=path,
-                    last_session_id=entry.get("lastSessionId") or None,
                     last_cost=entry.get("lastCost"),
                     last_duration=entry.get("lastDuration"),
                     last_lines_added=entry.get("lastLinesAdded"),

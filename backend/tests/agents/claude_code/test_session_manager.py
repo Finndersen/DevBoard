@@ -59,7 +59,6 @@ class TestListProjects:
         manager._config_parser.load_projects.return_value = [
             ClaudeConfigProject(
                 path="/Users/foo/myproject",
-                last_session_id="sess-1",
                 last_cost=0.01,
                 last_duration=None,
                 last_lines_added=5,
@@ -88,7 +87,6 @@ class TestListProjects:
         manager._config_parser.load_projects.return_value = [
             ClaudeConfigProject(
                 path="/Users/foo/empty",
-                last_session_id=None,
                 last_cost=None,
                 last_duration=None,
                 last_lines_added=None,
@@ -106,7 +104,6 @@ class TestListProjects:
         manager._config_parser.load_projects.return_value = [
             ClaudeConfigProject(
                 path="/Users/foo/nonexistent",
-                last_session_id=None,
                 last_cost=None,
                 last_duration=None,
                 last_lines_added=None,
@@ -121,28 +118,24 @@ class TestListProjects:
         assert projects == []
 
     def test_orders_by_last_activity_descending(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:
+        import os
+        import time
+
         for name in ["-Users-foo-old", "-Users-foo-new"]:
             d = claude_projects_dir / name
             d.mkdir()
             (d / "sess.jsonl").write_text("{}\n")
 
-        # Patch mtime so "new" project has more recent mtime
-        import os
-        import time
-
         old_dir = claude_projects_dir / "-Users-foo-old"
         new_dir = claude_projects_dir / "-Users-foo-new"
-        old_session = old_dir / "sess.jsonl"
-        new_session = new_dir / "sess.jsonl"
 
-        # Set different modification times
-        os.utime(old_session, (time.time() - 3600, time.time() - 3600))
-        os.utime(new_session, (time.time(), time.time()))
+        # Set different modification times on the project directories
+        os.utime(old_dir, (time.time() - 3600, time.time() - 3600))
+        os.utime(new_dir, (time.time(), time.time()))
 
         manager._config_parser.load_projects.return_value = [
             ClaudeConfigProject(
                 path="/Users/foo/old",
-                last_session_id="sess",
                 last_cost=None,
                 last_duration=None,
                 last_lines_added=None,
@@ -150,7 +143,6 @@ class TestListProjects:
             ),
             ClaudeConfigProject(
                 path="/Users/foo/new",
-                last_session_id="sess",
                 last_cost=None,
                 last_duration=None,
                 last_lines_added=None,

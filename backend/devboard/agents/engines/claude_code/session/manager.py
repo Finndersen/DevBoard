@@ -1,6 +1,7 @@
 """High-level service for browsing Claude Code projects and sessions."""
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -74,29 +75,26 @@ class ClaudeSessionManager:
     def list_projects(self) -> list[ClaudeCodeProjectInfo]:
         """List all Claude Code projects ordered by last activity descending."""
         config_projects = self._config_parser.load_projects()
+        dir_mtimes = self._scan_project_dir_mtimes()
 
         results: list[ClaudeCodeProjectInfo] = []
         for config_project in config_projects:
             encoded_path = ClaudeCodeSessionMigrator.encode_path_for_claude_projects(config_project.path)
-            project_dir = self.claude_projects_dir / encoded_path
 
-            if not project_dir.is_dir():
+            if encoded_path not in dir_mtimes:
                 continue
 
+            project_dir = self.claude_projects_dir / encoded_path
             jsonl_files = list(project_dir.glob("*.jsonl"))
             session_count = len(jsonl_files)
             if session_count == 0:
                 continue
 
-            last_activity = self._resolve_project_last_activity(
-                config_project.last_session_id, project_dir, jsonl_files
-            )
-
             results.append(
                 ClaudeCodeProjectInfo(
                     path=config_project.path,
                     encoded_path=encoded_path,
-                    last_activity=last_activity,
+                    last_activity=dir_mtimes[encoded_path],
                     last_cost=config_project.last_cost,
                     last_lines_added=config_project.last_lines_added,
                     last_lines_removed=config_project.last_lines_removed,
@@ -108,24 +106,20 @@ class ClaudeSessionManager:
         results.sort(key=lambda p: p.last_activity or datetime.min, reverse=True)
         return results
 
-    def _resolve_project_last_activity(
-        self,
-        last_session_id: str | None,
-        project_dir: Path,
-        jsonl_files: list[Path],
-    ) -> datetime | None:
-        """Resolve the last activity time for a project."""
-        if last_session_id:
-            specific_file = project_dir / f"{last_session_id}.jsonl"
-            if specific_file.exists():
-                return datetime.fromtimestamp(specific_file.stat().st_mtime)
-            # Fall back to directory mtime
-            return datetime.fromtimestamp(project_dir.stat().st_mtime)
-
-        if jsonl_files:
-            return max(datetime.fromtimestamp(f.stat().st_mtime) for f in jsonl_files)
-
-        return None
+    def _scan_project_dir_mtimes(self) -> dict[str, datetime]:
+        """Scan ~/.claude/projects/ and return a map of directory name to mtime."""
+        try:
+            result: dict[str, datetime] = {}
+            for entry in os.scandir(self.claude_projects_dir):
+                if not entry.is_dir():
+                    continue
+                try:
+                    result[entry.name] = datetime.fromtimestamp(entry.stat().st_mtime)
+                except OSError:
+                    continue
+            return result
+        except FileNotFoundError:
+            return {}
 
     async def list_sessions(self, encoded_project_path: str) -> list[ClaudeCodeSessionInfo]:
         """List sessions for a project, ordered by last activity descending.
