@@ -169,10 +169,6 @@ class WorkspaceAllocationService:
                 self.worktree_slot_repo.commit()
 
                 if previous_slot is None or slot.id != previous_slot.id:
-                    await self._migrate_claude_session_if_needed(
-                        task=task,
-                        new_working_dir=slot.path,
-                    )
                     yield SystemEvent(
                         type=SystemEventType.WORKSPACE_ALLOCATE,
                         data={"task_id": task.id, "slot_id": slot.id},
@@ -261,6 +257,9 @@ class WorkspaceAllocationService:
                     return
 
             logfire.info(f"Allocated workspace {slot.path} for task {task.id}")
+
+            # Always verify session is in the correct location before streaming (no-op if already correct)
+            await self._migrate_claude_session_if_needed(task=task, new_working_dir=slot.path)
 
             async for event in agent_stream:
                 yield event

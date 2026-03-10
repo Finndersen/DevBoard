@@ -550,6 +550,55 @@ async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
 
 
 @pytest.mark.asyncio
+async def test_run_task_agent_in_workspace_migration_called_for_sticky_slot(
+    service, mock_repos, sample_task, sample_slot
+):
+    """Test that session migration is always attempted, even when reusing a sticky slot."""
+    worktree_slot_repo, _, conversation_repo = mock_repos
+
+    # Setup: Slot is task's sticky slot (same slot as before)
+    sample_slot.locked = False
+    sample_slot.last_used_by_task_id = sample_task.id
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+
+    # Setup: Active Claude Code conversation with session
+    mock_conversation = MagicMock()
+    mock_conversation.engine = AgentEngine.CLAUDE_CODE
+    mock_conversation.external_session_id = "test-session-id"
+    conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
+
+    async def mock_agent_stream():
+        yield MagicMock(event_type="message")
+
+    with (
+        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
+        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_migrator_class,
+    ):
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_checkout.return_value = False
+        mock_migrator = AsyncMock()
+        mock_migrator.migrate_session_to_directory = AsyncMock(return_value=None)
+        mock_migrator_class.return_value = mock_migrator
+
+        events = []
+        async for event in service.run_task_agent_in_workspace(
+            task=sample_task,
+            agent_stream=mock_agent_stream(),
+        ):
+            events.append(event)
+
+    # Verify: Migration was called even though the slot didn't change
+    mock_migrator.migrate_session_to_directory.assert_called_once_with(
+        session_id="test-session-id",
+        new_working_dir=sample_slot.path,
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_task_agent_in_workspace_yields_workspace_create_event(
     service, mock_repos, sample_task, sample_codebase
 ):
