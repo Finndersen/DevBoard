@@ -33,22 +33,23 @@ export function cleanToolName(toolName: string): string {
  * @returns Relative path or original path if no match
  */
 export function relativizePath(absolutePath: string, codebaseLocalPath?: string): string {
-  if (!codebaseLocalPath || !absolutePath) {
-    return absolutePath
-  }
+  if (!absolutePath) return absolutePath
 
   // Try main repo path first: <local_path>/
-  const mainRepoPrefix = codebaseLocalPath + '/'
-  if (absolutePath.startsWith(mainRepoPrefix)) {
-    return absolutePath.slice(mainRepoPrefix.length)
+  if (codebaseLocalPath) {
+    const mainRepoPrefix = codebaseLocalPath + '/'
+    if (absolutePath.startsWith(mainRepoPrefix)) {
+      return absolutePath.slice(mainRepoPrefix.length)
+    }
   }
 
-  // Try worktree variant: <local_path>.worktree-\d+/
-  // e.g., /Users/dev/projects/myrepo.worktree-2/src/file.ts
-  const worktreePattern = new RegExp(`^${escapeRegExp(codebaseLocalPath)}\\.worktree-\\d+/`)
-  const worktreeMatch = absolutePath.match(worktreePattern)
+  // Try worktree variant — matches both alongside and central modes without needing
+  // external path data. The ".worktree-N/" segment is a reliable split point:
+  //   Alongside: /path/to/DevBoard.worktree-2/src/file.ts  -> src/file.ts
+  //   Central:   ~/.devboard/worktrees/1_DevBoard.worktree-4/src/file.ts  -> src/file.ts
+  const worktreeMatch = absolutePath.match(/^.+\.worktree-\d+\/(.+)$/)
   if (worktreeMatch) {
-    return absolutePath.slice(worktreeMatch[0].length)
+    return worktreeMatch[1]
   }
 
   return absolutePath

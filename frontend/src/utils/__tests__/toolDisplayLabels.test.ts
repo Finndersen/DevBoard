@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getToolDisplayLabel } from '../toolDisplayLabels'
+import { getToolDisplayLabel, relativizePath } from '../toolDisplayLabels'
 
 describe('getToolDisplayLabel', () => {
   describe('Skill', () => {
@@ -39,5 +39,42 @@ describe('getToolDisplayLabel', () => {
     it('returns toolName only when no args', () => {
       expect(getToolDisplayLabel('TaskOutput', null)).toEqual({ toolName: 'TaskOutput' })
     })
+  })
+})
+
+describe('relativizePath', () => {
+  it('strips main repo prefix when codebaseLocalPath provided', () => {
+    expect(
+      relativizePath('/Users/dev/projects/DevBoard/backend/file.py', '/Users/dev/projects/DevBoard'),
+    ).toBe('backend/file.py')
+  })
+
+  it('strips alongside-mode worktree path without codebaseLocalPath', () => {
+    expect(
+      relativizePath('/Users/dev/projects/DevBoard.worktree-2/backend/file.py'),
+    ).toBe('backend/file.py')
+  })
+
+  it('strips central-mode worktree path without codebaseLocalPath', () => {
+    expect(
+      relativizePath('/Users/finn.andersen/.devboard/worktrees/1_DevBoard.worktree-4/backend/file.py'),
+    ).toBe('backend/file.py')
+  })
+
+  it('strips alongside-mode worktree path even when codebaseLocalPath provided', () => {
+    expect(
+      relativizePath(
+        '/Users/dev/projects/DevBoard.worktree-2/backend/file.py',
+        '/Users/dev/projects/DevBoard',
+      ),
+    ).toBe('backend/file.py')
+  })
+
+  it('returns path unchanged when no match', () => {
+    expect(relativizePath('/Users/dev/other/file.py')).toBe('/Users/dev/other/file.py')
+  })
+
+  it('returns path unchanged when empty', () => {
+    expect(relativizePath('')).toBe('')
   })
 })
