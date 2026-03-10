@@ -36,9 +36,9 @@ describe('Settings', () => {
     const agentsTab = screen.getByText('Agents')
     await user.click(agentsTab)
     
-    // Should show agents content description text
+    // Should show agents content description text (appears in both role list and config panel)
     await waitFor(() => {
-      expect(screen.getByText('Answers questions about projects and helps with specifications')).toBeInTheDocument()
+      expect(screen.getAllByText('Answers questions about projects and helps with specifications').length).toBeGreaterThan(0)
     })
 
     // Click on General tab

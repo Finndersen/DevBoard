@@ -174,10 +174,14 @@ class WebSocketManager {
    * Get WebSocket URL for a conversation
    */
   private getWebSocketURL(conversationId: number): string {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-    const protocol = baseURL.startsWith('https') ? 'wss' : 'ws'
-    const host = baseURL.replace(/^https?:\/\//, '')
-    return `${protocol}://${host}/api/conversations/${conversationId}/ws`
+    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+    if (baseURL) {
+      const protocol = baseURL.startsWith('https') ? 'wss' : 'ws'
+      const host = baseURL.replace(/^https?:\/\//, '')
+      return `${protocol}://${host}/api/conversations/${conversationId}/ws`
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    return `${protocol}://${window.location.host}/api/conversations/${conversationId}/ws`
   }
 
   /**

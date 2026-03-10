@@ -126,7 +126,10 @@ class SystemEvent(BaseModel):
 def describe_event(event: "ConversationEvent") -> str:
     """Generate a concise single-line description of a conversation event."""
     if isinstance(event, TextMessage):
-        return f"TextMessage(role={event.role}, {len(event.text_content)} chars)"
+        preview = event.text_content[:80].replace("\n", " ")
+        if len(event.text_content) > 80:
+            preview += "…"
+        return f"TextMessage(role={event.role}, {len(event.text_content)} chars): {preview!r}"
     elif isinstance(event, ToolCall):
         args_desc = ""
         if event.tool_args:

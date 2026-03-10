@@ -371,7 +371,8 @@ export const handlers = [
           display_name: 'Internal',
           description: 'Internal agent framework'
         }
-      ]
+      ],
+      enabled_mcp_tools: []
     })
   }),
 

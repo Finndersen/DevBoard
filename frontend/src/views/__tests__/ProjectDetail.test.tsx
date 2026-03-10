@@ -162,7 +162,7 @@ describe('ProjectDetail', () => {
     })
 
     // Should show specification section on the home tab
-    expect(screen.getByText('Project Specification')).toBeInTheDocument()
+    expect(screen.getByText('Project Context')).toBeInTheDocument()
 
     // Should show the specification content (fetched asynchronously)
     await waitFor(() => {
@@ -179,7 +179,7 @@ describe('ProjectDetail', () => {
     })
     
     // Should see the specification section on home tab
-    expect(screen.getByText('Project Specification')).toBeInTheDocument()
+    expect(screen.getByText('Project Context')).toBeInTheDocument()
     
     // Click edit button
     const editButton = screen.getByText('Edit')

@@ -220,11 +220,11 @@ describe('TaskDetail', () => {
 
     // Wait for the Planning button to appear
     await waitFor(() => {
-      const button = screen.queryByText('Generate a technical implementation plan from the task specification')
+      const button = screen.queryByText('Create Implementation Plan')
       expect(button).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    const beginPlanningButton = screen.getByText('Generate a technical implementation plan from the task specification')
+    const beginPlanningButton = screen.getByText('Create Implementation Plan')
     await user.click(beginPlanningButton)
 
     // Wait for the stream to complete
@@ -267,11 +267,11 @@ describe('TaskDetail', () => {
 
     // Wait for the Planning button to appear
     await waitFor(() => {
-      const button = screen.queryByText('Generate a technical implementation plan from the task specification')
+      const button = screen.queryByText('Create Implementation Plan')
       expect(button).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    const beginPlanningButton = screen.getByText('Generate a technical implementation plan from the task specification')
+    const beginPlanningButton = screen.getByText('Create Implementation Plan')
     await user.click(beginPlanningButton)
 
     // Verify component continues to function despite error

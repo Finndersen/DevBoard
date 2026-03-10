@@ -43,7 +43,7 @@ describe('ConversationChat', () => {
 
     // Clear the conversationStreamStore between tests to prevent state pollution
     // Replace the Map entirely to ensure complete cleanup
-    useConversationStreamStore.setState({ activeStreams: new Map() })
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
 
     // Clear the approvalsStore between tests
     useApprovalsStore.setState({ approvals: {} })

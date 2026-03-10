@@ -6,22 +6,18 @@ import type { ConversationEvent } from '../../lib/api'
 // Enable Immer MapSet plugin for handling Map/Set in the store
 enableMapSet()
 
-describe('conversationStreamStore - addEvent deduplication', () => {
-  it('should remove duplicate ToolCall when ToolCallRequest arrives', () => {
-    const conversationId = Date.now() // Use unique ID for each test
+/** Helper to read messages from the conversation messages map */
+function getMessages(conversationId: number): ConversationEvent[] {
+  return useConversationStreamStore.getState().conversationMessages.get(conversationId)?.messages ?? []
+}
 
-    // Initialize stream state using Zustand's setState
-    useConversationStreamStore.setState((state) => {
-      state.activeStreams.set(conversationId, {
-        conversationId,
-        messages: [],
-        isStreaming: true,
-        error: null,
-        abortController: new AbortController(),
-        startedAt: Date.now(),
-        pendingToolRequests: []
-      })
-    })
+describe('conversationStreamStore - addEvent deduplication', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+  })
+
+  it('should remove duplicate ToolCall when ToolCallRequest arrives', () => {
+    const conversationId = 1
 
     const store = useConversationStreamStore.getState()
 
@@ -36,9 +32,8 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, toolCall)
 
     // Verify ToolCall was added
-    let streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(1)
-    expect(streamState?.messages[0]).toEqual(toolCall)
+    expect(getMessages(conversationId)).toHaveLength(1)
+    expect(getMessages(conversationId)[0]).toEqual(toolCall)
 
     // Add ToolCallRequest with same tool_call_id
     const toolCallRequest: ConversationEvent = {
@@ -51,25 +46,11 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, toolCallRequest)
 
     // Verify: ToolCall was removed, ToolCallRequest was not added
-    streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(0)
+    expect(getMessages(conversationId)).toHaveLength(0)
   })
 
   it('should not add ToolCallRequest to messages', () => {
-    const conversationId = Date.now() + 1 // Use unique ID for each test
-
-    // Initialize stream state using Zustand's setState
-    useConversationStreamStore.setState((state) => {
-      state.activeStreams.set(conversationId, {
-        conversationId,
-        messages: [],
-        isStreaming: true,
-        error: null,
-        abortController: new AbortController(),
-        startedAt: Date.now(),
-        pendingToolRequests: []
-      })
-    })
+    const conversationId = 2
 
     const store = useConversationStreamStore.getState()
 
@@ -84,25 +65,11 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, toolCallRequest)
 
     // Verify: ToolCallRequest was not added to messages
-    const streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(0)
+    expect(getMessages(conversationId)).toHaveLength(0)
   })
 
   it('should preserve other messages when removing duplicate ToolCall', () => {
-    const conversationId = Date.now() + 2 // Use unique ID for each test
-
-    // Initialize stream state using Zustand's setState
-    useConversationStreamStore.setState((state) => {
-      state.activeStreams.set(conversationId, {
-        conversationId,
-        messages: [],
-        isStreaming: true,
-        error: null,
-        abortController: new AbortController(),
-        startedAt: Date.now(),
-        pendingToolRequests: []
-      })
-    })
+    const conversationId = 3
 
     const store = useConversationStreamStore.getState()
 
@@ -133,8 +100,7 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, message2)
 
     // Verify initial state: 3 messages
-    let streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(3)
+    expect(getMessages(conversationId)).toHaveLength(3)
 
     // Add ToolCallRequest to trigger deduplication
     const toolCallRequest: ConversationEvent = {
@@ -147,27 +113,14 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, toolCallRequest)
 
     // Verify: ToolCall removed, other messages preserved
-    streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(2)
-    expect(streamState?.messages[0]).toEqual(message1)
-    expect(streamState?.messages[1]).toEqual(message2)
+    const messages = getMessages(conversationId)
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toEqual(message1)
+    expect(messages[1]).toEqual(message2)
   })
 
   it('should add normal events without deduplication', () => {
-    const conversationId = Date.now() + 3 // Use unique ID for each test
-
-    // Initialize stream state using Zustand's setState
-    useConversationStreamStore.setState((state) => {
-      state.activeStreams.set(conversationId, {
-        conversationId,
-        messages: [],
-        isStreaming: true,
-        error: null,
-        abortController: new AbortController(),
-        startedAt: Date.now(),
-        pendingToolRequests: []
-      })
-    })
+    const conversationId = 4
 
     const store = useConversationStreamStore.getState()
 
@@ -182,26 +135,13 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     events.forEach(event => store.addEvent(conversationId, event))
 
     // Verify all events were added normally
-    const streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(4)
-    expect(streamState?.messages).toEqual(events)
+    const messages = getMessages(conversationId)
+    expect(messages).toHaveLength(4)
+    expect(messages).toEqual(events)
   })
 
   it('should handle multiple ToolCalls with different IDs', () => {
-    const conversationId = Date.now() + 4 // Use unique ID for each test
-
-    // Initialize stream state using Zustand's setState
-    useConversationStreamStore.setState((state) => {
-      state.activeStreams.set(conversationId, {
-        conversationId,
-        messages: [],
-        isStreaming: true,
-        error: null,
-        abortController: new AbortController(),
-        startedAt: Date.now(),
-        pendingToolRequests: []
-      })
-    })
+    const conversationId = 5
 
     const store = useConversationStreamStore.getState()
 
@@ -235,16 +175,16 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     store.addEvent(conversationId, toolCallRequest1)
 
     // Verify: Only toolCall1 was removed, toolCall2 remains
-    const streamState = store.getStreamState(conversationId)
-    expect(streamState?.messages).toHaveLength(1)
-    expect(streamState?.messages[0]).toEqual(toolCall2)
+    const messages = getMessages(conversationId)
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toEqual(toolCall2)
   })
 })
 
 describe('conversationStreamStore - stream cancellation', () => {
   beforeEach(() => {
     // Reset store state before each test
-    useConversationStreamStore.setState({ activeStreams: new Map() })
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
   })
 
   it('should use provided abortController for stream cancellation', async () => {
