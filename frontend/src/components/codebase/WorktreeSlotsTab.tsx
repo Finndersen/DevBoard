@@ -106,58 +106,50 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
             )}
           </div>
 
-          {/* Path */}
-          <div>
-            <span className={`text-xs ${textColors.secondary} block mb-1`}>Path</span>
-            <code className="text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded block truncate">
-              {slot.path}
-            </code>
-          </div>
-
-          {/* Details Grid */}
+          {/* Details */}
           <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className={`shrink-0 ${textColors.secondary}`}>Path:</span>
+              <code className="font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded truncate min-w-0">
+                {slot.path}
+              </code>
+            </div>
+
             {slot.current_branch && (
-              <div className="flex items-center justify-between">
-                <span className={textColors.secondary}>Branch:</span>
-                <code className="font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded">
+              <div className="flex items-center justify-between gap-2">
+                <span className={`shrink-0 ${textColors.secondary}`}>Branch:</span>
+                <code className="font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded truncate min-w-0">
                   {slot.current_branch}
                 </code>
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <span className={textColors.secondary}>Last used:</span>
-              <span className={textColors.secondary}>
-                {formatTimestamp(slot.last_used_at)}
-              </span>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`shrink-0 ${textColors.secondary}`}>Last used:</span>
+              <span className={textColors.secondary}>{formatTimestamp(slot.last_used_at)}</span>
             </div>
 
-            {/* Show locked task OR last used task (not both) */}
             {isLocked && slot.locked_by_task && (
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className={`${textColors.secondary} block mb-1`}>Locked by task:</span>
-                <div
-                  className="bg-orange-50 dark:bg-orange-900/20 rounded p-2 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+              <div className="flex items-center justify-between gap-2">
+                <span className={`shrink-0 ${textColors.secondary}`}>Locked by:</span>
+                <button
+                  className="text-orange-600 dark:text-orange-400 hover:underline truncate min-w-0 text-left"
                   onClick={() => openTab({ type: 'task', entityId: String(slot.locked_by_task!.id), title: slot.locked_by_task!.title })}
                 >
-                  <div className="font-medium text-orange-700 dark:text-orange-300">
-                    Task {slot.locked_by_task.id}: {slot.locked_by_task.title}
-                  </div>
-                </div>
+                  Task {slot.locked_by_task.id}: {slot.locked_by_task.title}
+                </button>
               </div>
             )}
 
             {!isLocked && slot.last_used_by_task && (
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className={`${textColors.secondary} block mb-1`}>Last active task:</span>
-                <div
-                  className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              <div className="flex items-center justify-between gap-2">
+                <span className={`shrink-0 ${textColors.secondary}`}>Last active task:</span>
+                <button
+                  className="text-blue-600 dark:text-blue-400 hover:underline truncate min-w-0 text-left"
                   onClick={() => openTab({ type: 'task', entityId: String(slot.last_used_by_task!.id), title: slot.last_used_by_task!.title })}
                 >
-                  <div className="font-medium text-blue-700 dark:text-blue-300">
-                    Task {slot.last_used_by_task.id}: {slot.last_used_by_task.title}
-                  </div>
-                </div>
+                  Task {slot.last_used_by_task.id}: {slot.last_used_by_task.title}
+                </button>
               </div>
             )}
           </div>
@@ -226,6 +218,9 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
             </h3>
             <p className={`text-sm ${textColors.secondary}`}>
               Overview of worktree slot allocation for this codebase
+            </p>
+            <p className={`text-xs ${textColors.secondary} mt-1`}>
+              Additional worktrees are created automatically on demand when new tasks need them.
             </p>
           </div>
           <div className="flex space-x-6">
