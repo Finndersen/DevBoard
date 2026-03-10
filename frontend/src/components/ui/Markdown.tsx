@@ -62,8 +62,13 @@ export default function Markdown({
       const isBlock = className?.includes('language-') || String(children).includes('\n')
 
       if (!isBlock) {
+        // Use bg-white/20 on coloured backgrounds (e.g. blue user bubble), otherwise use a shade
+        // that contrasts with the bubble background (gray-100/gray-700).
+        const inlineCodeClass = forceWhiteText
+          ? 'bg-white/20 text-white rounded px-1 py-0.5 text-[0.85em] font-mono before:content-none after:content-none'
+          : 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded px-1 py-0.5 text-[0.85em] font-mono before:content-none after:content-none'
         return (
-          <code className={className} {...props}>
+          <code className={inlineCodeClass} {...props}>
             {children}
           </code>
         )
@@ -84,7 +89,7 @@ export default function Markdown({
       // Return children directly since CodeBlock/MermaidDiagram handle their own wrapping
       return <>{children}</>
     }
-  }), [])
+  }), [forceWhiteText])
 
   return (
     <>
