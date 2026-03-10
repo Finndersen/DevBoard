@@ -1,6 +1,6 @@
 """Tests for GitHub integration methods."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -674,7 +674,11 @@ class TestGetUserOpenPullRequests:
                             "url": "https://github.com/owner/repo/pull/42",
                             "mergeable": "MERGEABLE",
                             "mergeStateStatus": "CLEAN",
+                            "updatedAt": "2026-03-01T12:00:00Z",
                             "repository": {"nameWithOwner": "owner/repo"},
+                            "reviewDecision": "APPROVED",
+                            "totalCommentsCount": 5,
+                            "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "SUCCESS"}}}]},
                         },
                         {
                             "number": 7,
@@ -682,7 +686,11 @@ class TestGetUserOpenPullRequests:
                             "url": "https://github.com/owner/other/pull/7",
                             "mergeable": "CONFLICTING",
                             "mergeStateStatus": "DIRTY",
+                            "updatedAt": "2026-03-01T12:00:00Z",
                             "repository": {"nameWithOwner": "owner/other"},
+                            "reviewDecision": "CHANGES_REQUESTED",
+                            "totalCommentsCount": 2,
+                            "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "FAILURE"}}}]},
                         },
                     ]
                 }
@@ -708,6 +716,10 @@ class TestGetUserOpenPullRequests:
                 html_url="https://github.com/owner/repo/pull/42",
                 mergeable_state="CLEAN",
                 repo_full_name="owner/repo",
+                updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                review_decision="APPROVED",
+                ci_status="SUCCESS",
+                comment_count=5,
             ),
             OpenPullRequest(
                 number=7,
@@ -715,6 +727,10 @@ class TestGetUserOpenPullRequests:
                 html_url="https://github.com/owner/other/pull/7",
                 mergeable_state="DIRTY",
                 repo_full_name="owner/other",
+                updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                review_decision="CHANGES_REQUESTED",
+                ci_status="FAILURE",
+                comment_count=2,
             ),
         ]
 
@@ -722,6 +738,9 @@ class TestGetUserOpenPullRequests:
         call_kwargs = mock_client.post.call_args
         assert call_kwargs[0][0] == "https://api.github.com/graphql"
         assert call_kwargs[1]["headers"]["Authorization"] == "Bearer ghp_test_token"
+        # Verify staleness filter is included in the search query variable
+        variables = call_kwargs[1]["json"]["variables"]
+        assert "updated:>=" in variables["q"]
 
     @pytest.mark.asyncio
     async def test_skips_null_nodes(self, github_integration: GitHubIntegration):
@@ -736,7 +755,11 @@ class TestGetUserOpenPullRequests:
                             "url": "https://github.com/owner/repo/pull/1",
                             "mergeable": "MERGEABLE",
                             "mergeStateStatus": "CLEAN",
+                            "updatedAt": "2026-03-01T12:00:00Z",
                             "repository": {"nameWithOwner": "owner/repo"},
+                            "reviewDecision": None,
+                            "totalCommentsCount": 0,
+                            "commits": {"nodes": []},
                         },
                         None,
                     ]

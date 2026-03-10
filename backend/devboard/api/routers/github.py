@@ -76,6 +76,10 @@ async def get_open_prs(
                 mergeable_state=pr.mergeable_state,
                 task_id=task_info[0] if task_info else None,
                 task_title=task_info[1] if task_info else None,
+                updated_at=pr.updated_at,
+                review_decision=pr.review_decision,
+                ci_status=pr.ci_status,
+                comment_count=pr.comment_count,
             )
         )
 

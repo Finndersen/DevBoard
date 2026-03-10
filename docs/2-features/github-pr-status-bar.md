@@ -1,40 +1,52 @@
-# GitHub PR Status Bar
+# GitHub PR Dropdown
 
-**Navigation**: [Documentation Home](../INDEX.md) > [Features](./INDEX.md) > GitHub PR Status Bar
+**Navigation**: [Documentation Home](../INDEX.md) > [Features](./INDEX.md) > GitHub PR Dropdown
 
 ## Overview
 
-The GitHub PR Status Bar provides at-a-glance visibility into all open pull requests across GitHub-connected codebases, displayed in the application header bar.
+The GitHub PR Dropdown provides at-a-glance visibility into all open pull requests via a compact dropdown button in the application header bar, positioned next to the notifications bell.
 
 ## Feature Description
 
-A horizontal list of compact PR pills is shown in the top header bar, to the left of the notifications panel. Each pill represents an open GitHub PR and displays:
+A dropdown trigger button with a PR icon and badge count is displayed in the top header bar. Clicking it reveals a scrollable list of open PRs with inline status indicators.
 
-- **Repository name and PR number** (e.g., `DevBoard #42`)
-- **PR title** (truncated for long titles)
+### Staleness Filtering
+
+Only PRs updated within the last 30 days are shown. Stale PRs (not updated for over 30 days) are automatically filtered out on the backend using GitHub's `updatedAt` field.
+
+### PR List Items
+
+Each PR in the dropdown list displays:
+
 - **Status dot** color-coded by `mergeable_state`:
   - Green: `clean` (ready to merge)
   - Yellow/amber: `behind`, `blocked`, `unknown`
   - Red: `dirty`, `unstable` (has conflicts or failing checks)
+- **Repository name and PR number** (e.g., `DevBoard #42`)
+- **Relative time** since last update (e.g., `3d ago`)
+- **PR title** (truncated for long titles)
+- **Inline status indicators** (fetched via GraphQL in a single query):
+  - **CI status**: Check mark (passing), cross (failing), or circle (pending)
+  - **Review decision**: Badge showing "Approved", "Changes", or "Review needed"
+  - **Comment count**: Bubble icon with count (hidden when zero)
 
 ### Actions
 
-Each PR pill provides:
+Each PR list item provides:
 - **Open in GitHub**: Opens the PR URL in a new browser tab
 - **Open Task**: Navigates to the associated DevBoard task (only shown when a task is linked)
 
-### Expanded Detail View
+### Badge Count
 
-Clicking a PR pill opens a popover showing on-demand detail:
-- **CI Checks**: Overall CI status and individual check names with pass/fail/pending indicators
-- **Reviews**: List of reviewers with their review state (approved, changes requested, commented)
-- **Review comment count**
+The trigger button shows a badge with the number of open PRs (hidden when zero).
 
-Only one PR can be expanded at a time.
+### Header
+
+The dropdown header shows "Pull Requests ({count})" with a refresh button and error warning icon (when applicable).
 
 ### Refresh
 
-A manual refresh button re-fetches the PR list. No automatic polling is performed.
+A manual refresh button in the dropdown header re-fetches the PR list. No automatic polling is performed.
 
 ## API Endpoints
 
@@ -42,14 +54,16 @@ A manual refresh button re-fetches the PR list. No automatic polling is performe
 
 Returns all open PRs across all GitHub-connected codebases, correlated with DevBoard tasks.
 
-- Queries GitHub for open PRs across all codebases with a `repository_url`
+- Queries GitHub for open PRs via a single GraphQL call
+- Fetches CI rollup status, review decision, and comment count inline via GraphQL
+- Filters out PRs not updated in the last 30 days
 - Matches PRs to DevBoard tasks by `github_pr_number` and `codebase_id`
-- Handles per-codebase errors gracefully (partial results returned)
-- Does not fetch detailed CI checks (lightweight listing)
+- Returns `updated_at`, `ci_status`, `review_decision`, and `comment_count` for each PR
+- Handles errors gracefully (partial results returned)
 
 ### `GET /api/github/prs/{codebase_id}/{pr_number}/detail`
 
-Returns detailed status for a single PR (called on-demand when expanding a PR pill).
+Returns detailed status for a single PR (available for programmatic use).
 
 - CI check results with individual check names and states
 - Review summary with author and review state
@@ -57,6 +71,6 @@ Returns detailed status for a single PR (called on-demand when expanding a PR pi
 
 ## Architecture
 
-- **Backend**: New router (`api/routers/github.py`) with two endpoints, using existing `GitHubRepository` and `GitHubPR` wrappers
-- **Frontend**: `GitHubPRStatusBar` component in `components/github/`, integrated into `AppShell` header bar
-- **Data flow**: GitHub API → Backend aggregation → Frontend display with on-demand detail loading
+- **Backend**: Router (`api/routers/github.py`) with two endpoints; GraphQL query enriched with CI/review/comment data
+- **Frontend**: `GitHubPRDropdown` component in `components/github/`, integrated into `AppShell` header bar
+- **Data flow**: GitHub GraphQL API → Backend aggregation + staleness filter → Frontend dropdown with inline status display

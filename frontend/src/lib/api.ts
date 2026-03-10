@@ -661,6 +661,10 @@ export interface OpenPRItem {
   mergeable_state: string | null
   task_id: number | null
   task_title: string | null
+  updated_at: string
+  review_decision: string | null
+  ci_status: string | null
+  comment_count: number
 }
 
 export interface OpenPRsResponse {

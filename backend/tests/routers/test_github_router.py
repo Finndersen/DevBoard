@@ -1,5 +1,6 @@
 """Tests for GitHub router endpoints."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -79,6 +80,10 @@ class TestGetOpenPRs:
                     html_url="https://github.com/owner/repo/pull/1",
                     mergeable_state="CLEAN",
                     repo_full_name="owner/repo",
+                    updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                    review_decision="APPROVED",
+                    ci_status="SUCCESS",
+                    comment_count=3,
                 ),
                 OpenPullRequest(
                     number=2,
@@ -86,6 +91,10 @@ class TestGetOpenPRs:
                     html_url="https://github.com/owner/repo/pull/2",
                     mergeable_state="DIRTY",
                     repo_full_name="owner/repo",
+                    updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                    review_decision="APPROVED",
+                    ci_status="SUCCESS",
+                    comment_count=3,
                 ),
             ]
         )
@@ -109,8 +118,12 @@ class TestGetOpenPRs:
             "codebase_id": codebase_with_repo.id,
             "pr_url": "https://github.com/owner/repo/pull/1",
             "mergeable_state": "CLEAN",
+            "updated_at": "2026-03-01T12:00:00Z",
             "task_id": None,
             "task_title": None,
+            "review_decision": "APPROVED",
+            "ci_status": "SUCCESS",
+            "comment_count": 3,
         }
 
         pr2 = data["prs"][1]
@@ -127,6 +140,10 @@ class TestGetOpenPRs:
                     html_url="https://github.com/owner/repo/pull/1",
                     mergeable_state="CLEAN",
                     repo_full_name="owner/repo",
+                    updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                    review_decision="APPROVED",
+                    ci_status="SUCCESS",
+                    comment_count=3,
                 ),
                 OpenPullRequest(
                     number=5,
@@ -134,6 +151,10 @@ class TestGetOpenPRs:
                     html_url="https://github.com/other/project/pull/5",
                     mergeable_state="CLEAN",
                     repo_full_name="other/project",
+                    updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                    review_decision="APPROVED",
+                    ci_status="SUCCESS",
+                    comment_count=3,
                 ),
             ]
         )
@@ -185,6 +206,10 @@ class TestGetOpenPRs:
                     html_url="https://github.com/owner/repo/pull/1",
                     mergeable_state="CLEAN",
                     repo_full_name="owner/repo",
+                    updated_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC),
+                    review_decision="APPROVED",
+                    ci_status="SUCCESS",
+                    comment_count=3,
                 ),
             ]
         )

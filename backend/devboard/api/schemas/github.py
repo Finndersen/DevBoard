@@ -1,5 +1,7 @@
 """GitHub-specific API response schemas."""
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -12,6 +14,10 @@ class OpenPRItem(BaseModel):
     mergeable_state: str | None
     task_id: int | None
     task_title: str | None
+    updated_at: datetime
+    review_decision: str | None
+    ci_status: str | None
+    comment_count: int
 
 
 class OpenPRsResponse(BaseModel):

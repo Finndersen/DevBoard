@@ -5,7 +5,7 @@ import re
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 import httpx
@@ -161,6 +161,10 @@ class OpenPullRequest:
     html_url: str
     mergeable_state: str | None
     repo_full_name: str
+    updated_at: datetime
+    review_decision: str | None
+    ci_status: str | None
+    comment_count: int
 
 
 class GitHubPR:
@@ -488,6 +492,17 @@ class GitHubRepository:
         return await _github_api_call(_get_combined_status)
 
 
+def _extract_ci_status(node: dict[str, Any]) -> str | None:
+    """Extract CI rollup status from a GraphQL PR node."""
+    commits = node.get("commits", {}).get("nodes", [])
+    if not commits:
+        return None
+    rollup = commits[0].get("commit", {}).get("statusCheckRollup")
+    if not rollup:
+        return None
+    return rollup.get("state")
+
+
 class GitHubIntegration(BaseIntegration):
     """Integration for GitHub API access."""
 
@@ -569,18 +584,32 @@ class GitHubIntegration(BaseIntegration):
         owner, repo = self.parse_repo_url(url)
         return await self.get_repository(owner, repo)
 
-    async def get_user_open_pull_requests(self) -> list[OpenPullRequest]:
+    async def get_user_open_pull_requests(self, updated_since_days: int = 30) -> list[OpenPullRequest]:
         """Fetch all open PRs authored by the authenticated user via GraphQL."""
+        cutoff = (datetime.now(tz=UTC) - timedelta(days=updated_since_days)).strftime("%Y-%m-%d")
+        search_query = f"type:pr state:open author:@me draft:false updated:>={cutoff}"
         query = """
-        {
-          search(query: "type:pr state:open author:@me draft:false", type: ISSUE, first: 100) {
+        query($q: String!) {
+          search(query: $q, type: ISSUE, first: 100) {
             nodes {
               ... on PullRequest {
                 number
                 title
                 url
+                updatedAt
                 mergeable
                 mergeStateStatus
+                reviewDecision
+                totalCommentsCount
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      statusCheckRollup {
+                        state
+                      }
+                    }
+                  }
+                }
                 repository { nameWithOwner }
               }
             }
@@ -597,7 +626,7 @@ class GitHubIntegration(BaseIntegration):
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 graphql_url,
-                json={"query": query},
+                json={"query": query, "variables": {"q": search_query}},
                 headers={"Authorization": f"Bearer {config.api_token}"},
                 timeout=30.0,
             )
@@ -615,6 +644,10 @@ class GitHubIntegration(BaseIntegration):
                 html_url=node["url"],
                 mergeable_state=node.get("mergeStateStatus"),
                 repo_full_name=node["repository"]["nameWithOwner"],
+                updated_at=datetime.fromisoformat(node["updatedAt"]),
+                review_decision=node.get("reviewDecision"),
+                ci_status=_extract_ci_status(node),
+                comment_count=node.get("totalCommentsCount", 0),
             )
             for node in nodes
             if node

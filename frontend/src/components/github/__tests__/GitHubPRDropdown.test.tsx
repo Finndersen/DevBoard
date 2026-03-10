@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import GitHubPRStatusBar from '../GitHubPRStatusBar'
-import type { OpenPRsResponse, PRDetailResponse } from '../../../lib/api'
+import GitHubPRDropdown from '../GitHubPRDropdown'
+import type { OpenPRsResponse } from '../../../lib/api'
 
 // Mock the hooks and API client
 const mockRefetch = vi.fn()
@@ -17,18 +17,7 @@ vi.mock('../../../stores/uiStore', () => ({
   )
 }))
 
-vi.mock('../../../lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../lib/api')>()
-  return {
-    ...actual,
-    apiClient: {
-      getPRDetail: vi.fn(),
-    },
-  }
-})
-
 import { useOpenPRs } from '../../../hooks/useGitHubPRs'
-import { apiClient } from '../../../lib/api'
 
 const mockPRsResponse: OpenPRsResponse = {
   prs: [
@@ -41,6 +30,10 @@ const mockPRsResponse: OpenPRsResponse = {
       mergeable_state: 'clean',
       task_id: 42,
       task_title: 'Auth fix task',
+      review_decision: 'APPROVED',
+      ci_status: 'SUCCESS',
+      comment_count: 5,
+      updated_at: '2026-03-01T12:00:00Z',
     },
     {
       pr_number: 2,
@@ -51,19 +44,20 @@ const mockPRsResponse: OpenPRsResponse = {
       mergeable_state: 'dirty',
       task_id: null,
       task_title: null,
+      review_decision: 'CHANGES_REQUESTED',
+      ci_status: 'FAILURE',
+      comment_count: 0,
+      updated_at: '2026-02-28T10:00:00Z',
     },
   ],
   errors: [],
 }
 
-const mockDetailResponse: PRDetailResponse = {
-  ci_status: 'success',
-  checks: [{ name: 'ci/test', state: 'success', description: 'Tests passed' }],
-  reviews: [{ author: 'reviewer1', state: 'APPROVED', body: 'LGTM' }],
-  review_comment_count: 3,
+function openDropdown() {
+  fireEvent.click(screen.getByLabelText('Pull Requests'))
 }
 
-describe('GitHubPRStatusBar', () => {
+describe('GitHubPRDropdown', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useOpenPRs).mockReturnValue({
@@ -75,13 +69,22 @@ describe('GitHubPRStatusBar', () => {
     })
   })
 
-  it('renders PR pills with correct info', () => {
-    render(<GitHubPRStatusBar />)
+  it('renders trigger button with badge count', () => {
+    render(<GitHubPRDropdown />)
 
-    expect(screen.getByText('DevBoard #1')).toBeInTheDocument()
+    const badge = screen.getByText('2')
+    expect(badge).toBeInTheDocument()
+  })
+
+  it('shows PR list when dropdown is opened', () => {
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
+
     expect(screen.getByText('Fix authentication bug')).toBeInTheDocument()
-    expect(screen.getByText('DevBoard #2')).toBeInTheDocument()
     expect(screen.getByText('Add dark mode')).toBeInTheDocument()
+    expect(screen.getByText(/DevBoard #1/)).toBeInTheDocument()
+    expect(screen.getByText(/DevBoard #2/)).toBeInTheDocument()
   })
 
   it('shows loading state when data is loading', () => {
@@ -93,7 +96,10 @@ describe('GitHubPRStatusBar', () => {
       setData: vi.fn(),
     })
 
-    render(<GitHubPRStatusBar />)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
+
     expect(screen.getByText('Loading PRs...')).toBeInTheDocument()
   })
 
@@ -106,11 +112,14 @@ describe('GitHubPRStatusBar', () => {
       setData: vi.fn(),
     })
 
-    render(<GitHubPRStatusBar />)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
+
     expect(screen.getByText('No open PRs')).toBeInTheDocument()
   })
 
-  it('shows error warning when there are errors', () => {
+  it('shows error warning icon in header', () => {
     vi.mocked(useOpenPRs).mockReturnValue({
       data: { prs: [], errors: ['GitHub API error'] },
       loading: false,
@@ -119,14 +128,18 @@ describe('GitHubPRStatusBar', () => {
       setData: vi.fn(),
     })
 
-    render(<GitHubPRStatusBar />)
-    // Warning icon should be present (ExclamationTriangleIcon)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
+
     const warningIcon = document.querySelector('[title="GitHub API error"]')
     expect(warningIcon).toBeInTheDocument()
   })
 
   it('refresh button calls refetch', () => {
-    render(<GitHubPRStatusBar />)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
 
     const refreshButton = screen.getByTitle('Refresh PRs')
     fireEvent.click(refreshButton)
@@ -136,7 +149,9 @@ describe('GitHubPRStatusBar', () => {
   it('open in GitHub button opens PR URL in new tab', () => {
     const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null)
 
-    render(<GitHubPRStatusBar />)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
 
     const openButtons = screen.getAllByTitle('Open in GitHub')
     fireEvent.click(openButtons[0])
@@ -146,7 +161,9 @@ describe('GitHubPRStatusBar', () => {
   })
 
   it('open task button calls openTab for PR with task association', () => {
-    render(<GitHubPRStatusBar />)
+    render(<GitHubPRDropdown />)
+
+    openDropdown()
 
     const taskButtons = screen.getAllByTitle('Open task')
     // Only PR #1 has a task association
@@ -160,31 +177,28 @@ describe('GitHubPRStatusBar', () => {
     })
   })
 
-  it('shows detail popover when PR pill is clicked', async () => {
-    vi.mocked(apiClient.getPRDetail).mockResolvedValue(mockDetailResponse)
+  it('shows review badges and comment count', () => {
+    render(<GitHubPRDropdown />)
+    openDropdown()
 
-    render(<GitHubPRStatusBar />)
-
-    // Click on the first PR's info area
-    fireEvent.click(screen.getByText('DevBoard #1'))
-
-    // Should show loading then detail
-    await waitFor(() => {
-      expect(screen.getByText('ci/test')).toBeInTheDocument()
-      expect(screen.getByText('reviewer1')).toBeInTheDocument()
-      expect(screen.getByText('3 review comments')).toBeInTheDocument()
-    })
-
-    expect(apiClient.getPRDetail).toHaveBeenCalledWith(10, 1)
+    expect(screen.getByText('Approved')).toBeInTheDocument()
+    expect(screen.getByText('Changes')).toBeInTheDocument()
+    // First PR has 5 comments
+    expect(screen.getByText('5')).toBeInTheDocument()
   })
 
-  it('renders correct status dot colors', () => {
-    render(<GitHubPRStatusBar />)
+  it('shows combined status indicator with correct tooltips', () => {
+    render(<GitHubPRDropdown />)
+    openDropdown()
 
-    const dots = document.querySelectorAll('.rounded-full.w-2.h-2')
-    // First PR: clean -> green
-    expect(dots[0].className).toContain('bg-green-500')
-    // Second PR: dirty -> red
-    expect(dots[1].className).toContain('bg-red-500')
+    // First PR: CLEAN + SUCCESS -> "Ready to merge"
+    const readyIndicator = screen.getByTitle('Ready to merge')
+    expect(readyIndicator).toBeInTheDocument()
+    expect(readyIndicator.className).toContain('text-green-500')
+
+    // Second PR: DIRTY -> "Has merge conflicts" (takes priority over CI failure)
+    const conflictIndicator = screen.getByTitle('Has merge conflicts')
+    expect(conflictIndicator).toBeInTheDocument()
+    expect(conflictIndicator.className).toContain('text-red-500')
   })
 })
