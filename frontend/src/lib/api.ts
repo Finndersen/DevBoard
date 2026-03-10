@@ -709,6 +709,10 @@ export class ApiClient {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`)
     }
 
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T
+    }
+
     return response.json()
   }
 
