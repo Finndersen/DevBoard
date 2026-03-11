@@ -7,22 +7,16 @@ import {
   ChevronDownIcon,
   CodeBracketIcon,
   TrashIcon,
-  TagIcon,
   FolderIcon,
   ChatBubbleLeftIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline'
-import {
-  CheckCircleIcon,
-  ArrowTopRightOnSquareIcon,
-} from '@heroicons/react/24/solid'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
-import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, CustomFieldDefinition } from '../../lib/api'
+import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
 import { textColors } from '../../styles/designSystem'
-import TaskCustomFieldsModal from '../modals/TaskCustomFieldsModal'
-import { apiClient } from '../../lib/api'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
@@ -96,14 +90,6 @@ export function TaskDetailHeader({
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
-  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
-  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
-
-  useEffect(() => {
-    apiClient.getCustomFieldDefinitions('task')
-      .then(setCustomFieldDefinitions)
-      .catch(err => console.error('Failed to load custom field definitions:', err))
-  }, [])
 
   // Close codebase selector when clicking outside
   useEffect(() => {
@@ -171,7 +157,7 @@ export function TaskDetailHeader({
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1">
                 <h1 className={`text-xl font-bold ${textColors.primary}`}>
                   {task.title}
                 </h1>
@@ -187,70 +173,83 @@ export function TaskDetailHeader({
                 >
                   <PencilIcon className="w-4 h-4" />
                 </Button>
+                <Button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  variant="ghost"
+                  size="sm"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:text-gray-600 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+                  title="Delete task"
+                  aria-label="Delete task"
+                >
+                  <TrashIcon className="w-3.5 h-3.5" />
+                </Button>
               </div>
             )}
             <StatusBadge variant={getStatusVariant(task.status)}>
               {task.status}
             </StatusBadge>
 
-            {/* Parent Project Link */}
-            {project && (
-              <Link
-                to={`/projects/${project.id}`}
-                className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                title="View project"
-              >
-                <FolderIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                <span className="text-blue-600 dark:text-blue-400 hover:underline">{project.name}</span>
-              </Link>
-            )}
-
-            {/* Codebase Display/Selector */}
-            <div className="relative">
-              {selectedCodebase ? (
+            {/* Compact project / codebase display */}
+            <div className="flex items-center text-sm">
+              {project && (
                 <Link
-                  to={`/codebases/${selectedCodebase.id}`}
-                  className="flex items-center space-x-1.5 px-2 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  title="View codebase details"
+                  to={`/projects/${project.id}`}
+                  className="flex items-center space-x-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  title="View project"
                 >
-                  <CodeBracketIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  <span className="text-blue-600 dark:text-blue-400 hover:underline">{selectedCodebase.name}</span>
+                  <FolderIcon className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+                  <span className="text-blue-600 dark:text-blue-400 hover:underline max-w-[100px] truncate">{project.name}</span>
                 </Link>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
-                    className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
-                    title="Select codebase"
-                  >
-                    <CodeBracketIcon className="w-4 h-4" />
-                    <span className="italic">No codebase</span>
-                    <ChevronDownIcon className="w-3 h-3" />
-                  </button>
-
-                  {showCodebaseSelector && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
-                      <div className="max-h-64 overflow-y-auto">
-                        {codebases && codebases.map((codebase: Codebase) => (
-                          <button
-                            key={codebase.id}
-                            onClick={() => {
-                              setShowCodebaseSelector(false)
-                              onCodebaseSelect(codebase.id)
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                              codebase.id === task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
-                            } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}
-                          >
-                            <div className="font-medium">{codebase.name}</div>
-                            <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
               )}
+              {project && selectedCodebase && (
+                <span className="text-gray-400 dark:text-gray-600 mx-0.5">/</span>
+              )}
+              <div className="relative">
+                {selectedCodebase ? (
+                  <Link
+                    to={`/codebases/${selectedCodebase.id}`}
+                    className="flex items-center space-x-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="View codebase"
+                  >
+                    <CodeBracketIcon className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+                    <span className="text-blue-600 dark:text-blue-400 hover:underline max-w-[100px] truncate">{selectedCodebase.name}</span>
+                  </Link>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowCodebaseSelector(!showCodebaseSelector)}
+                      className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-sm ${textColors.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+                      title="Select codebase"
+                    >
+                      <CodeBracketIcon className="w-3.5 h-3.5" />
+                      <span className="italic">No codebase</span>
+                      <ChevronDownIcon className="w-3 h-3" />
+                    </button>
+
+                    {showCodebaseSelector && (
+                      <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                        <div className="max-h-64 overflow-y-auto">
+                          {codebases && codebases.map((codebase: Codebase) => (
+                            <button
+                              key={codebase.id}
+                              onClick={() => {
+                                setShowCodebaseSelector(false)
+                                onCodebaseSelect(codebase.id)
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                                codebase.id === task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
+                              } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}
+                            >
+                              <div className="font-medium">{codebase.name}</div>
+                              <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
@@ -267,25 +266,21 @@ export function TaskDetailHeader({
               >
                 <GitBranchIcon className="w-4 h-4" />
                 {gitStatus.commits_ahead > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                    {gitStatus.commits_ahead} ahead
-                  </span>
+                  <span className="text-xs font-medium text-green-700 dark:text-green-300">↑{gitStatus.commits_ahead}</span>
                 )}
                 {gitStatus.commits_behind > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                    {gitStatus.commits_behind} behind
-                  </span>
+                  <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">↓{gitStatus.commits_behind}</span>
                 )}
               </button>
             )}
 
             {/* PR Status - shown when task is in PR_OPEN state */}
             {task.status === 'pr_open' && (prStatus || prStatusLoading) && (
-              <div className="flex items-center">
+              <div className="flex items-center rounded border border-gray-300 dark:border-gray-600 overflow-hidden">
                 {prStatus && (
                   <button
                     onClick={() => window.open(prStatus.pr_url, '_blank')}
-                    className={`flex items-center space-x-1.5 px-2 py-1 rounded-l text-sm border border-r-0 transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ${textColors.secondary}`}
+                    className={`flex items-center space-x-1.5 px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
                     title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
                   >
                     <GitHubIcon className="w-4 h-4" />
@@ -302,48 +297,22 @@ export function TaskDetailHeader({
                         <span>{prStatus.comment_count}</span>
                       </span>
                     )}
-                    <ArrowTopRightOnSquareIcon className="w-3 h-3 opacity-60" />
                   </button>
                 )}
                 <button
                   onClick={onRefreshPrStatus}
                   disabled={prStatusLoading}
-                  className={`flex items-center px-1.5 py-1 rounded-r text-sm border transition-colors border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed ${textColors.secondary} ${!prStatus ? 'rounded-l' : ''}`}
+                  className={`flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${textColors.secondary}`}
                   title="Refresh PR status"
                 >
                   <ArrowPathIcon className={`w-3.5 h-3.5 ${prStatusLoading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             )}
-
-            {/* Custom Fields Button - only shown when task has custom fields */}
-            {task.custom_fields && Object.keys(task.custom_fields).length > 0 && (
-              <button
-                onClick={() => setShowCustomFieldsModal(true)}
-                className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
-                title="View custom fields"
-              >
-                <TagIcon className="w-4 h-4" />
-                <span>{Object.keys(task.custom_fields).length} field{Object.keys(task.custom_fields).length !== 1 ? 's' : ''}</span>
-              </button>
-            )}
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Delete Button */}
-          <Button
-            onClick={() => setShowDeleteConfirm(true)}
-            variant="ghost"
-            size="sm"
-            icon={<TrashIcon className="w-4 h-4" />}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-900/20"
-            title="Delete task"
-            aria-label="Delete task"
-          >
-            Delete
-          </Button>
-
           {/* Workflow Action Buttons */}
           {workflowActionButtons}
         </div>
@@ -387,14 +356,6 @@ export function TaskDetailHeader({
         cancelText="Cancel"
         variant="danger"
         loading={deleteLoading}
-      />
-
-      {/* Custom Fields Modal */}
-      <TaskCustomFieldsModal
-        isOpen={showCustomFieldsModal}
-        onClose={() => setShowCustomFieldsModal(false)}
-        customFields={task.custom_fields || {}}
-        fieldDefinitions={customFieldDefinitions}
       />
     </>
   )
