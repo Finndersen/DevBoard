@@ -4,7 +4,8 @@ import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMa
 import AgentChat from '../components/chat/AgentChat'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
-import { Button, Card, Textarea, Markdown, Input } from '../components/ui'
+import { Button, Card, Input } from '../components/ui'
+import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Codebase } from '../lib/api'
@@ -301,57 +302,15 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           <div className="flex flex-col overflow-hidden">
             {/* Specification Document Section */}
             <Card padding="xs" className="h-full flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between mb-2 flex-shrink-0">
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Project Context</h3>
-                {!specificationField.isEditing ? (
-                  <Button
-                    onClick={specificationField.startEditing}
-                    variant="secondary"
-                    size="sm"
-                    icon={<PencilIcon className="w-4 h-4" />}
-                  >
-                    Edit
-                  </Button>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      onClick={specificationField.save}
-                      variant="primary"
-                      size="sm"
-                      loading={specificationField.saving}
-                      icon={<CheckIcon className="w-4 h-4" />}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      onClick={specificationField.cancelEditing}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                )}
-              </div>
-              
+              <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
               <div className="flex-1 overflow-hidden flex flex-col">
-                {specificationField.isEditing ? (
-                  <Textarea
-                    value={specificationField.editedValue}
-                    onChange={(e) => specificationField.setEditedValue(e.target.value)}
-                    className="w-full font-mono text-sm"
-                    fillHeight={true}
-                    placeholder="Enter project specification in Markdown format..."
-                  />
-                ) : (
-                  <div className="h-full overflow-y-auto">
-                    {specificationDoc?.content ? (
-                      <Markdown>{specificationDoc.content}</Markdown>
-                    ) : (
-                      <p className="text-gray-500 dark:text-gray-400 italic">No project context provided. Click Edit to add context.</p>
-                    )}
-                  </div>
-                )}
+                <MarkdownDocumentEditor
+                  content={specificationDoc?.content}
+                  field={specificationField}
+                  placeholder="Enter project specification in Markdown format..."
+                  emptyText="No project context provided."
+                  textareaClassName="w-full font-mono text-sm"
+                />
               </div>
             </Card>
           </div>

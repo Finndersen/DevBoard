@@ -1,6 +1,5 @@
 import { useEditableField } from '../../hooks/useEditableField'
-import { Textarea, Markdown } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import type { DocumentResponse } from '../../lib/api'
 
 interface PlanTabProps {
@@ -10,23 +9,11 @@ interface PlanTabProps {
 
 export function PlanTab({ implementationPlanDoc, planField }: PlanTabProps) {
   return (
-    <div className="h-full flex flex-col">
-      {planField.isEditing ? (
-        <Textarea
-          value={planField.editedValue}
-          onChange={(e) => planField.setEditedValue(e.target.value)}
-          fillHeight={true}
-          placeholder="Enter implementation plan in Markdown format..."
-        />
-      ) : (
-        <div className="h-full overflow-y-auto">
-          {implementationPlanDoc?.content ? (
-            <Markdown>{implementationPlanDoc.content}</Markdown>
-          ) : (
-            <p className={`${textColors.secondary} italic`}>No implementation plan provided. Click Edit to add plan.</p>
-          )}
-        </div>
-      )}
-    </div>
+    <MarkdownDocumentEditor
+      content={implementationPlanDoc?.content}
+      field={planField}
+      placeholder="Enter implementation plan in Markdown format..."
+      emptyText="No implementation plan provided."
+    />
   )
 }
