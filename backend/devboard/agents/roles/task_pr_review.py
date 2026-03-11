@@ -62,16 +62,8 @@ def format_pr_status(status: PRStatus) -> str:
 
 
 def build_task_pr_review_context(task: Task, pr_status_content: str = "") -> str:
-    """Build context for PR review agent.
-
-    Includes task metadata with PR number, PR status, task specification,
-    implementation plan, and codebase info. Project specification is excluded.
-    """
-    return build_task_context(
-        task,
-        include_project_specification=False,
-        pr_status_content=pr_status_content,
-    )
+    """Build context for PR review agent."""
+    return build_task_context(task, pr_status_content=pr_status_content)
 
 
 class TaskPRReviewAgentRole(AgentRole):

@@ -312,7 +312,17 @@ def create_code_review_tool(
 
         assert task.implementation_plan is not None, "Task must have an implementation plan for code review"
 
-        prompt = f"""Please review the following task changes.
+        prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
+
+## Project
+
+**{task.project.name}**: {task.project.description}
+
+### Project Specification
+
+```markdown
+{task.project.specification.content or "<EMPTY>"}
+```
 
 ## Task Specification
 

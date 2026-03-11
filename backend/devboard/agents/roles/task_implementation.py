@@ -43,10 +43,22 @@ WORKFLOW:
 - Review the implementation plan and understand requirements
 - Ask for clarification when encountering ambiguity
 - Create an internal to-do list of tasks to complete to track progress, based on implementation plan
-- Make incremental changes following the plan's steps, updating the internal to-do list as progress is made
-- Validate changes through testing where appropriate
-- If docs/ directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating and missing or incorrect documentation
-- Once implementation is complete (including tests and docs), call `review_code_changes` to perform a self-review before finalisation. Address any Critical or Important findings before proceeding.
+
+Then execute in order:
+
+1. IMPLEMENT CODE CHANGES
+   - Work through the implementation plan step by step, launching sub-agents (via the `Agent` tool) to implement each step where possible
+   - Update the internal to-do list as progress is made
+   - If a `docs/` directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating any missing or incorrect documentation
+
+2. CODE REVIEW
+   - For non-trivial changes, call `review_code_changes()` to perform a self-review before finalisation
+   - Thoughtfully consider the review feedback — use it in combination with your own judgement rather than blindly applying every suggestion
+   - Address findings where you agree they are valid and worth doing
+
+3. TEST & VERIFY
+   - Run relevant tests to validate the changes
+   - Confirm everything works as expected before finalising
 
 IMPORTANT BEHAVIOUR GUIDELINES:
 - When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
@@ -59,13 +71,8 @@ IMPORTANT BEHAVIOUR GUIDELINES:
 
 
 def build_task_implementation_context(task: Task) -> str:
-    """Build context for task implementation agent.
-
-    Includes task metadata, task specification, implementation plan, and codebase info.
-    Project specification is excluded - implementation should follow the task
-    specification and plan which already incorporate project context.
-    """
-    return build_task_context(task, include_project_specification=False)
+    """Build context for task implementation agent."""
+    return build_task_context(task)
 
 
 class TaskImplementationAgentRole(AgentRole):
