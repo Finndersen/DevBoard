@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import type { ConversationEvent, ToolCall, ToolResult } from '../../lib/api'
 
-export type CodeReviewStatus = 'not_reviewed' | 'reviewed' | 'stale'
+export type CodeReviewStatus = 'not_reviewed' | 'reviewed'
 
 const EMPTY_MESSAGES: ConversationEvent[] = []
 
@@ -34,24 +34,7 @@ export function useCodeReviewStatus(conversationId: number | null): { status: Co
       }
     }
 
-    if (latestReviewTimestamp === null) {
-      return 'not_reviewed'
-    }
-
-    // Check for any Edit or Write tool calls after the latest review
-    for (const event of messages) {
-      if (event.event_type === 'tool_call') {
-        const toolCall = event as ToolCall
-        if (
-          (toolCall.tool_name === 'Edit' || toolCall.tool_name === 'Write') &&
-          toolCall.timestamp > latestReviewTimestamp
-        ) {
-          return 'stale'
-        }
-      }
-    }
-
-    return 'reviewed'
+    return latestReviewTimestamp === null ? 'not_reviewed' : 'reviewed'
   }, [messages])
 
   return { status }

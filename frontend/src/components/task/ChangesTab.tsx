@@ -11,8 +11,8 @@ interface ChangesTabProps {
   prFeedback: PRFeedbackResponse | null
   onRefresh: (view: string) => Promise<void>
   onSubmitComments: (message: string) => void
-  codeReviewStatus: CodeReviewStatus
-  onAutoReview: () => void
+  codeReviewStatus?: CodeReviewStatus
+  onAutoReview?: () => void
   isStreaming: boolean
 }
 

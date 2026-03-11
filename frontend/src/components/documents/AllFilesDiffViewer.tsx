@@ -1,4 +1,4 @@
-import { ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, CheckCircleIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useState, useMemo } from 'react'
 import type { TaskDiffResponse, TaskBranchInfo, PRFeedbackResponse, PRFeedbackCommentThread } from '../../lib/api'
 import type { CodeReviewStatus } from '../../views/hooks/useCodeReviewStatus'
@@ -162,49 +162,45 @@ function AllFilesDiffViewerContent({
               </>
             )}
           </div>
-          <div className="flex items-center space-x-3">
-            {/* Code review status badge */}
-            {onAutoReview && codeReviewStatus === 'reviewed' && (
-              <span className="inline-flex items-center space-x-1 text-xs text-green-600 dark:text-green-400">
-                <CheckCircleIcon className="w-3.5 h-3.5" />
-                <span>Self-reviewed</span>
-              </span>
-            )}
-            {onAutoReview && codeReviewStatus === 'stale' && (
-              <span className="inline-flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400">
-                <ExclamationTriangleIcon className="w-3.5 h-3.5" />
-                <span>Review outdated</span>
-              </span>
-            )}
-            {onAutoReview && codeReviewStatus === 'not_reviewed' && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">Not self-reviewed</span>
-            )}
+          <div className="flex items-center space-x-2">
             {/* Submit All Comments Button - only visible when there are pending comments */}
             {onSubmitComments && <SubmitAllCommentsButton />}
-            {lastUpdated && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Last updated: {formatTimestamp(lastUpdated)}
-              </span>
-            )}
-            {/* Auto-Review button */}
+            {/* Auto-Review split button: [👁 Auto-Review | status icon] */}
             {onAutoReview && (
-              <button
-                onClick={onAutoReview}
-                disabled={isStreaming}
-                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <EyeIcon className="w-4 h-4 mr-1.5" />
-                Auto-Review
-              </button>
+              <div className="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+                <button
+                  onClick={onAutoReview}
+                  disabled={isStreaming}
+                  className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <EyeIcon className="w-3.5 h-3.5 mr-1" />
+                  Auto-Review
+                </button>
+                <div className="w-px self-stretch bg-gray-300 dark:bg-gray-600" />
+                <div className="flex items-center justify-center w-7 bg-white dark:bg-gray-800">
+                  {codeReviewStatus === 'reviewed'
+                    ? <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                    : <span className="w-2 h-2 rounded-full border border-gray-400 dark:border-gray-500" />
+                  }
+                </div>
+              </div>
             )}
-            <button
-              onClick={() => onRefresh(selectedView)}
-              disabled={loading}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ArrowPathIcon className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            {/* Refresh: timestamp + icon-only button */}
+            <div className="flex items-center space-x-1">
+              {lastUpdated && (
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {formatTimestamp(lastUpdated)}
+                </span>
+              )}
+              <button
+                onClick={() => onRefresh(selectedView)}
+                disabled={loading}
+                title="Refresh"
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 

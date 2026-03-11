@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, PencilIcon, CheckIcon, CodeBracketIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse } from '../lib/api'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, CheckCircleIcon, TagIcon } from '@heroicons/react/24/outline'
+import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
@@ -12,6 +12,7 @@ import { Button, Card, ErrorMessage } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
+import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
@@ -60,6 +61,15 @@ function TaskDetail({ id }: TaskDetailProps) {
   const [prStatusLoading, setPrStatusLoading] = useState(false)
   // PR feedback (reviews and comments) for tasks in PR_OPEN state
   const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
+
+  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+
+  useEffect(() => {
+    apiClient.getCustomFieldDefinitions('task')
+      .then(setCustomFieldDefinitions)
+      .catch(err => console.error('Failed to load custom field definitions:', err))
+  }, [])
 
   // Fetch PR status and feedback when task is in PR_OPEN state
   useEffect(() => {
@@ -516,80 +526,23 @@ function TaskDetail({ id }: TaskDetailProps) {
                     >
                       <tab.icon className="w-4 h-4" />
                       <span>{tab.name}</span>
-                      {tab.id === 'changes' && codeReviewStatus === 'reviewed' && (
+                      {tab.id === 'changes' && task?.status === 'implementing' && codeReviewStatus === 'reviewed' && (
                         <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                      )}
-                      {tab.id === 'changes' && codeReviewStatus === 'stale' && (
-                        <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-500" />
                       )}
                     </button>
                   ))}
                 </nav>
 
                 {/* Action Buttons */}
-                <div>
-                  {activeTab === 'specification' && (
-                    !specificationField.isEditing ? (
-                      <Button
-                        onClick={specificationField.startEditing}
-                        variant="secondary"
-                        size="sm"
-                        icon={<PencilIcon className="w-4 h-4" />}
-                      >
-                        Edit
-                      </Button>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          onClick={specificationField.save}
-                          variant="primary"
-                          size="sm"
-                          loading={specificationField.saving}
-                          icon={<CheckIcon className="w-4 h-4" />}
-                        >
-                          Save
-                        </Button>
-                        <Button
-                          onClick={specificationField.cancelEditing}
-                          variant="secondary"
-                          size="sm"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    )
-                  )}
-
-                  {activeTab === 'plan' && (
-                    !planField.isEditing ? (
-                      <Button
-                        onClick={planField.startEditing}
-                        variant="secondary"
-                        size="sm"
-                        icon={<PencilIcon className="w-4 h-4" />}
-                      >
-                        Edit
-                      </Button>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          onClick={planField.save}
-                          variant="primary"
-                          size="sm"
-                          loading={planField.saving}
-                          icon={<CheckIcon className="w-4 h-4" />}
-                        >
-                          Save
-                        </Button>
-                        <Button
-                          onClick={planField.cancelEditing}
-                          variant="secondary"
-                          size="sm"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    )
+                <div className="flex items-center space-x-2">
+                  {task.custom_fields && Object.keys(task.custom_fields).length > 0 && (
+                    <button
+                      onClick={() => setShowCustomFieldsModal(true)}
+                      className={`p-1.5 rounded text-sm border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
+                      title={`${Object.keys(task.custom_fields).length} custom field${Object.keys(task.custom_fields).length !== 1 ? 's' : ''}`}
+                    >
+                      <TagIcon className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -622,9 +575,11 @@ function TaskDetail({ id }: TaskDetailProps) {
                 prFeedback={prFeedback}
                 onRefresh={handleDiffRefresh}
                 onSubmitComments={handleSubmitReviewComments}
-                codeReviewStatus={codeReviewStatus}
-                onAutoReview={handleAutoReview}
                 isStreaming={isConversationStreaming}
+                {...(task?.status === 'implementing' && {
+                  codeReviewStatus,
+                  onAutoReview: handleAutoReview,
+                })}
               />
             )}
 
@@ -663,6 +618,14 @@ function TaskDetail({ id }: TaskDetailProps) {
         onStatusUpdate={refreshGitStatus}
         onTriggerRebase={handleTriggerRebase}
         isStreaming={isConversationStreaming}
+      />
+
+      {/* Custom Fields Modal */}
+      <TaskCustomFieldsModal
+        isOpen={showCustomFieldsModal}
+        onClose={() => setShowCustomFieldsModal(false)}
+        customFields={task.custom_fields || {}}
+        fieldDefinitions={customFieldDefinitions}
       />
     </div>
   )
