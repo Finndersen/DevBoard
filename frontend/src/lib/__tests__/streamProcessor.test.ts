@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi } from 'vitest'
 import { processConversationStream } from '../streamProcessor'
 import type { ConversationEvent, ToolCallRequest } from '../api'

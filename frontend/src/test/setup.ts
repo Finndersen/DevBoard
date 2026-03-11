@@ -23,42 +23,41 @@ afterAll(() => {
   server.close()
 })
 
-// Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-})
+// Browser-only mocks — skipped in node environment tests
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(), // deprecated
+      removeListener: vi.fn(), // deprecated
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
 
-// Mock IntersectionObserver
-globalThis.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
+  globalThis.IntersectionObserver = class IntersectionObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver
 
-// Mock ResizeObserver
-globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
 
-// Mock react-syntax-highlighter to avoid ESM module issues
-vi.mock('react-syntax-highlighter', () => ({
-  Prism: ({ children }: { children: string }) => React.createElement('pre', null, children),
-  Light: ({ children }: { children: string }) => React.createElement('pre', null, children),
-}))
+  vi.mock('react-syntax-highlighter', () => ({
+    Prism: ({ children }: { children: string }) => React.createElement('pre', null, children),
+    Light: ({ children }: { children: string }) => React.createElement('pre', null, children),
+  }))
 
-vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
-  oneDark: {},
-  oneLight: {},
-}))
+  vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
+    oneDark: {},
+    oneLight: {},
+  }))
+}
