@@ -2,7 +2,7 @@
 
 from pytest import fixture
 
-from devboard.agents.roles.task_planning import build_task_planning_context
+from devboard.agents.roles.context_helpers import build_task_context as build_task_planning_context
 from devboard.db.models import Codebase, DocumentType, Project, Task
 from devboard.db.models.task import TaskStatus
 from devboard.db.models.worktree_slot import WorktreeSlot
@@ -74,6 +74,7 @@ def task_with_documents(db_session, project_with_spec: Project, sample_codebase:
         specification=spec_doc,
         implementation_plan=impl_doc,
         base_branch="main",
+        branch_name="feature/test-task",
         codebase_id=sample_codebase.id,
     )
 
@@ -112,6 +113,7 @@ def task_without_implementation_plan(db_session, project_with_spec: Project, sam
         specification=spec_doc,
         implementation_plan=None,
         base_branch="main",
+        branch_name="feature/test-task",
         codebase_id=sample_codebase.id,
     )
 
@@ -138,8 +140,8 @@ class TestBuildTaskPlanningContext:
         context = build_task_planning_context(task_with_documents)
 
         # Check task metadata
-        assert "TASK NAME: Test Task" in context
-        assert "TASK STATUS: planning" in context
+        assert "NAME: Test Task" in context
+        assert "STATUS: planning" in context
 
         # Check project specification is included
         assert "PROJECT SPECIFICATION:" in context
@@ -158,8 +160,8 @@ class TestBuildTaskPlanningContext:
         context = build_task_planning_context(task_without_implementation_plan)
 
         # Check task metadata
-        assert "TASK NAME: Test Task" in context
-        assert "TASK STATUS: planning" in context
+        assert "NAME: Test Task" in context
+        assert "STATUS: planning" in context
 
         # Check project specification is included
         assert "PROJECT SPECIFICATION:" in context
@@ -195,6 +197,7 @@ class TestBuildTaskPlanningContext:
             specification=spec_doc,
             implementation_plan=impl_doc,
             base_branch="main",
+            branch_name="feature/test-task",
             codebase_id=sample_codebase.id,
         )
 
@@ -234,6 +237,7 @@ class TestBuildTaskPlanningContext:
             specification=spec_doc,
             implementation_plan=None,
             base_branch="main",
+            branch_name="feature/test-task",
             codebase_id=sample_codebase.id,
         )
 
@@ -287,6 +291,7 @@ class TestBuildTaskPlanningContext:
             specification=spec_doc,
             implementation_plan=None,
             base_branch="main",
+            branch_name="feature/test-task",
             codebase_id=sample_codebase.id,
         )
 
@@ -331,6 +336,7 @@ class TestBuildTaskPlanningContext:
             specification=spec_doc,
             implementation_plan=impl_doc,
             base_branch="main",
+            branch_name="feature/test-task",
             codebase_id=sample_codebase.id,
         )
 

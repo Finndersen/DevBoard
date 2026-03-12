@@ -434,5 +434,15 @@ export const handlers = [
     ])
   }),
 
+  // Active executions endpoint (used by useStreamSubscription on mount)
+  http.get('*/api/executions/active', () => {
+    return HttpResponse.json({ executions: [] })
+  }),
+
+  // Interrupt endpoint (used by stopStream)
+  http.post('*/api/conversations/:conversationId/interrupt', () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // Architecture document endpoints - let tests set their own handlers
 ]
