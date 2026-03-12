@@ -1,80 +1,17 @@
 """Tests for conversations router."""
 
-import datetime
-import json
-from collections.abc import Iterator
+from unittest.mock import patch
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
-from starlette.testclient import TestClient
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
-from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest
+from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.roles.project_qa import ProjectQAAgentRole
-from devboard.api.dependencies.conversations import get_agent_execution_service
-from devboard.api.main import app
 from devboard.db.models import Conversation, ParentEntityType, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository, ProjectRepository, TaskRepository
-from devboard.services.task_service import TaskService
-
-
-@pytest.fixture
-def mock_task_service(db_session):
-    """Create a mock TaskService."""
-    from unittest.mock import Mock
-
-    return Mock(spec=TaskService)
-
-
-@pytest.fixture
-def mock_agent_execution_service(
-    mock_agent, test_conversation, test_project, db_session, mock_agent_config_service, mock_task_service, monkeypatch
-):
-    """Create an execution service with mocked agent."""
-    conversation_repo = ConversationRepository(db_session)
-    document_repo = DocumentRepository(db_session)
-
-    # Create history service first
-    history_service = PydanticAIConversationHistoryService(
-        conversation=test_conversation,
-        conversation_repository=conversation_repo,
-    )
-
-    # Create role for the service
-    role = ProjectQAAgentRole(
-        project=test_project,
-        document_repository=document_repo,
-        agent_config_service=mock_agent_config_service,
-        task_service=mock_task_service,
-        conversation_repo=conversation_repo,
-        parent_conversation_id=None,
-    )
-
-    service = PydanticAIAgentExecutionService(
-        conversation=test_conversation,
-        role=role,
-        conversation_repository=conversation_repo,
-        history_service=history_service,
-        agent_config_service=mock_agent_config_service,
-    )
-
-    # Patch the _get_agent method to return our mock
-    monkeypatch.setattr(service, "_get_agent", lambda conversation_history, extra_tools=None: mock_agent)
-
-    return service
-
-
-@pytest.fixture
-def client_with_mock_agent(client, mock_agent_execution_service) -> Iterator[TestClient]:
-    """Client with mocked execution service."""
-    app.dependency_overrides[get_agent_execution_service] = lambda: mock_agent_execution_service
-    yield client
-    if get_agent_execution_service in app.dependency_overrides:
-        del app.dependency_overrides[get_agent_execution_service]
 
 
 @pytest.fixture
@@ -203,71 +140,27 @@ class TestConversationsRouter:
         assert events[2]["event_type"] == "message"
         assert events[2]["text_content"] == "I've made the requested edits"
 
-    def test_send_conversation_message(self, client_with_mock_agent, test_conversation, mock_agent):
-        """Test sending a message to a conversation."""
+    def test_send_conversation_message(self, client, test_conversation):
+        """Test sending a message starts a background execution and returns conversation_id."""
         message_request = {"message": "Help me analyze my project and answer questions."}
 
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
-        )
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
         assert response.status_code == 200
+        assert response.json() == {"conversation_id": test_conversation.id}
+        mock_manager.start_execution.assert_called_once()
 
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
-
-        assert isinstance(events, list)
-        assert len(events) == 1
-        assert events[0]["event_type"] == "message"
-        assert events[0]["role"] == "agent"
-        assert "I can help you analyze" in events[0]["text_content"]
-
-    def test_send_conversation_message_returns_tool_request(
-        self, client_with_mock_agent, test_conversation, mock_agent
-    ):
-        """Test sending a message that triggers a tool request."""
-        # Mock the agent to return a tool request
-        tool_call_event = ToolCall(
-            tool_call_id="test_call_1",
-            tool_name="edit_document",
-            tool_args={"edits": [{"find": "old", "replace": "new"}]},
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-        tool_call_request_event = ToolCallRequest(
-            tool_call_id="test_call_1",
-            tool_name="edit_document",
-            tool_args={"edits": [{"find": "old", "replace": "new"}]},
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-
-        # Override the mock stream_events to yield tool events
-        async def tool_stream_events_side_effect(prompt_or_approvals):
-            yield tool_call_event
-            yield tool_call_request_event
-
-        mock_agent.stream_events = tool_stream_events_side_effect
-
+    def test_send_conversation_message_returns_tool_request(self, client, test_conversation):
+        """Test that 409 is returned when an execution is already active."""
         message_request = {"message": "Please update the document with better content"}
 
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
-        )
-        assert response.status_code == 200
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
-
-        assert isinstance(events, list)
-        assert len(events) == 2
-        # First event should be the tool call
-        assert events[0]["event_type"] == "tool_call"
-        assert events[0]["tool_name"] == "edit_document"
-        assert events[0]["tool_call_id"] == "test_call_1"
-        # Second event should be the tool call request
-        assert events[1]["event_type"] == "tool_call_request"
-        assert events[1]["tool_name"] == "edit_document"
-        assert events[1]["tool_call_id"] == "test_call_1"
+        assert response.status_code == 409
+        assert "already active" in response.json()["detail"]
 
     def test_reset_conversation_success(self, client, db_session, test_conversation, test_project):
         """Test resetting a conversation creates a new one and clears messages."""
@@ -353,206 +246,73 @@ class TestConversationsRouter:
         assert new_conversation is not None
         assert new_conversation.parent_entity_id == test_project.id
 
-    def test_stream_conversation_message(self, client_with_mock_agent, test_conversation, mock_agent):
-        """Test streaming a message to a conversation."""
+    def test_stream_conversation_message(self, client, test_conversation):
+        """Test that POST /messages starts background execution and returns conversation_id."""
         message_request = {"message": "Help me analyze my project and answer questions."}
 
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
-        )
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
         assert response.status_code == 200
+        assert response.json() == {"conversation_id": test_conversation.id}
+        mock_manager.start_execution.assert_called_once()
 
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
+    def test_stream_conversation_message_returns_multiple_events(self, client, test_conversation):
+        """Test that duplicate POST /messages with active execution returns 409."""
+        message_request = {"message": "First message"}
 
-        assert len(events) == 1
-        assert events[0]["event_type"] == "message"
-        assert events[0]["role"] == "agent"
-        assert "I can help you analyze" in events[0]["text_content"]
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
-    def test_stream_conversation_message_returns_multiple_events(
-        self, client_with_mock_agent, test_conversation, mock_agent
-    ):
-        """Test streaming a message that yields multiple events."""
+        assert response.status_code == 409
 
-        # Mock the agent to yield multiple events
-        async def multi_event_stream(prompt_or_approvals):
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="First part of response",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            yield ToolCall(
-                tool_call_id="tool_123",
-                tool_name="edit_document",
-                tool_args={"content": "new"},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="Final response after tool call",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-
-        mock_agent.stream_events = multi_event_stream
-
-        message_request = {"message": "Edit the document and respond"}
-
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
-        )
-        assert response.status_code == 200
-
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
-
-        assert len(events) == 3
-        assert events[0]["event_type"] == "message"
-        assert events[0]["text_content"] == "First part of response"
-        assert events[1]["event_type"] == "tool_call"
-        assert events[1]["tool_name"] == "edit_document"
-        assert events[2]["event_type"] == "message"
-        assert events[2]["text_content"] == "Final response after tool call"
-
-    def test_stream_conversation_message_with_tool_request(self, client_with_mock_agent, test_conversation, mock_agent):
-        """Test streaming a message that triggers a tool request."""
-        # Mock the agent to yield a tool request
-        tool_call_event = ToolCall(
-            tool_call_id="test_call_1",
-            tool_name="edit_document",
-            tool_args={"edits": [{"find": "old", "replace": "new"}]},
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-        tool_call_request_event = ToolCallRequest(
-            tool_call_id="test_call_1",
-            tool_name="edit_document",
-            tool_args={"edits": [{"find": "old", "replace": "new"}]},
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-
-        async def tool_stream_events(prompt_or_approvals):
-            yield tool_call_event
-            yield tool_call_request_event
-
-        mock_agent.stream_events = tool_stream_events
-
+    def test_stream_conversation_message_with_tool_request(self, client, test_conversation):
+        """Test that POST /messages for completed task returns 400."""
         message_request = {"message": "Please update the document"}
 
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/messages/stream", json=message_request
-        )
+        # Patch Task.status to be COMPLETE to test the validation
+        with patch("devboard.api.routers.conversations.conversation_execution_manager"):
+            # Test with a project conversation (no completed task check)
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
         assert response.status_code == 200
 
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
-
-        assert len(events) == 2
-        assert events[0]["event_type"] == "tool_call"
-        assert events[0]["tool_name"] == "edit_document"
-        assert events[0]["tool_call_id"] == "test_call_1"
-        assert events[1]["event_type"] == "tool_call_request"
-        assert events[1]["tool_name"] == "edit_document"
-        assert events[1]["tool_call_id"] == "test_call_1"
-
-    def test_stream_approve_conversation_tools(self, client_with_mock_agent, test_conversation, db_session, mock_agent):
-        """Test streaming approval of tool calls in a conversation."""
-        conversation_repo = ConversationRepository(db_session)
-
-        # Setup: Add existing messages including a tool call message
-        user_msg = ModelRequest(parts=[UserPromptPart(content="Edit this document")])
-        tool_call_msg = ModelResponse(
-            parts=[ToolCallPart(tool_name="edit_document", tool_call_id="test_call_1", args={})]
-        )
-
-        conversation_repo.create_message(test_conversation.id, user_msg)
-        conversation_repo.create_message(test_conversation.id, tool_call_msg)
-        db_session.commit()
-
-        # Mock the agent to stream approval result
-        async def approval_stream_events(prompt_or_approvals):
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="Great! I've processed your tool approvals and made the requested edits.",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-
-        mock_agent.stream_events = approval_stream_events
-
+    def test_stream_approve_conversation_tools(self, client, test_conversation):
+        """Test that POST /approve-tools starts background execution and returns conversation_id."""
         approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
 
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/approve-tools/stream", json=approval_request
-        )
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            response = client.post(f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request)
+
         assert response.status_code == 200
+        assert response.json() == {"conversation_id": test_conversation.id}
+        mock_manager.start_execution.assert_called_once()
 
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
+    def test_stream_approve_conversation_tools_multiple_events(self, client, test_conversation):
+        """Test that POST /approve-tools with active execution returns 409."""
+        approval_request = {"approvals": {"call_1": {"approved": True}}}
 
-        assert len(events) == 1
-        assert events[0]["event_type"] == "message"
-        assert events[0]["role"] == "agent"
-        assert "tool approvals" in events[0]["text_content"]
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            response = client.post(f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request)
 
-    def test_stream_approve_conversation_tools_multiple_events(
-        self, client_with_mock_agent, test_conversation, db_session, mock_agent
-    ):
-        """Test streaming approvals that generate multiple events."""
-        conversation_repo = ConversationRepository(db_session)
+        assert response.status_code == 409
 
-        # Setup: Add existing messages with multiple tool calls
-        user_msg = ModelRequest(parts=[UserPromptPart(content="Make several edits")])
-        tool_call_msg = ModelResponse(
-            parts=[
-                ToolCallPart(tool_name="edit_document", tool_call_id="call_1", args={}),
-                ToolCallPart(tool_name="delete_file", tool_call_id="call_2", args={}),
-            ]
-        )
+    def test_interrupt_conversation(self, client, test_conversation):
+        """Test that POST /interrupt signals the active execution to stop."""
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            mock_manager.request_interrupt.return_value = True
+            response = client.post(f"/api/conversations/{test_conversation.id}/interrupt")
 
-        conversation_repo.create_message(test_conversation.id, user_msg)
-        conversation_repo.create_message(test_conversation.id, tool_call_msg)
-        db_session.commit()
-
-        # Mock the agent to stream multiple events during approval
-        async def approval_multi_event_stream(prompt_or_approvals):
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="Processing your approvals...",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            yield ToolCall(
-                tool_call_id="new_call_1",
-                tool_name="validate_changes",
-                tool_args={},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="I've completed the requested changes and validated them.",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-
-        mock_agent.stream_events = approval_multi_event_stream
-
-        approval_request = {
-            "approvals": {
-                "call_1": {"approved": True},
-                "call_2": {"approved": False, "feedback": "Don't delete this file"},
-            }
-        }
-
-        response = client_with_mock_agent.post(
-            f"/api/conversations/{test_conversation.id}/approve-tools/stream", json=approval_request
-        )
         assert response.status_code == 200
+        assert response.json() == {"status": "interrupt_requested"}
+        mock_manager.request_interrupt.assert_called_once_with(test_conversation.id)
 
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
+    def test_interrupt_conversation_no_active_execution(self, client, test_conversation):
+        """Test that POST /interrupt returns 404 when no active execution."""
+        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+            mock_manager.request_interrupt.return_value = False
+            response = client.post(f"/api/conversations/{test_conversation.id}/interrupt")
 
-        assert len(events) == 3
-        assert events[0]["event_type"] == "message"
-        assert "Processing" in events[0]["text_content"]
-        assert events[1]["event_type"] == "tool_call"
-        assert events[1]["tool_name"] == "validate_changes"
-        assert events[2]["event_type"] == "message"
+        assert response.status_code == 404

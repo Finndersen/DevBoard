@@ -297,7 +297,7 @@ class ClaudeClient:
             session_id=result_message.session_id,
         )
 
-    async def stream(self, user_query: str) -> AsyncIterator[Message]:
+    async def stream(self, user_query: str, interrupt_event: asyncio.Event | None = None) -> AsyncIterator[Message]:
         """Execute a query and stream individual messages as they arrive.
 
         This method yields messages in real-time, allowing for progressive
@@ -305,6 +305,7 @@ class ClaudeClient:
 
         Args:
             user_query: The user's query/prompt to send to Claude Code
+            interrupt_event: Optional asyncio.Event; when set, sends a native SDK interrupt signal
 
         Yields:
             Message objects (UserMessage, AssistantMessage, SystemMessage, ResultMessage)
@@ -348,6 +349,20 @@ class ClaudeClient:
                         with logfire.span("claude_client.send_query", query=user_query):
                             await client.query(user_query)
 
+                        # Spawn interrupt monitor to send native SDK interrupt signal when requested
+                        monitor_task: asyncio.Task[None] | None = None
+                        if interrupt_event is not None:
+                            _interrupt_event = interrupt_event
+
+                            async def _monitor_interrupt() -> None:
+                                await _interrupt_event.wait()
+                                try:
+                                    await client.interrupt()
+                                except Exception as e:
+                                    logfire.error(f"Failed to interrupt Claude Code session: {e}")
+
+                            monitor_task = asyncio.create_task(_monitor_interrupt())
+
                         try:
                             async for message in client.receive_response():
                                 message_desc = describe_message(message)
@@ -359,6 +374,11 @@ class ClaudeClient:
                             # closes stdin while MCP tool requests are still pending,
                             # causing "Tool permission stream closed" errors in the session.
                             logfire.info("SDK consumer cancelled during streaming")
+                        finally:
+                            if monitor_task and not monitor_task.done():
+                                monitor_task.cancel()
+                                with contextlib.suppress(asyncio.CancelledError):
+                                    await monitor_task
 
                         await self._wait_for_subprocess_flush(client)
             except asyncio.CancelledError:

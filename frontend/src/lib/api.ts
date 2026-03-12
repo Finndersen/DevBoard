@@ -1,4 +1,4 @@
-import { StreamParser } from './streaming'
+import { createWebSocketEventStream } from './websocketStream'
 
 export interface Project {
   id: number
@@ -675,6 +675,21 @@ export interface OpenPRsResponse {
   errors: string[]
 }
 
+// Active Executions
+export interface ActiveExecutionItem {
+  conversation_id: number
+  status: 'running'
+  started_at: string
+  parent_entity_type: string
+  agent_role: string
+  task_id: number | null
+  task_title: string | null
+}
+
+export interface ActiveExecutionsResponse {
+  executions: ActiveExecutionItem[]
+}
+
 export interface PRCheckItem {
   name: string
   state: string
@@ -831,50 +846,32 @@ export class ApiClient {
     return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`)
   }
 
-  async sendConversationMessage(conversationId: number | string, request: UserPrompt): Promise<ConversationEvent[]> {
-    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    })
-  }
-
   async *streamConversationMessage(
     conversationId: number | string,
     request: UserPrompt,
-    signal?: AbortSignal,
   ): AsyncGenerator<ConversationEvent> {
-    yield* StreamParser.parseStream(
-      `${this.baseURL}/api/conversations/${conversationId}/messages/stream`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-        signal,
-      },
-    )
-  }
-
-  async approveConversationTools(conversationId: number | string, request: ToolApprovalRequest): Promise<ConversationEvent[]> {
-    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/approve-tools`, {
+    await this.request<{ conversation_id: number }>(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
+    yield* createWebSocketEventStream(Number(conversationId))
   }
 
   async *streamApproveConversationTools(
     conversationId: number | string,
     request: ToolApprovalRequest,
-    signal?: AbortSignal,
   ): AsyncGenerator<ConversationEvent> {
-    yield* StreamParser.parseStream(
-      `${this.baseURL}/api/conversations/${conversationId}/approve-tools/stream`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-        signal,
-      },
-    )
+    await this.request<{ conversation_id: number }>(`/api/conversations/${conversationId}/approve-tools`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+    yield* createWebSocketEventStream(Number(conversationId))
+  }
+
+  async interruptConversation(conversationId: number | string): Promise<void> {
+    await this.request<void>(`/api/conversations/${conversationId}/interrupt`, {
+      method: 'POST',
+    })
   }
 
   async resetConversation(conversationId: number | string): Promise<{ new_conversation_id: number; message: string }> {
@@ -887,15 +884,14 @@ export class ApiClient {
     return this.request<TodoItem[]>(`/api/conversations/${conversationId}/todos`)
   }
 
-  async *streamWorkflowAction(
+  async executeWorkflowAction(
     taskId: number | string,
     request: PromptActionRequest,
-  ): AsyncGenerator<ConversationEvent> {
-    yield* StreamParser.parseStream(
-      `${this.baseURL}/api/tasks/${taskId}/workflow-action`,
+  ): Promise<{ conversation_id?: number; status?: string }> {
+    return this.request<{ conversation_id?: number; status?: string }>(
+      `/api/tasks/${taskId}/workflow-action`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       },
     )
@@ -1219,6 +1215,11 @@ export class ApiClient {
 
   async getPRDetail(codebaseId: number, prNumber: number): Promise<PRDetailResponse> {
     return this.request<PRDetailResponse>(`/api/github/prs/${codebaseId}/${prNumber}/detail`)
+  }
+
+  // Active Executions
+  async getActiveExecutions(): Promise<ActiveExecutionsResponse> {
+    return this.request<ActiveExecutionsResponse>('/api/executions/active')
   }
 }
 

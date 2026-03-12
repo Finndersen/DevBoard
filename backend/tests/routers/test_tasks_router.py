@@ -1,7 +1,6 @@
 """Tests for tasks router."""
 
 import datetime
-import json
 from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,10 +8,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
-from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -71,72 +67,18 @@ def mock_task_service_for_workflow():
 
 
 @pytest.fixture
-def mock_agent_execution_service_for_workflow(
-    mock_agent, db_session, mock_agent_config_service, mock_task_service_for_workflow, monkeypatch
-):
-    """Create an execution service with mocked agent for workflow tests."""
-
-    def _create_service(conversation, task, document_repo):
-        conversation_repo = ConversationRepository(db_session)
-
-        # Create history service first
-        history_service = PydanticAIConversationHistoryService(
-            conversation=conversation,
-            conversation_repository=conversation_repo,
-        )
-
-        # Create role for the service
-        role = TaskPlanningAgentRole(
-            task=task,
-            document_repository=document_repo,
-            agent_config_service=mock_agent_config_service,
-            task_service=mock_task_service_for_workflow,
-        )
-
-        service = PydanticAIAgentExecutionService(
-            conversation=conversation,
-            role=role,
-            conversation_repository=conversation_repo,
-            history_service=history_service,
-            agent_config_service=mock_agent_config_service,
-        )
-
-        # Patch the _get_agent method to return our mock
-        monkeypatch.setattr(service, "_get_agent", lambda conversation_history, extra_tools=None: mock_agent)
-
-        return service
-
-    return _create_service
-
-
-@pytest.fixture
 def client_with_mock_workflow_deps(
     client,
     mock_task_service_for_workflow,
 ) -> Iterator[TestClient]:
     """Client with mocked dependencies for workflow actions."""
-    from unittest.mock import Mock
-
-    from devboard.api.dependencies.services import get_task_service, get_workspace_allocation_service
+    from devboard.api.dependencies.services import get_task_service
     from devboard.api.main import app
 
-    # Mock workspace allocation service to avoid git worktree operations
-    mock_workspace_service = Mock()
-
-    # Make run_task_agent_in_workspace pass through the agent stream unchanged
-    async def passthrough_stream(task, agent_stream):
-        async for event in agent_stream:
-            yield event
-
-    mock_workspace_service.run_task_agent_in_workspace = passthrough_stream
-
     app.dependency_overrides[get_task_service] = lambda: mock_task_service_for_workflow
-    app.dependency_overrides[get_workspace_allocation_service] = lambda: mock_workspace_service
     yield client
     if get_task_service in app.dependency_overrides:
         del app.dependency_overrides[get_task_service]
-    if get_workspace_allocation_service in app.dependency_overrides:
-        del app.dependency_overrides[get_workspace_allocation_service]
 
 
 class TestListAllTasks:
@@ -254,6 +196,7 @@ class TestTasksRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -304,6 +247,7 @@ class TestTasksRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
 
         # Create conversation for task
@@ -361,6 +305,7 @@ class TestTasksRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
 
         # Create conversation and messages for the task
@@ -656,6 +601,7 @@ class TestTaskResourcesRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -685,6 +631,7 @@ class TestTaskResourcesRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -735,6 +682,7 @@ class TestTaskResourcesRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -774,6 +722,7 @@ class TestTaskResourcesRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -819,6 +768,7 @@ class TestTaskResourcesRouter:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -853,6 +803,7 @@ class TestTaskStateTransition:
             implementation_plan=None,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
 
         # Create conversation for task
@@ -895,6 +846,7 @@ class TestWorkflowActions:
             specification=task_spec_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
 
         # Create conversation for task
@@ -911,49 +863,61 @@ class TestWorkflowActions:
 
         return task
 
-    def test_stream_workflow_action(
-        self, client_with_mock_workflow_deps, test_task_for_workflow, mock_agent, monkeypatch
-    ):
-        """Test streaming a workflow action."""
-
-        # Set up mock agent to return events
-        async def mock_stream(prompt_or_approvals):
-            yield TextMessage(
-                role=MessageRole.AGENT,
-                text_content="Creating implementation plan...",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-
-        mock_agent.stream_events = mock_stream
-
-        # Patch PydanticAIAgentExecutionService._get_agent to return our mock
-        from devboard.agents.engines.internal.agent_execution import PydanticAIAgentExecutionService
-
-        monkeypatch.setattr(
-            PydanticAIAgentExecutionService,
-            "_get_agent",
-            lambda self, conversation_history, extra_tools=None: mock_agent,
-        )
-
+    def test_workflow_action_starts_execution(self, client_with_mock_workflow_deps, test_task_for_workflow):
+        """Test that workflow action returning a prompt starts background execution."""
         prompt_action_request = {"action_key": "task.create_implementation_plan"}
 
-        response = client_with_mock_workflow_deps.post(
-            f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
-            json=prompt_action_request,
-        )
+        with patch("devboard.api.routers.tasks.conversation_execution_manager") as mock_manager:
+            response = client_with_mock_workflow_deps.post(
+                f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+                json=prompt_action_request,
+            )
+
         assert response.status_code == 200
+        data = response.json()
+        assert "conversation_id" in data
+        mock_manager.start_execution.assert_called_once()
 
-        # Parse NDJSON response
-        lines = response.text.strip().split("\n")
-        events = [json.loads(line) for line in lines if line]
+    def test_workflow_action_returns_completed_when_no_prompt(
+        self, client_with_mock_workflow_deps, test_task_for_workflow, db_session
+    ):
+        """Test that workflow action returning None returns status completed."""
+        # Transition task to implementing with manual branch handling so FinaliseAction is available
+        test_task_for_workflow.status = TaskStatus.IMPLEMENTING
+        test_task_for_workflow.codebase.branch_handling = "manual"
+        db_session.commit()
 
-        # Should have SystemEvent for task update and agent message
-        assert len(events) >= 1
-        # Check that we got events back
-        assert any(e["event_type"] in ["message", "system"] for e in events)
+        mock_task_service_for_workflow = client_with_mock_workflow_deps.app.dependency_overrides[
+            __import__("devboard.api.dependencies.services", fromlist=["get_task_service"]).get_task_service
+        ]()
+        mock_task_service_for_workflow.transition_to_complete = MagicMock()
 
-    def test_stream_workflow_action_not_found(self, client_with_mock_workflow_deps, test_task_for_workflow):
-        """Test streaming a non-existent workflow action."""
+        with patch("devboard.api.routers.tasks.conversation_execution_manager") as mock_manager:
+            response = client_with_mock_workflow_deps.post(
+                f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+                json={"action_key": "task.finalise"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "completed"}
+        mock_manager.start_execution.assert_not_called()
+
+    def test_workflow_action_returns_400_on_value_error(self, client_with_mock_workflow_deps, test_task_for_workflow):
+        """Test that ValueError from workflow action returns 400."""
+        with patch(
+            "devboard.workflow_actions.task_workflows.CreateImplementationPlanAction.run", new_callable=AsyncMock
+        ) as mock_run:
+            mock_run.side_effect = ValueError("Rebase encountered conflicts")
+            response = client_with_mock_workflow_deps.post(
+                f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+                json={"action_key": "task.create_implementation_plan"},
+            )
+
+        assert response.status_code == 400
+        assert "conflicts" in response.json()["detail"]
+
+    def test_workflow_action_not_found(self, client_with_mock_workflow_deps, test_task_for_workflow):
+        """Test that a non-existent workflow action returns 404."""
         prompt_action_request = {"action_key": "nonexistent.action"}
 
         response = client_with_mock_workflow_deps.post(

@@ -1,5 +1,6 @@
 """Abstract base interface for agent execution services."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
@@ -49,6 +50,7 @@ class AgentExecutionService(ABC):
         agent_config_service: "AgentConfigService",
         additional_tools: list[Tool] | None = None,
         oauth_service: OAuthService | None = None,
+        interrupt_event: asyncio.Event | None = None,
     ):
         """Initialize the agent execution service.
 
@@ -61,6 +63,7 @@ class AgentExecutionService(ABC):
             additional_tools: Optional list of additional tools to provide to the agent,
                 beyond those defined by the role. Used for workflow-action-specific tools.
             oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
+            interrupt_event: Optional asyncio.Event that signals graceful interrupt when set.
         """
         self.conversation = conversation
         self.role = role
@@ -69,6 +72,7 @@ class AgentExecutionService(ABC):
         self._agent_config_service = agent_config_service
         self._additional_tools = additional_tools or []
         self._oauth_service = oauth_service
+        self._interrupt_event = interrupt_event
 
     def get_custom_instructions(self) -> str | None:
         """Get custom instructions for this agent role from config service."""

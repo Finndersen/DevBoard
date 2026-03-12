@@ -2,10 +2,12 @@
 
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.background_execution import run_agent_for_conversation
+from devboard.agents.exceptions import ConversationBusyError
+from devboard.agents.execution_manager import conversation_execution_manager
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
@@ -16,7 +18,6 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
-    get_oauth_service,
     get_resource_service,
     get_task_git_service,
     get_task_service,
@@ -44,7 +45,6 @@ from devboard.api.schemas import (
     TaskUpdate,
     WorkflowActionInfo,
 )
-from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import ParentEntityType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
@@ -56,14 +56,13 @@ from devboard.db.repositories import (
 from devboard.integrations.base import IntegrationError
 from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment
 from devboard.services.integration_service import IntegrationService
-from devboard.services.oauth_service import OAuthService
 from devboard.services.resource_service import (
     ResourceService,
     UnsupportedResourceUriError,
 )
 from devboard.services.task_git import TaskGitStatus
 from devboard.services.task_git_service import TaskGitService
-from devboard.services.task_service import TaskService, TaskTransitionError
+from devboard.services.task_service import TaskService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 from devboard.workflow_actions.registry import workflow_action_registry
@@ -321,7 +320,6 @@ async def get_task_diff(
 @router.post("/{task_id}/workflow-action")
 async def execute_workflow_action(
     task_id: int,
-    http_request: Request,
     request: PromptActionRequest,
     task: Task = Depends(get_verified_task),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
@@ -329,30 +327,29 @@ async def execute_workflow_action(
     task_service: TaskService = Depends(get_task_service),
     task_git_service: TaskGitService = Depends(get_task_git_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
     integration_service: IntegrationService = Depends(get_integration_service),
-    oauth_service: OAuthService = Depends(get_oauth_service),
-) -> StreamingResponse:
-    """Stream a task workflow action.
+) -> dict:
+    """Execute a task workflow action.
 
-    Workflow actions are reusable, named operations that can send prompts
-    to agent conversations or perform structured actions (like task state transitions).
-    This endpoint looks up the action by key and executes it, streaming the results.
+    Runs the action's procedural steps (state transitions, DB changes) synchronously.
+    If the action returns a prompt, starts a background agent execution on the task's
+    active conversation and returns its ID. Otherwise returns a completion status.
 
-    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
-    Each line is a JSON-serialized ConversationEvent (TextMessage, ToolCall, ToolResult, or SystemEvent).
+    Connect to GET /api/conversations/{conversation_id}/ws to receive agent events.
+
+    Returns:
+        {"conversation_id": <id>} if agent execution started
+        {"status": "completed"} if no agent interaction needed
 
     Raises:
-        HTTPException: 404 if action_key not found
-        HTTPException: 400 if conversation not active
+        HTTPException 400: if action validation fails (e.g. GitHub connection)
+        HTTPException 404: if action_key not found or no active conversation
+        HTTPException 409: if an execution is already active for this conversation
     """
-    # Look up action class in registry
     action_class = workflow_action_registry.get(request.action_key)
     if not action_class:
         raise HTTPException(status_code=404, detail=f"Workflow action '{request.action_key}' not found")
 
-    # Instantiate the task workflow action
-    # The action will create the agent service internally when needed
     action = action_class(
         task=task,
         task_service=task_service,
@@ -360,20 +357,32 @@ async def execute_workflow_action(
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
         document_repository=document_repo,
-        workspace_allocation_service=workspace_allocation_service,
         integration_service=integration_service,
-        oauth_service=oauth_service,
     )
 
-    # Define exception handler to convert task transition errors to HTTP exceptions
-    def handle_exception(exc: Exception) -> None:
-        """Convert task transition errors to appropriate HTTP exceptions."""
-        if isinstance(exc, TaskTransitionError):
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        raise exc
+    try:
+        prompt = await action.run()
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
-    # Stream events from the action
-    return stream_conversation_events(action.run(), http_request, exception_handler=handle_exception)
+    if prompt is None:
+        return {"status": "completed"}
+
+    # Get active conversation (may have changed after action.run(), e.g. BeginImplementation)
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail=f"No active conversation found for task {task_id}")
+
+    cid = conversation.id
+    try:
+        conversation_execution_manager.start_execution(
+            cid,
+            lambda q, ie: run_agent_for_conversation(q, ie, conversation_id=cid, message_or_approvals=prompt),
+        )
+    except ConversationBusyError as err:
+        raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
+
+    return {"conversation_id": cid}
 
 
 # Git endpoints

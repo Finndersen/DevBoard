@@ -93,27 +93,25 @@ Services raise specific exceptions (e.g., `DocumentConflictError`), routers conv
 
 ## Async Patterns
 
-### Streaming Responses
+### Background Task Execution + Event Queue
 
-`StreamingResponse` with NDJSON for real-time event streaming.
+Agent execution runs as background asyncio tasks, decoupled from HTTP requests. Events stream via WebSocket.
 
-**Helper Function**: `stream_conversation_events()` in `backend/devboard/api/streaming.py` encapsulates the streaming pattern:
+**ConversationExecutionManager** (`backend/devboard/agents/execution_manager.py`):
+- Process-level singleton tracking active executions per conversation
+- `start_execution(conversation_id, coro_factory)` — raises `ConversationBusyError` if already active
+- Maintains `asyncio.Queue` per execution for event buffering
+- Manages interrupt flag (`asyncio.Event`) for graceful shutdown
+- Schedules cleanup after 60s grace period
 
-```python
-from devboard.api.streaming import stream_conversation_events
+**Background execution coroutines** (`backend/devboard/agents/background_execution.py`):
+- `run_agent_for_conversation(event_queue, interrupt_event, *, ...)` — executes agent, pushes events to queue
+- Creates DB sessions via `SessionLocal()` (cannot use FastAPI `Depends()` in background tasks)
+- Service factory: `create_execution_services(db)` in `backend/devboard/agents/execution_dependencies.py`
 
-# Simple usage - just pass the event iterator
-return stream_conversation_events(
-    conversation_service.stream_events_for_message_or_approval(message)
-)
-```
+**Conversation message/approval pattern**: HTTP endpoint validates request, calls `conversation_execution_manager.start_execution()`, returns `{"conversation_id": N}` immediately. WebSocket endpoint (`/api/conversations/{id}/ws`) polls for executions and streams events from queue.
 
-**Implementation Details**:
-- Takes `AsyncIterator[ConversationEvent]` as input
-- Returns `StreamingResponse` with NDJSON format
-- Automatically handles JSON serialization and newline delimiters
-- Media type: `text/plain` (NDJSON)
-- Used by all conversation streaming endpoints (`/messages/stream`, `/approve-tools/stream`, `/workflow-action`)
+**Workflow action pattern**: Workflow actions run synchronously within the HTTP request handler. Each action's `run()` method performs procedural steps (state transitions, DB changes) and returns either a prompt string or `None`. If a prompt is returned, the endpoint starts a background agent execution on the task's active conversation and returns `{"conversation_id": N}`. If `None`, returns `{"status": "completed"}`.
 
 ## Configuration Management
 
@@ -139,9 +137,20 @@ Hierarchical configuration: environment variables > database > code defaults
 
 **Two-Phase Execution**: Agent pauses on tool requiring approval, returns `ToolCallRequest` events. Frontend approves/denies, agent resumes.
 
-**Pattern**: Agent checks tool.requires_approval, if true, yields approval request and pauses. `/approve-tools` endpoint resumes with decisions.
+**Pattern**: Agent checks tool.requires_approval, if true, yields approval request and pauses. `POST /approve-tools` starts a new background execution with the approval decisions; the agent resumes via the same WebSocket connection.
 
 **Implementation**: `backend/devboard/agents/base_agent.py`, `backend/devboard/services/agent_conversation.py`
+
+### Graceful Agent Interruption
+
+**Interrupt flag**: Each execution has an `asyncio.Event` set via `POST /conversations/{id}/interrupt`.
+
+**Agent checking**: Both PydanticAI (`engines/internal/`) and Claude Code (`engines/claude_code/`) engines check the interrupt flag and raise `AgentInterruptedError`.
+
+- **PydanticAI**: Checks after each streaming event, raises on interrupt
+- **Claude Code**: Spawns monitor task that calls `client.interrupt()` (native SDK signal) when flag is set
+
+**On interrupt**: `ConversationExecutionManager` catches `AgentInterruptedError`, marks status as INTERRUPTED, pushes None sentinel to queue, WebSocket sends `execution_completed` with `status: "interrupted"`.
 
 ### Context Assembly Strategy
 

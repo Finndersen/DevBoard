@@ -1,5 +1,6 @@
 """Base agent class for Claude Code agents with virtual tool calling."""
 
+import asyncio
 import datetime
 import difflib
 from collections.abc import AsyncIterator
@@ -211,6 +212,7 @@ class ClaudeCodeAgent(BaseAgent):
     async def stream_events(
         self,
         prompt_or_approvals: str | ToolApprovals,
+        interrupt_event: asyncio.Event | None = None,
     ) -> AsyncIterator[ConversationEvent]:
         """Stream conversation events from agent execution.
 
@@ -247,7 +249,7 @@ class ClaudeCodeAgent(BaseAgent):
         # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
             # Capture the stream generator to ensure proper cleanup on exception
-            stream_generator = client.stream(user_query=current_message)
+            stream_generator = client.stream(user_query=current_message, interrupt_event=interrupt_event)
             should_retry_api_error = False
             last_assistant_text: str | None = None
             try:

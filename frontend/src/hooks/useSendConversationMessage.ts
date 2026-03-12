@@ -18,7 +18,7 @@ interface SendMessageResult {
  *
  * This includes:
  * - Creating and managing pending message state (shows "sending..." in UI)
- * - Creating the API stream with abort controller
+ * - POSTing the message and consuming WebSocket events via the stream store
  * - Adding the user message to the conversation on first response event
  * - Error handling with status updates
  *
@@ -62,14 +62,10 @@ export function useSendConversationMessage({
         timestamp: new Date().toISOString()
       }
 
-      // Create abort controller for stream cancellation
-      const abortController = new AbortController()
-
-      // Create stream from API with abort signal
+      // Create stream from API (POST message, then consume WebSocket events)
       const stream = apiClient.streamConversationMessage(
         conversationId,
         { message: messageText },
-        abortController.signal
       )
 
       // Start streaming via store
@@ -87,7 +83,6 @@ export function useSendConversationMessage({
           addEvent(conversationId, userMessage)
           removeMessage(pendingKey, pendingMessageId)
         },
-        abortController
       )
       if (!firstEventFired) {
         updateMessageStatus(pendingKey, pendingMessageId, 'failed', 'No response received. Please try again.')

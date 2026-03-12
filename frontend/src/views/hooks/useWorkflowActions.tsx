@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { Task, GitHubPRStatusResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
+import { createWebSocketEventStream } from '../../lib/websocketStream'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { Button } from '../../components/ui'
 
@@ -18,6 +19,7 @@ interface UseWorkflowActionsParams {
   task: Task | null
   prStatus: GitHubPRStatusResponse | null
   specificationContent: string | undefined
+  refetch: () => Promise<void>
 }
 
 interface UseWorkflowActionsResult {
@@ -28,7 +30,7 @@ interface UseWorkflowActionsResult {
   handleTriggerRebase: () => void
 }
 
-export function useWorkflowActions({ task, prStatus, specificationContent }: UseWorkflowActionsParams): UseWorkflowActionsResult {
+export function useWorkflowActions({ task, prStatus, specificationContent, refetch }: UseWorkflowActionsParams): UseWorkflowActionsResult {
   const [streamingMessage, setStreamingMessage] = useState('')
 
   const startStream = useConversationStreamStore(state => state.startStream)
@@ -37,25 +39,23 @@ export function useWorkflowActions({ task, prStatus, specificationContent }: Use
   )
 
   const executeWorkflowAction = useCallback(async (actionKey: string, message: string) => {
-    if (!task?.id || !task?.conversation_id) return
-
-    console.log('[TaskDetail] executeWorkflowAction:', {
-      actionKey,
-      taskId: task.id,
-      conversationId: task.conversation_id
-    })
+    if (!task?.id) return
 
     setStreamingMessage(message)
     try {
-      const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
-      console.log('[TaskDetail] Starting stream with conversation_id:', task.conversation_id)
-      await startStream(task.conversation_id, stream)
-      console.log('[TaskDetail] Stream completed')
+      const result = await apiClient.executeWorkflowAction(task.id, { action_key: actionKey })
+
+      if (result.conversation_id) {
+        const stream = createWebSocketEventStream(result.conversation_id)
+        await startStream(result.conversation_id, stream)
+      }
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
       setStreamingMessage('')
+    } finally {
+      await refetch()
     }
-  }, [task?.id, task?.conversation_id, startStream])
+  }, [task?.id, startStream, refetch])
 
   const getButtonConfigForAction = (actionKey: string) => {
     const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean }> = {

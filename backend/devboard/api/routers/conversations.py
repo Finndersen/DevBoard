@@ -2,22 +2,22 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_execution import AgentExecutionService
+from devboard.agents.background_execution import run_agent_for_conversation
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
-from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
+from devboard.agents.exceptions import ConversationBusyError
+from devboard.agents.execution_manager import conversation_execution_manager
+from devboard.api.dependencies.conversations import get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_conversation_service,
-    get_workspace_allocation_service,
 )
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
@@ -27,11 +27,9 @@ from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import ResetConversationResponse
 from devboard.api.schemas.conversation import ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
-from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 router = APIRouter()
 
@@ -72,72 +70,91 @@ async def get_conversation_messages(
     return await history_service.get_conversation_messages()
 
 
-async def _stream_agent_response(
-    http_request: Request,
-    conversation: Conversation,
-    agent_execution_service: AgentExecutionService,
-    workspace_allocation_service: WorkspaceAllocationService,
-    message_or_approvals: str | ToolApprovals,
-) -> StreamingResponse:
-    """Stream agent response events for a conversation.
+def _start_agent_execution(conversation: Conversation, message_or_approvals: str | ToolApprovals) -> dict[str, int]:
+    """Validate conversation state and start a background agent execution.
 
-    Handles both new messages and tool approval continuations.
-    For Task conversations, wraps the stream with workspace allocation.
+    Returns:
+        dict with conversation_id
+
+    Raises:
+        HTTPException 400: If the conversation belongs to a completed task
+        HTTPException 409: If an execution is already active for this conversation
     """
     conversation_parent = conversation.get_parent_entity()
     if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
 
-    agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(message_or_approvals)
-
-    if isinstance(conversation_parent, Task):
-        agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
-            task=conversation_parent, agent_stream=agent_event_stream
+    cid = conversation.id
+    try:
+        conversation_execution_manager.start_execution(
+            cid,
+            lambda q, ie: run_agent_for_conversation(
+                q, ie, conversation_id=cid, message_or_approvals=message_or_approvals
+            ),
         )
+    except ConversationBusyError as err:
+        raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 
-    return stream_conversation_events(agent_event_stream, http_request)
+    return {"conversation_id": cid}
 
 
-@router.post("/{conversation_id}/messages/stream")
-async def stream_conversation_message(
-    http_request: Request,
+@router.post("/{conversation_id}/messages")
+async def send_conversation_message(
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
-    agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
-) -> StreamingResponse:
-    """Stream conversation events as they are generated.
+) -> dict[str, int]:
+    """Send a message and start a background agent execution.
 
-    Uses the appropriate agent engine (PydanticAI or Claude Code) based on
-    the conversation's configuration.
+    Starts a background task for agent execution and returns immediately.
+    Connect to GET /api/conversations/{conversation_id}/ws to receive events.
 
-    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
-    Each line is a JSON-serialized ConversationEvent.
+    Returns:
+        {"conversation_id": <id>}
+
+    Raises:
+        HTTPException 409: If an execution is already active
     """
-    return await _stream_agent_response(
-        http_request, conversation, agent_execution_service, workspace_allocation_service, request.message
-    )
+    return _start_agent_execution(conversation, request.message)
 
 
-@router.post("/{conversation_id}/approve-tools/stream")
-async def stream_approve_conversation_tools(
-    http_request: Request,
+@router.post("/{conversation_id}/approve-tools")
+async def approve_conversation_tools(
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
-    agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
-) -> StreamingResponse:
-    """Stream tool approval events as they are generated.
+) -> dict[str, int]:
+    """Submit tool approvals and resume background agent execution.
 
-    Processes tool approval decisions and continues agent execution
-    with the appropriate engine (PydanticAI or Claude Code).
+    Starts a background task to process tool approvals and continues agent execution.
+    Connect to GET /api/conversations/{conversation_id}/ws to receive events.
 
-    Returns events as newline-delimited JSON (NDJSON) for real-time updates.
-    Each line is a JSON-serialized ConversationEvent.
+    Returns:
+        {"conversation_id": <id>}
+
+    Raises:
+        HTTPException 409: If an execution is already active
     """
-    return await _stream_agent_response(
-        http_request, conversation, agent_execution_service, workspace_allocation_service, request
-    )
+    return _start_agent_execution(conversation, request)
+
+
+@router.post("/{conversation_id}/interrupt")
+async def interrupt_conversation(
+    conversation: Conversation = Depends(get_verified_conversation),
+) -> dict[str, str]:
+    """Request graceful interruption of the active execution.
+
+    Sets the interrupt flag on the active execution. The agent checks this flag
+    periodically and stops gracefully, persisting messages received up to that point.
+
+    Returns:
+        {"status": "interrupt_requested"}
+
+    Raises:
+        HTTPException 404: If no active execution for this conversation
+    """
+    interrupted = conversation_execution_manager.request_interrupt(conversation.id)
+    if not interrupted:
+        raise HTTPException(status_code=404, detail="No active execution for this conversation")
+    return {"status": "interrupt_requested"}
 
 
 @router.post("/{conversation_id}/reset", response_model=ResetConversationResponse)

@@ -1,4 +1,3 @@
-import { useConversationStore } from '../stores/conversationStore'
 import type { ConversationEvent } from '../lib/api'
 
 interface WebSocketConnection {
@@ -10,19 +9,49 @@ interface WebSocketConnection {
 
 /**
  * Singleton WebSocket Manager
- * Manages multiple concurrent WebSocket connections for conversations
+ * Manages multiple concurrent WebSocket connections for conversations.
+ * Provides a push-based message routing system via registered callbacks,
+ * which are consumed by createWebSocketEventStream() in websocketStream.ts.
  */
 class WebSocketManager {
   private connections: Map<number, WebSocketConnection> = new Map()
+  private messageHandlers: Map<number, Set<(data: string) => void>> = new Map()
   private readonly MAX_CONNECTIONS = 10
   private readonly MAX_RECONNECT_ATTEMPTS = 5
   private readonly BASE_RECONNECT_DELAY = 1000 // 1 second
   private readonly MAX_RECONNECT_DELAY = 30000 // 30 seconds
 
   /**
-   * Create or get existing WebSocket connection for a conversation
+   * Ensure a WebSocket connection exists for the given conversation.
+   * Creates a new connection if one does not already exist or is not open.
    */
-  createConnection(conversationId: number): WebSocket {
+  ensureConnected(conversationId: number): void {
+    this.createConnection(conversationId)
+  }
+
+  /**
+   * Register a handler to receive raw WebSocket message data for a conversation.
+   * Multiple handlers can be registered for the same conversation.
+   */
+  registerMessageHandler(conversationId: number, handler: (data: string) => void): void {
+    if (!this.messageHandlers.has(conversationId)) {
+      this.messageHandlers.set(conversationId, new Set())
+    }
+    this.messageHandlers.get(conversationId)!.add(handler)
+  }
+
+  /**
+   * Unregister a previously registered message handler.
+   */
+  unregisterMessageHandler(conversationId: number, handler: (data: string) => void): void {
+    this.messageHandlers.get(conversationId)?.delete(handler)
+  }
+
+  /**
+   * Create or get existing WebSocket connection for a conversation.
+   * Returns the WebSocket instance (mostly for internal use).
+   */
+  private createConnection(conversationId: number): WebSocket {
     // Return existing connection if available
     const existing = this.connections.get(conversationId)
     if (existing?.ws.readyState === WebSocket.OPEN) {
@@ -80,6 +109,7 @@ class WebSocketManager {
       }
       connection.ws.close()
       this.connections.delete(conversationId)
+      this.messageHandlers.delete(conversationId)
     }
   }
 
@@ -94,27 +124,24 @@ class WebSocketManager {
       connection.ws.close()
     })
     this.connections.clear()
+    this.messageHandlers.clear()
   }
 
   /**
-   * Route incoming WebSocket message to appropriate handler
+   * Route incoming WebSocket message to all registered handlers for the conversation.
    */
   private routeMessage(conversationId: number, data: string): void {
-    try {
-      const event: ConversationEvent = JSON.parse(data)
-
-      // Add event to conversation store
-      const { addMessage, setIsTyping } = useConversationStore.getState()
-
-      // For message events from agent, clear typing indicator
-      if (event.event_type === 'message' && event.role === 'agent') {
-        setIsTyping(conversationId, false)
-      }
-
-      addMessage(conversationId, event)
-    } catch (error) {
-      console.error('WebSocketManager: Failed to parse message:', error)
+    const handlers = this.messageHandlers.get(conversationId)
+    if (!handlers || handlers.size === 0) {
+      return
     }
+    handlers.forEach((handler) => {
+      try {
+        handler(data)
+      } catch (error) {
+        console.error(`WebSocketManager: Handler error for conversation ${conversationId}:`, error)
+      }
+    })
   }
 
   /**
@@ -149,11 +176,9 @@ class WebSocketManager {
    * Close the oldest inactive connection
    */
   private closeOldestConnection(): void {
-    // Find oldest connection based on last activity
     let oldestConnection: WebSocketConnection | null = null
 
     this.connections.forEach((connection) => {
-      // For simplicity, we'll close any connection that's not OPEN
       if (connection.ws.readyState !== WebSocket.OPEN) {
         oldestConnection = connection
         return
@@ -161,12 +186,11 @@ class WebSocketManager {
     })
 
     if (!oldestConnection) {
-      // If all connections are open, close the first one (arbitrary)
       oldestConnection = Array.from(this.connections.values())[0]
     }
 
     if (oldestConnection) {
-      this.closeConnection(oldestConnection.conversationId)
+      this.closeConnection((oldestConnection as WebSocketConnection).conversationId)
     }
   }
 
@@ -204,3 +228,6 @@ class WebSocketManager {
 
 // Export singleton instance
 export const webSocketManager = new WebSocketManager()
+
+// Re-export ConversationEvent for backwards compatibility
+export type { ConversationEvent }

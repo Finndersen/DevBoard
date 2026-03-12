@@ -110,7 +110,7 @@ def setup_mock_client(mock_client_class, messages_to_yield):
     if not isinstance(messages_to_yield, list):
         messages_to_yield = [messages_to_yield]
 
-    async def mock_stream(user_query):
+    async def mock_stream(user_query, **kwargs):
         for message in messages_to_yield:
             yield message
 
@@ -381,7 +381,7 @@ class TestStreamEventsVirtualToolCalls:
 
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             for message in create_mock_text_stream(tool_call_json):
@@ -602,7 +602,7 @@ class TestStreamEventsRetryLogic:
 
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -636,7 +636,7 @@ class TestStreamEventsRetryLogic:
 
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             for message in create_mock_text_stream(invalid_tool_call):
@@ -699,7 +699,7 @@ class TestStreamEventsRetryLogic:
             async def aclose(self):
                 self.closed = True
 
-        def mock_stream(user_query):
+        def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -891,7 +891,7 @@ class TestStreamEventsApi500Retry:
         call_count = 0
         call_messages = []
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             call_messages.append(user_query)
@@ -941,7 +941,7 @@ class TestStreamEventsApi500Retry:
 
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             # Always return API 500 error
@@ -991,7 +991,7 @@ class TestStreamEventsApi500Retry:
                 ),
             ]
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             for message in create_api_429_error_stream():
@@ -1017,7 +1017,7 @@ class TestStreamEventsApi500Retry:
         session_id = "preserved-session-456"
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -1126,7 +1126,7 @@ class TestStreamEventsApi400Retry:
         call_count = 0
         call_messages = []
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             call_messages.append(user_query)
@@ -1177,7 +1177,7 @@ class TestStreamEventsApi400Retry:
         """
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -1216,7 +1216,7 @@ class TestStreamEventsApi400Retry:
 
         call_count = 0
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             # Always return API 400 error
@@ -1266,7 +1266,7 @@ class TestStreamEventsApi400Retry:
                 ),
             ]
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             nonlocal call_count
             call_count += 1
             for message in create_non_retryable_400_error_stream():

@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { Task } from '../../lib/api'
 import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
-import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 
 interface UseTaskEventHandlersParams {
   task: Task | null
@@ -11,7 +10,6 @@ interface UseTaskEventHandlersParams {
   refreshGitStatus: () => Promise<void>
   handleDiffRefresh: (view: string) => Promise<void>
   setActiveTab: (tab: 'specification' | 'plan' | 'changes' | 'summary') => void
-  setStreamingMessage: (message: string) => void
   diffRefreshTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
 }
 
@@ -23,10 +21,8 @@ export function useTaskEventHandlers({
   refreshGitStatus,
   handleDiffRefresh,
   setActiveTab,
-  setStreamingMessage,
   diffRefreshTimeoutRef,
 }: UseTaskEventHandlersParams) {
-  const migrateStream = useConversationStreamStore(state => state.migrateStream)
 
   const specificationHandler = useCallback(async (toolName: string, _result: unknown) => {
     if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
@@ -110,24 +106,8 @@ export function useTaskEventHandlers({
     const isForThisTask = event.data?.task_id === task?.id
 
     if (isRelevantEventType && isForThisTask) {
-      console.log('[TaskDetail] SystemEvent received:', {
-        taskId: task?.id,
-        eventType: event.type,
-        eventData: event.data,
-        timestamp: new Date().toISOString()
-      })
-
       try {
         if (event.type === 'task_updated') {
-          const oldConversationId = task?.conversation_id
-          const newConversationId = event.data?.updated_fields?.conversation_id
-
-          if (oldConversationId && newConversationId && oldConversationId !== newConversationId) {
-            console.log('[TaskDetail] Migrating stream:', { from: oldConversationId, to: newConversationId })
-            migrateStream(oldConversationId, newConversationId)
-            setStreamingMessage('')
-          }
-
           await refetch()
         }
 
@@ -142,7 +122,7 @@ export function useTaskEventHandlers({
         console.error('Failed to handle system event:', error)
       }
     }
-  }, [task?.id, task?.conversation_id, migrateStream, refetch, refreshGitStatus, setStreamingMessage])
+  }, [task?.id, refetch, refreshGitStatus])
 
   useSystemEventHandler(systemEventHandler)
 

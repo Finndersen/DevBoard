@@ -246,15 +246,9 @@ class InternalAgent(BaseAgent):
             raise ValueError("Agent execution did not produce a result")
 
     def get_new_messages(self) -> list[ModelMessage]:
-        """Get new messages from the last agent run.
-
-        Can be called multiple times - does not clear buffer.
-
-        Returns:
-            List of new messages from the last run
-        """
-        if not self.last_run_result:
-            return []
+        """Get new messages from the last agent run. Can be called multiple times."""
+        if self.last_run_result is None:
+            raise RuntimeError("get_new_messages() called before agent run completed")
         return self.last_run_result.new_messages()
 
     def _build_context_summary(self, context_data: ProjectContextData) -> str:

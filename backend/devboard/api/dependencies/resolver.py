@@ -23,7 +23,14 @@ from fastapi.dependencies.utils import get_dependant, solve_dependencies
 from starlette.requests import Request
 
 
-async def call_with_dependencies[T](
+class _OverridesProvider:
+    """Minimal dependency overrides provider for use outside a FastAPI app context."""
+
+    def __init__(self, overrides: dict[Callable, Callable]):
+        self.dependency_overrides = overrides
+
+
+async def resolve_dependency[T](
     func: Callable[..., T],
     *,
     request: Request,
@@ -37,7 +44,7 @@ async def call_with_dependencies[T](
     WARNING — isolated DB session: FastAPI's dependency_cache is created as a local `{}` inside
     `solve_dependencies` and never stored in `request.scope`, so it is not accessible after the
     endpoint's Depends() chain has resolved. The cache used here only provides sharing between
-    multiple `call_with_dependencies` calls within the same request — it is isolated from the
+    multiple `resolve_dependency` calls within the same request — it is isolated from the
     endpoint's own Depends() chain. As a result, shared dependencies like `get_db` are resolved
     fresh here, creating a new DB session separate from the one used by endpoint-resolved
     dependencies. For services that need to share the same DB session as the endpoint, declare
@@ -91,14 +98,24 @@ class DependencyResolver:
             # DB commits on successful exit, rolls back on exception
     """
 
-    def __init__(self, *, app: FastAPI | None = None):
+    def __init__(
+        self,
+        *,
+        app: FastAPI | None = None,
+        dependency_overrides: dict[Callable, Callable] | None = None,
+    ):
         """
         Initialize resolver.
 
         Args:
             app: FastAPI app for dependency_overrides support (optional)
+            dependency_overrides: Additional dependency overrides to apply, merged with any
+                app-level overrides. Useful for injecting pre-constructed values (e.g. a
+                manually-managed DB session) while still auto-resolving everything else.
         """
-        self._app = app
+        base = dict(app.dependency_overrides) if app else {}
+        merged = {**base, **(dependency_overrides or {})}
+        self._overrides_provider: FastAPI | _OverridesProvider | None = _OverridesProvider(merged) if merged else app
         self._exit_stack: AsyncExitStack | None = None
         self._dependency_cache: dict[Any, Any] = {}
 
@@ -165,7 +182,7 @@ class DependencyResolver:
             dependency_cache=self._dependency_cache,
             async_exit_stack=self._exit_stack,
             embed_body_fields=False,
-            dependency_overrides_provider=self._app,
+            dependency_overrides_provider=self._overrides_provider,
         )
 
         if solved.errors:

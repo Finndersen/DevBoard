@@ -363,7 +363,7 @@ class TestRetryMechanism:
         # Create mock client instance with stream method
         mock_client = MagicMock()
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             yield assistant_msg
             yield result_msg
 
@@ -399,7 +399,7 @@ class TestRetryMechanism:
         # Create mock client instance with stream method
         mock_client = MagicMock()
 
-        async def mock_stream(user_query):
+        async def mock_stream(user_query, **kwargs):
             yield assistant_msg
             yield result_msg
 

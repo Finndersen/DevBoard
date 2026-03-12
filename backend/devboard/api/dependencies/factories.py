@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import HTTPException
 from pydantic_ai import Tool
 
@@ -143,11 +145,22 @@ def create_agent_execution_service(
     agent_config_service: AgentConfigService,
     additional_tools: list[Tool] | None = None,
     oauth_service: OAuthService | None = None,
+    interrupt_event: asyncio.Event | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
 
     Non-dependency helper that can be called directly from any context.
     Internally creates the appropriate history service.
+
+    Args:
+        conversation: The conversation instance
+        role: The role defining agent behavior
+        conversation_repo: Repository for conversation operations
+        agent_config_service: Service for loading agent configuration
+        additional_tools: Optional extra tools beyond those defined by the role
+        oauth_service: Optional OAuthService for OAuth-authenticated MCP servers
+        interrupt_event: Optional asyncio.Event for graceful interrupt signaling
+
 
     Returns:
         AgentExecutionService instance (PydanticAI or ClaudeCode)
@@ -166,6 +179,7 @@ def create_agent_execution_service(
             agent_config_service=agent_config_service,
             additional_tools=additional_tools,
             oauth_service=oauth_service,
+            interrupt_event=interrupt_event,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
         return ClaudeCodeAgentExecutionService(
@@ -176,6 +190,7 @@ def create_agent_execution_service(
             agent_config_service=agent_config_service,
             additional_tools=additional_tools,
             oauth_service=oauth_service,
+            interrupt_event=interrupt_event,
         )
     else:
         raise HTTPException(

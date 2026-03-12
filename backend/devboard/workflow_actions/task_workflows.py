@@ -1,7 +1,3 @@
-import datetime
-from collections.abc import AsyncIterator
-
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling, MergeMethod
 from devboard.db.models.conversation import AgentRoleType
@@ -46,15 +42,9 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
-    """Workflow action that creates an implementation plan document and prompts the agent to generate it.
+    """Creates an implementation plan document and prompts the agent to generate it.
 
-    This action:
-    1. Validates the task is in PLANNING status and has no implementation plan yet
-    2. Creates an implementation_plan document
-    3. Emits a TASK_UPDATED SystemEvent
-    4. Streams the agent's implementation plan generation
-
-    Note: Does NOT change task status - task remains in PLANNING throughout.
+    Does NOT change task status — task remains in PLANNING throughout.
     The same conversation is used for both specification and planning work.
     """
 
@@ -64,10 +54,6 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is PLANNING, specification has content, and no implementation plan yet.
-        """
         return (
             task.status == TaskStatus.PLANNING
             and task.specification is not None
@@ -75,55 +61,16 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
             and task.implementation_plan is None
         )
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: create implementation plan document and generate content.
-
-        Yields:
-            ConversationEvent objects including SystemEvent and agent messages
-
-        Raises:
-            ValueError: If task is not in PLANNING status or already has an implementation plan
-        """
-        # Create implementation plan document (validates status, checks plan doesn't exist)
+    async def run(self) -> str | None:
         self.task_service.create_implementation_plan(self.task)
-
-        # Get the current conversation (no role change needed)
-        current_conversation = self.conversation_repo.get_active_conversation_for_entity(
-            ParentEntityType.TASK, self.task.id
-        )
-
-        # Commit changes before sending event
         self.conversation_repo.commit()
-
-        # Emit SystemEvent for task update
-        yield SystemEvent(
-            event_type="system",
-            type=SystemEventType.TASK_UPDATED,
-            data={
-                "task_id": self.task.id,
-                "updated_fields": {
-                    "implementation_plan_id": self.task.implementation_plan_id,
-                },
-            },
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-
-        # Stream agent response for the current conversation
-        async for event in self._stream_agent_response(current_conversation, self.PROMPT):
-            yield event
+        return self.PROMPT
 
 
 class BeginImplementationAction(TaskWorkflowAction):
-    """Workflow action that transitions a task to IMPLEMENTING and begins implementation.
+    """Transitions a task to IMPLEMENTING and creates a new implementation conversation.
 
-    This action:
-    1. Validates the task has an implementation plan
-    2. Updates task status to IMPLEMENTING
-    3. Creates a new conversation for the implementation phase (archives planning conversation)
-    4. Emits a TASK_UPDATED SystemEvent
-    5. Streams the agent's implementation work
-
-    Note: Always creates a new conversation to provide clean context for implementation.
+    Always creates a new conversation to provide clean context for implementation.
     """
 
     KEY = "task.begin_implementation"
@@ -132,64 +79,25 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is PLANNING and implementation plan has content.
-        """
         return task.status == TaskStatus.PLANNING and task.implementation_plan_id is not None
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: transition to IMPLEMENTING and begin implementation.
-
-        Yields:
-            ConversationEvent objects including SystemEvent and agent messages
-
-        Raises:
-            ValueError: If task is not in PLANNING status or transition validation fails
-        """
-        # Transition task to IMPLEMENTING (validates status, updates status)
+    async def run(self) -> str | None:
         self.task_service.transition_to_implementing(self.task)
-
-        # Always create new conversation for implementation (clean context)
-        new_conversation = self.conversation_service.replace_active_conversation(
+        self.conversation_service.replace_active_conversation(
             entity_type=ParentEntityType.TASK,
             entity_id=self.task.id,
             new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
         )
-        # Commit changes before sending event
         self.conversation_repo.commit()
-
-        # Emit SystemEvent for task update
-        yield SystemEvent(
-            event_type="system",
-            type=SystemEventType.TASK_UPDATED,
-            data={
-                "task_id": self.task.id,
-                "updated_fields": {
-                    "status": self.task.status.value,
-                    "conversation_id": new_conversation.id,
-                },
-            },
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-
-        # Stream agent response for the new conversation
-        async for event in self._stream_agent_response(new_conversation, self.PROMPT_TEMPLATE):
-            yield event
+        return self.PROMPT_TEMPLATE
 
 
 class RebaseTaskBranchAction(TaskWorkflowAction):
-    """Workflow action that rebases a task's feature branch onto its base branch.
+    """Rebases a task's feature branch onto its base branch.
 
     Behavior varies by task status:
     - PLANNING: Direct service call (no agent involvement, no file changes expected)
     - IMPLEMENTING: Delegates to agent with rebase_task_branch tool for conflict resolution
-
-    For IMPLEMENTING, the agent handles:
-    1. Stashing uncommitted changes (if any)
-    2. Starting/continuing the rebase
-    3. Conflict resolution (agent resolves, then calls tool again)
-    4. Restoring stashed changes after successful rebase
     """
 
     KEY = "task.rebase_branch"
@@ -213,104 +121,29 @@ Please briefly review these changes and note if any are relevant to the current 
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: task has feature branch and status is PLANNING or IMPLEMENTING.
-        """
         return task.status in (TaskStatus.PLANNING, TaskStatus.IMPLEMENTING)
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: rebase task branch onto base branch.
-
-        For PLANNING: Direct service call, then agent reviews base branch changes.
-        For IMPLEMENTING: Delegates to agent with rebase tool for conflict resolution.
-
-        Yields:
-            ConversationEvent objects from agent interaction or system events
-        """
+    async def run(self) -> str | None:
         if self.task.status == TaskStatus.PLANNING:
-            async for event in self._run_direct_rebase():
-                yield event
+            return await self._run_direct_rebase()
         else:
-            # IMPLEMENTING: Use agent for potential conflict resolution
-            async for event in self._run_agent_rebase():
-                yield event
+            return self.IMPLEMENTING_PROMPT
 
-    async def _run_direct_rebase(self) -> AsyncIterator[ConversationEvent]:
-        """Execute direct rebase for PLANNING states (no file changes expected)."""
-        try:
-            rebase_result = await self.task_git_service.rebase_task_branch(self.task)
-        except Exception as e:
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={
-                    "task_id": self.task.id,
-                    "message": f"Rebase failed: {str(e)}",
-                },
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
+    async def _run_direct_rebase(self) -> str | None:
+        """Execute direct rebase for PLANNING state (no file changes expected)."""
+        rebase_result = await self.task_git_service.rebase_task_branch(self.task)
 
-        # Check for conflicts (shouldn't happen in PLANNING since no file changes)
         if rebase_result.outcome.value == "conflict":
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={
-                    "task_id": self.task.id,
-                    "message": f"Rebase encountered conflicts. Conflicted files: {', '.join(rebase_result.conflicted_files or [])}",
-                },
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
+            conflicted = ", ".join(rebase_result.conflicted_files or [])
+            raise ValueError(f"Rebase encountered conflicts. Conflicted files: {conflicted}")
 
-        # Emit success event
-        yield SystemEvent(
-            event_type="system",
-            type=SystemEventType.BRANCH_REBASED,
-            data={
-                "task_id": self.task.id,
-                "message": f"Rebased onto {self.task.base_branch}",
-            },
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
-
-        # If base branch had changes, stream agent response to review them
+        # If base branch had changes, return prompt for agent to review them
         if rebase_result.base_branch_changes:
-            prompt = self.BASE_BRANCH_CHANGES_PROMPT_TEMPLATE.format(
+            return self.BASE_BRANCH_CHANGES_PROMPT_TEMPLATE.format(
                 changes_summary=rebase_result.base_branch_changes.format_summary(self.task.base_branch),
             )
 
-            current_conversation = self.conversation_repo.get_active_conversation_for_entity(
-                ParentEntityType.TASK, self.task.id
-            )
-
-            # Stream agent response - agent uses the rebase_task_branch tool
-            async for event in self._stream_agent_response(current_conversation, prompt):
-                yield event
-
-    async def _run_agent_rebase(self) -> AsyncIterator[ConversationEvent]:
-        """Execute agent-based rebase for IMPLEMENTING state (handles conflict resolution)."""
-        # Get current active conversation
-        current_conversation = self.conversation_repo.get_active_conversation_for_entity(
-            ParentEntityType.TASK, self.task.id
-        )
-
-        # Stream agent response - agent uses the rebase_task_branch tool
-        async for event in self._stream_agent_response(current_conversation, self.IMPLEMENTING_PROMPT):
-            yield event
-
-        # After agent completes, emit success event
-        yield SystemEvent(
-            event_type="system",
-            type=SystemEventType.BRANCH_REBASED,
-            data={
-                "task_id": self.task.id,
-                "message": f"Rebased onto {self.task.base_branch}",
-            },
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
+        return None
 
 
 _FINALISATION_PREAMBLE = """## Git Status
@@ -323,15 +156,7 @@ If there are uncommitted changes, create appropriate commit(s) with clear commit
 
 
 class ApproveAndMergeAction(TaskWorkflowAction):
-    """Workflow action for solo/local development - approve changes and merge feature branch locally.
-
-    This action prompts the agent to:
-    1. Commit any uncommitted changes
-    2. Complete the task using the complete_task_with_local_merge tool (includes change summary)
-
-    The complete_task_with_local_merge tool creates the change summary document, merges the branch,
-    and transitions the task to COMPLETE status.
-    """
+    """Approve changes and merge feature branch locally."""
 
     KEY = "task.approve_and_merge"
 
@@ -363,41 +188,17 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is IMPLEMENTING, task has feature branch,
-        and branch handling is LOCAL_MERGE.
-        """
         return (
             task.status == TaskStatus.IMPLEMENTING and task.codebase.branch_handling == BranchHandling.LOCAL_MERGE.value
         )
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: agent commits and calls merge tool.
-
-        Yields:
-            ConversationEvent objects from agent interaction
-        """
+    async def run(self) -> str | None:
         changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
-        prompt = self._build_prompt(self.task.codebase.merge_method, changes_context)
-
-        conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, prompt):
-            yield event
+        return self._build_prompt(self.task.codebase.merge_method, changes_context)
 
 
 class ApproveAndCreatePRAction(TaskWorkflowAction):
-    """Workflow action for GitHub workflows - approve changes and create a pull request.
-
-    This action prompts the agent to:
-    1. Review and commit any uncommitted changes
-    2. Create a GitHub PR using the create_pull_request tool
-
-    The create_pull_request tool handles:
-    - Creating the PR on GitHub
-    - Transitioning task to PR_OPEN
-    - Creating new conversation with TASK_PR_REVIEW role
-    """
+    """Approve changes and create a GitHub pull request."""
 
     KEY = "task.approve_and_create_pr"
     PROMPT_TEMPLATE = (
@@ -419,59 +220,24 @@ The PR will be created against the base branch and the task will transition to P
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is IMPLEMENTING, has feature branch, codebase has GitHub remote,
-        and branch handling is GITHUB_PR.
-        """
         return (
             task.status == TaskStatus.IMPLEMENTING
             and task.codebase.repository_url is not None
             and task.codebase.branch_handling == BranchHandling.GITHUB_PR.value
         )
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: prompt agent to commit changes and create PR.
-
-        The create_pull_request tool (provided by role) handles transitioning task
-        to PR_OPEN and creating new conversation with TASK_PR_REVIEW role.
-
-        Yields:
-            ConversationEvent objects from agent interaction
-        """
-        # Check GitHub connection early to fail fast
+    async def run(self) -> str | None:
         github = self.integration_service.get_integration_instance(GitHubIntegration)
         connection_result = await github.test_connection()
         if not connection_result.success:
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={"message": f"GitHub connection failed: {connection_result.message}"},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
+            raise ValueError(f"GitHub connection failed: {connection_result.message}")
 
         changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
-        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
-
-        conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, prompt):
-            yield event
+        return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
 
 
 class MergeAndFinaliseAction(TaskWorkflowAction):
-    """Workflow action to merge an open PR via GitHub and complete the task.
-
-    This action prompts the agent to:
-    1. Ensure all changes are committed and pushed
-    2. Use the merge_pr_and_complete_task tool to merge the PR and complete the task
-
-    The merge_pr_and_complete_task tool handles:
-    - Merging the PR via GitHub API
-    - Creating the change summary document
-    - Deleting the local feature branch
-    - Transitioning the task to COMPLETE status
-    """
+    """Merge an open PR via GitHub and complete the task."""
 
     KEY = "task.merge_and_finalise"
     PROMPT_TEMPLATE = (
@@ -490,84 +256,28 @@ Once all changes are committed and pushed, use the `merge_pr_and_complete_task` 
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is PR_OPEN and task has PR reference.
-        """
         return task.status == TaskStatus.PR_OPEN and task.github_pr_number is not None
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: prompt agent to merge PR and complete task.
-
-        The merge_pr_and_complete_task tool (provided by role) handles the merge
-        and task completion.
-
-        Yields:
-            ConversationEvent objects from agent interaction
-        """
-        # Check GitHub connection early to fail fast
+    async def run(self) -> str | None:
         github = self.integration_service.get_integration_instance(GitHubIntegration)
         connection_result = await github.test_connection()
         if not connection_result.success:
-            yield SystemEvent(
-                event_type="system",
-                type=SystemEventType.STREAM_ERROR,
-                data={"message": f"GitHub connection failed: {connection_result.message}"},
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            return
+            raise ValueError(f"GitHub connection failed: {connection_result.message}")
 
         changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
-        prompt = self.PROMPT_TEMPLATE.format(changes_context=changes_context)
-
-        conversation = self.conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, self.task.id)
-        async for event in self._stream_agent_response(conversation, prompt):
-            yield event
+        return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
 
 
 class FinaliseAction(TaskWorkflowAction):
-    """Workflow action to complete a task when manual branch handling is configured.
-
-    This action:
-    1. Validates the task is in IMPLEMENTING status with MANUAL branch handling
-    2. Skips change summary generation (user manages branch manually)
-    3. Transitions task to COMPLETE
-    4. Emits TASK_UPDATED SystemEvent
-
-    Used for tasks where the user manages the branch manually (e.g., external CI/CD).
-    """
+    """Complete a task when manual branch handling is configured (no merge needed)."""
 
     KEY = "task.finalise"
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        """Check if this action is available for the given task.
-
-        Available when: status is IMPLEMENTING and branch handling is MANUAL.
-        """
         return task.status == TaskStatus.IMPLEMENTING and task.codebase.branch_handling == BranchHandling.MANUAL.value
 
-    async def run(self) -> AsyncIterator[ConversationEvent]:
-        """Execute the action: transition task to COMPLETE.
-
-        Yields:
-            ConversationEvent objects including SystemEvent
-        """
-        # Transition task to COMPLETE (skip change summary for legacy tasks)
+    async def run(self) -> str | None:
         self.task_service.transition_to_complete(self.task)
-
-        # Commit changes before sending event
         self.conversation_repo.commit()
-
-        # Emit SystemEvent for task update
-        yield SystemEvent(
-            event_type="system",
-            type=SystemEventType.TASK_UPDATED,
-            data={
-                "task_id": self.task.id,
-                "updated_fields": {
-                    "status": self.task.status.value,
-                },
-            },
-            timestamp=datetime.datetime.now(datetime.UTC),
-        )
+        return None

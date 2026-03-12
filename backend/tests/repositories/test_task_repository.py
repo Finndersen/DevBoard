@@ -49,6 +49,7 @@ class TestTaskRepository:
             "specification": spec_doc,
             "implementation_plan": plan_doc,
             "base_branch": "main",
+            "branch_name": "feature/test-task",
             "codebase_id": codebase.id,
         }
 
@@ -93,6 +94,7 @@ class TestTaskRepository:
             implementation_plan=plan_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
@@ -105,6 +107,7 @@ class TestTaskRepository:
             status=TaskStatus.COMPLETE,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -138,6 +141,7 @@ class TestTaskRepository:
             implementation_plan=plan_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
@@ -149,6 +153,7 @@ class TestTaskRepository:
             implementation_plan=plan_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -175,6 +180,7 @@ class TestTaskRepository:
             implementation_plan=plan_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
@@ -187,6 +193,7 @@ class TestTaskRepository:
             status=TaskStatus.COMPLETE,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -223,6 +230,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.PLANNING,
         )
 
@@ -233,6 +241,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.COMPLETE,
         )
         db_session.flush()
@@ -259,6 +268,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.PLANNING,
         )
 
@@ -269,6 +279,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.IMPLEMENTING,
         )
 
@@ -279,6 +290,7 @@ class TestTaskRepository:
             specification=spec_doc3,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.COMPLETE,
         )
         db_session.flush()
@@ -310,6 +322,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -325,6 +338,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -351,6 +365,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -366,6 +381,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -402,6 +418,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,  # "Test Codebase"
+            branch_name="feature/test-task",
         )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
@@ -411,6 +428,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase2.id,  # "Backend Codebase"
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -449,6 +467,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase2.id,
+            branch_name="feature/test-task",
             status=TaskStatus.PLANNING,
         )
         db_session.flush()
@@ -462,6 +481,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase2.id,
+            branch_name="feature/test-task",
             status=TaskStatus.PLANNING,
         )
 
@@ -472,6 +492,7 @@ class TestTaskRepository:
             specification=spec_doc3,
             base_branch="main",
             codebase_id=codebase2.id,
+            branch_name="feature/test-task",
             status=TaskStatus.COMPLETE,
         )
 
@@ -482,6 +503,7 @@ class TestTaskRepository:
             specification=spec_doc4,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
             status=TaskStatus.PLANNING,
         )
         db_session.flush()
@@ -522,6 +544,7 @@ class TestTaskRepository:
             specification=spec_doc1,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
 
         spec_doc2 = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
@@ -531,6 +554,7 @@ class TestTaskRepository:
             specification=spec_doc2,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 
@@ -556,6 +580,7 @@ class TestTaskRepository:
             specification=spec_doc,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.flush()
 

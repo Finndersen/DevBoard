@@ -19,6 +19,7 @@ from devboard.api.routers import (
     conversations,
     custom_fields,
     documents,
+    executions,
     github,
     mcp_servers,
     oauth,
@@ -26,6 +27,7 @@ from devboard.api.routers import (
     settings,
     tasks,
     tool_approvals,
+    websocket,
     worktrees,
 )
 from devboard.config.logfire_config import setup_logfire
@@ -159,12 +161,14 @@ app.include_router(custom_fields.router, prefix="/api/custom-fields", tags=["cus
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
+app.include_router(websocket.router, prefix="/api/conversations", tags=["websocket"])
 app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])
 app.include_router(tool_approvals.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
 app.include_router(mcp_servers.router, prefix="/api/mcp-servers", tags=["mcp-servers"])
 app.include_router(claude_code.router, prefix="/api/claude-code", tags=["claude-code"])
 app.include_router(github.router, prefix="/api/github", tags=["github"])
+app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
 
 # Mount MCP server as ASGI application
 # The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)

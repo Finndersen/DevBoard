@@ -3,6 +3,7 @@ import TabBar from './TabBar'
 import NavigationMenu from './NavigationMenu'
 import NotificationsPanel from '../notifications/NotificationsPanel'
 import GitHubPRDropdown from '../github/GitHubPRDropdown'
+import ActiveExecutionsDropdown from '../executions/ActiveExecutionsDropdown'
 import CreateTaskModal from '../modals/CreateTaskModal'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -23,6 +24,7 @@ export default function AppShell({ children }: AppShellProps) {
         {/* Top strip - matches sidebar logo height */}
         <div className="h-16 flex items-center px-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 gap-2">
           <div className="flex-1" />
+          <ActiveExecutionsDropdown />
           <GitHubPRDropdown />
           <NotificationsPanel />
         </div>

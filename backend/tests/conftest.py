@@ -235,6 +235,7 @@ def test_task(db_session, test_codebase):
         status=TaskStatus.PLANNING,
         specification=task_spec_doc,
         base_branch="main",
+        branch_name="task-1-test-task",
         codebase_id=test_codebase.id,
     )
 

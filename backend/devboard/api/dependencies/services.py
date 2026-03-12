@@ -1,5 +1,7 @@
 """Service dependency injection functions."""
 
+import dataclasses
+
 from fastapi import Depends
 
 from devboard.agents.agent_config_service import AgentConfigService
@@ -186,3 +188,44 @@ def get_mcp_service(
 ) -> MCPService:
     """Get MCPService instance."""
     return MCPService(mcp_server_repository=mcp_server_repo, oauth_service=oauth_service)
+
+
+@dataclasses.dataclass
+class ExecutionServices:
+    """Bundle of services needed for background agent execution and workflow actions."""
+
+    conversation_repo: ConversationRepository
+    document_repo: DocumentRepository
+    task_repo: TaskRepository
+    agent_config_service: AgentConfigService
+    task_service: TaskService
+    task_git_service: TaskGitService
+    workspace_allocation_service: WorkspaceAllocationService
+    integration_service: IntegrationService
+
+
+def get_execution_services(
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+    task_repo: TaskRepository = Depends(get_task_repository),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
+    task_service: TaskService = Depends(get_task_service),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExecutionServices:
+    """Get all services needed for background agent execution.
+
+    Intended for use with DependencyResolver (background tasks) or as a FastAPI
+    dependency in endpoints that need the full execution service bundle.
+    """
+    return ExecutionServices(
+        conversation_repo=conversation_repo,
+        document_repo=document_repo,
+        task_repo=task_repo,
+        agent_config_service=agent_config_service,
+        task_service=task_service,
+        task_git_service=task_git_service,
+        workspace_allocation_service=workspace_allocation_service,
+        integration_service=integration_service,
+    )

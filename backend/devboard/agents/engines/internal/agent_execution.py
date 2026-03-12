@@ -1,6 +1,5 @@
 """PydanticAI agent execution service implementation."""
 
-import asyncio
 from collections.abc import AsyncIterator
 
 import logfire
@@ -11,6 +10,7 @@ from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.conversation_history import convert_messages_to_pydantic
 from devboard.agents.events import ConversationEvent
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
@@ -68,17 +68,19 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
 
         agent = self._get_agent(conversation_history=message_history, extra_tools=extra_tools)
 
-        # Stream events from agent execution
-        try:
-            async for event in agent.stream_events(message_or_approvals):
-                yield event
+        async for event in agent.stream_events(message_or_approvals):
+            if self._interrupt_event and self._interrupt_event.is_set():
+                logfire.info(f"PydanticAI agent execution interrupted for conversation {self.conversation.id}")
+                raise AgentInterruptedError("Agent execution interrupted")
 
-            # Persist new messages after streaming completes
-            new_messages = agent.get_new_messages()
-            self._store_new_messages(new_messages=new_messages)
-        except asyncio.CancelledError:
-            logfire.info(f"PydanticAI agent execution cancelled for conversation {self.conversation.id}")
-            raise
+            yield event
+
+        # Check interrupt flag after the loop in case it was set just as the final event arrived.
+        if self._interrupt_event and self._interrupt_event.is_set():
+            logfire.info(f"PydanticAI agent execution interrupted (post-loop) for conversation {self.conversation.id}")
+            raise AgentInterruptedError("Agent execution interrupted")
+
+        self._store_new_messages(agent.get_new_messages())
 
     def _get_agent(
         self, conversation_history: list[ModelMessage], extra_tools: list[Tool] | None = None

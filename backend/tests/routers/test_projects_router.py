@@ -378,6 +378,7 @@ class TestProjectTasksRouter:
             implementation_plan=task1_plan,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
         task2_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
         task2_plan = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
@@ -389,6 +390,7 @@ class TestProjectTasksRouter:
             implementation_plan=task2_plan,
             base_branch="main",
             codebase_id=codebase.id,
+            branch_name="feature/test-task",
         )
 
         # Create conversations for tasks

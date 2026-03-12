@@ -14,6 +14,7 @@ import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
+import { createWebSocketEventStream } from '../lib/websocketStream'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
 import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
@@ -310,7 +311,6 @@ function TaskDetail({ id }: TaskDetailProps) {
     refreshGitStatus,
     handleDiffRefresh,
     setActiveTab,
-    setStreamingMessage,
     diffRefreshTimeoutRef,
   })
 
@@ -346,30 +346,23 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [])
 
   const executeWorkflowAction = async (actionKey: string, message: string) => {
-    if (!task?.id || !task?.conversation_id) return
-
-    console.log('[TaskDetail] executeWorkflowAction:', {
-      actionKey,
-      taskId: task.id,
-      conversationId: task.conversation_id
-    })
+    if (!task?.id) return
 
     setStreamingMessage(message)
     try {
-      // Create workflow action stream
-      const stream = apiClient.streamWorkflowAction(task.id, { action_key: actionKey })
+      const result = await apiClient.executeWorkflowAction(task.id, { action_key: actionKey })
 
-      // Use store startStream for unified streaming behavior
-      // Messages are stored separately and preserved automatically
-      // This immediately sets isStreaming=true in the store, which disables buttons
-      // Event handlers are registered via updateEventHandlerRegistry effect
-      console.log('[TaskDetail] Starting stream with conversation_id:', task.conversation_id)
-      await startStream(task.conversation_id, stream)
-      console.log('[TaskDetail] Stream completed')
+      if (result.conversation_id) {
+        // Agent execution started — connect WebSocket to receive events
+        const stream = createWebSocketEventStream(result.conversation_id)
+        await startStream(result.conversation_id, stream)
+      }
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
-      // Clear transition message on error
       setStreamingMessage('')
+    } finally {
+      // Always refetch task details (status, conversation_id, available actions may have changed)
+      await refetch()
     }
   }
 

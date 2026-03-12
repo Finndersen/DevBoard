@@ -44,7 +44,7 @@ GET    /api/tasks/{id}                   Get task details
 PATCH  /api/tasks/{id}                   Update task
 DELETE /api/tasks/{id}                   Delete task
 POST   /api/tasks/{id}/state-transition  Trigger state transition with optional AI
-POST   /api/tasks/{id}/workflow-action   Execute workflow action (NDJSON stream)
+POST   /api/tasks/{id}/workflow-action   Execute workflow action (returns conversation_id or status)
 GET    /api/tasks/{id}/diff              Get git diff of uncommitted changes
 GET    /api/tasks/{id}/resources         List task-linked resources
 POST   /api/tasks/{id}/resources         Link resource to task
@@ -71,23 +71,25 @@ DELETE /api/tasks/{id}/resources/{id}    Unlink resource from task
 **Unified Interface**: All entity conversations (projects, tasks, codebases) share these endpoints.
 
 ```
-GET    /api/conversations/{id}                       Get conversation details
-GET    /api/conversations/{id}/messages              Get message history as event list
-POST   /api/conversations/{id}/messages              Send message (returns all events)
-POST   /api/conversations/{id}/messages/stream       Send message (NDJSON stream)
-POST   /api/conversations/{id}/approve-tools         Approve/deny tool requests
-POST   /api/conversations/{id}/approve-tools/stream  Approve tools (NDJSON stream)
-PUT    /api/conversations/{id}/model                 Update conversation model
-DELETE /api/conversations/{id}/messages              Clear conversation
+GET    /api/conversations/{id}                  Get conversation details
+GET    /api/conversations/{id}/messages         Get message history as event list
+POST   /api/conversations/{id}/messages         Send message — starts background execution, returns {"conversation_id": id}
+POST   /api/conversations/{id}/approve-tools    Submit tool approvals — resumes background execution, returns {"conversation_id": id}
+GET    /api/conversations/{id}/ws               WebSocket for event consumption (server→client only)
+POST   /api/conversations/{id}/interrupt        Request graceful interruption of active execution
+PUT    /api/conversations/{id}/model            Update conversation model
+POST   /api/conversations/{id}/reset            Reset conversation (delete + recreate)
 ```
 
-**Event-Based Architecture**: All responses are lists of `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`, `SystemEvent`.
+**Background Task Architecture**: `POST /messages` and `POST /approve-tools` start/resume a background asyncio task and return immediately. Clients consume events via WebSocket (`GET /ws`). See [Frontend Streaming Architecture](../frontend/streaming.md) for full details.
 
-**Streaming Format**: NDJSON (newline-delimited JSON). Each line is a complete `ConversationEvent` JSON object. All streaming endpoints use the `stream_conversation_events()` helper from `backend/devboard/api/streaming.py`.
+**409 Conflict**: If a background execution is already active for a conversation, `POST /messages` and `POST /approve-tools` return HTTP 409.
+
+**Event-Based Architecture**: WebSocket delivers `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`, `SystemEvent`. Plus execution lifecycle events (`execution_started`, `execution_completed`).
 
 **Tool Approval**: When tools require approval, agent pauses and returns `ToolCallRequest` events. Frontend approves/denies via `/approve-tools`.
 
-**Workflow Actions**: Reusable, named operations that combine task state transitions with agent interactions. Executed via `/workflow-action` endpoint. Examples: `task.create_implementation_plan`, `task.begin_implementation`.
+**Workflow Actions**: Reusable, named operations that perform optional procedural steps (state transitions, DB changes) and return either a prompt string to start an agent run or `None`. Executed via `/workflow-action` endpoint. Returns `{"conversation_id": N}` if agent started, `{"status": "completed"}` otherwise. Returns 400 if action validation fails. Examples: `task.create_implementation_plan`, `task.begin_implementation`, `task.finalise`.
 
 **Key Schemas**: `ChatRequest`, `ConversationEvent`, `ToolApprovalRequest`, `ToolApprovalDecision`, `PromptActionRequest`, `UpdateConversationModelRequest`
 

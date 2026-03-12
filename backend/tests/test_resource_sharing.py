@@ -133,6 +133,7 @@ class TestResourceSharing:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 
@@ -258,6 +259,7 @@ class TestResourceSharing:
             implementation_plan=task_plan_doc,
             base_branch="main",
             codebase_id=test_codebase.id,
+            branch_name="feature/test-task",
         )
         db_session.commit()
 

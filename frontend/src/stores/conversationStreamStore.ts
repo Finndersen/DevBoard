@@ -5,6 +5,7 @@ import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandlers'
+import { useNotificationStore } from './notificationStore'
 
 /**
  * State for an active conversation stream (streaming concerns only).
@@ -12,7 +13,6 @@ import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandl
 export interface StreamState {
   isStreaming: boolean
   error: Error | null
-  abortController?: AbortController
   startedAt?: number
   pendingToolRequests: ToolCallRequest[]
   isQueued: boolean
@@ -67,18 +67,16 @@ interface ConversationStreamActions {
    * @param conversationId - The conversation to stream
    * @param stream - The event stream to process
    * @param onFirstEvent - Optional callback invoked once when first event is received
-   * @param abortController - Optional AbortController for cancelling the stream (if not provided, one is created internally)
    */
   startStream: (
     conversationId: number,
     stream: AsyncGenerator<ConversationEvent>,
     onFirstEvent?: () => void | Promise<void>,
-    abortController?: AbortController
   ) => Promise<void>
 
   /**
-   * Stop (abort) an active stream.
-   * This cancels the fetch request and stops processing events.
+   * Stop an active stream by requesting a graceful interrupt from the server.
+   * The stream will wind down naturally and emit execution_completed with status interrupted.
    *
    * @param conversationId - The conversation to stop streaming
    */
@@ -239,10 +237,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     conversationMessages: new Map(),
 
     // Actions
-    startStream: async (conversationId, stream, onFirstEvent, providedAbortController) => {
-      // Use provided abort controller or create a new one
-      const abortController = providedAbortController ?? new AbortController()
-
+    startStream: async (conversationId, stream, onFirstEvent) => {
       // Create mutable ref for conversation ID in external map (not in Zustand state)
       // Allows closures to see updates after migration (Immer freezes objects in state)
       const conversationIdRef = { current: conversationId }
@@ -260,14 +255,15 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       // Initialize streaming state only (messages are separate and preserved)
+      // Preserve existing isQueued so queued messages survive stream restarts (e.g., after tool approval)
+      const existingIsQueued = get().activeStreams.get(conversationId)?.isQueued ?? false
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
           error: null,
-          abortController,
           startedAt: Date.now(),
           pendingToolRequests: [],
-          isQueued: false
+          isQueued: existingIsQueued
         })
       })
 
@@ -301,8 +297,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Stream completed successfully
         get().completeStream(conversationIdRef.current)
       } catch (error) {
-        // Handle stream errors (ignore abort errors)
-        if (error instanceof Error && error.name !== 'AbortError') {
+        if (error instanceof Error) {
           console.error('Stream error:', error)
           get().setError(conversationIdRef.current, error)
           // Re-throw so caller can handle (e.g., mark pending message as failed)
@@ -313,14 +308,38 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     stopStream: (conversationId) => {
       const stream = get().activeStreams.get(conversationId)
-      if (stream) {
-        // Abort the fetch request
-        stream.abortController.abort()
+      if (stream?.isStreaming) {
+        // Request graceful interrupt via HTTP — server will stop the agent and emit execution_completed
+        // Optimistically mark as not streaming and clear queue (user stopped intentionally)
+        set((draft) => {
+          const streamState = draft.activeStreams.get(conversationId)
+          if (streamState) {
+            streamState.isStreaming = false
+            streamState.isQueued = false
+          }
+        })
 
-        // Delegate to completeStream which handles isStreaming=false,
-        // invokes stream complete handlers (enabling queued message auto-send),
-        // and schedules cleanup
-        get().completeStream(conversationId)
+        // Request graceful interrupt via HTTP — server will stop the agent and emit execution_completed.
+        // Revert optimistic update if the request fails so the user can retry.
+        apiClient.interruptConversation(conversationId).catch((error) => {
+          console.error('Failed to interrupt conversation:', error)
+          set((draft) => {
+            const streamState = draft.activeStreams.get(conversationId)
+            if (streamState) {
+              streamState.isStreaming = true
+            }
+          })
+          useNotificationStore.getState().addNotification({
+            type: 'system_error',
+            priority: 'high',
+            entityType: null,
+            entityId: null,
+            entityTitle: null,
+            conversationId,
+            message: 'Failed to stop agent. Please try again.',
+            actions: [],
+          })
+        })
       }
     },
 
@@ -458,9 +477,6 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         conversationIdRefs.set(conversationId, conversationIdRef)
       }
 
-      // Create new abort controller for the approval stream
-      const abortController = new AbortController()
-
       // Create or update streaming state (messages are separate and preserved)
       // Preserve existing isQueued state - message should stay queued through approval workflow
       const existingIsQueued = existingStream?.isQueued ?? false
@@ -468,7 +484,6 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
           error: null,
-          abortController,
           startedAt: Date.now(),
           pendingToolRequests: [],
           isQueued: existingIsQueued
@@ -476,11 +491,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       try {
-        // Send approval to backend and start new stream with abort signal
+        // Send approval to backend and start WebSocket stream
         const approvalStream = apiClient.streamApproveConversationTools(
           conversationIdRef.current,
           { approvals } as ToolApprovalRequest,
-          abortController.signal
         )
 
         // Process stream events and collect any new tool requests
@@ -506,7 +520,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Stream completed
         get().completeStream(conversationIdRef.current)
       } catch (error) {
-        if (error instanceof Error && error.name !== 'AbortError') {
+        if (error instanceof Error) {
           console.error('Approval stream error:', error)
           get().setError(conversationIdRef.current, error)
         }

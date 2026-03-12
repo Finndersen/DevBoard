@@ -1,6 +1,5 @@
 """Claude Code agent execution service implementation."""
 
-import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -10,6 +9,7 @@ from pydantic_ai import Tool
 from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Codebase, Task
@@ -60,7 +60,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
 
         # Stream events from agent execution
         try:
-            async for event in agent.stream_events(message_or_approvals):
+            async for event in agent.stream_events(message_or_approvals, interrupt_event=self._interrupt_event):
                 # Update session_id if changed
                 if agent.session_id != self.conversation.external_session_id:
                     logfire.info(
@@ -78,9 +78,10 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                     )
 
                 yield event
-        except asyncio.CancelledError:
-            logfire.info(f"Claude Code agent execution cancelled for conversation {self.conversation.id}")
-            raise
+
+            if self._interrupt_event and self._interrupt_event.is_set():
+                logfire.info(f"Claude Code agent execution interrupted for conversation {self.conversation.id}")
+                raise AgentInterruptedError("Agent execution interrupted")
         except FileNotFoundError:
             # Session file was cleaned up - reset session ID and notify user
             logfire.info(

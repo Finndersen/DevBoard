@@ -16,13 +16,22 @@ RESTful API with FastAPI. Focus on architectural decisions.
 
 **Implementation**: Backend converts PydanticAI messages to ConversationEvents, stores in database, returns/streams to frontend.
 
-### NDJSON Streaming
+### Background Task + WebSocket Architecture
 
-**Decision**: Streaming endpoints use NDJSON (newline-delimited JSON), one event per line.
+**Decision**: Agent execution is decoupled from HTTP request lifecycle. HTTP endpoints start background asyncio tasks and return `{"conversation_id": N}` immediately. Clients consume events via WebSocket.
 
-**Rationale**: Incremental parsing, no buffering entire response, clear message boundaries, simple client-side consumption.
+**Rationale**: Enables reconnection resilience (clients can disconnect/reconnect without losing events) and graceful interruption (HTTP POST `/interrupt` → agent stops cleanly).
 
-**Endpoints**: `/conversations/{id}/messages/stream`, `/conversations/{id}/approve-tools/stream`
+**Key endpoints**:
+- `POST /conversations/{id}/messages` — starts background execution, returns immediately
+- `POST /conversations/{id}/approve-tools` — resumes execution with tool approval
+- `GET /conversations/{id}/ws` — WebSocket for consuming events (server→client only)
+- `POST /conversations/{id}/interrupt` — request graceful interruption
+- `POST /tasks/{id}/workflow-action` — runs procedural steps, optionally starts agent execution. Returns `{"conversation_id": N}` if agent started, `{"status": "completed"}` otherwise. Returns 400 if action validation fails.
+
+**409 Conflict**: Returns 409 if an execution is already active for a conversation. At most one active execution per conversation at any time.
+
+**In-memory queue**: Each execution has an `asyncio.Queue`. Events are consumed by the WebSocket connection. Queue is cleaned up ~60s after execution completes to allow reconnection.
 
 ### Polymorphic Conversation System
 
@@ -91,9 +100,9 @@ See [Backend API Reference](./backend/api-reference.md) for complete endpoint li
 
 ### Event-Based Responses
 
-**Pattern**: Conversation endpoints return `list[ConversationEvent]` with chronological events.
+**Pattern**: GET conversation history returns `list[ConversationEvent]` with chronological events.
 
-**Streaming**: NDJSON format, one event per line, for real-time updates.
+**Real-time streaming**: POST endpoints start background execution and return immediately. Events stream via WebSocket (`GET /conversations/{id}/ws`). See [Frontend Streaming Architecture](../frontend/streaming.md) for details.
 
 ### Error Responses
 

@@ -143,7 +143,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         assert conversation.external_session_id == "test-session-id-12345"
 
         # Create a mock agent that raises FileNotFoundError when streaming
-        async def mock_stream_events_raise_fnf(_message_or_approvals):
+        async def mock_stream_events_raise_fnf(_message_or_approvals, **kwargs):
             # Yield one event before raising to simulate partial streaming
             yield TextMessage(
                 role=MessageRole.AGENT,
@@ -189,7 +189,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         assert conversation.external_session_id == "test-session-id-12345"
 
         # Create a mock agent that raises FileNotFoundError immediately
-        async def mock_stream_events_raise_fnf_immediate(_message_or_approvals):
+        async def mock_stream_events_raise_fnf_immediate(_message_or_approvals, **kwargs):
             raise FileNotFoundError("Session file not found")
             yield  # Make it a generator (type: ignore - unreachable code by design)
 

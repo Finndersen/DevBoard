@@ -4,331 +4,152 @@
 
 ## Overview
 
-Real-time agent conversation updates using NDJSON streaming. Immediate feedback as agents process requests.
+Real-time agent conversation updates using WebSocket connections. Agent execution is decoupled from the HTTP request lifecycle: HTTP endpoints start background tasks and return immediately, while clients consume events via WebSocket.
 
-**Key Technologies**: NDJSON (newline-delimited JSON), async generators, event-based architecture
+**Key Technologies**: WebSocket, async generators, event-based architecture, background asyncio tasks
 
-## NDJSON Streaming Protocol
+## Architecture: Background Tasks + WebSocket
 
-**Format**: Each line contains complete JSON object followed by newline.
+### High-Level Flow
 
-**Example Stream**:
+1. **Client sends message/action** → POST to HTTP endpoint → server starts background agent execution → returns `{"conversation_id": N}` immediately
+2. **Background execution** → agent runs as asyncio task, pushes `ConversationEvent` objects to an in-memory `asyncio.Queue`
+3. **Client consumes events** → WebSocket connection to `/api/conversations/{id}/ws` → server drains queue and sends events as JSON
+4. **Completion** → server sends `execution_completed` lifecycle event → client terminates stream
+
+### Why WebSocket Instead of NDJSON HTTP Streaming
+
+- **Reconnection resilience**: Client can disconnect and reconnect mid-execution. Unconsumed events are buffered in the in-memory queue.
+- **Graceful interruption**: Client sends HTTP `POST /interrupt` → server signals interrupt flag → agent stops gracefully
+- **Decoupled lifecycle**: Agent execution continues even if HTTP connection drops. No lost events.
+
+## WebSocket Protocol
+
+**Endpoint**: `GET /api/conversations/{conversation_id}/ws`
+
+**Direction**: Unidirectional — server→client only. The WebSocket carries events from the server to the client. Client-to-server communication (e.g., interrupt) uses separate HTTP endpoints.
+
+### Server→Client Messages
+
+All messages are JSON. Discriminated by `event_type` field:
+
+**Conversation events** (same as stored message history):
+- `{ "event_type": "message", "role": "agent", "text_content": "...", "timestamp": "..." }`
+- `{ "event_type": "tool_call", "tool_call_id": "...", "tool_name": "...", ... }`
+- `{ "event_type": "tool_result", "tool_call_id": "...", "result_content": "...", ... }`
+- `{ "event_type": "tool_call_request", ... }` — requires user approval
+- `{ "event_type": "system", "type": "task_updated", ... }`
+
+**Execution lifecycle events** (internal, not conversation messages):
+- `{ "event_type": "execution_lifecycle", "event": "execution_started" }`
+- `{ "event_type": "execution_lifecycle", "event": "execution_completed", "status": "completed|interrupted|failed", "error": null }`
+
+### Connection Lifecycle
+
 ```
-{"event_type":"text_message","role":"assistant","text_content":"Analyzing...","timestamp":"2024-01-01T10:00:00Z"}
-{"event_type":"tool_call","tool_call_id":"tc_1","tool_name":"search_codebase","tool_args":{"query":"auth"},"timestamp":"2024-01-01T10:00:01Z"}
-{"event_type":"tool_result","tool_call_id":"tc_1","result_content":"Found 5 files","is_error":false,"timestamp":"2024-01-01T10:00:03Z"}
+Client                          Server
+  |                               |
+  |--- GET /ws ------------------>|  WebSocket handshake
+  |                               |
+  |<-- execution_started ---------|  Agent execution begins
+  |<-- ConversationEvent ----------|  Events stream as agent runs
+  |<-- ConversationEvent ----------|
+  |<-- execution_completed --------|  Execution done
+  |                               |
+  |  (waits for next execution)   |
+  |<-- execution_started ---------|  Next approval/message
+  ...
 ```
 
-**Benefits**: Incremental parsing, no buffering entire response, clear message boundaries
+The WebSocket connection stays open across multiple sequential executions (send message → approve tools → etc.).
 
-### NDJSON Parser
+## Frontend WebSocket Implementation
 
-**Location**: `frontend/src/lib/api.ts` (within streaming methods)
+### WebSocketManager
 
-Line buffering for incomplete chunks, UTF-8 decoding, async generator for clean consumption, type-safe with generics.
+**Location**: `frontend/src/services/WebSocketManager.ts`
 
-**Pattern**:
+Singleton managing WebSocket connections per conversation. Provides:
+- `ensureConnected(conversationId)` — creates or reuses connection
+- `registerMessageHandler(conversationId, handler)` — push-based message delivery
+- `unregisterMessageHandler(conversationId, handler)` — cleanup
+- Auto-reconnect with exponential backoff (max 5 attempts)
+- Connection limit (max 10 concurrent connections)
+
+### createWebSocketEventStream
+
+**Location**: `frontend/src/lib/websocketStream.ts`
+
+Bridges push-based WebSocket messages to pull-based async generator, enabling the existing `startStream()` / `processConversationStream()` pipeline to work unchanged.
+
 ```typescript
-async function* parseNDJSONStream<T>(stream: ReadableStream<Uint8Array>): AsyncGenerator<T>
+async function* createWebSocketEventStream(conversationId: number): AsyncGenerator<ConversationEvent>
 ```
 
-Splits incoming bytes by newlines, maintains buffer for incomplete lines, yields parsed JSON objects.
+**Behavior**:
+- Registers a handler with `WebSocketManager` for message routing
+- Buffers incoming events in a local array
+- Yields events as they arrive via a Promise-based wait mechanism
+- Terminates when `execution_completed` lifecycle event is received
 
-## Event-Based Chat Architecture
-
-**Location**: `frontend/src/components/chat/ConversationChat.tsx`
-
-### Streaming Event Consumption
-
-Core chat component consumes streaming events via async generators:
-
-**Pattern**:
-```typescript
-const eventStream = apiClient.sendMessageStreaming(conversationId, message)
-for await (const event of eventStream) {
-  setEvents(prev => [...prev, event])
-}
-```
-
-**Benefits**: Events appear progressively, immediate feedback, improved perceived performance
-
-### Event Type Discrimination
-
-Type-safe event rendering with discriminated unions:
-
-```typescript
-switch (event.event_type) {
-  case 'message': return <ConversationMessage message={event} />
-  case 'tool_call': return <ToolCallDisplay toolCall={event} />
-  case 'tool_result': return <ToolResult result={event} />
-  case 'tool_call_request': return <ToolApprovalRequest request={event} />
-  case 'system': // Handled by registered SystemEventHandlers, not rendered
-}
-```
-
-TypeScript exhaustiveness check ensures all event types handled at compile time.
-
-## Event Handler Architecture
-
-**Location**: `frontend/src/hooks/useConversationEventHandlers.ts`, `frontend/src/components/chat/ConversationEventHandlerProvider.tsx`
-
-The frontend implements a sophisticated event handler system for processing conversation events with side effects.
-
-### ConversationEventHandlerProvider
-
-A React Context provider that maintains registries for tool result handlers and system event handlers. Must wrap conversation components that need to react to events.
-
-**Pattern**:
-```typescript
-<ConversationEventHandlerProvider>
-  <TaskDetail id={123} />
-</ConversationEventHandlerProvider>
-```
-
-**Registry Structure**:
-- `toolResultHandlers`: Map of matchers to handler sets for tool execution results
-- `systemEventHandlers`: Map of matchers to handler sets for system events
-
-**Architecture**: Each parent view (TaskDetail, ProjectDetail) is wrapped in a provider at the TabContentContainer level. This ensures a single registry per conversation context, allowing components to register handlers that execute when matching events stream through ConversationChat.
-
-### Tool Result Handlers
-
-Components can register handlers that execute when specific tools complete successfully (error results are automatically skipped).
-
-**Hook**: `useToolResultHandler(matcher, handler)`
-
-**Example - Handle document edits**:
-```typescript
-useToolResultHandler(
-  (toolName) => toolName.includes('edit_specification'),
-  async (result) => await refetchSpecification()
-)
-```
-
-**Example - Handle multiple tools**:
-```typescript
-useToolResultHandler(
-  (toolName) => ['edit_specification', 'set_specification_content'].some(t => toolName.includes(t)),
-  async () => await refetchDocuments()
-)
-```
-
-**Pattern**: Matcher receives tool name and event, returns boolean. Handler receives ToolResult event. Multiple handlers can match a single tool result.
-
-### System Event Handlers
-
-Components can register handlers for system-level events like task updates and conversation changes.
-
-**Hook**: `useSystemEventHandler(matcher, handler)`
-
-**Example - Handle task updates**:
-```typescript
-useSystemEventHandler(
-  (event) => event.type === 'task_updated' && event.data?.task_id === taskId,
-  async (event) => {
-    const { updated_fields } = event.data
-    if ('status' in updated_fields) {
-      // Task status changed during workflow action
-      await refetch()
-    }
-    if ('implementation_plan_id' in updated_fields) {
-      // Implementation plan was created
-      await refetch()
-    }
-  }
-)
-```
-
-**Pattern**: Matcher receives SystemEvent, returns boolean. Handler receives SystemEvent. Enables reactive updates to task state changes, workflow transitions, and entity modifications.
-
-### Event Processing Flow
-
-**ConversationChat Integration**:
-1. ConversationChat retrieves registry via `useEventHandlerRegistryForStream()`
-2. Passes registry to `processConversationStream()` helper
-3. Stream processor invokes `invokeEventHandlers()` for each event
-4. For ToolResult events: maps tool_call_id to tool name, skips errors, finds matching handlers
-5. For SystemEvent events: finds matching handlers based on event type and data
-6. All matching handlers execute concurrently via `Promise.all()`
-
-**Benefits**:
-- Decoupled event handling from rendering logic
-- Type-safe event matching and handling
-- Automatic cleanup on component unmount
-- Supports multiple handlers per event type
-- Error results automatically filtered out for tool handlers
-- System events filtered from UI display (handled in background)
-
-**Implementation**: The `processConversationStream` helper in `streamProcessor.ts` builds a tool call map from ToolCall events, then uses it to resolve tool names for ToolResult events. System events skip the UI rendering pipeline entirely and only trigger registered handlers.
-
-## API Client Streaming Methods
+### API Client Methods
 
 **Location**: `frontend/src/lib/api.ts`
 
-### Async Generator Pattern
-
-API client provides async generator methods for streaming endpoints:
-
-**Send Message with Streaming**:
 ```typescript
-async *sendMessageStreaming(conversationId: number, message: string): AsyncGenerator<ConversationEvent>
+// POST /messages → starts background execution → returns WebSocket stream
+async *streamConversationMessage(conversationId, request): AsyncGenerator<ConversationEvent>
+
+// POST /approve-tools → resumes execution → returns WebSocket stream
+async *streamApproveConversationTools(conversationId, request): AsyncGenerator<ConversationEvent>
+
+// POST /workflow-action → runs procedural steps, optionally starts agent
+// Returns { conversation_id } if agent started, { status: "completed" } otherwise
+async executeWorkflowAction(taskId, request): Promise<{ conversation_id?: number; status?: string }>
+
+// POST /interrupt → requests graceful stop
+async interruptConversation(conversationId): Promise<void>
 ```
 
-**Approve Tools with Streaming**:
-```typescript
-async *approveToolsStreaming(conversationId: number, approvals: ToolApprovalRequest): AsyncGenerator<ConversationEvent>
-```
+Conversation streaming methods POST to the backend first (starting/resuming execution), then return `createWebSocketEventStream()` for the target conversation. Workflow actions return immediately and the caller creates a WebSocket stream only if `conversation_id` is returned.
 
-**Implementation**: Fetch streaming endpoint, parse NDJSON with `parseNDJSONStream()`, yield events.
+## Graceful Interruption
 
-## Real-Time UI Updates
+**User action**: Click stop button → calls `stopStream(conversationId)` in store
 
-### Progressive Event Display
+**Store behavior**: Calls `apiClient.interruptConversation(conversationId)` (fire-and-forget HTTP POST), optimistically marks stream as not streaming.
 
-**User Experience Timeline**:
-1. User sends message → Message appears immediately
-2. Agent starts processing → Loading indicator
-3. Tool call event → Tool call card appears (collapsed)
-4. Tool result event → Result added to tool call card
-5. Agent text response → Response message appears
-6. Streaming complete → Loading indicator removed
+**Server behavior**: Sets `interrupt_event` asyncio.Event → agent checks flag between tool calls → raises `AgentInterruptedError` → persists completed turns → pushes `execution_completed` with status `interrupted`.
 
-**Pattern**: Events added to timeline as they arrive. UI updates incrementally without waiting for completion.
+**Result**: All messages processed before interruption are persisted. WebSocket stream terminates naturally.
 
-### Streaming State Management
+## Event Handler Architecture
 
-Track streaming state for UI feedback:
+**Location**: `frontend/src/hooks/useConversationEventHandlers.ts`
 
-```typescript
-const [streamingState, setStreamingState] = useState<{
-  isStreaming: boolean
-  currentToolCall?: string
-}>({ isStreaming: false })
-```
+Same as before — React Context-based registry for:
+- `useToolResultHandler(handler)` — called when tool execution completes
+- `useSystemEventHandler(handler)` — called for system events (task_updated, etc.)
+- `useStreamCompleteHandler(handler)` — called when execution completes
 
-Update state during streaming to show current tool execution, display loading indicators, enable/disable input.
+### Workflow Action Conversation Switching
 
-## Error Handling
+Workflow actions that create new conversations (e.g., BeginImplementation) do so synchronously within the HTTP request handler. The response includes the new `conversation_id`, which the frontend uses to create a WebSocket stream on the correct conversation. The frontend always refetches task details after a workflow action completes to pick up status changes, new conversation IDs, and updated available actions.
 
-### Stream Error Recovery
+## Conversation Stream Store
 
-**Error Scenarios**: Network interruption mid-stream, invalid JSON, server error during processing
+**Location**: `frontend/src/stores/conversationStreamStore.ts`
 
-**Pattern**:
-```typescript
-try {
-  for await (const event of eventStream) {
-    addEvent(event)
-  }
-} catch (error) {
-  // Show error message, preserve already received events
-}
-```
+Manages streaming state per conversation. Key changes from the old streaming architecture:
+- No `abortController` in `StreamState` — interruption is via HTTP, not fetch abort
+- `stopStream()` calls `apiClient.interruptConversation()` instead of aborting fetch
+- `startStream()` takes no `abortController` parameter — streams self-terminate via WebSocket
 
-### Partial Stream Recovery
+## Multitasking and State Preservation
 
-Events received before error remain in UI. Allows retry from last received event.
+The WebSocket architecture improves resilience compared to HTTP streaming:
 
-## Performance Characteristics
-
-**Immediate Feedback**: Users see agent activity as it happens, tool executions visible real-time, progress based on actual events
-
-**Perceived Performance**: UI feels responsive, no "black box" waiting, incremental content reduces perceived latency
-
-**Resource Efficiency**: No buffering entire response, memory proportional to event rate
-
-### Optimizations
-
-**Virtual Scrolling**: Handle large conversation histories efficiently in ConversationChat component
-
-**Event Deduplication**: Prevent duplicates when reconnecting mid-stream
-
-## DevBoard-Specific Patterns
-
-### Tool Call/Result Streaming
-
-Tool calls and results stream as separate events. `findToolResult()` helper in ConversationChat matches ToolResult to ToolCall by `tool_call_id` for integrated display.
-
-**Pattern**: ToolCall event arrives → card appears with spinner. ToolResult event arrives → result added to card, spinner replaced with checkmark/error icon.
-
-### Tool Approval Request Streaming
-
-When agent encounters tool requiring approval:
-1. Agent streams `ToolCallRequest` event
-2. Frontend pauses event consumption, displays approval UI
-3. User approves/denies
-4. Frontend calls `/approve-tools/stream`
-5. Agent resumes, streams completion events
-
-**Pattern**: Two-phase streaming: initial request stream pauses at approval, approval response stream continues to completion.
-
-## Multitasking and Streaming State Preservation
-
-**Challenge**: In a multitasking environment with multiple tabs, switching between tabs must not interrupt or lose streaming state.
-
-### Implementation Strategy
-
-**Location**: `frontend/src/components/chat/ConversationChat.tsx`, `frontend/src/views/TaskDetail.tsx`, `frontend/src/views/ProjectDetail.tsx`, `frontend/src/components/layout/TabContentContainer.tsx`
-
-#### Component Memoization
-
-All view components (TaskDetail, ProjectDetail) are wrapped with `React.memo()` and custom comparison functions:
-
-```typescript
-export default memo(TaskDetail, (prevProps, nextProps) => {
-  return prevProps.id === nextProps.id
-})
-```
-
-**Effect**: Only re-renders when entity ID changes, not when other tabs switch. Preserves all component state including active streaming sessions.
-
-#### Conversation History Fetch Optimization
-
-ConversationChat tracks which conversations have been fetched to prevent unnecessary refetches:
-
-```typescript
-const lastFetchedConversationIdRef = useRef<number | null>(null)
-
-const fetchChatHistory = useCallback(async () => {
-  // Only fetch if we haven't already fetched for this conversation
-  if (lastFetchedConversationIdRef.current === conversationId) {
-    return
-  }
-
-  const data = await apiClient.getConversationMessages(conversationId)
-  setMessages(data)
-  lastFetchedConversationIdRef.current = conversationId
-}, [conversationId])
-```
-
-**Effect**: Prevents overwriting client-side streaming messages with incomplete backend history when tabs switch.
-
-#### Tab Container Optimization
-
-TabContentContainer uses `useMemo` to prevent unnecessary re-render cascades:
-
-```typescript
-const renderedTabs = useMemo(() => {
-  return tabs.map(tab => {
-    const isActive = tab.id === activeTabId
-    return <div style={{ visibility: isActive ? 'visible' : 'hidden' }}>
-      {/* tab content */}
-    </div>
-  })
-}, [tabs, activeTabId])
-```
-
-**Effect**: Minimizes re-renders when switching tabs. Combined with component memoization, ensures inactive tabs don't re-render unnecessarily.
-
-### State Preservation Guarantees
-
-With these optimizations:
-- ✓ Streaming messages remain in client state when switching tabs
-- ✓ No refetch of conversation history on tab switch
-- ✓ Active streaming connections maintained (subject to browser throttling)
-- ✓ Minimal re-renders across all mounted components
-- ✓ Seamless multitasking experience
-
-### Browser Considerations
-
-Modern browsers may throttle or suspend fetch requests for hidden tabs. While components stay mounted and state preserved, the underlying network connection may be affected by browser optimizations. The application maintains message state regardless of connection status.
+- **Tab switching**: WebSocket connection maintained. Events continue to buffer in queue even with no consumer.
+- **Navigation**: Stream state preserved in Zustand store across component unmounts.
+- **Reconnection**: Queue buffers events during disconnection. Consumer receives all events on reconnect.
+- **Server restarts**: Active executions are lost (in-memory only), but all persisted messages remain in database.
