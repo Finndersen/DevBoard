@@ -13,8 +13,8 @@ type WebSocketRawMessage = ConversationEvent | ExecutionLifecycleEvent
 /**
  * Create an AsyncGenerator that yields ConversationEvents from a WebSocket connection.
  *
- * Bridges push-based WebSocket messages to a pull-based async generator, allowing the
- * existing startStream() / processConversationStream() pipeline to work unchanged.
+ * Opens a fresh WebSocket connection for a single execution. The server closes
+ * the connection after sending execution_completed, which is the normal lifecycle.
  *
  * Handles execution_lifecycle events internally:
  * - execution_started: ignored (no consumer action needed)
@@ -30,6 +30,7 @@ export async function* createWebSocketEventStream(
   let done = false
   let completionStatus: ExecutionLifecycleEvent | null = null
   let parseError: Error | null = null
+  let serverClosed = false
 
   const handleMessage = (data: string) => {
     let parsed: WebSocketRawMessage
@@ -58,13 +59,30 @@ export async function* createWebSocketEventStream(
     resolveWait = null
   }
 
-  webSocketManager.ensureConnected(conversationId)
+  const handleClose = (_code: number, _reason: string) => {
+    // Server-initiated close is expected after execution_completed.
+    // If we haven't received execution_completed yet, treat as unexpected close.
+    if (!done) {
+      serverClosed = true
+      resolveWait?.()
+      resolveWait = null
+    }
+  }
+
+  // Open a fresh connection for this execution
+  webSocketManager.connect(conversationId)
   webSocketManager.registerMessageHandler(conversationId, handleMessage)
+  webSocketManager.registerCloseHandler(conversationId, handleClose)
 
   try {
     while (true) {
       if (parseError) {
         throw parseError
+      }
+
+      if (serverClosed) {
+        // Server closed before sending execution_completed — abnormal
+        break
       }
 
       if (buffer.length > 0) {
@@ -79,6 +97,7 @@ export async function* createWebSocketEventStream(
     }
   } finally {
     webSocketManager.unregisterMessageHandler(conversationId, handleMessage)
+    webSocketManager.unregisterCloseHandler(conversationId, handleClose)
   }
 
   // Propagate execution failure as an error so the stream store shows error state

@@ -3,8 +3,7 @@
 import asyncio
 
 import logfire
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from devboard.agents.execution_manager import (
     ExecutionLifecycleEvent,
@@ -12,95 +11,116 @@ from devboard.agents.execution_manager import (
     ExecutionStatus,
     conversation_execution_manager,
 )
-from devboard.db.database import get_db
+from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories import ConversationRepository
 
 router = APIRouter()
 
 # How long to wait (in seconds) for new events before checking execution status
 _QUEUE_GET_TIMEOUT = 1.0
-# How long to wait (in seconds) between polls for a new execution
+# How long to wait (in seconds) between polls for a new execution to start
 _EXECUTION_POLL_INTERVAL = 0.5
+# How long to wait (in seconds) for an execution to start before closing the WebSocket
+_EXECUTION_START_TIMEOUT = 30.0
+
+
+def _log_pool_status(label: str, conversation_id: int) -> None:
+    pool = engine.pool.status()
+    logfire.info(f"WebSocket {label} for conversation {conversation_id} [db_pool: {pool}]")
 
 
 @router.websocket("/{conversation_id}/ws")
 async def conversation_websocket(
     conversation_id: int,
     websocket: WebSocket,
-    db: Session = Depends(get_db),
 ) -> None:
     """WebSocket endpoint for streaming conversation events.
 
-    Connects to the event queue for the given conversation. Events are sent
-    as JSON as they are pushed by the background execution task.
+    Handles exactly one execution per connection. The server closes the
+    WebSocket after sending EXECUTION_COMPLETED.
+
+    If an execution is already running when the WebSocket connects, it streams
+    the remaining buffered events (reconnection support).
 
     Server → Client messages:
     - ConversationEvent objects (TextMessage, ToolCall, ToolResult, etc.)
     - ExecutionLifecycleEvent objects (execution_started, execution_completed)
 
     Client → Server: None (unidirectional). Use POST /interrupt to stop execution.
-
-    Connection lifecycle:
-    - Can be opened before, during, or after an execution
-    - Remains open across multiple sequential executions
-    - Client disconnection does not affect background execution
     """
-    conversation_repo = ConversationRepository(db)
-    conversation = conversation_repo.get_by_id(conversation_id)
-    if not conversation:
-        await websocket.close(code=4004, reason="Conversation not found")
-        return
+    # Validate conversation with a short-lived DB session (no pool hold)
+    db = SessionLocal()
+    try:
+        conversation_repo = ConversationRepository(db)
+        conversation = conversation_repo.get_by_id(conversation_id)
+        if not conversation:
+            await websocket.close(code=4004, reason="Conversation not found")
+            return
+    finally:
+        db.close()
 
     await websocket.accept()
-    logfire.info(f"WebSocket connected for conversation {conversation_id}")
+    _log_pool_status("connected", conversation_id)
 
     try:
-        await _stream_executions(websocket, conversation_id)
+        await _stream_single_execution(websocket, conversation_id)
     except WebSocketDisconnect:
-        logfire.info(f"WebSocket disconnected for conversation {conversation_id}")
+        _log_pool_status("client disconnected", conversation_id)
+    finally:
+        _log_pool_status("closing", conversation_id)
 
 
-async def _stream_executions(websocket: WebSocket, conversation_id: int) -> None:
-    """Loop indefinitely: wait for executions, stream events, repeat."""
-    last_seen_started_at = None
+async def _stream_single_execution(websocket: WebSocket, conversation_id: int) -> None:
+    """Wait for an execution, stream its events, then close the WebSocket."""
+    # Wait for an execution to appear (may already be running or start soon)
+    execution = await _wait_for_execution(conversation_id)
+    if execution is None:
+        await websocket.close(code=4408, reason="No execution started within timeout")
+        return
 
+    # Notify client that we're streaming an execution
+    await websocket.send_text(
+        ExecutionLifecycleEvent(event=ExecutionLifecycleEventType.EXECUTION_STARTED).model_dump_json()
+    )
+
+    # Drain the event queue until sentinel or execution finishes
     while True:
-        # Poll until a new execution appears
-        while True:
-            execution = conversation_execution_manager.get_execution(conversation_id)
-            if execution is not None and execution.started_at != last_seen_started_at:
+        try:
+            event = await asyncio.wait_for(execution.event_queue.get(), timeout=_QUEUE_GET_TIMEOUT)
+        except TimeoutError:
+            if execution.status != ExecutionStatus.RUNNING:
                 break
-            await asyncio.sleep(_EXECUTION_POLL_INTERVAL)
+            continue
 
-        last_seen_started_at = execution.started_at
+        if event is None:
+            break
 
-        # Notify client that an execution is being consumed
-        await websocket.send_text(
-            ExecutionLifecycleEvent(event=ExecutionLifecycleEventType.EXECUTION_STARTED).model_dump_json()
-        )
+        await websocket.send_text(event.model_dump_json())
 
-        # Drain the event queue until sentinel or timeout with completed status
-        while True:
-            try:
-                event = await asyncio.wait_for(execution.event_queue.get(), timeout=_QUEUE_GET_TIMEOUT)
-            except TimeoutError:
-                # No new events — check if execution finished without us consuming sentinel
-                # (possible if a previous WS connection already consumed it)
-                if execution.status != ExecutionStatus.RUNNING:
-                    break
-                continue
+    # Send completion lifecycle event
+    await websocket.send_text(
+        ExecutionLifecycleEvent(
+            event=ExecutionLifecycleEventType.EXECUTION_COMPLETED,
+            status=execution.status,
+            error=execution.error,
+        ).model_dump_json()
+    )
 
-            if event is None:
-                # Sentinel — execution completed normally
-                break
+    # Server closes the connection — this execution is done
+    await websocket.close(code=1000, reason="Execution completed")
 
-            await websocket.send_text(event.model_dump_json())
 
-        # Send completion lifecycle event
-        await websocket.send_text(
-            ExecutionLifecycleEvent(
-                event=ExecutionLifecycleEventType.EXECUTION_COMPLETED,
-                status=execution.status,
-                error=execution.error,
-            ).model_dump_json()
-        )
+async def _wait_for_execution(conversation_id: int):
+    """Poll for an execution, returning it or None on timeout.
+
+    Accepts executions in any status — a recently completed execution may still
+    have events in its queue that a reconnecting WebSocket should drain.
+    """
+    elapsed = 0.0
+    while elapsed < _EXECUTION_START_TIMEOUT:
+        execution = conversation_execution_manager.get_execution(conversation_id)
+        if execution is not None:
+            return execution
+        await asyncio.sleep(_EXECUTION_POLL_INTERVAL)
+        elapsed += _EXECUTION_POLL_INTERVAL
+    return None
