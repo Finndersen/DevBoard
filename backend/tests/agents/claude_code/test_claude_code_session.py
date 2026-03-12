@@ -17,6 +17,7 @@ from devboard.agents.engines.claude_code.session.file_locator import (
     find_all_session_todo_files,
     find_main_session_todo_file,
     find_session_file,
+    find_sub_agent_session_file,
 )
 from devboard.agents.engines.claude_code.session.parser import is_message_entry, parse_session_message
 from devboard.agents.events import MetaMessageType
@@ -596,6 +597,73 @@ class TestClaudeCodeSessionService:
             result = find_all_session_todo_files(session_id, claude_todos_dir)
 
         assert result == []
+
+    def test_find_sub_agent_session_file_found(self, tmp_path):
+        """Test finding a sub-agent session file with correct path derivation."""
+        session_id = "parent-session-123"
+        agent_id = "ac2a274"
+        claude_projects_dir = tmp_path / "projects"
+        project_dir = claude_projects_dir / "my-project"
+        project_dir.mkdir(parents=True)
+
+        # Create parent session file
+        parent_file = project_dir / f"{session_id}.jsonl"
+        parent_file.write_text("{}")
+
+        # Create sub-agent file
+        subagents_dir = project_dir / session_id / "subagents"
+        subagents_dir.mkdir(parents=True)
+        sub_agent_file = subagents_dir / f"agent-{agent_id}.jsonl"
+        sub_agent_file.write_text("{}")
+
+        result = find_sub_agent_session_file(session_id, agent_id, claude_projects_dir)
+        assert result == sub_agent_file
+
+    def test_find_sub_agent_session_file_not_found(self, tmp_path):
+        """Test FileNotFoundError when sub-agent file doesn't exist."""
+        session_id = "parent-session-123"
+        agent_id = "nonexistent"
+        claude_projects_dir = tmp_path / "projects"
+        project_dir = claude_projects_dir / "my-project"
+        project_dir.mkdir(parents=True)
+
+        parent_file = project_dir / f"{session_id}.jsonl"
+        parent_file.write_text("{}")
+
+        with pytest.raises(FileNotFoundError, match="Sub-agent session file not found"):
+            find_sub_agent_session_file(session_id, agent_id, claude_projects_dir)
+
+    def test_find_sub_agent_session_file_rejects_path_traversal(self):
+        """Test that agent IDs with path traversal characters are rejected."""
+        claude_projects_dir = Path("/home/user/.claude/projects")
+
+        with pytest.raises(ValueError, match="Invalid agent_id"):
+            find_sub_agent_session_file("parent-session", "../../../etc/passwd", claude_projects_dir)
+
+        with pytest.raises(ValueError, match="Invalid agent_id"):
+            find_sub_agent_session_file("parent-session", "agent/../../secret", claude_projects_dir)
+
+        with pytest.raises(ValueError, match="Invalid agent_id"):
+            find_sub_agent_session_file("parent-session", "agent.id", claude_projects_dir)
+
+    def test_find_sub_agent_session_file_valid_agent_ids(self, tmp_path):
+        """Test that valid agent IDs are accepted."""
+        session_id = "parent-session"
+        claude_projects_dir = tmp_path / "projects"
+        project_dir = claude_projects_dir / "my-project"
+        project_dir.mkdir(parents=True)
+
+        parent_file = project_dir / f"{session_id}.jsonl"
+        parent_file.write_text("{}")
+
+        for valid_id in ["ac2a274", "abc-123", "AGENT1", "a1b2c3"]:
+            subagents_dir = project_dir / session_id / "subagents"
+            subagents_dir.mkdir(parents=True, exist_ok=True)
+            sub_file = subagents_dir / f"agent-{valid_id}.jsonl"
+            sub_file.write_text("{}")
+
+            result = find_sub_agent_session_file(session_id, valid_id, claude_projects_dir)
+            assert result == sub_file
 
     def test_todo_status_enum_values(self, service):
         """Test all TodoStatus enum values can be parsed."""

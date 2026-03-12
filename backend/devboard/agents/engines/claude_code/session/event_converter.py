@@ -28,7 +28,9 @@ from devboard.agents.events import (
 )
 
 
-def session_messages_to_events(session_messages: list[SessionMessage]) -> list[ConversationEvent]:
+def session_messages_to_events(
+    session_messages: list[SessionMessage], *, include_sidechain: bool = False
+) -> list[ConversationEvent]:
     """Convert session messages to conversation events.
 
     Expands each SessionMessage.content list into separate events, providing a complete
@@ -39,7 +41,7 @@ def session_messages_to_events(session_messages: list[SessionMessage]) -> list[C
     events: list[ConversationEvent] = []
     message_count = len(session_messages)
     for session_idx, session_msg in enumerate(session_messages):
-        if session_msg.is_sidechain:
+        if session_msg.is_sidechain and not include_sidechain:
             continue
 
         if isinstance(session_msg, MetaSessionMessage):

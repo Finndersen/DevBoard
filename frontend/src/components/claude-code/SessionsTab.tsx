@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ClaudeCodeProject, ClaudeCodeSession, SessionSearchResult } from '../../lib/api'
@@ -148,9 +149,10 @@ export default function SessionsTab() {
         <button
           onClick={handleRefresh}
           disabled={projectsLoading || sessionsLoading}
-          className={`text-xs ${textColors.accent} hover:underline disabled:opacity-50 shrink-0`}
+          className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 shrink-0"
+          title="Refresh projects and sessions"
         >
-          Refresh
+          <ArrowPathIcon className="w-4 h-4" />
         </button>
         <div className="w-64 shrink-0">
           <GoToSession onLocated={handleGoToSession} />
@@ -238,13 +240,11 @@ export default function SessionsTab() {
               {selectedSession?.task_info && (
                 <>
                   <span className="shrink-0">·</span>
-                  <span className="shrink-0">Task #{selectedSession.task_info.task_id}</span>
-                  <span className="shrink-0">·</span>
                   <button
                     onClick={() => navigate(`/tasks/${selectedSession.task_info!.task_id}`)}
                     className="text-blue-600 dark:text-blue-400 hover:underline truncate"
                   >
-                    {selectedSession.task_info.task_title}
+                    Task #{selectedSession.task_info.task_id}: {selectedSession.task_info.task_title}
                   </button>
                   <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                     {AGENT_ROLE_LABELS[selectedSession.task_info.agent_role] ?? selectedSession.task_info.agent_role}

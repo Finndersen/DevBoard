@@ -14,6 +14,7 @@ interface ConversationMessageListProps {
   showEmptyState: boolean
   codebaseLocalPath?: string
   highlightUuids?: string[]
+  sessionId?: string
 }
 
 interface SingleRenderItem {
@@ -55,7 +56,8 @@ function ConversationMessageList({
   emptyStateMessage,
   showEmptyState,
   codebaseLocalPath,
-  highlightUuids
+  highlightUuids,
+  sessionId,
 }: ConversationMessageListProps) {
   // Compute tool result mappings using useMemo
   // This creates a Map of cache keys to ToolResults, recomputed only when messages change
@@ -213,6 +215,7 @@ function ConversationMessageList({
           toolResultMap={toolResultMap}
           highlightSet={highlightSet}
           codebaseLocalPath={codebaseLocalPath}
+          sessionId={sessionId}
         />
       )
     }
@@ -233,6 +236,7 @@ function ConversationMessageList({
           isLatest={isLatest}
           isHighlighted={isHighlighted}
           codebaseLocalPath={codebaseLocalPath}
+          sessionId={sessionId}
         />
       </div>
     )
@@ -253,6 +257,7 @@ function ConversationMessageList({
                 isLatest={outerItem.index === lastMessageIndex}
                 isHighlighted={isHighlighted}
                 codebaseLocalPath={codebaseLocalPath}
+                sessionId={sessionId}
               />
             </div>
           )

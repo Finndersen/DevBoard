@@ -42,11 +42,12 @@ interface ConversationMessageProps {
   isLatest?: boolean
   isHighlighted?: boolean
   codebaseLocalPath?: string
+  sessionId?: string
 }
 
 const MAX_COLLAPSED_HEIGHT = 240 // ~10 lines at typical line height
 
-export default function ConversationMessageComponent({ message, toolResult, isLatest = false, isHighlighted = false, codebaseLocalPath }: ConversationMessageProps) {
+export default function ConversationMessageComponent({ message, toolResult, isLatest = false, isHighlighted = false, codebaseLocalPath, sessionId }: ConversationMessageProps) {
   const highlightRing = isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''
   // Handle different event types
   if (message.event_type === 'message') {
@@ -112,7 +113,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   }
 
   if (message.event_type === 'tool_call') {
-    return <ToolCallDisplay toolCall={message} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} />
+    return <ToolCallDisplay toolCall={message} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} />
   }
 
   // Tool results are rendered as part of their corresponding tool call

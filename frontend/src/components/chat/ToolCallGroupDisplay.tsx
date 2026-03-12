@@ -9,9 +9,10 @@ interface ToolCallGroupDisplayProps {
   toolResultMap: Map<string, ToolResult>
   highlightSet: Set<string>
   codebaseLocalPath?: string
+  sessionId?: string
 }
 
-function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLocalPath }: ToolCallGroupDisplayProps) {
+function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLocalPath, sessionId }: ToolCallGroupDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Auto-expand if any item in the group is highlighted
@@ -162,6 +163,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
                   toolResult={toolResult}
                   isHighlighted={isItemHighlighted}
                   codebaseLocalPath={codebaseLocalPath}
+                  sessionId={sessionId}
                 />
               </div>
             )

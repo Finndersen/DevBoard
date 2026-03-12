@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
+import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 
 import type { ToolCall, ToolResult } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
+
+import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
 
 import { getRichResultRenderer, tryParseToolResult, getCustomToolDisplay } from './toolResultRenderers'
 
@@ -11,10 +14,12 @@ interface ToolCallDisplayProps {
   toolResult?: ToolResult
   isHighlighted?: boolean
   codebaseLocalPath?: string
+  sessionId?: string
 }
 
-function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath }: ToolCallDisplayProps) {
+function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
   const hasResult = toolResult !== undefined
   const isError = toolResult?.is_error || false
   const hasArguments = toolCall.tool_args && Object.keys(toolCall.tool_args).length > 0
@@ -27,6 +32,15 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
       codebaseLocalPath
     )
   }, [toolCall.tool_name, toolCall.tool_args, codebaseLocalPath])
+
+  // Extract agentId from Task tool results
+  const subAgentInfo = useMemo(() => {
+    if (toolCall.tool_name !== 'Task' || !sessionId || !toolResult?.result_content) return null
+    const match = toolResult.result_content.match(/agentId:\s*(\S+)/)
+    if (!match) return null
+    const description = (toolCall.tool_args as Record<string, unknown> | null)?.description as string | undefined
+    return { agentId: match[1], description: description ?? 'Sub-agent conversation' }
+  }, [toolCall.tool_name, toolCall.tool_args, toolResult?.result_content, sessionId])
 
   // Determine status
   const status = isError ? 'error' : hasResult ? 'complete' : 'running'
@@ -94,6 +108,17 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
             {status === 'running' && (
               <span className="text-xs text-blue-600 dark:text-blue-400">Running...</span>
             )}
+            {/* View sub-agent conversation button */}
+            {subAgentInfo && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIsSubAgentModalOpen(true) }}
+                className="flex-shrink-0 p-0.5 rounded text-blue-500 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                title="View sub-agent conversation"
+              >
+                <ChatBubbleLeftRightIcon className="w-4 h-4" />
+              </button>
+            )}
           </div>
           {/* Expand/Collapse Chevron */}
           <svg
@@ -153,15 +178,24 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
             </div>
           )}
         </button>
+      {subAgentInfo && (
+        <SubAgentConversationModal
+          isOpen={isSubAgentModalOpen}
+          onClose={() => setIsSubAgentModalOpen(false)}
+          sessionId={sessionId!}
+          agentId={subAgentInfo.agentId}
+          title={subAgentInfo.description}
+        />
+      )}
     </div>
   )
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath }: ToolCallDisplayProps) {
+export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId }: ToolCallDisplayProps) {
   const CustomDisplay = getCustomToolDisplay(toolCall.tool_name)
   if (CustomDisplay) {
     return <CustomDisplay toolCall={toolCall} toolResult={toolResult} />
   }
 
-  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} />
+  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} />
 }

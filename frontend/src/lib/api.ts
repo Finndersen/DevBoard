@@ -1194,6 +1194,12 @@ export class ApiClient {
     return this.request<ConversationEvent[]>(`/api/claude-code/sessions/${encodeURIComponent(sessionId)}/messages`)
   }
 
+  async getClaudeCodeSubAgentMessages(sessionId: string, agentId: string): Promise<ConversationEvent[]> {
+    return this.request<ConversationEvent[]>(
+      `/api/claude-code/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}/messages`
+    )
+  }
+
   async locateClaudeCodeSession(sessionId: string): Promise<{ project_encoded_path: string }> {
     return this.request<{ project_encoded_path: string }>(`/api/claude-code/sessions/${encodeURIComponent(sessionId)}/locate`)
   }

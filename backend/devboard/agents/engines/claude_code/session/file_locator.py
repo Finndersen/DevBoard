@@ -1,8 +1,11 @@
 """File location utilities for Claude Code session and todo files."""
 
+import re
 from pathlib import Path
 
 import logfire
+
+_AGENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9\-]+$")
 
 
 def find_session_file(session_id: str, claude_projects_dir: Path) -> Path:
@@ -52,6 +55,30 @@ def find_main_session_todo_file(session_id: str, claude_todos_dir: Path) -> Path
         )
 
     return todo_file
+
+
+def find_sub_agent_session_file(parent_session_id: str, agent_id: str, claude_projects_dir: Path) -> Path:
+    """Find a sub-agent session file given the parent session ID and agent ID.
+
+    Sub-agent files are located at: <parent_session_dir>/<parent_session_id>/subagents/agent-<agent_id>.jsonl
+
+    Raises:
+        ValueError: If agent_id contains invalid characters (path traversal prevention)
+        FileNotFoundError: If the sub-agent session file does not exist
+    """
+    if not _AGENT_ID_PATTERN.match(agent_id):
+        raise ValueError(f"Invalid agent_id: {agent_id}")
+
+    parent_file = find_session_file(parent_session_id, claude_projects_dir)
+    sub_agent_file = parent_file.parent / parent_session_id / "subagents" / f"agent-{agent_id}.jsonl"
+
+    if not sub_agent_file.is_file():
+        raise FileNotFoundError(
+            f"Sub-agent session file not found: agent-{agent_id}.jsonl for session {parent_session_id}"
+        )
+
+    logfire.debug(f"Found sub-agent session file: {sub_agent_file}")
+    return sub_agent_file
 
 
 def find_all_session_todo_files(session_id: str, claude_todos_dir: Path) -> list[Path]:

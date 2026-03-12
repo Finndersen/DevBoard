@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render, mockNavigate } from '../../../test/utils'
 import ToolCallDisplay from '../ToolCallDisplay'
 import type { ToolCall, ToolResult } from '../../../lib/api'
+
+vi.mock('../../claude-code/SubAgentConversationModal', () => ({
+  default: ({ isOpen, sessionId, agentId, title }: { isOpen: boolean; onClose: () => void; sessionId: string; agentId: string; title: string }) => (
+    isOpen ? <div data-testid="sub-agent-modal" data-session-id={sessionId} data-agent-id={agentId}>{title}</div> : null
+  ),
+}))
 
 describe('ToolCallDisplay', () => {
   beforeEach(() => {
@@ -833,6 +839,156 @@ describe('ToolCallDisplay', () => {
       // Standard expandable content should never appear
       expect(screen.queryByText('Arguments:')).not.toBeInTheDocument()
       expect(screen.queryByText('Result:')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Sub-Agent Conversation Button', () => {
+    const taskToolCall: ToolCall = {
+      event_type: 'tool_call',
+      tool_call_id: 'call_task_1',
+      tool_name: 'Task',
+      tool_args: {
+        description: 'Investigate auth module',
+        prompt: 'Look into the auth module',
+        subagent_type: 'Explore',
+      },
+      timestamp: '2024-01-01T10:00:00Z',
+    }
+
+    const taskResultWithAgentId: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_task_1',
+      result_content: 'Task completed successfully\nagentId: ac2a274\nTotal cost: $0.05',
+      is_error: false,
+      timestamp: '2024-01-01T10:00:30Z',
+    }
+
+    const taskResultWithoutAgentId: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_task_1',
+      result_content: 'Task completed successfully',
+      is_error: false,
+      timestamp: '2024-01-01T10:00:30Z',
+    }
+
+    it('shows view conversation button when Task tool has agentId and sessionId', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          toolResult={taskResultWithAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      expect(screen.getByTitle('View sub-agent conversation')).toBeInTheDocument()
+    })
+
+    it('does not show view conversation button when sessionId is not provided', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          toolResult={taskResultWithAgentId}
+        />
+      )
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+
+    it('does not show view conversation button when result has no agentId', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          toolResult={taskResultWithoutAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+
+    it('does not show view conversation button for non-Task tools', () => {
+      const nonTaskToolCall: ToolCall = {
+        ...taskToolCall,
+        tool_name: 'search_codebase',
+      }
+
+      render(
+        <ToolCallDisplay
+          toolCall={nonTaskToolCall}
+          toolResult={taskResultWithAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+
+    it('does not show view conversation button when no result yet', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          sessionId="parent-session-123"
+        />
+      )
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+
+    it('opens sub-agent modal when view conversation button is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          toolResult={taskResultWithAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      await user.click(screen.getByTitle('View sub-agent conversation'))
+
+      const modal = screen.getByTestId('sub-agent-modal')
+      expect(modal).toBeInTheDocument()
+      expect(modal).toHaveAttribute('data-session-id', 'parent-session-123')
+      expect(modal).toHaveAttribute('data-agent-id', 'ac2a274')
+      expect(modal).toHaveTextContent('Investigate auth module')
+    })
+
+    it('does not toggle expand/collapse when view conversation button is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <ToolCallDisplay
+          toolCall={taskToolCall}
+          toolResult={taskResultWithAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      // Click the view conversation button
+      await user.click(screen.getByTitle('View sub-agent conversation'))
+
+      // Should NOT expand (stopPropagation should prevent it)
+      expect(screen.queryByText('Arguments:')).not.toBeInTheDocument()
+    })
+
+    it('uses fallback title when description is not in tool args', async () => {
+      const user = userEvent.setup()
+      const taskWithoutDescription: ToolCall = {
+        ...taskToolCall,
+        tool_args: { prompt: 'some prompt' },
+      }
+
+      render(
+        <ToolCallDisplay
+          toolCall={taskWithoutDescription}
+          toolResult={taskResultWithAgentId}
+          sessionId="parent-session-123"
+        />
+      )
+
+      await user.click(screen.getByTitle('View sub-agent conversation'))
+
+      const modal = screen.getByTestId('sub-agent-modal')
+      expect(modal).toHaveTextContent('Sub-agent conversation')
     })
   })
 })

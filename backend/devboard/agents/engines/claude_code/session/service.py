@@ -6,6 +6,7 @@ from devboard.agents.engines.claude_code.session.file_locator import (
     find_all_session_todo_files,
     find_main_session_todo_file,
     find_session_file,
+    find_sub_agent_session_file,
 )
 from devboard.agents.engines.claude_code.session.models import (
     SessionMessage,
@@ -32,6 +33,10 @@ class ClaudeCodeSessionService:
     def load_session_messages(self, session_id: str) -> list[SessionMessage]:
         session_file = find_session_file(session_id, self.claude_projects_dir)
         return load_session_messages_from_file(session_file)
+
+    def load_sub_agent_session_messages(self, parent_session_id: str, agent_id: str) -> list[SessionMessage]:
+        sub_agent_file = find_sub_agent_session_file(parent_session_id, agent_id, self.claude_projects_dir)
+        return load_session_messages_from_file(sub_agent_file)
 
     def load_todo_list(self, session_id: str, include_subagents: bool = False) -> list[TodoItem]:
         if include_subagents:

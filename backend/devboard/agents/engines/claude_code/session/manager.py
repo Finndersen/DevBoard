@@ -288,6 +288,16 @@ class ClaudeSessionManager:
         session_file = find_session_file(session_id, self.claude_projects_dir)
         return session_file.parent.name
 
+    async def get_sub_agent_messages(self, session_id: str, agent_id: str) -> list[ConversationEvent]:
+        """Load full conversation events for a sub-agent session.
+
+        Raises:
+            ValueError: If agent_id contains invalid characters.
+            FileNotFoundError: If the sub-agent session file cannot be found.
+        """
+        messages = self._session_service.load_sub_agent_session_messages(session_id, agent_id)
+        return session_messages_to_events(messages, include_sidechain=True)
+
     async def get_session_messages(self, session_id: str) -> list[ConversationEvent]:
         """Load full conversation events for a session.
 

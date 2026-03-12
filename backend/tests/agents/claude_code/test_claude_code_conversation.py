@@ -312,3 +312,71 @@ class TestMetaMessageEvents:
             timestamp=self._TIMESTAMP,
             uuid="test-uuid",
         )
+
+
+class TestSidechainFiltering:
+    """Test include_sidechain parameter of session_messages_to_events."""
+
+    _TIMESTAMP = datetime.datetime(2025, 10, 8, 15, 0, 0, tzinfo=datetime.UTC)
+
+    def test_sidechain_messages_skipped_by_default(self):
+        """Sidechain messages are filtered out by default."""
+        normal_msg = UserSessionMessage(
+            uuid="normal",
+            timestamp=self._TIMESTAMP,
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Normal message"}],
+        )
+        sidechain_msg = AssistantSessionMessage(
+            uuid="sidechain",
+            timestamp=self._TIMESTAMP,
+            line_num=2,
+            is_sidechain=True,
+            content=[{"type": "text", "text": "Sidechain message"}],
+        )
+
+        events = session_messages_to_events([normal_msg, sidechain_msg])
+
+        assert len(events) == 1
+        assert events[0].text_content == "Normal message"
+
+    def test_sidechain_messages_included_when_flag_set(self):
+        """Sidechain messages are included when include_sidechain=True."""
+        normal_msg = UserSessionMessage(
+            uuid="normal",
+            timestamp=self._TIMESTAMP,
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Normal message"}],
+        )
+        sidechain_msg = AssistantSessionMessage(
+            uuid="sidechain",
+            timestamp=self._TIMESTAMP,
+            line_num=2,
+            is_sidechain=True,
+            content=[{"type": "text", "text": "Sidechain message"}],
+        )
+
+        events = session_messages_to_events([normal_msg, sidechain_msg], include_sidechain=True)
+
+        assert len(events) == 2
+        assert events[0].text_content == "Normal message"
+        assert events[1].text_content == "Sidechain message"
+
+    def test_all_sidechain_messages_included(self):
+        """All sidechain messages are included, not just the first."""
+        messages = [
+            AssistantSessionMessage(
+                uuid=f"sc-{i}",
+                timestamp=self._TIMESTAMP,
+                line_num=i,
+                is_sidechain=True,
+                content=[{"type": "text", "text": f"Sidechain {i}"}],
+            )
+            for i in range(3)
+        ]
+
+        events = session_messages_to_events(messages, include_sidechain=True)
+
+        assert len(events) == 3

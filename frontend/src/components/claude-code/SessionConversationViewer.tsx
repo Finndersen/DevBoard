@@ -18,12 +18,14 @@ function MessagePane({
   messages,
   onRetry,
   highlightUuids,
+  sessionId,
 }: {
   loading: boolean
   error: string | null
   messages: ConversationEvent[]
   onRetry: () => void
   highlightUuids?: string[]
+  sessionId?: string
 }) {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
 
@@ -87,6 +89,7 @@ function MessagePane({
           emptyStateMessage="No messages in this session"
           showEmptyState={messages.length === 0}
           highlightUuids={highlightUuids}
+          sessionId={sessionId}
         />
       </div>
     </div>
@@ -146,6 +149,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
         messages={planMessages}
         onRetry={loadPlanMessages}
         highlightUuids={highlightUuids}
+        sessionId={sessionId}
       />
     )
   }
@@ -182,6 +186,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
             messages={planMessages}
             onRetry={loadPlanMessages}
             highlightUuids={highlightUuids}
+            sessionId={sessionId}
           />
         ) : (
           <MessagePane
@@ -189,6 +194,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
             error={implError}
             messages={implMessages}
             onRetry={loadImplMessages}
+            sessionId={linkedSessionId}
           />
         )}
       </div>

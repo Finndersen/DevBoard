@@ -81,6 +81,18 @@ async def get_session_messages(session_id: str) -> list[ConversationEvent]:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
+@router.get("/sessions/{session_id}/subagents/{agent_id}/messages", response_model=list[ConversationEvent])
+async def get_sub_agent_messages(session_id: str, agent_id: str) -> list[ConversationEvent]:
+    """Get full conversation event history for a sub-agent of a session."""
+    manager = _get_manager()
+    try:
+        return await manager.get_sub_agent_messages(session_id, agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 @router.get("/sessions/search", response_model=list[SessionSearchResultResponse])
 async def search_sessions(
     query: str = Query(..., description="Search pattern"),
