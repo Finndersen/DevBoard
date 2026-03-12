@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import { useAllTasks, useProjects } from '../hooks'
+import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { useAllTasks, useProjects, useRefetchOnTabActivation } from '../hooks'
 import { useModal } from '../hooks/useModal'
 import { useOpenPRs } from '../hooks/useGitHubPRs'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
@@ -39,8 +39,20 @@ export default function TasksList() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined)
   const { data: tasks, loading: tasksLoading, error: tasksError, refetch: refetchTasks } = useAllTasks(selectedProjectId)
   const { data: projects } = useProjects()
-  const { data: openPRsData } = useOpenPRs()
+  const { data: openPRsData, refetch: refetchOpenPRs } = useOpenPRs()
   const createTaskModal = useModal()
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([refetchTasks(), refetchOpenPRs()])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refetchTasks, refetchOpenPRs])
+
+  useRefetchOnTabActivation([refetchTasks, refetchOpenPRs])
 
   const prByTaskId = useMemo(() => {
     const map = new Map<number, OpenPRItem>()
@@ -99,6 +111,15 @@ export default function TasksList() {
         count={tasks?.length ?? 0}
         actions={
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh"
+              aria-label="Refresh tasks"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
             <div className="flex items-center gap-2">
               <FunnelIcon className="w-4 h-4 text-gray-500" />
               <select
@@ -122,7 +143,7 @@ export default function TasksList() {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden py-6 min-h-0">
-      {tasksLoading ? (
+      {tasksLoading && !tasks ? (
         <div className="flex justify-center items-center h-64">
           <div className={loadingSpinner}></div>
         </div>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useUIStore } from '../../stores/uiStore'
+import { TabContextProvider } from '../../contexts/TabContext'
 import Home from '../../views/Home'
 import TaskDetail from '../../views/TaskDetail'
 import ProjectDetail from '../../views/ProjectDetail'
@@ -54,24 +55,26 @@ export default function TabContentContainer() {
             ...(isActive ? {} : { inset: 0 }),
           }}
         >
-          {tab.type === 'home' && <Home />}
-          {tab.type === 'task' && (
-            <ConversationEventHandlerProvider>
-              <TaskDetail id={tab.entityId} />
-            </ConversationEventHandlerProvider>
-          )}
-          {tab.type === 'project' && (
-            <ConversationEventHandlerProvider>
-              <ProjectDetail id={tab.entityId} />
-            </ConversationEventHandlerProvider>
-          )}
-          {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
-          {tab.type === 'projects-list' && <ProjectsList />}
-          {tab.type === 'codebases-list' && <CodebasesList />}
-          {tab.type === 'tasks-list' && <TasksList />}
-          {tab.type === 'mcp-servers' && <MCPServersView />}
-          {tab.type === 'settings' && <Settings />}
-          {tab.type === 'claude-code' && <ClaudeCodeView />}
+          <TabContextProvider tabId={tab.id}>
+            {tab.type === 'home' && <Home />}
+            {tab.type === 'task' && (
+              <ConversationEventHandlerProvider>
+                <TaskDetail id={tab.entityId} />
+              </ConversationEventHandlerProvider>
+            )}
+            {tab.type === 'project' && (
+              <ConversationEventHandlerProvider>
+                <ProjectDetail id={tab.entityId} />
+              </ConversationEventHandlerProvider>
+            )}
+            {tab.type === 'codebase' && <CodebaseDetail id={tab.entityId} />}
+            {tab.type === 'projects-list' && <ProjectsList />}
+            {tab.type === 'codebases-list' && <CodebasesList />}
+            {tab.type === 'tasks-list' && <TasksList />}
+            {tab.type === 'mcp-servers' && <MCPServersView />}
+            {tab.type === 'settings' && <Settings />}
+            {tab.type === 'claude-code' && <ClaudeCodeView />}
+          </TabContextProvider>
         </div>
       )
     })
