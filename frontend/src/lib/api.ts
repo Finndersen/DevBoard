@@ -637,6 +637,7 @@ export interface ClaudeCodeSession {
   session_id: string
   label: string
   last_activity: string
+  start_time: string
   file_size: number
   is_empty: boolean
   linked_session_id: string | null

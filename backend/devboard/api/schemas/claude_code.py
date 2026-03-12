@@ -25,6 +25,7 @@ class ClaudeCodeSessionResponse(BaseModel):
     session_id: str
     label: str
     last_activity: datetime
+    start_time: datetime
     file_size: int
     is_empty: bool
     linked_session_id: str | None = None
