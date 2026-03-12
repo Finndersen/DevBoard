@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,11 @@ from devboard.integrations.shell import execute_shell_command
 _LABEL_SCAN_LIMIT = 50
 # Maximum length for session labels (characters)
 _LABEL_MAX_LENGTH = 200
+
+_IMPLEMENTATION_MESSAGE_PREFIX = "Implement the following plan:"
+_TRANSCRIPT_REF_PATTERN = re.compile(
+    r"read the full transcript at:\s+\S+/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl"
+)
 
 
 @dataclass
@@ -144,6 +150,20 @@ class ClaudeSessionManager:
             if filename_stem != internal_id and internal_id in all_session_ids:
                 plan_to_impl[internal_id] = filename_stem
 
+        # Build reverse mapping for O(1) lookup
+        impl_to_plan: dict[str, str] = {impl: plan for plan, impl in plan_to_impl.items()}
+
+        # Fallback: transcript-reference detection for sessions not yet linked via sessionId
+        for jsonl_file in jsonl_files:
+            session_id = jsonl_file.stem
+            if session_id in plan_to_impl or session_id in impl_to_plan:
+                continue
+            plan_id = self._extract_plan_session_id_from_transcript_ref(jsonl_file)
+            if plan_id and plan_id in all_session_ids:
+                impl_to_plan[session_id] = plan_id
+                if plan_id not in plan_to_impl:
+                    plan_to_impl[plan_id] = session_id
+
         sessions: list[ClaudeCodeSessionInfo] = []
         for jsonl_file in jsonl_files:
             session_id = jsonl_file.stem
@@ -159,16 +179,9 @@ class ClaudeSessionManager:
             if session_id in plan_to_impl:
                 session_role: str | None = "plan"
                 linked_session_id: str | None = plan_to_impl[session_id]
-            elif file_to_internal_id.get(session_id, session_id) != session_id:
-                # This is an implementation file (internal_id ≠ filename_stem)
-                # Only annotate if the referenced plan session exists
-                internal_id = file_to_internal_id[session_id]
-                if internal_id in all_session_ids:
-                    session_role = "implementation"
-                    linked_session_id = internal_id
-                else:
-                    session_role = None
-                    linked_session_id = None
+            elif session_id in impl_to_plan:
+                session_role = "implementation"
+                linked_session_id = impl_to_plan[session_id]
             else:
                 session_role = None
                 linked_session_id = None
@@ -190,7 +203,7 @@ class ClaudeSessionManager:
         return sessions
 
     def _extract_internal_session_id(self, jsonl_file: Path) -> str | None:
-        """Read the first JSON entry of a JSONL file and return its sessionId field."""
+        """Read session JSONL entries until a sessionId field is found."""
         try:
             with jsonl_file.open("r") as f:
                 for line in f:
@@ -198,7 +211,40 @@ class ClaudeSessionManager:
                     if not line:
                         continue
                     entry = json.loads(line)
-                    return entry.get("sessionId")
+                    session_id = entry.get("sessionId")
+                    if session_id is not None:
+                        return session_id
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+        return None
+
+    def _extract_plan_session_id_from_transcript_ref(self, jsonl_file: Path) -> str | None:
+        """Scan for the implementation phase user message and extract the plan session reference.
+
+        DevBoard's implementation phase agent receives a user message starting with
+        "Implement the following plan:" that also contains:
+        "read the full transcript at: /path/to/<plan-session-id>.jsonl"
+
+        Returns the plan session ID UUID if found, otherwise None.
+        """
+        try:
+            with jsonl_file.open("r") as f:
+                for i, line in enumerate(f):
+                    if i >= _LABEL_SCAN_LIMIT:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    entry = json.loads(line)
+                    if entry.get("type") != "user":
+                        continue
+                    content = entry.get("message", {}).get("content", "")
+                    text = self._extract_text_from_content(content)
+                    if not text.startswith(_IMPLEMENTATION_MESSAGE_PREFIX):
+                        continue
+                    match = _TRANSCRIPT_REF_PATTERN.search(text)
+                    if match:
+                        return match.group(1)
         except (OSError, json.JSONDecodeError, KeyError):
             pass
         return None

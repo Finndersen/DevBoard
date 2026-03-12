@@ -430,6 +430,81 @@ class TestLinkedSessions:
         assert by_id["impl-id"].session_role == "implementation"
         assert by_id["impl-id"].linked_session_id == "plan-id"
 
+    @pytest.mark.asyncio
+    async def test_file_history_snapshot_first_line_detected_correctly(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        """Sessions starting with file-history-snapshot (no sessionId) are detected via next entry."""
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        snapshot_entry = {"type": "file-history-snapshot", "files": []}
+        _write_jsonl(
+            project_dir / "sess-1.jsonl",
+            [snapshot_entry, _make_user_entry("Hello", session_id="sess-1")],
+        )
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        assert len(sessions) == 1
+        assert sessions[0].session_role is None
+        assert sessions[0].linked_session_id is None
+
+    @pytest.mark.asyncio
+    async def test_transcript_ref_links_implementation_to_plan(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        """Impl session with 'Implement the following plan:' message referencing plan JSONL is linked."""
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        plan_id = "b3c097c9-6212-452d-9a96-0036b096547f"
+        impl_id = "f32dd876-d42e-4911-adbf-3ba58cc38afb"
+
+        _write_jsonl(project_dir / f"{plan_id}.jsonl", [_make_user_entry("Plan task", session_id=plan_id)])
+        impl_message = (
+            f"Implement the following plan:\n\n...\n\n"
+            f"read the full transcript at: /Users/finn/.claude/projects/proj/{plan_id}.jsonl"
+        )
+        _write_jsonl(
+            project_dir / f"{impl_id}.jsonl",
+            [_make_user_entry(impl_message, session_id=impl_id)],
+        )
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        by_id = {s.session_id: s for s in sessions}
+        assert by_id[plan_id].session_role == "plan"
+        assert by_id[plan_id].linked_session_id == impl_id
+        assert by_id[impl_id].session_role == "implementation"
+        assert by_id[impl_id].linked_session_id == plan_id
+
+    @pytest.mark.asyncio
+    async def test_transcript_ref_ignored_when_plan_not_in_project(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path
+    ) -> None:
+        """Impl session referencing a plan session not present in the project is treated as standalone."""
+        project_dir = claude_projects_dir / "-Users-foo-proj"
+        project_dir.mkdir()
+        missing_plan_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        impl_id = "f32dd876-d42e-4911-adbf-3ba58cc38afb"
+
+        impl_message = (
+            f"Implement the following plan:\n\n...\n\n"
+            f"read the full transcript at: /Users/finn/.claude/projects/proj/{missing_plan_id}.jsonl"
+        )
+        _write_jsonl(
+            project_dir / f"{impl_id}.jsonl",
+            [_make_user_entry(impl_message, session_id=impl_id)],
+        )
+
+        with patch.object(manager, "_resolve_custom_titles", new=AsyncMock(return_value={})):
+            sessions = await manager.list_sessions("-Users-foo-proj")
+
+        assert len(sessions) == 1
+        assert sessions[0].session_role is None
+        assert sessions[0].linked_session_id is None
+
 
 class TestLocateSession:
     def test_returns_encoded_project_path_for_existing_session(
