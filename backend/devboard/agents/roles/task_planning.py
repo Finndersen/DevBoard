@@ -165,4 +165,15 @@ class TaskPlanningAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return ["WebFetch", "WebSearch", "Read", "Skill", "Bash"]
+        return [
+            "WebFetch",
+            "WebSearch",
+            "Read",
+            "Skill",
+            "Bash",
+            "TaskCreate",
+            "TaskGet",
+            "TaskUpdate",
+            "TaskList",
+            "Agent",
+        ]
