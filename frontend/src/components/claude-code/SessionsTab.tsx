@@ -13,8 +13,12 @@ export default function SessionsTab() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const selectedProjectPath = searchParams.get('project')
-  const selectedSessionId = searchParams.get('session')
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(
+    () => searchParams.get('project')
+  )
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    () => searchParams.get('session')
+  )
 
   const [projects, setProjects] = useState<ClaudeCodeProject[]>([])
   const [sessions, setSessions] = useState<ClaudeCodeSession[]>([])
@@ -25,7 +29,6 @@ export default function SessionsTab() {
   const [searchResults, setSearchResults] = useState<SessionSearchResult[]>([])
   const [searchQuery, setSearchQuery] = useState('')
 
-  const selectedProject = projects.find(p => p.encoded_path === selectedProjectPath) ?? null
   const selectedSession = sessions.find(s => s.session_id === selectedSessionId) ?? null
   const filteredSessions = excludeEmpty ? sessions.filter(s => !s.is_empty) : sessions
 
@@ -112,29 +115,27 @@ export default function SessionsTab() {
   }, [selectedProjectPath, loadSessions])
 
   const handleProjectSelect = (project: ClaudeCodeProject) => {
-    setSearchParams(prev => {
-      prev.set('tab', 'sessions')
-      prev.set('project', project.encoded_path)
-      prev.delete('session')
-      return prev
-    }, { replace: true })
+    setSelectedProjectPath(project.encoded_path)
+    setSelectedSessionId(null)
+    setSearchParams(prev => { prev.set('tab', 'sessions'); return prev }, { replace: true })
   }
 
   const handleSessionSelect = (session: ClaudeCodeSession) => {
-    setSearchParams(prev => {
-      prev.set('session', session.session_id)
-      return prev
-    }, { replace: true })
+    setSelectedSessionId(session.session_id)
   }
+
+  const handleRefresh = useCallback(() => {
+    loadProjects()
+    if (selectedProjectPath) {
+      loadSessions(selectedProjectPath)
+    }
+  }, [loadProjects, loadSessions, selectedProjectPath])
 
   const handleGoToSession = (sessionId: string, projectEncodedPath: string) => {
     setSearchResults([])
     setSearchQuery('')
-    setSearchParams(prev => {
-      prev.set('project', projectEncodedPath)
-      prev.set('session', sessionId)
-      return prev
-    }, { replace: true })
+    setSelectedProjectPath(projectEncodedPath)
+    setSelectedSessionId(sessionId)
   }
 
   return (
@@ -144,10 +145,13 @@ export default function SessionsTab() {
         <p className={`text-sm ${textColors.secondary} flex-1 min-w-0 truncate`}>
           Browse and search Claude Code project session histories
         </p>
-        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
-          Hide empty
-        </label>
+        <button
+          onClick={handleRefresh}
+          disabled={projectsLoading || sessionsLoading}
+          className={`text-xs ${textColors.accent} hover:underline disabled:opacity-50 shrink-0`}
+        >
+          Refresh
+        </button>
         <div className="w-64 shrink-0">
           <GoToSession onLocated={handleGoToSession} />
         </div>
@@ -191,8 +195,12 @@ export default function SessionsTab() {
       {/* Middle panel: Sessions */}
       {selectedProjectPath && (
         <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center justify-between">
             <h2 className={`text-sm font-semibold ${textColors.primary}`}>Sessions</h2>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+              <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
+              Hide empty
+            </label>
           </div>
           <div className="flex-1 overflow-y-auto">
             <SessionListPanel
@@ -215,6 +223,18 @@ export default function SessionsTab() {
             </h2>
             <div className={`flex items-center gap-2 text-xs ${textColors.muted} min-w-0`}>
               <span className="font-mono truncate">{selectedSessionId}</span>
+              {selectedSession?.session_role === 'plan' && selectedSession?.linked_session_id && (
+                <>
+                  <span className="shrink-0">|</span>
+                  <span className="font-mono truncate">{selectedSession.linked_session_id}</span>
+                </>
+              )}
+              {selectedSession?.start_time && (
+                <>
+                  <span className="shrink-0">·</span>
+                  <span className="shrink-0">{new Date(selectedSession.start_time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </>
+              )}
               {selectedSession?.task_info && (
                 <>
                   <span className="shrink-0">·</span>
