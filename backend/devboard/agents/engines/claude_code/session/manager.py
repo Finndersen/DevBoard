@@ -10,6 +10,7 @@ from devboard.agents.engines.claude_code.config_parser import ClaudeConfigParser
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
+from devboard.agents.engines.claude_code.session.parser import _HOOK_MESSAGE_TAGS
 from devboard.agents.engines.claude_code.session.service import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
 from devboard.integrations.shell import execute_shell_command
@@ -18,13 +19,6 @@ from devboard.integrations.shell import execute_shell_command
 _LABEL_SCAN_LIMIT = 50
 # Maximum length for session labels (characters)
 _LABEL_MAX_LENGTH = 200
-# Prefixes that indicate a non-genuine user message (hook-injected or system messages)
-_HOOK_MESSAGE_TAGS = (
-    "<command-name>",
-    "<local-command-caveat>",
-    "<local-command-stdout>",
-    "[Request interrupted by user for tool use]",
-)
 
 
 @dataclass
@@ -48,6 +42,7 @@ class ClaudeCodeSessionInfo:
     label: str
     last_activity: datetime
     file_size: int
+    start_time: datetime
     is_empty: bool
     linked_session_id: str | None = None
     session_role: str | None = None  # "plan" | "implementation" | None
@@ -153,8 +148,6 @@ class ClaudeSessionManager:
         for jsonl_file in jsonl_files:
             session_id = jsonl_file.stem
             stat = jsonl_file.stat()
-            last_activity = datetime.fromtimestamp(stat.st_mtime)
-            file_size = stat.st_size
 
             if session_id in custom_titles:
                 label = custom_titles[session_id]
@@ -184,8 +177,9 @@ class ClaudeSessionManager:
                 ClaudeCodeSessionInfo(
                     session_id=session_id,
                     label=label,
-                    last_activity=last_activity,
-                    file_size=file_size,
+                    last_activity=datetime.fromtimestamp(stat.st_mtime),
+                    file_size=stat.st_size,
+                    start_time=datetime.fromtimestamp(getattr(stat, "st_birthtime", stat.st_ctime)),
                     is_empty=is_empty,
                     linked_session_id=linked_session_id,
                     session_role=session_role,

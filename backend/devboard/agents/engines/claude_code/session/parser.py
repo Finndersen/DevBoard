@@ -16,6 +16,13 @@ from devboard.agents.engines.claude_code.session.models import (
 from devboard.agents.engines.claude_code.session.types import MessageEntry, TextBlockDict, ToolResultBlockDict
 from devboard.agents.events import MetaMessageType
 
+_HOOK_MESSAGE_TAGS = (
+    "<command-name>",
+    "<local-command-caveat>",
+    "<local-command-stdout>",
+    "[Request interrupted by user for tool use]",
+)
+
 
 def is_message_entry(entry: dict[str, Any]) -> bool:
     """Check if a raw JSONL entry is a user or assistant message."""
@@ -28,7 +35,7 @@ def is_message_entry(entry: dict[str, Any]) -> bool:
 
 def parse_session_message(
     entry: MessageEntry, line_num: int
-) -> UserSessionMessage | AssistantSessionMessage | MetaSessionMessage:
+) -> UserSessionMessage | AssistantSessionMessage | MetaSessionMessage | None:
     """Parse a message entry into the appropriate session message type.
 
     Callers must verify the entry is a message type using is_message_entry()
@@ -57,6 +64,8 @@ def parse_session_message(
                 )
             else:
                 text = ""
+            if meta_type == MetaMessageType.SKILL_CONTENT and any(text.startswith(tag) for tag in _HOOK_MESSAGE_TAGS):
+                return None
             return MetaSessionMessage(
                 uuid=uuid,
                 timestamp=timestamp,
@@ -102,7 +111,9 @@ def load_session_messages_from_file(session_file: Path) -> list[SessionMessage]:
             try:
                 entry = json.loads(line)
                 if is_message_entry(entry):
-                    messages.append(parse_session_message(entry, line_num=line_num))
+                    msg = parse_session_message(entry, line_num=line_num)
+                    if msg is not None:
+                        messages.append(msg)
             except (json.JSONDecodeError, KeyError, ValueError) as e:
                 logfire.warning(f"Skipping malformed JSONL entry at line {line_num}: {e}")
                 continue
@@ -121,6 +132,8 @@ def get_last_session_message_from_file(session_file: Path) -> SessionMessage | N
             continue
         entry = json.loads(line)
         if is_message_entry(entry):
-            return parse_session_message(entry, line_num=i + 1)
+            msg = parse_session_message(entry, line_num=i + 1)
+            if msg is not None:
+                return msg
 
     return None
