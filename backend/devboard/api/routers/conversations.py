@@ -11,7 +11,7 @@ from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
-from devboard.api.dependencies import resolve_dependency
+from devboard.api.dependencies import call_with_dependencies
 from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
@@ -90,7 +90,9 @@ async def _stream_agent_response(
     agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(message_or_approvals)
 
     if isinstance(conversation_parent, Task):
-        workspace_allocation_service = await resolve_dependency(get_workspace_allocation_service, request=http_request)
+        workspace_allocation_service = await call_with_dependencies(
+            get_workspace_allocation_service, request=http_request
+        )
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream
         )

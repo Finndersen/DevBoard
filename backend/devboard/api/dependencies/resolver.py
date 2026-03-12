@@ -23,7 +23,7 @@ from fastapi.dependencies.utils import get_dependant, solve_dependencies
 from starlette.requests import Request
 
 
-async def resolve_dependency[T](
+async def call_with_dependencies[T](
     func: Callable[..., T],
     *,
     request: Request,

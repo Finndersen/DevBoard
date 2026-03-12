@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi import Depends
 
-from devboard.api.dependencies.resolver import DependencyResolver, resolve_dependency
+from devboard.api.dependencies.resolver import DependencyResolver, call_with_dependencies
 
 
 # Test dependencies
@@ -37,7 +37,7 @@ class TestResolveDependency:
             "dependency_cache": {},
         }
 
-        result = await resolve_dependency(get_simple_dep, request=mock_request)
+        result = await call_with_dependencies(get_simple_dep, request=mock_request)
 
         assert result == "resolved_value"
         await exit_stack.__aexit__(None, None, None)
@@ -54,7 +54,7 @@ class TestResolveDependency:
             "dependency_cache": {},
         }
 
-        result = await resolve_dependency(get_chained_dep, request=mock_request)
+        result = await call_with_dependencies(get_chained_dep, request=mock_request)
 
         assert result == {"simple": "resolved_value"}
         await exit_stack.__aexit__(None, None, None)
@@ -81,8 +81,8 @@ class TestResolveDependency:
         def uses_counting(val: int = Depends(counting_dep)) -> int:
             return val
 
-        result1 = await resolve_dependency(uses_counting, request=mock_request)
-        result2 = await resolve_dependency(uses_counting, request=mock_request)
+        result1 = await call_with_dependencies(uses_counting, request=mock_request)
+        result2 = await call_with_dependencies(uses_counting, request=mock_request)
 
         # The sub-dependency (counting_dep) should be cached across calls
         assert result1 == result2 == 1
@@ -97,7 +97,7 @@ class TestResolveDependency:
         mock_request.scope = {}
 
         with pytest.raises(RuntimeError, match="missing 'fastapi_inner_astack'"):
-            await resolve_dependency(get_simple_dep, request=mock_request)
+            await call_with_dependencies(get_simple_dep, request=mock_request)
 
 
 class TestDependencyResolver:
