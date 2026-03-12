@@ -39,7 +39,9 @@ export default function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
-      <CreateTaskModal isOpen={createTaskModalOpen} onClose={closeCreateTaskModal} />
+      {createTaskModalOpen && (
+        <CreateTaskModal isOpen={createTaskModalOpen} onClose={closeCreateTaskModal} />
+      )}
     </div>
   )
 }
