@@ -8,7 +8,7 @@ import type { RichResultRendererProps } from './index'
 
 interface SubAgentResultData {
   result: string
-  session_id: string | null
+  session_id: number | null
 }
 
 function isSubAgentResultData(data: unknown): data is SubAgentResultData {
@@ -19,7 +19,7 @@ function isSubAgentResultData(data: unknown): data is SubAgentResultData {
   const obj = data as Record<string, unknown>
   return (
     typeof obj.result === 'string' &&
-    (obj.session_id === null || typeof obj.session_id === 'string')
+    (obj.session_id === null || typeof obj.session_id === 'number')
   )
 }
 
@@ -39,7 +39,7 @@ export default function SubAgentResultRenderer({ data }: RichResultRendererProps
       </div>
       {data.session_id !== null && (
         <div className="mt-2 text-[11px] text-gray-400 dark:text-gray-500 font-mono select-text">
-          Session: {data.session_id}
+          Conversation: {data.session_id}
         </div>
       )}
     </div>
