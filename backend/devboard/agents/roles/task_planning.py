@@ -25,6 +25,7 @@ Defines an atomic piece of work from a product/user perspective. **Be concise â€
 - Relevant background context of current state
 - Functional requirements and constraints
 - Important design decisions or specifications (e.g. data model, schemas)
+- Rich visual/structured content where it aids clarity: tables for comparing options or listing fields/properties, Mermaid diagrams for component relationships or data flows, ASCII/text layout mockups for UI features
 
 **Exclude:**
 - Implementation details or steps (reserved for Implementation Plan)
