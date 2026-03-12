@@ -3,7 +3,6 @@
 import logfire
 
 from devboard.db.models.task import Task
-from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import RebaseConflictError, ShellCommandExecutionError
 from devboard.services.task_git.types import BaseBranchChanges, RebaseOutcome, RebaseResult
@@ -14,13 +13,8 @@ class TaskRebaseCoordinator:
 
     REBASE_STASH_MESSAGE_PREFIX = "DevBoard: rebase stash for task"
 
-    def __init__(self, worktree_slot_repo: WorktreeSlotRepository):
-        self.worktree_slot_repo = worktree_slot_repo
-
-    def _get_rebase_stash_message(self, task_id: int) -> str:
-        return f"{self.REBASE_STASH_MESSAGE_PREFIX} {task_id}"
-
-    async def rebase_task_branch(self, task: Task) -> RebaseResult:
+    @classmethod
+    async def rebase_task_branch(cls, task: Task) -> RebaseResult:
         """Rebase a task's branch onto its base branch (idempotent).
 
         Handles the complete rebase lifecycle:
@@ -35,25 +29,26 @@ class TaskRebaseCoordinator:
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch name configured")
 
-        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        last_used_slot = task.last_used_worktree_slot
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
 
         git = GitRepoIntegration(repo_path)
-        stash_message = self._get_rebase_stash_message(task.id)
+        stash_message = f"{cls.REBASE_STASH_MESSAGE_PREFIX} {task.id}"
 
         if git.is_rebase_in_progress():
-            return await self._continue_rebase(task, git, repo_path, stash_message)
+            return await cls._continue_rebase(task, git, repo_path, stash_message)
 
-        return await self._start_rebase(task, git, repo_path, stash_message)
+        return await cls._start_rebase(task, git, repo_path, stash_message)
 
+    @classmethod
     async def _continue_rebase(
-        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
+        cls, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
     ) -> RebaseResult:
         """Continue an in-progress rebase."""
         try:
             new_head = await git.rebase_continue()
             logfire.info(f"Rebase continued successfully for task {task.id}")
-            return await self._apply_rebase_stash_if_exists(task, git, repo_path, stash_message, new_head)
+            return await cls._apply_rebase_stash_if_exists(task, git, repo_path, stash_message, new_head)
         except RebaseConflictError:
             conflicted_files = await git.get_conflicted_files()
             has_pending_stash = await git.find_stash_by_message(stash_message) is not None
@@ -64,8 +59,9 @@ class TaskRebaseCoordinator:
                 has_pending_stash=has_pending_stash,
             )
 
+    @classmethod
     async def _start_rebase(
-        self, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
+        cls, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
     ) -> RebaseResult:
         """Start a new rebase operation."""
         if await git.has_uncommitted_changes():
@@ -104,7 +100,7 @@ class TaskRebaseCoordinator:
         try:
             new_head = await git.rebase_branch(task.branch_name, task.base_branch, abort_on_conflict=False)
             logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
-            return await self._apply_rebase_stash_if_exists(
+            return await cls._apply_rebase_stash_if_exists(
                 task, git, repo_path, stash_message, new_head, base_branch_changes
             )
         except RebaseConflictError:
@@ -119,8 +115,9 @@ class TaskRebaseCoordinator:
                 base_branch_changes=base_branch_changes,
             )
 
+    @classmethod
     async def _apply_rebase_stash_if_exists(
-        self,
+        cls,
         task: Task,
         git: GitRepoIntegration,
         repo_path: str,

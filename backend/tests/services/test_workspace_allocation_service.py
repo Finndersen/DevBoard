@@ -29,10 +29,9 @@ def mock_repos():
 @pytest.fixture
 def service(mock_repos):
     """Create service instance with mocked repos."""
-    worktree_slot_repo, task_repo, conversation_repo = mock_repos
+    worktree_slot_repo, _, conversation_repo = mock_repos
     service = WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
-        task_repo=task_repo,
         conversation_repo=conversation_repo,
     )
     # Mock TaskGitService.ensure_task_branch to avoid git operations in tests
@@ -514,7 +513,7 @@ async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
     # Mock that this task previously used this slot
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     # Mock git operations and worktree validation
     with (
@@ -561,7 +560,7 @@ async def test_run_task_agent_in_workspace_migration_called_for_sticky_slot(
     sample_slot.last_used_by_task_id = sample_task.id
     worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
     worktree_slot_repo.lock_slot.return_value = sample_slot
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     # Setup: Active Claude Code conversation with session
     mock_conversation = MagicMock()
@@ -823,11 +822,7 @@ def task_git_service(mock_repos):
     """Create TaskGitService instance with mocked repos."""
     from devboard.services.task_git_service import TaskGitService
 
-    worktree_slot_repo, task_repo, _ = mock_repos
-    return TaskGitService(
-        task_repo=task_repo,
-        worktree_slot_repo=worktree_slot_repo,
-    )
+    return TaskGitService()
 
 
 @pytest.mark.asyncio
@@ -919,7 +914,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
     worktree_slot_repo, _, _ = mock_repos
 
     # Setup: Task has a worktree slot
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
@@ -960,7 +955,7 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
@@ -997,7 +992,7 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()
@@ -1031,7 +1026,7 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
-    worktree_slot_repo.get_last_used_slot_for_task.return_value = sample_slot
+    sample_task.last_used_worktree_slot = sample_slot
 
     with patch("devboard.services.task_git.rebase_coordinator.GitRepoIntegration") as mock_git_class:
         mock_git = AsyncMock()

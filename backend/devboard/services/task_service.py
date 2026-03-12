@@ -18,7 +18,6 @@ from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStat
 from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
-from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.conversation_service import ConversationService
 from devboard.services.task_git_service import MergeOutcome, MergeResult, TaskGitService
@@ -36,22 +35,11 @@ class TaskService:
         conversation_service: ConversationService,
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
-        worktree_slot_repo: WorktreeSlotRepository,
         custom_field_repo: CustomFieldRepository,
     ):
-        """Initialize service.
-
-        Args:
-            conversation_service: Service for conversation operations
-            document_repo: Repository for document operations
-            task_repo: Repository for task operations
-            worktree_slot_repo: Repository for worktree slot operations
-            custom_field_repo: Repository for custom field operations
-        """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
-        self.worktree_slot_repo = worktree_slot_repo
         self.custom_field_repo = custom_field_repo
 
     def _generate_branch_name(self, title: str) -> str:
@@ -205,9 +193,9 @@ class TaskService:
         self.task_repo.delete(task)
 
         # 4. Delete git branch if requested
-        task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
         if delete_branch:
             try:
+                task_git_service = TaskGitService()
                 await task_git_service.delete_task_branch(task, force=True)
             except Exception as e:
                 # Log error but don't fail task deletion
@@ -297,7 +285,7 @@ class TaskService:
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch configured")
 
-        task_git_service = TaskGitService(task_repo=self.task_repo, worktree_slot_repo=self.worktree_slot_repo)
+        task_git_service = TaskGitService()
         merge_result = await task_git_service.merge_task_feature_branch(task)
 
         # SUCCESS, SKIPPED (already merged), and STASH_CONFLICT (merge succeeded, WIP restore had conflicts) are all acceptable

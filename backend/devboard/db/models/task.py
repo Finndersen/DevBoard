@@ -83,11 +83,18 @@ class Task(Base):
         """
         return next((slot for slot in self.worktree_slots if slot.locked), None)
 
+    @property
+    def last_used_worktree_slot(self) -> "WorktreeSlot | None":
+        """Get the most recently used worktree slot for this task."""
+        if not self.worktree_slots:
+            return None
+        return max(self.worktree_slots, key=lambda s: s.last_used_at)
+
     def get_current_workspace_dir(self) -> str:
         """Get the workspace directory for this task, and raise exception if workspace is not allocated"""
         allocated_workspace = self.current_worktree_slot
         if not allocated_workspace:
-            raise NoWorktreeAllocatedException("Workspace not allocated for task #{self.id}")
+            raise NoWorktreeAllocatedException(f"Workspace not allocated for task {self.id}")
         return allocated_workspace.path
 
     # Valid status transitions: from_status -> set of allowed target statuses

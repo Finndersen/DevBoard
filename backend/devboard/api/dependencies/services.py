@@ -115,12 +115,9 @@ def get_conversation_service(
     )
 
 
-def get_task_git_service(
-    task_repo: TaskRepository = Depends(get_task_repository),
-    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
-) -> TaskGitService:
+def get_task_git_service() -> TaskGitService:
     """Get TaskGitService instance."""
-    return TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
+    return TaskGitService()
 
 
 def get_pool_manager(
@@ -135,7 +132,6 @@ def get_pool_manager(
 
 def get_workspace_allocation_service(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
-    task_repo: TaskRepository = Depends(get_task_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     config_service: ConfigService = Depends(get_config_service),
 ) -> WorkspaceAllocationService:
@@ -144,7 +140,6 @@ def get_workspace_allocation_service(
     worktree_directory = config.worktree_directory if config else "central"
     return WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
-        task_repo=task_repo,
         conversation_repo=conversation_repo,
         worktree_directory=worktree_directory,
     )
@@ -154,7 +149,6 @@ def get_task_service(
     conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
-    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
     """Get TaskService instance."""
@@ -162,7 +156,6 @@ def get_task_service(
         conversation_service=conversation_service,
         document_repo=document_repo,
         task_repo=task_repo,
-        worktree_slot_repo=worktree_slot_repo,
         custom_field_repo=custom_field_repo,
     )
 

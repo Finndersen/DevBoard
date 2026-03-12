@@ -27,7 +27,7 @@ def mock_task_git_service():
 class TestGetTaskChangesPromptContext:
     @pytest.mark.asyncio
     async def test_no_worktree_slot_returns_fallback(self, mock_task_git_service, mock_task):
-        mock_task_git_service.worktree_slot_repo.get_last_used_slot_for_task.return_value = None
+        mock_task.last_used_worktree_slot = None
 
         result = await _get_task_changes_prompt_context(mock_task_git_service, mock_task)
 
@@ -38,7 +38,7 @@ class TestGetTaskChangesPromptContext:
 
     @pytest.mark.asyncio
     async def test_worktree_with_uncommitted_changes(self, mock_task_git_service, mock_task):
-        mock_task_git_service.worktree_slot_repo.get_last_used_slot_for_task.return_value = Mock(path="/tmp/slot")
+        mock_task.last_used_worktree_slot = Mock(path="/tmp/slot")
         mock_task_git_service.get_task_commit_metadata.return_value = [
             GitLogEntry(hash="abc1234", author="Test", date="2024-01-01", subject="First commit"),
             GitLogEntry(hash="def5678", author="Test", date="2024-01-02", subject="Second commit"),
@@ -61,7 +61,7 @@ class TestGetTaskChangesPromptContext:
 
     @pytest.mark.asyncio
     async def test_worktree_with_no_uncommitted_changes(self, mock_task_git_service, mock_task):
-        mock_task_git_service.worktree_slot_repo.get_last_used_slot_for_task.return_value = Mock(path="/tmp/slot")
+        mock_task.last_used_worktree_slot = Mock(path="/tmp/slot")
         mock_task_git_service.get_task_commit_metadata.return_value = [
             GitLogEntry(hash="abc1234", author="Test", date="2024-01-01", subject="Implement feature"),
         ]
@@ -80,7 +80,7 @@ class TestGetTaskChangesPromptContext:
 
     @pytest.mark.asyncio
     async def test_worktree_with_no_commits(self, mock_task_git_service, mock_task):
-        mock_task_git_service.worktree_slot_repo.get_last_used_slot_for_task.return_value = Mock(path="/tmp/slot")
+        mock_task.last_used_worktree_slot = Mock(path="/tmp/slot")
         mock_task_git_service.get_task_commit_metadata.return_value = []
         mock_task_git_service.get_task_uncommitted_changes.return_value = StructuredDiff(
             files=[

@@ -30,7 +30,7 @@ from devboard.db.models.project import Project
 from devboard.db.models.task import Task
 from devboard.db.repositories import ConversationRepository
 from devboard.integrations.types import FileDiff, StructuredDiff
-from devboard.services.task_git.diff_service import TaskDiffService
+from devboard.services.task_git.service import TaskGitService
 
 
 @pytest.fixture
@@ -742,8 +742,8 @@ class TestCreateCodeReviewTool:
         return task
 
     @pytest.fixture
-    def mock_task_diff_service(self):
-        return Mock(spec=TaskDiffService)
+    def mock_task_git_service(self):
+        return Mock(spec=TaskGitService)
 
     @pytest.fixture
     def mock_conv_repo(self):
@@ -754,13 +754,13 @@ class TestCreateCodeReviewTool:
         return repo
 
     def test_tool_creation_returns_correct_name(
-        self, mock_task, mock_agent_config_service, mock_task_diff_service, mock_conv_repo
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
     ):
         """Test tool is created with name 'review_code_changes'."""
         tool = create_code_review_tool(
             mock_task,
             mock_agent_config_service,
-            mock_task_diff_service,
+            mock_task_git_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
         )
@@ -770,17 +770,17 @@ class TestCreateCodeReviewTool:
 
     @pytest.mark.asyncio
     async def test_empty_diff_returns_early_without_running_subagent(
-        self, mock_task, mock_agent_config_service, mock_task_diff_service, mock_conv_repo
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
     ):
         """Test that empty diff returns early message without invoking subagent."""
-        mock_task_diff_service.get_task_all_changes = AsyncMock(
+        mock_task_git_service.get_task_all_changes = AsyncMock(
             return_value=StructuredDiff(files=[], additions=0, deletions=0)
         )
 
         tool = create_code_review_tool(
             mock_task,
             mock_agent_config_service,
-            mock_task_diff_service,
+            mock_task_git_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
         )
@@ -795,7 +795,7 @@ class TestCreateCodeReviewTool:
 
     @pytest.mark.asyncio
     async def test_review_calls_run_sub_agent_with_code_review_role_type(
-        self, mock_task, mock_agent_config_service, mock_task_diff_service, mock_conv_repo
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
     ):
         """Test that run_sub_agent is called with CODE_REVIEW role type and correct params."""
         file_diff = FileDiff(
@@ -804,14 +804,14 @@ class TestCreateCodeReviewTool:
             additions=1,
             deletions=0,
         )
-        mock_task_diff_service.get_task_all_changes = AsyncMock(
+        mock_task_git_service.get_task_all_changes = AsyncMock(
             return_value=StructuredDiff(files=[file_diff], additions=1, deletions=0)
         )
 
         tool = create_code_review_tool(
             mock_task,
             mock_agent_config_service,
-            mock_task_diff_service,
+            mock_task_git_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=456,
         )
@@ -836,7 +836,7 @@ class TestCreateCodeReviewTool:
 
     @pytest.mark.asyncio
     async def test_prompt_includes_spec_plan_and_diff(
-        self, mock_task, mock_agent_config_service, mock_task_diff_service, mock_conv_repo
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
     ):
         """Test that the prompt contains spec, implementation plan, and diff content."""
         file_diff = FileDiff(
@@ -845,14 +845,14 @@ class TestCreateCodeReviewTool:
             additions=1,
             deletions=0,
         )
-        mock_task_diff_service.get_task_all_changes = AsyncMock(
+        mock_task_git_service.get_task_all_changes = AsyncMock(
             return_value=StructuredDiff(files=[file_diff], additions=1, deletions=0)
         )
 
         tool = create_code_review_tool(
             mock_task,
             mock_agent_config_service,
-            mock_task_diff_service,
+            mock_task_git_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
         )

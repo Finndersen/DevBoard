@@ -4,11 +4,8 @@ import logfire
 
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import Task
-from devboard.db.repositories.task import TaskRepository
-from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
-from devboard.integrations.types import GitLogEntry
-from devboard.services.task_git.diff_service import TaskDiffService
+from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
 from devboard.services.task_git.merge_strategy import get_merge_strategy
 from devboard.services.task_git.rebase_coordinator import TaskRebaseCoordinator
 from devboard.services.task_git.types import MergeOutcome, MergeResult, RebaseResult, TaskDiffView, TaskGitStatus
@@ -16,17 +13,6 @@ from devboard.services.task_git.types import MergeOutcome, MergeResult, RebaseRe
 
 class TaskGitService:
     """Service for task git operations."""
-
-    def __init__(self, task_repo: TaskRepository, worktree_slot_repo: WorktreeSlotRepository):
-        """Initialize service.
-
-        Args:
-            task_repo: Task repository for updating task.branch_name
-            worktree_slot_repo: Worktree slot repository for finding task worktree slots
-        """
-        self.task_repo = task_repo
-        self.worktree_slot_repo = worktree_slot_repo
-        self._diff_service = TaskDiffService(worktree_slot_repo)
 
     async def ensure_task_branch(self, task: Task) -> str:
         """Ensure task's git branch exists, creating it if necessary.
@@ -64,7 +50,7 @@ class TaskGitService:
 
     async def get_task_git_status(self, task: Task) -> TaskGitStatus:
         """Get git status for a task's branch."""
-        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        last_used_slot = task.last_used_worktree_slot
         worktree_slot_path = last_used_slot.path if last_used_slot else None
 
         main_git = GitRepoIntegration(task.codebase.local_path)
@@ -138,28 +124,72 @@ class TaskGitService:
         await git.delete_branch(task.branch_name, force=force)
         logfire.info(f"Deleted branch {task.branch_name} for task {task.id}")
 
-    # Diff operations — delegate to TaskDiffService
+    async def get_task_all_changes(self, task: Task) -> StructuredDiff:
+        """Get all changes for a task (from merge base to current state).
 
-    async def get_task_all_changes(self, task: Task):
-        return await self._diff_service.get_task_all_changes(task)
+        If a worktree slot exists, this includes committed changes plus uncommitted changes.
+        If no worktree slot exists, this shows only committed changes on the task branch.
+        """
+        last_used_slot = task.last_used_worktree_slot
+        if last_used_slot:
+            git = GitRepoIntegration(last_used_slot.path)
+            await git.stage_untracked_files_intent()
+            fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
+            if not fork_point:
+                return StructuredDiff(files=[], additions=0, deletions=0)
+            return await git.get_structured_diff(commit1=fork_point)
+        else:
+            git = GitRepoIntegration(task.codebase.local_path)
+            fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
+            if not fork_point:
+                return StructuredDiff(files=[], additions=0, deletions=0)
+            return await git.get_structured_diff(commit1=fork_point, commit2=task.branch_name)
 
-    async def get_task_uncommitted_changes(self, task: Task):
-        return await self._diff_service.get_task_uncommitted_changes(task)
+    async def get_task_uncommitted_changes(self, task: Task) -> StructuredDiff:
+        """Get uncommitted changes for a task.
 
-    async def get_task_commit_diff(self, task: Task, commit_hash: str):
-        return await self._diff_service.get_task_commit_diff(task, commit_hash)
+        Returns empty diff if no worktree slot exists for the task.
+        """
+        last_used_slot = task.last_used_worktree_slot
+        if not last_used_slot:
+            return StructuredDiff(files=[], additions=0, deletions=0)
 
-    async def get_task_diff_by_view(self, task: Task, view: TaskDiffView | str):
-        return await self._diff_service.get_task_diff_by_view(task, view)
+        git = GitRepoIntegration(last_used_slot.path)
+        await git.stage_untracked_files_intent()
+        return await git.get_structured_diff(commit1="HEAD")
 
-    # Rebase operations — delegate to TaskRebaseCoordinator
+    async def get_task_commit_diff(self, task: Task, commit_hash: str) -> CommitDiff:
+        """Get diff for a specific commit in the task branch.
+
+        Commits are repository-wide, so always uses the main codebase path.
+        """
+        git = GitRepoIntegration(task.codebase.local_path)
+        return await git.get_structured_commit_diff(commit_hash)
+
+    async def get_task_diff_by_view(self, task: Task, view: TaskDiffView | str) -> StructuredDiff:
+        """Get task diff based on view type (all/uncommitted/<commit_hash>).
+
+        Raises:
+            ValueError: If view is invalid
+        """
+        if view == TaskDiffView.ALL:
+            return await self.get_task_all_changes(task)
+        elif view == TaskDiffView.UNCOMMITTED:
+            return await self.get_task_uncommitted_changes(task)
+        else:
+            commit_diff = await self.get_task_commit_diff(task, view)
+            return StructuredDiff(
+                files=commit_diff.files,
+                additions=commit_diff.additions,
+                deletions=commit_diff.deletions,
+            )
 
     async def rebase_task_branch(self, task: Task) -> RebaseResult:
-        return await TaskRebaseCoordinator(self.worktree_slot_repo).rebase_task_branch(task)
+        return await TaskRebaseCoordinator.rebase_task_branch(task)
 
     async def abort_rebase(self, task: Task) -> None:
         """Abort an in-progress rebase for a task."""
-        last_used_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+        last_used_slot = task.last_used_worktree_slot
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
 
         git = GitRepoIntegration(repo_path)

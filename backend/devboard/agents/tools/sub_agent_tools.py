@@ -13,7 +13,7 @@ from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import ConversationRepository
-from devboard.services.task_git.diff_service import TaskDiffService
+from devboard.services.task_git.service import TaskGitService
 
 _active_sub_agent_conversations: set[int] = set()
 # Backwards-compatibility alias used by existing tests
@@ -267,7 +267,7 @@ def create_task_codebase_investigation_tool(
 def create_code_review_tool(
     task: Task,
     agent_config_service: AgentConfigService,
-    task_diff_service: TaskDiffService,
+    task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
 ) -> Tool:
@@ -276,7 +276,7 @@ def create_code_review_tool(
     Args:
         task: The task being reviewed
         agent_config_service: AgentConfigService for getting configured LLM
-        task_diff_service: Service for retrieving the full task diff
+        task_git_service: Service for retrieving the full task diff
         conversation_repo: Repository for creating conversation records
         parent_conversation_id: ID of the invoking agent's conversation
     """
@@ -301,7 +301,7 @@ def create_code_review_tool(
             - `session_id`: Always null (code review is single-shot)
         """
         working_dir = task.get_current_workspace_dir()
-        diff = await task_diff_service.get_task_all_changes(task)
+        diff = await task_git_service.get_task_all_changes(task)
 
         if not diff.files:
             return json.dumps({"result": "No changes to review — the task diff is empty.", "session_id": None})

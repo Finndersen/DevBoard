@@ -18,7 +18,7 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
     inserted into finalisation action prompts.
     """
     # Check if a worktree slot exists
-    last_used_slot = task_git_service.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+    last_used_slot = task.last_used_worktree_slot
 
     if not last_used_slot:
         return "Unable to determine branch state — no worktree slot found for this task."

@@ -151,7 +151,7 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         """
         slot.locked = True
         slot.last_used_at = datetime.datetime.now(datetime.UTC)
-        slot.last_used_by_task_id = task.id
+        slot.last_used_by_task = task
 
         self.db.flush()
         return slot
@@ -187,7 +187,7 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
             Updated WorktreeSlot instance
         """
         slot.last_used_at = datetime.datetime.now(datetime.UTC)
-        slot.last_used_by_task_id = task.id
+        slot.last_used_by_task = task
 
         self.db.flush()
         return slot

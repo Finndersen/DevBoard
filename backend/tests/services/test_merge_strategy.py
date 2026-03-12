@@ -65,10 +65,7 @@ def mock_worktree_git():
 
 @pytest.fixture
 def task_git_service():
-    return TaskGitService(
-        task_repo=MagicMock(),
-        worktree_slot_repo=MagicMock(),
-    )
+    return TaskGitService()
 
 
 @pytest.mark.asyncio

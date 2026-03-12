@@ -1041,7 +1041,7 @@ async def test_get_task_diff(client, db_session):
     mock_git.get_structured_diff = AsyncMock(return_value=mock_structured_diff)
 
     # Patch GitRepoIntegration - this will affect code running during the request
-    with patch("devboard.services.task_git.diff_service.GitRepoIntegration", return_value=mock_git):
+    with patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git):
         # Test with view='all' parameter (required)
         response = client.get(f"/api/tasks/{task.id}/diff?view=all")
 

@@ -11,7 +11,6 @@ from devboard.agents.engines.claude_code.session import ClaudeCodeSessionMigrato
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.db.models import Codebase, ParentEntityType, Task, WorktreeSlot
 from devboard.db.repositories.conversation import ConversationRepository
-from devboard.db.repositories.task import TaskRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import execute_shell_command
@@ -32,14 +31,12 @@ class WorkspaceAllocationService:
     def __init__(
         self,
         worktree_slot_repo: WorktreeSlotRepository,
-        task_repo: TaskRepository,
         conversation_repo: ConversationRepository,
         worktree_directory: str = "central",
     ):
         self.worktree_slot_repo = worktree_slot_repo
-        self.task_repo = task_repo
         self.conversation_repo = conversation_repo
-        self.task_git_service = TaskGitService(task_repo=task_repo, worktree_slot_repo=worktree_slot_repo)
+        self.task_git_service = TaskGitService()
         self._pool_manager = WorktreePoolManager(worktree_slot_repo, worktree_directory=worktree_directory)
 
     # Slot utility methods
@@ -161,7 +158,7 @@ class WorkspaceAllocationService:
             await self.task_git_service.ensure_task_branch(task)
 
             # Track previous slot to determine if allocation changed
-            previous_slot = self.worktree_slot_repo.get_last_used_slot_for_task(task.id)
+            previous_slot = task.last_used_worktree_slot
 
             # Try to allocate an existing slot
             try:
