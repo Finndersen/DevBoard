@@ -32,8 +32,8 @@ describe('processConversationStream', () => {
     // Should process all events
     expect(result.eventCount).toBe(4)
 
-    // Should call onEvent for all events (4 times) - including tool requests for deduplication
-    expect(onEvent).toHaveBeenCalledTimes(4)
+    // Should call onEvent for all 4 events + 1 synthesized error ToolResult for the unmatched tool_call
+    expect(onEvent).toHaveBeenCalledTimes(5)
   })
 
   it('should invoke onFirstEvent callback once on first event', async () => {
@@ -190,5 +190,76 @@ describe('processConversationStream', () => {
         onEvent
       })
     ).rejects.toThrow('Stream error')
+  })
+
+  it('should synthesize error ToolResult for tool calls without matching results when stream ends normally', async () => {
+    const events: ConversationEvent[] = [
+      { event_type: 'message', role: 'user', text_content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
+      { event_type: 'tool_call', tool_call_id: 'tc1', tool_name: 'investigate_codebase', tool_args: null, timestamp: '2024-01-01T00:00:01Z' },
+    ]
+
+    const onEvent = vi.fn()
+    await processConversationStream({
+      stream: createStream(events),
+      onEvent,
+    })
+
+    // onEvent called for 2 real events + 1 synthesized ToolResult
+    expect(onEvent).toHaveBeenCalledTimes(3)
+    const synthesized = onEvent.mock.calls[2][0]
+    expect(synthesized).toMatchObject({
+      event_type: 'tool_result',
+      tool_call_id: 'tc1',
+      result_content: 'Tool execution was interrupted.',
+      is_error: true,
+    })
+  })
+
+  it('should synthesize error ToolResult when stream ends with stream_error', async () => {
+    const events: ConversationEvent[] = [
+      { event_type: 'tool_call', tool_call_id: 'tc1', tool_name: 'run_code', tool_args: null, timestamp: '2024-01-01T00:00:00Z' },
+      { event_type: 'system', type: 'stream_error', data: { message: 'Server error' }, timestamp: '2024-01-01T00:00:01Z' },
+    ]
+
+    const onEvent = vi.fn()
+
+    await expect(
+      processConversationStream({
+        stream: createStream(events),
+        onEvent,
+      })
+    ).rejects.toThrow('Server error')
+
+    // 2 real events + 1 synthesized in finally block
+    expect(onEvent).toHaveBeenCalledTimes(3)
+    const synthesized = onEvent.mock.calls[2][0]
+    expect(synthesized).toMatchObject({
+      event_type: 'tool_result',
+      tool_call_id: 'tc1',
+      is_error: true,
+    })
+  })
+
+  it('should not synthesize results for tool calls that already have results', async () => {
+    const events: ConversationEvent[] = [
+      { event_type: 'tool_call', tool_call_id: 'tc1', tool_name: 'read_file', tool_args: null, timestamp: '2024-01-01T00:00:00Z' },
+      { event_type: 'tool_result', tool_call_id: 'tc1', result_content: 'file contents', is_error: false, timestamp: '2024-01-01T00:00:01Z' },
+      { event_type: 'message', role: 'agent', text_content: 'Done', timestamp: '2024-01-01T00:00:02Z' },
+    ]
+
+    const onEvent = vi.fn()
+    await processConversationStream({
+      stream: createStream(events),
+      onEvent,
+    })
+
+    // Only 3 real events, no synthesized results
+    expect(onEvent).toHaveBeenCalledTimes(3)
+    // Verify no synthesized tool_result was added
+    const toolResults = onEvent.mock.calls
+      .map(call => call[0])
+      .filter((e: ConversationEvent) => e.event_type === 'tool_result')
+    expect(toolResults).toHaveLength(1)
+    expect(toolResults[0].is_error).toBe(false)
   })
 })
