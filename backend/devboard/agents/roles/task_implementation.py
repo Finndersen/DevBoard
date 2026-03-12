@@ -8,11 +8,9 @@ from devboard.agents.tools import (
     create_complete_task_with_local_merge_tool,
     create_directory_tree_tool,
     create_document_edit_tool,
-    create_file_search_tool,
     create_github_pr_tool,
     create_rebase_task_branch_tool,
     create_set_document_content_tool,
-    create_text_search_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
@@ -124,8 +122,6 @@ class TaskImplementationAgentRole(AgentRole):
                 self.task.implementation_plan, self.document_repository, requires_approval=False
             ),
             create_document_edit_tool(self.task.implementation_plan, self.document_repository, requires_approval=False),
-            create_text_search_tool(codebase_integration),
-            create_file_search_tool(codebase_integration),
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
             create_task_codebase_investigation_tool(
@@ -173,6 +169,8 @@ class TaskImplementationAgentRole(AgentRole):
         """List of allowed engine internal tools for this role."""
         return [
             "Read",
+            "Grep",
+            "Glob",
             "Edit",
             "Write",
             "Bash",
