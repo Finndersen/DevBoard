@@ -72,12 +72,33 @@ function ConversationMessageList({
       return undefined
     }
 
+    // Check if there's a subsequent message event (user or agent text) after a given index,
+    // indicating the conversation moved past that point
+    const hasSubsequentMessage = (afterIndex: number): boolean => {
+      for (let i = afterIndex + 1; i < messages.length; i++) {
+        if (messages[i].event_type === 'message') {
+          return true
+        }
+      }
+      return false
+    }
+
     messages.forEach((message, index) => {
       if (message.event_type === 'tool_call') {
         const cacheKey = `${message.timestamp}-${message.event_type}-${index}`
         const result = findToolResult(message.tool_call_id, index)
         if (result) {
           map.set(cacheKey, result)
+        } else if (hasSubsequentMessage(index)) {
+          // Tool call is orphaned: the conversation moved on without a result.
+          // This happens when a stream was interrupted (e.g. client disconnect).
+          map.set(cacheKey, {
+            event_type: 'tool_result',
+            tool_call_id: message.tool_call_id,
+            result_content: 'Tool execution was interrupted.',
+            is_error: true,
+            timestamp: message.timestamp,
+          })
         }
       }
     })
