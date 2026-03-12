@@ -32,6 +32,7 @@ interface UseWorkflowActionsResult {
 export function useWorkflowActions({ task, prStatus, specificationContent, refetch }: UseWorkflowActionsParams): UseWorkflowActionsResult {
   const [streamingMessage, setStreamingMessage] = useState('')
 
+  const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
   const isConversationStreaming = useConversationStreamStore(
     state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
   )
@@ -44,10 +45,13 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
       const result = await apiClient.executeWorkflowAction(task.id, { action_key: actionKey })
 
       // Refetch task details first — conversation_id may have changed.
-      // useStreamSubscription's reconnection logic will detect the active execution.
       await refetch()
 
-      if (!result.conversation_id) {
+      if (result.conversation_id) {
+        // Explicitly open WebSocket — needed when action reuses the same conversation,
+        // as useStreamSubscription's reconnectAttempted guard won't re-trigger.
+        reconnectStream(result.conversation_id)
+      } else {
         setStreamingMessage('')
       }
     } catch (error) {
@@ -55,7 +59,7 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
       setStreamingMessage('')
       await refetch()
     }
-  }, [task?.id, refetch])
+  }, [task?.id, refetch, reconnectStream])
 
   const getButtonConfigForAction = (actionKey: string) => {
     const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean }> = {

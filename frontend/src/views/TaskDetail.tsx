@@ -133,6 +133,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Get stream store methods for workflow actions
   const migrateStream = useConversationStreamStore(state => state.migrateStream)
+  const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const isConversationStreaming = useConversationStreamStore(
     state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
@@ -351,13 +352,17 @@ function TaskDetail({ id }: TaskDetailProps) {
       const result = await apiClient.executeWorkflowAction(task.id, { action_key: actionKey })
 
       // Refetch task details first — conversation_id may have changed (e.g. new agent role).
-      // This causes AgentChat to re-render with the new conversation ID, and
-      // useStreamSubscription's reconnection logic will detect the active execution
-      // and open the WebSocket automatically.
       await refetch()
 
-      // If no agent execution was started (action completed synchronously), nothing more to do
-      if (!result.conversation_id) {
+      if (result.conversation_id) {
+        // Explicitly open WebSocket for the conversation. This is necessary when the
+        // workflow action reuses the same conversation (e.g. CreateImplementationPlan),
+        // because useStreamSubscription's reconnectAttempted guard prevents re-checking.
+        // Safe for new-conversation cases too — reconnectStream's isConversationStreaming
+        // guard will no-op if a stream is already active.
+        reconnectStream(result.conversation_id)
+      } else {
+        // No agent execution was started (action completed synchronously)
         setStreamingMessage('')
       }
     } catch (error) {
