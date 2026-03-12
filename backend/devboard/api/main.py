@@ -31,7 +31,7 @@ from devboard.api.routers import (
     worktrees,
 )
 from devboard.config.logfire_config import setup_logfire
-from devboard.db.database import SessionLocal
+from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.mcp import mcp
@@ -123,7 +123,8 @@ class RequestLifecycleMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         method = request.method
         path = request.url.path
-        logfire.info(f"Request started: {method} {path}")
+        pool = engine.pool.status()
+        logfire.info(f"Request started: {method} {path} [db_pool: {pool}]")
         start = time.monotonic()
         response = await call_next(request)
         elapsed_ms = (time.monotonic() - start) * 1000

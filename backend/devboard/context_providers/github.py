@@ -210,7 +210,7 @@ class GitHubContextProvider(BaseContextProvider):
                         error=str(e),
                     )
                     raise
-                logfire.error("Unexpected error retrieving GitHub resource", error=str(e), exc_info=e)
+                logfire.exception("Unexpected error retrieving GitHub resource")
                 raise ContextRetrievalError(f"Failed to get GitHub resource: {e}") from e
 
     async def get_relevant_context(self, resource_uri: str, query: str) -> str:
@@ -324,7 +324,7 @@ Based on this repository data, here is the relevant context for your query:
                 if isinstance(e, ResourceHandlingError | ContextRetrievalError):
                     logfire.warn("GitHub context retrieval failed", error_type=type(e).__name__, error=str(e))
                     raise
-                logfire.error("Unexpected error in GitHub context retrieval", error=str(e), exc_info=e)
+                logfire.exception("Unexpected error in GitHub context retrieval")
                 raise ContextRetrievalError(f"Failed to get GitHub context: {e}") from e
 
     async def generate_resource_description(self, resource_uri: str) -> str:
