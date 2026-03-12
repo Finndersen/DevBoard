@@ -1,8 +1,13 @@
 """Configuration classes for external service integrations."""
 
-from typing import Literal
+from enum import StrEnum
 
 from devboard.config.base import BaseConfig
+
+
+class WorktreeLocationMode(StrEnum):
+    CENTRAL = "central"
+    ALONGSIDE = "alongside"
 
 
 class DevBoardConfig(BaseConfig):
@@ -12,7 +17,7 @@ class DevBoardConfig(BaseConfig):
     env_prefix = "DEVBOARD_"
 
     backend_base_url: str = "http://localhost:8000"
-    worktree_directory: Literal["central", "alongside"] = "central"
+    worktree_location_mode: WorktreeLocationMode = WorktreeLocationMode.CENTRAL
 
 
 class GitHubIntegrationConfig(BaseConfig):

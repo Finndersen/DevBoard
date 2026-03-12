@@ -6,6 +6,7 @@ from pathlib import Path
 
 import logfire
 
+from devboard.config.integration_configs import WorktreeLocationMode
 from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
@@ -24,9 +25,13 @@ from devboard.services.workspace.types import (
 class WorktreePoolManager:
     """Manages the pool of worktree slots for a codebase."""
 
-    def __init__(self, worktree_slot_repo: WorktreeSlotRepository, worktree_directory: str = "central"):
+    def __init__(
+        self,
+        worktree_slot_repo: WorktreeSlotRepository,
+        worktree_location_mode: WorktreeLocationMode = WorktreeLocationMode.CENTRAL,
+    ):
         self.worktree_slot_repo = worktree_slot_repo
-        self.worktree_directory = worktree_directory
+        self.worktree_location_mode = worktree_location_mode
 
     def bootstrap_main_repo_slot(self, codebase: Codebase) -> WorktreeSlot:
         """Create the main repository slot (slot 0) if it doesn't exist."""
@@ -47,7 +52,7 @@ class WorktreePoolManager:
         repo_name = repo_path.name
         slot_number = len(self.worktree_slot_repo.get_by_codebase(codebase.id))
 
-        if self.worktree_directory == "alongside":
+        if self.worktree_location_mode == WorktreeLocationMode.ALONGSIDE:
             worktree_path = repo_path.parent / f"{repo_name}.worktree-{slot_number}"
         else:
             # Default: central mode — place under DEVBOARD_HOME/worktrees/

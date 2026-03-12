@@ -18,7 +18,7 @@ from devboard.api.dependencies.repositories import (
     get_task_repository,
     get_worktree_slot_repository,
 )
-from devboard.config.integration_configs import DevBoardConfig
+from devboard.config.integration_configs import DevBoardConfig, WorktreeLocationMode
 from devboard.context_providers.registry import context_provider_registry
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
@@ -126,8 +126,8 @@ def get_pool_manager(
 ) -> WorktreePoolManager:
     """Get WorktreePoolManager instance."""
     config = config_service.get_config(DevBoardConfig)
-    worktree_directory = config.worktree_directory if config else "central"
-    return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_directory=worktree_directory)
+    worktree_location_mode = config.worktree_location_mode if config else WorktreeLocationMode.CENTRAL
+    return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_location_mode=worktree_location_mode)
 
 
 def get_workspace_allocation_service(
@@ -137,11 +137,11 @@ def get_workspace_allocation_service(
 ) -> WorkspaceAllocationService:
     """Get WorkspaceAllocationService instance."""
     config = config_service.get_config(DevBoardConfig)
-    worktree_directory = config.worktree_directory if config else "central"
+    worktree_location_mode = config.worktree_location_mode if config else WorktreeLocationMode.CENTRAL
     return WorkspaceAllocationService(
         worktree_slot_repo=worktree_slot_repo,
         conversation_repo=conversation_repo,
-        worktree_directory=worktree_directory,
+        worktree_location_mode=worktree_location_mode,
     )
 
 

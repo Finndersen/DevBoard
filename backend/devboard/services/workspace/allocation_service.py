@@ -9,6 +9,7 @@ import logfire
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionMigrator
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.config.integration_configs import WorktreeLocationMode
 from devboard.db.models import Codebase, ParentEntityType, Task, WorktreeSlot
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
@@ -32,12 +33,12 @@ class WorkspaceAllocationService:
         self,
         worktree_slot_repo: WorktreeSlotRepository,
         conversation_repo: ConversationRepository,
-        worktree_directory: str = "central",
+        worktree_location_mode: WorktreeLocationMode = WorktreeLocationMode.CENTRAL,
     ):
         self.worktree_slot_repo = worktree_slot_repo
         self.conversation_repo = conversation_repo
         self.task_git_service = TaskGitService()
-        self._pool_manager = WorktreePoolManager(worktree_slot_repo, worktree_directory=worktree_directory)
+        self._pool_manager = WorktreePoolManager(worktree_slot_repo, worktree_location_mode=worktree_location_mode)
 
     # Slot utility methods
 

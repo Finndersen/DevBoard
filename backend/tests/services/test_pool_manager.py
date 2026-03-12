@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from devboard.config.integration_configs import WorktreeLocationMode
 from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.services.workspace.pool_manager import WorktreePoolManager
@@ -134,7 +135,9 @@ def test_generate_new_worktree_path_central_mode(worktree_slot_repo, sample_code
     monkeypatch.setenv("DEVBOARD_HOME", "/devboard")
     worktree_slot_repo.get_by_codebase.return_value = []  # slot_number = 0
 
-    manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_directory="central")
+    manager = WorktreePoolManager(
+        worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.CENTRAL
+    )
 
     with patch("devboard.services.workspace.pool_manager.Path.mkdir") as mock_mkdir:
         path = manager._generate_new_worktree_path(sample_codebase)
@@ -151,7 +154,9 @@ def test_generate_new_worktree_path_central_mode_increments_slot_number(
     existing_slots = [MagicMock(), MagicMock()]  # 2 existing slots
     worktree_slot_repo.get_by_codebase.return_value = existing_slots
 
-    manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_directory="central")
+    manager = WorktreePoolManager(
+        worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.CENTRAL
+    )
 
     with patch("devboard.services.workspace.pool_manager.Path.mkdir"):
         path = manager._generate_new_worktree_path(sample_codebase)
@@ -163,7 +168,9 @@ def test_generate_new_worktree_path_alongside_mode(worktree_slot_repo, sample_co
     """Alongside mode generates path as sibling to main repo."""
     worktree_slot_repo.get_by_codebase.return_value = []  # slot_number = 0
 
-    manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_directory="alongside")
+    manager = WorktreePoolManager(
+        worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.ALONGSIDE
+    )
 
     path = manager._generate_new_worktree_path(sample_codebase)
 
