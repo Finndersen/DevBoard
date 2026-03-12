@@ -210,6 +210,31 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       maxWidth="xl"
     >
       <form onSubmit={handleCreateTask} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Task Title
+          </label>
+          <Input
+            type="text"
+            value={newTask.title}
+            onChange={handleTaskTitleChange}
+            placeholder="Enter task title"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Initial Prompt (Optional)
+          </label>
+          <Textarea
+            value={newTask.initial_message}
+            onChange={handleInitialMessageChange}
+            placeholder="Describe what you want to do with this task, including as much detail and context as possible. This will be used to start the conversation with the AI assistant."
+            rows={6}
+          />
+        </div>
+
         {/* Project Selection - only when no projectId prop */}
         {!projectId && (
           <div>
@@ -229,19 +254,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             </select>
           </div>
         )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Task Title
-          </label>
-          <Input
-            type="text"
-            value={newTask.title}
-            onChange={handleTaskTitleChange}
-            placeholder="Enter task title"
-            required
-          />
-        </div>
 
         {/* Codebase and Base Branch - only show when project is selected */}
         {selectedProjectId && (
@@ -327,18 +339,6 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             )}
           </div>
         )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Initial Description (Optional)
-          </label>
-          <Textarea
-            value={newTask.initial_message}
-            onChange={handleInitialMessageChange}
-            placeholder="Describe what you want to do with this task, including as much detail and context as possible. This will be used to start the conversation with the AI assistant."
-            rows={6}
-          />
-        </div>
 
         {/* Custom Fields */}
         {!customFieldsLoading && customFieldDefinitions.length > 0 && (
