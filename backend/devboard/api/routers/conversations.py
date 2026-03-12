@@ -11,7 +11,6 @@ from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
-from devboard.api.dependencies import call_with_dependencies
 from devboard.api.dependencies.conversations import get_agent_execution_service, get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
@@ -32,6 +31,7 @@ from devboard.api.streaming import stream_conversation_events
 from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 router = APIRouter()
 
@@ -76,6 +76,7 @@ async def _stream_agent_response(
     http_request: Request,
     conversation: Conversation,
     agent_execution_service: AgentExecutionService,
+    workspace_allocation_service: WorkspaceAllocationService,
     message_or_approvals: str | ToolApprovals,
 ) -> StreamingResponse:
     """Stream agent response events for a conversation.
@@ -90,9 +91,6 @@ async def _stream_agent_response(
     agent_event_stream = agent_execution_service.stream_events_for_message_or_approval(message_or_approvals)
 
     if isinstance(conversation_parent, Task):
-        workspace_allocation_service = await call_with_dependencies(
-            get_workspace_allocation_service, request=http_request
-        )
         agent_event_stream = workspace_allocation_service.run_task_agent_in_workspace(
             task=conversation_parent, agent_stream=agent_event_stream
         )
@@ -106,6 +104,7 @@ async def stream_conversation_message(
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream conversation events as they are generated.
 
@@ -115,7 +114,9 @@ async def stream_conversation_message(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    return await _stream_agent_response(http_request, conversation, agent_execution_service, request.message)
+    return await _stream_agent_response(
+        http_request, conversation, agent_execution_service, workspace_allocation_service, request.message
+    )
 
 
 @router.post("/{conversation_id}/approve-tools/stream")
@@ -124,6 +125,7 @@ async def stream_approve_conversation_tools(
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
     agent_execution_service: AgentExecutionService = Depends(get_agent_execution_service),
+    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
 ) -> StreamingResponse:
     """Stream tool approval events as they are generated.
 
@@ -133,7 +135,9 @@ async def stream_approve_conversation_tools(
     Returns events as newline-delimited JSON (NDJSON) for real-time updates.
     Each line is a JSON-serialized ConversationEvent.
     """
-    return await _stream_agent_response(http_request, conversation, agent_execution_service, request)
+    return await _stream_agent_response(
+        http_request, conversation, agent_execution_service, workspace_allocation_service, request
+    )
 
 
 @router.post("/{conversation_id}/reset", response_model=ResetConversationResponse)

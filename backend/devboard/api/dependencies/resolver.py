@@ -33,7 +33,15 @@ async def call_with_dependencies[T](
     Resolve a dependency function within a request context.
 
     Use this for conditional dependency resolution during request handling.
-    The resolved dependency shares the request's DB session and lifecycle.
+
+    WARNING — isolated DB session: FastAPI's dependency_cache is created as a local `{}` inside
+    `solve_dependencies` and never stored in `request.scope`, so it is not accessible after the
+    endpoint's Depends() chain has resolved. The cache used here only provides sharing between
+    multiple `call_with_dependencies` calls within the same request — it is isolated from the
+    endpoint's own Depends() chain. As a result, shared dependencies like `get_db` are resolved
+    fresh here, creating a new DB session separate from the one used by endpoint-resolved
+    dependencies. For services that need to share the same DB session as the endpoint, declare
+    them as standard Depends() parameters on the endpoint function instead.
 
     Args:
         func: Dependency function to resolve (e.g., get_workspace_allocation_service)
