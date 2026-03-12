@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 interface ModalProps {
   isOpen: boolean
   onClose: () => void
-  title: string
+  title: ReactNode
   children: ReactNode
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '6xl' | '7xl' | 'screen'
   scrollable?: boolean
@@ -28,7 +28,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'md
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className={`bg-white dark:bg-gray-800 rounded-lg ${maxWidthClasses[maxWidth]} w-full p-6 max-h-[90vh] flex flex-col`}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex-1 min-w-0">
             {title}
           </h3>
           <button

@@ -35,11 +35,13 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
 
   // Extract agentId from Task tool results
   const subAgentInfo = useMemo(() => {
-    if (toolCall.tool_name !== 'Task' || !sessionId || !toolResult?.result_content) return null
+    if ((toolCall.tool_name !== 'Task' && toolCall.tool_name !== 'Agent') || !sessionId || !toolResult?.result_content) return null
     const match = toolResult.result_content.match(/agentId:\s*(\S+)/)
     if (!match) return null
-    const description = (toolCall.tool_args as Record<string, unknown> | null)?.description as string | undefined
-    return { agentId: match[1], description: description ?? 'Sub-agent conversation' }
+    const args = toolCall.tool_args as Record<string, unknown> | null
+    const description = args?.description as string | undefined
+    const subagentType = args?.subagent_type as string | undefined
+    return { agentId: match[1], description: description ?? 'Sub-agent conversation', subagentType }
   }, [toolCall.tool_name, toolCall.tool_args, toolResult?.result_content, sessionId])
 
   // Determine status
@@ -185,6 +187,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
           sessionId={sessionId!}
           agentId={subAgentInfo.agentId}
           title={subAgentInfo.description}
+          subagentType={subAgentInfo.subagentType}
         />
       )}
     </div>

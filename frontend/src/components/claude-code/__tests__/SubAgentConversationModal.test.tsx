@@ -56,7 +56,7 @@ describe('SubAgentConversationModal', () => {
       />
     )
 
-    expect(screen.queryByText('Test sub-agent')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Test sub-agent/)).not.toBeInTheDocument()
   })
 
   it('fetches and displays messages when opened', async () => {
@@ -159,5 +159,71 @@ describe('SubAgentConversationModal', () => {
     await waitFor(() => {
       expect(screen.getByText('No messages in this sub-agent session')).toBeInTheDocument()
     })
+  })
+
+  it('displays "Sub Agent:" prefix in the modal header', () => {
+    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
+
+    render(
+      <SubAgentConversationModal
+        isOpen={true}
+        onClose={() => {}}
+        sessionId="session-123"
+        agentId="ac2a274"
+        title="Investigate auth module"
+      />
+    )
+
+    expect(screen.getByText(/Sub Agent: Investigate auth module/)).toBeInTheDocument()
+  })
+
+  it('displays sub-agent type badge when subagentType is provided', () => {
+    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
+
+    render(
+      <SubAgentConversationModal
+        isOpen={true}
+        onClose={() => {}}
+        sessionId="session-123"
+        agentId="ac2a274"
+        title="Investigate auth module"
+        subagentType="Explore"
+      />
+    )
+
+    expect(screen.getByText('Explore')).toBeInTheDocument()
+  })
+
+  it('does not display sub-agent type badge when subagentType is not provided', () => {
+    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
+
+    render(
+      <SubAgentConversationModal
+        isOpen={true}
+        onClose={() => {}}
+        sessionId="session-123"
+        agentId="ac2a274"
+        title="Test title"
+      />
+    )
+
+    expect(screen.queryByText('Explore')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bash')).not.toBeInTheDocument()
+  })
+
+  it('displays agent ID in the modal header', () => {
+    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
+
+    render(
+      <SubAgentConversationModal
+        isOpen={true}
+        onClose={() => {}}
+        sessionId="session-123"
+        agentId="ac2a274"
+        title="Test title"
+      />
+    )
+
+    expect(screen.getByText('ac2a274')).toBeInTheDocument()
   })
 })

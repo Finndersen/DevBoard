@@ -159,6 +159,14 @@ export function getToolDisplayLabel(
       return { toolName: cleanedName }
     }
 
+    case 'Agent': {
+      const description = args.description as string | undefined
+      if (description) {
+        return { toolName: 'Agent', details: description }
+      }
+      return { toolName: cleanedName }
+    }
+
     case 'investigate_codebase': {
       const query = args.query as string | undefined
       if (query) {
