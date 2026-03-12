@@ -52,6 +52,7 @@ async def run_agent_for_conversation(
             integration_service=services.integration_service,
             task_service=services.task_service,
             task_git_service=services.task_git_service,
+            conversation_repo=services.conversation_repo,
         )
 
         agent_execution_service = create_agent_execution_service(
@@ -74,12 +75,12 @@ async def run_agent_for_conversation(
         async for event in agent_stream:
             await event_queue.put(event)
 
-        db.commit()
+        await asyncio.to_thread(db.commit)
     except AgentInterruptedError:
-        db.commit()
+        await asyncio.to_thread(db.commit)
         raise
     except Exception:
-        db.rollback()
+        await asyncio.to_thread(db.rollback)
         raise
     finally:
-        db.close()
+        await asyncio.to_thread(db.close)

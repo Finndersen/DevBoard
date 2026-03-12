@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 import logfire
+from opentelemetry import context as otel_context
 from pydantic import BaseModel
 
 from devboard.agents.events import ConversationEvent
@@ -126,24 +127,33 @@ class ConversationExecutionManager:
         if not execution:
             return
 
+        # Detach from the request's trace context — background tasks run outside
+        # the request lifecycle and should produce their own root span in Logfire.
+        token = otel_context.attach(otel_context.Context())
         try:
-            await coro
-            execution.status = ExecutionStatus.COMPLETED
-            logfire.info(f"Execution completed for conversation {conversation_id}")
-        except AgentInterruptedError:
-            execution.status = ExecutionStatus.INTERRUPTED
-            logfire.info(f"Execution interrupted for conversation {conversation_id}")
-        except Exception as e:
-            execution.status = ExecutionStatus.FAILED
-            execution.error = str(e)
-            logfire.error(f"Execution failed for conversation {conversation_id}: {e}", exc_info=True)
+            with logfire.span("background.agent_execution", conversation_id=conversation_id):
+                try:
+                    await coro
+                    execution.status = ExecutionStatus.COMPLETED
+                    logfire.info(f"Execution completed for conversation {conversation_id}")
+                except AgentInterruptedError:
+                    execution.status = ExecutionStatus.INTERRUPTED
+                    logfire.info(f"Execution interrupted for conversation {conversation_id}")
+                except Exception as e:
+                    execution.status = ExecutionStatus.FAILED
+                    execution.error = str(e)
+                    logfire.exception(f"Execution failed for conversation {conversation_id}: {e}")
+                finally:
+                    execution.completed_at = datetime.datetime.now(datetime.UTC)
+                    # Push sentinel to signal completion to WebSocket consumers
+                    await event_queue.put(None)
+                    # Schedule cleanup after grace period, keyed by started_at to avoid
+                    # deleting a newer execution if one is started before this cleanup runs.
+                    execution.cleanup_task = asyncio.create_task(
+                        self._schedule_cleanup(conversation_id, execution.started_at)
+                    )
         finally:
-            execution.completed_at = datetime.datetime.now(datetime.UTC)
-            # Push sentinel to signal completion to WebSocket consumers
-            await event_queue.put(None)
-            # Schedule cleanup after grace period, keyed by started_at to avoid
-            # deleting a newer execution if one is started before this cleanup runs.
-            execution.cleanup_task = asyncio.create_task(self._schedule_cleanup(conversation_id, execution.started_at))
+            otel_context.detach(token)
 
     async def _schedule_cleanup(self, conversation_id: int, started_at: datetime.datetime) -> None:
         """Remove execution record after a grace period for reconnection.
