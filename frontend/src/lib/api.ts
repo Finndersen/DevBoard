@@ -1221,6 +1221,11 @@ export class ApiClient {
   async getActiveExecutions(): Promise<ActiveExecutionsResponse> {
     return this.request<ActiveExecutionsResponse>('/api/executions/active')
   }
+
+  async hasActiveExecution(conversationId: number): Promise<boolean> {
+    const response = await this.getActiveExecutions()
+    return response.executions.some((e) => e.conversation_id === conversationId)
+  }
 }
 
 export const apiClient = new ApiClient()

@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, SystemEvent } from '../lib/api'
 import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
+import { createWebSocketEventStream } from '../lib/websocketStream'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandlers'
 import { useNotificationStore } from './notificationStore'
@@ -194,6 +195,14 @@ interface ConversationStreamActions {
    * @param newConversationId - The new conversation ID to migrate to
    */
   migrateStream: (oldConversationId: number, newConversationId: number) => void
+
+  /**
+   * Reconnect to an active execution by opening a WebSocket without posting a new message.
+   * Used when navigating back to a conversation that has a running execution.
+   *
+   * @param conversationId - The conversation with an active execution
+   */
+  reconnectStream: (conversationId: number) => Promise<void>
 }
 
 type ConversationStreamStore = ConversationStreamState & ConversationStreamActions
@@ -624,6 +633,54 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       }
 
       console.log('[StreamStore] Stream migrated successfully, allActiveStreams:', Array.from(get().activeStreams.keys()))
-    }
+    },
+
+    reconnectStream: async (conversationId) => {
+      // Don't reconnect if already streaming
+      if (get().isConversationStreaming(conversationId)) return
+
+      console.log('[StreamStore] reconnectStream:', { conversationId })
+
+      const conversationIdRef = { current: conversationId }
+      conversationIdRefs.set(conversationId, conversationIdRef)
+
+      set((draft) => {
+        draft.activeStreams.set(conversationId, {
+          isStreaming: true,
+          error: null,
+          startedAt: Date.now(),
+          pendingToolRequests: [],
+          isQueued: false,
+        })
+      })
+
+      try {
+        const stream = createWebSocketEventStream(conversationId)
+
+        const { toolRequests } = await processConversationStream({
+          stream,
+          onEvent: (event) => {
+            get().addEvent(conversationIdRef.current, event)
+          },
+          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current),
+        })
+
+        if (toolRequests.length > 0) {
+          set((draft) => {
+            const streamState = draft.activeStreams.get(conversationIdRef.current)
+            if (streamState) {
+              streamState.pendingToolRequests = toolRequests
+            }
+          })
+        }
+
+        get().completeStream(conversationIdRef.current)
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error('Reconnect stream error:', error)
+          get().setError(conversationIdRef.current, error)
+        }
+      }
+    },
   }))
 )

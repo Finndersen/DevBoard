@@ -14,7 +14,6 @@ import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
-import { createWebSocketEventStream } from '../lib/websocketStream'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
 import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
@@ -133,7 +132,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
 
   // Get stream store methods for workflow actions
-  const startStream = useConversationStreamStore(state => state.startStream)
   const migrateStream = useConversationStreamStore(state => state.migrateStream)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const isConversationStreaming = useConversationStreamStore(
@@ -352,16 +350,19 @@ function TaskDetail({ id }: TaskDetailProps) {
     try {
       const result = await apiClient.executeWorkflowAction(task.id, { action_key: actionKey })
 
-      if (result.conversation_id) {
-        // Agent execution started — connect WebSocket to receive events
-        const stream = createWebSocketEventStream(result.conversation_id)
-        await startStream(result.conversation_id, stream)
+      // Refetch task details first — conversation_id may have changed (e.g. new agent role).
+      // This causes AgentChat to re-render with the new conversation ID, and
+      // useStreamSubscription's reconnection logic will detect the active execution
+      // and open the WebSocket automatically.
+      await refetch()
+
+      // If no agent execution was started (action completed synchronously), nothing more to do
+      if (!result.conversation_id) {
+        setStreamingMessage('')
       }
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
       setStreamingMessage('')
-    } finally {
-      // Always refetch task details (status, conversation_id, available actions may have changed)
       await refetch()
     }
   }

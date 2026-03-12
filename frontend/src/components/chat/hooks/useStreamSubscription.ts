@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ConversationEvent, ToolCallRequest } from '../../../lib/api'
+import { apiClient } from '../../../lib/api'
 import { useConversationStreamStore } from '../../../stores/conversationStreamStore'
 import { useEventHandlerRegistryForStream } from '../../../hooks/useConversationEventHandlers'
 
@@ -26,12 +27,33 @@ export function useStreamSubscription(conversationId: number) {
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const setQueued = useConversationStreamStore(state => state.setQueued)
   const setStoreMessages = useConversationStreamStore(state => state.setMessages)
+  const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
 
   const eventHandlerRegistry = useEventHandlerRegistryForStream()
+  const reconnectAttempted = useRef<number | null>(null)
 
   useEffect(() => {
     updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
   }, [conversationId, eventHandlerRegistry, updateEventHandlerRegistry])
+
+  // On mount, check for active execution and reconnect if needed
+  useEffect(() => {
+    // Only attempt reconnection once per conversation mount
+    if (reconnectAttempted.current === conversationId) return
+    // Don't reconnect if already streaming
+    if (isStreaming) return
+
+    reconnectAttempted.current = conversationId
+
+    apiClient.hasActiveExecution(conversationId).then((hasActive) => {
+      if (hasActive && !useConversationStreamStore.getState().isConversationStreaming(conversationId)) {
+        console.log('[useStreamSubscription] Active execution found, reconnecting:', conversationId)
+        reconnectStream(conversationId)
+      }
+    }).catch((error) => {
+      console.error('[useStreamSubscription] Failed to check active execution:', error)
+    })
+  }, [conversationId, isStreaming, reconnectStream])
 
   useEffect(() => {
     console.log('[ConversationChat] Subscription state changed:', {
