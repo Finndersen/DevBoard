@@ -281,7 +281,7 @@ def create_code_review_tool(
         parent_conversation_id: ID of the invoking agent's conversation
     """
 
-    async def review_code_changes() -> str:
+    async def review_code_changes(context: str | None = None) -> str:
         """Perform a comprehensive code review of all changes made so far in this task.
 
         Use this tool after completing initial implementation to get a thorough review
@@ -294,6 +294,11 @@ def create_code_review_tool(
         - Test coverage adequacy
         - Potential issues, edge cases, and risks
         - Cross-component impact
+
+        Args:
+            context: Optional additional context for the reviewer. Use this to explain why changes
+                diverge from the specification or implementation plan, describe known limitations,
+                or highlight specific areas you want the reviewer to focus on.
 
         Returns:
             A JSON string with:
@@ -347,6 +352,13 @@ def create_code_review_tool(
 ```diff
 {full_diff_content}
 ```
+"""
+
+        if context is not None:
+            prompt += f"""
+## Additional Context from Implementation Agent
+
+{context}
 """
 
         sub_agent_result = await run_sub_agent(

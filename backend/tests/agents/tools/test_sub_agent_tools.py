@@ -870,3 +870,72 @@ class TestCreateCodeReviewTool:
         assert "Implementation plan content" in prompt
         assert "src/bar.py" in prompt
         assert "@@ -0,0 +1,1 @@" in prompt
+
+    @pytest.mark.asyncio
+    async def test_prompt_includes_context_when_provided(
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
+    ):
+        """Test that the prompt includes an additional context section when context is provided."""
+        file_diff = FileDiff(
+            file_path="src/foo.py",
+            diff_content="@@ -1,1 +1,2 @@\n+new line\n",
+            additions=1,
+            deletions=0,
+        )
+        mock_task_git_service.get_task_all_changes = AsyncMock(
+            return_value=StructuredDiff(files=[file_diff], additions=1, deletions=0)
+        )
+
+        tool = create_code_review_tool(
+            mock_task,
+            mock_agent_config_service,
+            mock_task_git_service,
+            conversation_repo=mock_conv_repo,
+            parent_conversation_id=None,
+        )
+
+        with patch(
+            "devboard.agents.tools.sub_agent_tools.run_sub_agent",
+            return_value=SubAgentResult(result="OK", conversation_id=42),
+        ) as mock_run:
+            await tool.function(context="Diverged from plan because the API changed")
+
+        call_kwargs = mock_run.call_args[1]
+        prompt = call_kwargs["prompt"]
+
+        assert "## Additional Context from Implementation Agent" in prompt
+        assert "Diverged from plan because the API changed" in prompt
+
+    @pytest.mark.asyncio
+    async def test_prompt_excludes_context_section_when_none(
+        self, mock_task, mock_agent_config_service, mock_task_git_service, mock_conv_repo
+    ):
+        """Test that the prompt does not include the context section when context is None."""
+        file_diff = FileDiff(
+            file_path="src/foo.py",
+            diff_content="@@ -1,1 +1,2 @@\n+new line\n",
+            additions=1,
+            deletions=0,
+        )
+        mock_task_git_service.get_task_all_changes = AsyncMock(
+            return_value=StructuredDiff(files=[file_diff], additions=1, deletions=0)
+        )
+
+        tool = create_code_review_tool(
+            mock_task,
+            mock_agent_config_service,
+            mock_task_git_service,
+            conversation_repo=mock_conv_repo,
+            parent_conversation_id=None,
+        )
+
+        with patch(
+            "devboard.agents.tools.sub_agent_tools.run_sub_agent",
+            return_value=SubAgentResult(result="OK", conversation_id=42),
+        ) as mock_run:
+            await tool.function()
+
+        call_kwargs = mock_run.call_args[1]
+        prompt = call_kwargs["prompt"]
+
+        assert "Additional Context from Implementation Agent" not in prompt

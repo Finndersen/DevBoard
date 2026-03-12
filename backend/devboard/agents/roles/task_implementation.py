@@ -50,7 +50,7 @@ Then execute in order:
    - If a `docs/` directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating any missing or incorrect documentation
 
 2. CODE REVIEW
-   - For non-trivial changes, call `review_code_changes()` to perform a self-review before finalisation
+   - For non-trivial changes, call `review_code_changes()` to perform a self-review before finalisation. You can optionally provide a `context` message to give the reviewer additional information — e.g. explaining why changes diverge from the specification or implementation plan, known limitations, or areas to focus on.
    - Thoughtfully consider the review feedback — use it in combination with your own judgement rather than blindly applying every suggestion
    - Address findings where you agree they are valid and worth doing
 
