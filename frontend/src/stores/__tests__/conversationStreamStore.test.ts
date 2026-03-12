@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { enableMapSet } from 'immer'
 import { useConversationStreamStore } from '../conversationStreamStore'
 import type { ConversationEvent } from '../../lib/api'
+import type { EventHandlerRegistry } from '../../hooks/useConversationEventHandlers'
 
 // Enable Immer MapSet plugin for handling Map/Set in the store
 enableMapSet()
@@ -328,5 +329,65 @@ describe('conversationStreamStore - stream cancellation', () => {
 
     // Wait for stream to finish
     await streamPromise
+  })
+
+  it('should invoke stream complete handlers when stopStream is called', async () => {
+    const conversationId = Date.now() + 103
+    const store = useConversationStreamStore.getState()
+
+    const abortController = new AbortController()
+    const streamCompleteHandler = vi.fn()
+
+    // Register event handler registry with a stream complete handler
+    const registry: EventHandlerRegistry = {
+      toolResultHandlers: new Set(),
+      systemEventHandlers: new Set(),
+      streamCompleteHandlers: new Set([streamCompleteHandler]),
+    }
+    store.updateEventHandlerRegistry(conversationId, registry)
+
+    async function* mockStream(): AsyncGenerator<ConversationEvent> {
+      yield {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Message',
+        timestamp: '2024-01-01T00:00:00Z',
+      }
+      // Simulate long-running stream that waits for abort
+      await new Promise((_, reject) => {
+        abortController.signal.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+    }
+
+    // Start stream and set queued state
+    const streamPromise = store.startStream(
+      conversationId,
+      mockStream(),
+      undefined,
+      abortController,
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    store.setQueued(conversationId, true)
+
+    // Verify stream is active and queued
+    expect(store.isConversationStreaming(conversationId)).toBe(true)
+    expect(store.getStreamState(conversationId)?.isQueued).toBe(true)
+
+    // Stop the stream (should delegate to completeStream and invoke handlers)
+    store.stopStream(conversationId)
+    await streamPromise
+
+    // Allow microtasks for async handler invocation
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    // Verify stream complete handler was invoked
+    expect(streamCompleteHandler).toHaveBeenCalledTimes(1)
+    expect(store.isConversationStreaming(conversationId)).toBe(false)
+
+    // Clean up registry
+    store.updateEventHandlerRegistry(conversationId, undefined)
   })
 })

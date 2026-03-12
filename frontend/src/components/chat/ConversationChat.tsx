@@ -104,7 +104,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     messages, pendingMessage, isRunningAction
   )
 
-  const { inputMessage, setInputMessage, handleSendMessage, handleCancelQueue } = useMessageQueueing(
+  const { inputMessage, setInputMessage, handleSendMessage } = useMessageQueueing(
     conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook
   )
 
@@ -295,7 +295,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
               isStreaming={isStreaming}
               onStopStream={() => stopStream(conversationId)}
               isQueued={isQueued}
-              onCancelQueue={handleCancelQueue}
             />
 
             {pendingMessage && pendingMessage.status !== 'failed' && (

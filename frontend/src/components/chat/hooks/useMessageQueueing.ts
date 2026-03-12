@@ -27,10 +27,6 @@ export function useMessageQueueing(
     await sendMessageViaHook(messageText)
   }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook])
 
-  const handleCancelQueue = useCallback(() => {
-    setQueued(conversationId, false)
-  }, [conversationId, setQueued])
-
   // Clear queue state when input is cleared while queued
   useEffect(() => {
     if (isQueued && !inputMessage.trim()) {
@@ -56,5 +52,5 @@ export function useMessageQueueing(
     }
   }, [conversationId, inputMessage, setQueued, sendMessageViaHook]))
 
-  return { inputMessage, setInputMessage, handleSendMessage, handleCancelQueue }
+  return { inputMessage, setInputMessage, handleSendMessage }
 }

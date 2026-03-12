@@ -13,7 +13,6 @@ interface ConversationInputProps {
   isStreaming?: boolean
   onStopStream?: () => void
   isQueued?: boolean
-  onCancelQueue?: () => void
 }
 
 export default function ConversationInput({
@@ -24,7 +23,6 @@ export default function ConversationInput({
   isStreaming = false,
   onStopStream,
   isQueued = false,
-  onCancelQueue
 }: ConversationInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const cachedLineHeightRef = useRef<number | null>(null)
@@ -129,31 +127,22 @@ export default function ConversationInput({
         )}
       </div>
       {isStreaming ? (
-        isQueued ? (
-          <div className="flex items-center space-x-2 flex-shrink-0">
+        <div className="flex items-center space-x-2 flex-shrink-0">
+          {isQueued && (
             <div className="flex items-center space-x-1 px-3 py-2 bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-md">
               <ClockIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Queued</span>
             </div>
-            <button
-              type="button"
-              onClick={onCancelQueue}
-              aria-label="Cancel queued message"
-              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
-            >
-              <XMarkIcon className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
+          )}
           <button
             type="button"
             onClick={onStopStream}
             aria-label="Stop streaming"
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 flex-shrink-0"
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
           >
             <StopIcon className="w-4 h-4" />
           </button>
-        )
+        </div>
       ) : (
         <button
           type="submit"

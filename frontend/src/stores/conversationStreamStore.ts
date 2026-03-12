@@ -317,14 +317,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Abort the fetch request
         stream.abortController.abort()
 
-        // Mark as not streaming and clear queue (user stopped intentionally)
-        set((draft) => {
-          const streamState = draft.activeStreams.get(conversationId)
-          if (streamState) {
-            streamState.isStreaming = false
-            streamState.isQueued = false
-          }
-        })
+        // Delegate to completeStream which handles isStreaming=false,
+        // invokes stream complete handlers (enabling queued message auto-send),
+        // and schedules cleanup
+        get().completeStream(conversationId)
       }
     },
 

@@ -61,7 +61,7 @@ export function MarkdownDocumentEditor({
           {field && (
             <button
               onClick={field.startEditing}
-              className="absolute bottom-3 right-3 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
+              className="absolute top-3 right-3 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
             >
               <PencilIcon className="w-3.5 h-3.5" />
               <span>Edit</span>
