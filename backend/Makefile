@@ -32,6 +32,7 @@ test:		## Run tests
 	uv run --frozen pytest
 
 start:		## Start development server (use BACKEND_PORT=XXXX to override default 8000)
+	@lsof -ti :$${BACKEND_PORT:-8000} | xargs kill -9 2>/dev/null || true
 	uv run --frozen uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
 
 migrate:	## Run database migrations
