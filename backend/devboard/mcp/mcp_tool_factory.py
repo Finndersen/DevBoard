@@ -5,8 +5,10 @@ and get pydantic_ai.Tool instances that wrap MCP tool calls.
 """
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
+import logfire
 from mcp import ClientSession
 from pydantic_ai import Tool
 
@@ -16,6 +18,13 @@ from devboard.mcp.exceptions import MCPToolExecutionError
 from devboard.mcp.mcp_lifecycle import MCPLifecycleManager
 from devboard.mcp.mcp_oauth_adapter import create_oauth_provider
 from devboard.services.oauth_service import OAuthService
+
+
+@dataclass
+class MCPServerSetupFailure:
+    server_name: str
+    server_id: int
+    error: str
 
 
 class MCPToolFactory:
@@ -34,6 +43,8 @@ class MCPToolFactory:
         self._oauth_service = oauth_service
         self._lifecycle_managers: dict[int, MCPLifecycleManager] = {}
         self._tools: list[Tool[Any]] = []
+        self._setup_failures: list[MCPServerSetupFailure] = []
+        self._failed_server_ids: set[int] = set()
 
     async def _create_lifecycle_manager(self, server_config: Any) -> MCPLifecycleManager:
         """Create an MCPLifecycleManager, with OAuth provider if needed."""
@@ -52,12 +63,36 @@ class MCPToolFactory:
             return MCPLifecycleManager(server_config, oauth_provider=oauth_provider)
         return MCPLifecycleManager(server_config)
 
+    @property
+    def setup_failures(self) -> list[MCPServerSetupFailure]:
+        return self._setup_failures
+
     async def __aenter__(self) -> "MCPToolFactory":
         """Set up MCP connections and create tool wrappers."""
         for mcp_tool in self._mcp_tools:
+            if mcp_tool.server_id in self._failed_server_ids:
+                continue
+
             if mcp_tool.server_id not in self._lifecycle_managers:
                 lifecycle = await self._create_lifecycle_manager(mcp_tool.server)
-                await lifecycle.setup()
+                try:
+                    await lifecycle.setup()
+                except Exception as e:
+                    logfire.error(
+                        "MCP server setup failed: {server_name} (id={server_id}): {error}",
+                        server_name=mcp_tool.server.name,
+                        server_id=mcp_tool.server_id,
+                        error=str(e),
+                    )
+                    self._setup_failures.append(
+                        MCPServerSetupFailure(
+                            server_name=mcp_tool.server.name,
+                            server_id=mcp_tool.server_id,
+                            error=str(e),
+                        )
+                    )
+                    self._failed_server_ids.add(mcp_tool.server_id)
+                    continue
                 self._lifecycle_managers[mcp_tool.server_id] = lifecycle
 
             session = self._lifecycle_managers[mcp_tool.server_id].mcp_session

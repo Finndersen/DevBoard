@@ -1,6 +1,7 @@
 """Abstract base interface for agent execution services."""
 
 import asyncio
+import datetime
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
@@ -9,7 +10,7 @@ import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.conversation_history import ConversationHistoryService
-from devboard.agents.events import ConversationEvent
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
@@ -131,6 +132,16 @@ class AgentExecutionService(ABC):
         ):
             mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
             async with MCPToolFactory(mcp_tool_configs, oauth_service=self._oauth_service) as mcp_factory:
+                for failure in mcp_factory.setup_failures:
+                    yield SystemEvent(
+                        type=SystemEventType.STREAM_ERROR,
+                        data={
+                            "error_code": "MCP_SERVER_SETUP_FAILED",
+                            "message": f"MCP server '{failure.server_name}' failed to connect: {failure.error}",
+                        },
+                        timestamp=datetime.datetime.now(tz=datetime.UTC),
+                    )
+
                 # MCP server tools for the role plus any others added dynamically for the specific run
                 extra_tools = self._additional_tools + mcp_factory.get_tools()
                 async for event in self._stream_events_impl(message_or_approvals, extra_tools):

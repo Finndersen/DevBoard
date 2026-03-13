@@ -6,7 +6,7 @@ import pytest
 
 from devboard.db.models import MCPServerConfig, MCPTool
 from devboard.mcp.exceptions import MCPToolExecutionError
-from devboard.mcp.mcp_tool_factory import MCPToolFactory
+from devboard.mcp.mcp_tool_factory import MCPServerSetupFailure, MCPToolFactory
 
 
 @pytest.fixture
@@ -228,3 +228,134 @@ class TestMCPToolFactoryErrorHandling:
 
                 with pytest.raises(MCPToolExecutionError, match="Error line 1\nError line 2"):
                     await tools[0].function(param="test")
+
+
+class TestMCPToolFactorySetupFailureHandling:
+    """Tests for graceful handling of MCP server setup failures."""
+
+    def _make_server_and_tool(self, server_id: int, server_name: str, tool_name: str):
+        server = Mock(spec=MCPServerConfig)
+        server.id = server_id
+        server.name = server_name
+        server.last_verified_success = True
+
+        tool = Mock(spec=MCPTool)
+        tool.id = server_id * 100
+        tool.name = tool_name
+        tool.description = f"Tool from {server_name}"
+        tool.input_schema = {"type": "object", "properties": {}}
+        tool.server_id = server_id
+        tool.server = server
+        return server, tool
+
+    @pytest.mark.asyncio
+    async def test_one_server_fails_other_succeeds(self):
+        """When one server fails setup, its tools are skipped but the other server's tools are returned."""
+        _, tool_a = self._make_server_and_tool(1, "Failing Server", "tool_a")
+        _, tool_b = self._make_server_and_tool(2, "Working Server", "tool_b")
+
+        mock_session = AsyncMock()
+
+        with patch("devboard.mcp.mcp_tool_factory.MCPLifecycleManager") as mock_lifecycle_class:
+            failing_lifecycle = AsyncMock()
+            failing_lifecycle.setup.side_effect = ConnectionError("Connection refused")
+
+            working_lifecycle = AsyncMock()
+            working_lifecycle.mcp_session = mock_session
+
+            mock_lifecycle_class.side_effect = [failing_lifecycle, working_lifecycle]
+
+            factory = MCPToolFactory([tool_a, tool_b])
+            async with factory:
+                tools = factory.get_tools()
+
+                assert len(tools) == 1
+                assert tools[0].name == "tool_b"
+
+                assert len(factory.setup_failures) == 1
+                assert factory.setup_failures[0] == MCPServerSetupFailure(
+                    server_name="Failing Server",
+                    server_id=1,
+                    error="Connection refused",
+                )
+
+    @pytest.mark.asyncio
+    async def test_all_servers_fail(self):
+        """When all servers fail setup, no tools are returned and all failures recorded."""
+        _, tool_a = self._make_server_and_tool(1, "Server A", "tool_a")
+        _, tool_b = self._make_server_and_tool(2, "Server B", "tool_b")
+
+        with patch("devboard.mcp.mcp_tool_factory.MCPLifecycleManager") as mock_lifecycle_class:
+            lifecycle_a = AsyncMock()
+            lifecycle_a.setup.side_effect = ConnectionError("refused")
+
+            lifecycle_b = AsyncMock()
+            lifecycle_b.setup.side_effect = TimeoutError("timed out")
+
+            mock_lifecycle_class.side_effect = [lifecycle_a, lifecycle_b]
+
+            factory = MCPToolFactory([tool_a, tool_b])
+            async with factory:
+                assert factory.get_tools() == []
+                assert len(factory.setup_failures) == 2
+                assert factory.setup_failures[0].server_name == "Server A"
+                assert factory.setup_failures[1].server_name == "Server B"
+
+    @pytest.mark.asyncio
+    async def test_teardown_only_called_on_successful_servers(self):
+        """Failed servers should not have teardown called since they were never added to lifecycle managers."""
+        _, tool_a = self._make_server_and_tool(1, "Failing Server", "tool_a")
+        _, tool_b = self._make_server_and_tool(2, "Working Server", "tool_b")
+
+        mock_session = AsyncMock()
+
+        with patch("devboard.mcp.mcp_tool_factory.MCPLifecycleManager") as mock_lifecycle_class:
+            failing_lifecycle = AsyncMock()
+            failing_lifecycle.setup.side_effect = ConnectionError("refused")
+
+            working_lifecycle = AsyncMock()
+            working_lifecycle.mcp_session = mock_session
+
+            mock_lifecycle_class.side_effect = [failing_lifecycle, working_lifecycle]
+
+            factory = MCPToolFactory([tool_a, tool_b])
+            async with factory:
+                pass
+
+            working_lifecycle.teardown.assert_called_once()
+            failing_lifecycle.teardown.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_multiple_tools_from_same_failed_server_all_skipped(self):
+        """Multiple tools from the same failed server are all skipped with a single failure entry."""
+        server, tool_a = self._make_server_and_tool(1, "Failing Server", "tool_a")
+        tool_b = Mock(spec=MCPTool)
+        tool_b.id = 101
+        tool_b.name = "tool_b"
+        tool_b.description = "Another tool from failing server"
+        tool_b.input_schema = {"type": "object", "properties": {}}
+        tool_b.server_id = server.id
+        tool_b.server = server
+
+        _, tool_c = self._make_server_and_tool(2, "Working Server", "tool_c")
+
+        mock_session = AsyncMock()
+
+        with patch("devboard.mcp.mcp_tool_factory.MCPLifecycleManager") as mock_lifecycle_class:
+            failing_lifecycle = AsyncMock()
+            failing_lifecycle.setup.side_effect = ConnectionError("refused")
+
+            working_lifecycle = AsyncMock()
+            working_lifecycle.mcp_session = mock_session
+
+            mock_lifecycle_class.side_effect = [failing_lifecycle, working_lifecycle]
+
+            factory = MCPToolFactory([tool_a, tool_b, tool_c])
+            async with factory:
+                tools = factory.get_tools()
+
+                assert len(tools) == 1
+                assert tools[0].name == "tool_c"
+
+                assert len(factory.setup_failures) == 1
+                assert factory.setup_failures[0].server_id == 1
