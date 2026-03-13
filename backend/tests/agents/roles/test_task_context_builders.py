@@ -140,6 +140,7 @@ class TestBuildTaskPlanningContext:
         context = build_task_planning_context(task_with_documents)
 
         # Check task metadata
+        assert f"ID: {task_with_documents.id}" in context
         assert "NAME: Test Task" in context
         assert "STATUS: planning" in context
 
@@ -160,6 +161,7 @@ class TestBuildTaskPlanningContext:
         context = build_task_planning_context(task_without_implementation_plan)
 
         # Check task metadata
+        assert f"ID: {task_without_implementation_plan.id}" in context
         assert "NAME: Test Task" in context
         assert "STATUS: planning" in context
 

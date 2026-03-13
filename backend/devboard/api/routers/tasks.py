@@ -593,24 +593,14 @@ async def get_task_pr_status(
     task_service: TaskService = Depends(get_task_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> GitHubPRStatusResponse:
-    """Get GitHub PR status for a task in PR_OPEN state.
+    """Get GitHub PR status for a task that has a PR.
 
     Returns PR information including merge status, mergeable state, and checks status.
-    Used by frontend to enable/disable merge actions and display PR status.
-
-    Args:
-        task_id: ID of the task
-
-    Returns:
-        GitHubPRStatusResponse with PR status information
-
-    Raises:
-        HTTPException: 404 if task not in PR_OPEN state or has no PR reference
-        HTTPException: 500 if GitHub API fails
+    Supported for tasks in PR_OPEN or COMPLETE state (PR number persists after completion).
     """
-    # Validate task is in PR_OPEN state
-    if task.status != TaskStatus.PR_OPEN:
-        raise HTTPException(status_code=404, detail=f"Task is not in PR_OPEN state (current: {task.status.value})")
+    # Validate task has (or had) a PR
+    if task.status not in (TaskStatus.PR_OPEN, TaskStatus.COMPLETE):
+        raise HTTPException(status_code=404, detail=f"Task has no PR (current status: {task.status.value})")
 
     # Check task has PR info
     if not task.github_pr_number:

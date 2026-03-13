@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { TaskStatus } from '../../lib/api'
 import type { Task } from '../../lib/api'
 import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 
@@ -55,7 +56,7 @@ export function useTaskEventHandlers({
 
   const fileModificationHandler = useCallback((toolName: string, _result: unknown) => {
     const isFileModification = toolName === 'Edit' || toolName === 'Write'
-    const isImplementing = task?.status?.toLowerCase() === 'implementing' && task?.codebase_id
+    const isImplementing = task?.status === TaskStatus.IMPLEMENTING && task?.codebase_id
 
     if (isFileModification && isImplementing) {
       if (diffRefreshTimeoutRef.current) {
@@ -127,7 +128,7 @@ export function useTaskEventHandlers({
   useSystemEventHandler(systemEventHandler)
 
   const streamCompleteHandler = useCallback(() => {
-    if (task?.status?.toLowerCase() === 'implementing' && task?.codebase_id) {
+    if (task?.status === TaskStatus.IMPLEMENTING && task?.codebase_id) {
       if (diffRefreshTimeoutRef.current) {
         clearTimeout(diffRefreshTimeoutRef.current)
         diffRefreshTimeoutRef.current = null

@@ -7,28 +7,29 @@ import { useOpenPRs } from '../hooks/useGitHubPRs'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
+import { TaskStatus } from '../lib/api'
 import type { TaskListItem, OpenPRItem } from '../lib/api'
 import ViewHeader from '../components/layout/ViewHeader'
 import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
 
-const STATUS_COLUMNS = ['planning', 'implementing', 'pr_open', 'complete']
+const STATUS_COLUMNS: TaskStatus[] = [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE]
 
-const STATUS_LABELS: Record<string, string> = {
-  planning: 'Planning',
-  implementing: 'Implementing',
-  pr_open: 'PR Open',
-  complete: 'Complete',
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  [TaskStatus.PLANNING]: 'Planning',
+  [TaskStatus.IMPLEMENTING]: 'Implementing',
+  [TaskStatus.PR_OPEN]: 'PR Open',
+  [TaskStatus.COMPLETE]: 'Complete',
 }
 
-function getStatusColor(status: string) {
-  switch (status.toLowerCase()) {
-    case 'planning':
+function getStatusColor(status: TaskStatus) {
+  switch (status) {
+    case TaskStatus.PLANNING:
       return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-    case 'implementing':
+    case TaskStatus.IMPLEMENTING:
       return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
-    case 'pr_open':
+    case TaskStatus.PR_OPEN:
       return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
-    case 'complete':
+    case TaskStatus.COMPLETE:
       return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
     default:
       return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
@@ -164,7 +165,7 @@ export default function TasksList() {
 
             <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
               {taskGroups[status]?.map((task) => {
-                const pr = status === 'pr_open' ? prByTaskId.get(task.id) : undefined
+                const pr = status === TaskStatus.PR_OPEN ? prByTaskId.get(task.id) : undefined
                 return (
                   <Link
                     key={task.id}

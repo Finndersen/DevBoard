@@ -277,8 +277,9 @@ class ClaudeCodeAgent(BaseAgent):
                             should_retry_api_error = True
                         else:
                             _verify_result_message(message.result, last_assistant_text)
-                        # ResultMessage is always last - break to check retry flag or exit loop
-                        break
+                        # Don't break - let the stream finish naturally so the
+                        # subprocess can flush the session file before exiting
+                        continue
 
                     if isinstance(message, SystemMessage):
                         # Set session_id from SystemMessage

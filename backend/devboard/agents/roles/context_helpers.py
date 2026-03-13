@@ -21,6 +21,7 @@ def _format_task_metadata(task: Task) -> str:
     """Format task name and status metadata."""
     lines = [
         "## TASK DETAILS",
+        f"ID: {task.id}",
         f"NAME: {task.title}",
         f"STATUS: {task.status.value}",
     ]

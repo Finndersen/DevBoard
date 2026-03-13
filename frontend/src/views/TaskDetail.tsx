@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, CheckCircleIcon, TagIcon } from '@heroicons/react/24/outline'
+import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
@@ -71,17 +72,22 @@ function TaskDetail({ id }: TaskDetailProps) {
       .catch(err => console.error('Failed to load custom field definitions:', err))
   }, [])
 
-  // Fetch PR status and feedback when task is in PR_OPEN state
+  // Fetch PR status when task has a PR (pr_open or complete)
+  // Fetch PR feedback only for pr_open (active review)
   useEffect(() => {
-    if (task?.status === 'pr_open' && task?.id) {
+    if (task?.id && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
       setPrStatusLoading(true)
       apiClient.getTaskPRStatus(task.id)
         .then(setPrStatus)
         .catch(() => setPrStatus(null))
         .finally(() => setPrStatusLoading(false))
-      apiClient.getTaskPRFeedback(task.id)
-        .then(setPrFeedback)
-        .catch(() => setPrFeedback(null))
+      if (task.status === TaskStatus.PR_OPEN) {
+        apiClient.getTaskPRFeedback(task.id)
+          .then(setPrFeedback)
+          .catch(() => setPrFeedback(null))
+      } else {
+        setPrFeedback(null)
+      }
     } else {
       setPrStatus(null)
       setPrFeedback(null)
@@ -511,7 +517,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
                     ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
-                    ...(task.codebase_id && ['implementing', 'pr_open'].includes(task.status.toLowerCase()) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
+                    ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
                     ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon }] : []),
                   ].map((tab) => (
                     <button
@@ -525,7 +531,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                     >
                       <tab.icon className="w-4 h-4" />
                       <span>{tab.name}</span>
-                      {tab.id === 'changes' && task?.status === 'implementing' && codeReviewStatus === 'reviewed' && (
+                      {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
                         <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
                       )}
                     </button>
@@ -575,7 +581,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 onRefresh={handleDiffRefresh}
                 onSubmitComments={handleSubmitReviewComments}
                 isStreaming={isConversationStreaming}
-                {...(task?.status === 'implementing' && {
+                {...(task?.status === TaskStatus.IMPLEMENTING && {
                   codeReviewStatus,
                   onAutoReview: handleAutoReview,
                 })}
@@ -602,7 +608,7 @@ function TaskDetail({ id }: TaskDetailProps) {
             initialMessage={pendingInitialMessage}
             onInitialMessageSent={() => setPendingInitialMessage(null)}
             codebaseLocalPath={selectedCodebase?.local_path}
-            isDisabled={task.status === 'complete'}
+            isDisabled={task.status === TaskStatus.COMPLETE}
             onConversationReset={handleConversationReset}
           />
         </div>

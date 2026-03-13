@@ -405,12 +405,27 @@ class ClaudeClient:
                     raise item
                 yield item
         finally:
-            # If consumer stops early (e.g., client disconnect), cancel the SDK task.
-            # The SDK task will handle its own cleanup in its own task context.
             if not task.done():
-                task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+                # Consumer stopped early — give the SDK task time to flush the
+                # subprocess session file before resorting to cancellation.
+                logfire.warning("Stream consumer exited before SDK task completed — waiting for subprocess flush")
+                try:
+                    await asyncio.wait_for(task, timeout=10.0)
+                except TimeoutError:
+                    logfire.error(
+                        "SDK task did not complete within 10s grace period — cancelling "
+                        "(session file may be incomplete)"
+                    )
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+                except asyncio.CancelledError:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+            else:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     @staticmethod
     async def _wait_for_subprocess_flush(client: ClaudeSDKClient, timeout: float = 5.0) -> None:

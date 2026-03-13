@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
+import { TaskStatus } from '../../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
@@ -55,14 +56,14 @@ interface TaskDetailHeaderProps {
   deleteError: unknown
 }
 
-const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
-  switch (status.toLowerCase()) {
-    case 'planning':
-    case 'implementing':
+const getStatusVariant = (status: TaskStatus): 'default' | 'success' | 'warning' | 'error' | 'info' => {
+  switch (status) {
+    case TaskStatus.PLANNING:
+    case TaskStatus.IMPLEMENTING:
       return 'info'
-    case 'pr_open':
+    case TaskStatus.PR_OPEN:
       return 'warning'
-    case 'complete':
+    case TaskStatus.COMPLETE:
       return 'success'
     default:
       return 'default'
@@ -253,7 +254,7 @@ export function TaskDetailHeader({
             </div>
 
             {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
-            {gitStatus?.branch_name && task.status !== 'complete' && (
+            {gitStatus?.branch_name && task.status !== TaskStatus.COMPLETE && (
               <button
                 onClick={onOpenBranchStatusModal}
                 className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${
@@ -274,8 +275,8 @@ export function TaskDetailHeader({
               </button>
             )}
 
-            {/* PR Status - shown when task is in PR_OPEN state */}
-            {task.status === 'pr_open' && (prStatus || prStatusLoading) && (
+            {/* PR Status - shown when task has a PR (pr_open or complete) */}
+            {(task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE) && (prStatus || prStatusLoading) && (
               <div className="flex items-center rounded border border-gray-300 dark:border-gray-600 overflow-hidden">
                 {prStatus && (
                   <button
@@ -299,14 +300,16 @@ export function TaskDetailHeader({
                     )}
                   </button>
                 )}
-                <button
-                  onClick={onRefreshPrStatus}
-                  disabled={prStatusLoading}
-                  className={`flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${textColors.secondary}`}
-                  title="Refresh PR status"
-                >
-                  <ArrowPathIcon className={`w-3.5 h-3.5 ${prStatusLoading ? 'animate-spin' : ''}`} />
-                </button>
+                {task.status === TaskStatus.PR_OPEN && (
+                  <button
+                    onClick={onRefreshPrStatus}
+                    disabled={prStatusLoading}
+                    className={`flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${textColors.secondary}`}
+                    title="Refresh PR status"
+                  >
+                    <ArrowPathIcon className={`w-3.5 h-3.5 ${prStatusLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
               </div>
             )}
           </div>

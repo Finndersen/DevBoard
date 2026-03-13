@@ -3,6 +3,7 @@ import { FolderIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24
 import { useProjects } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
 import { useAllTasks } from '../hooks/useTasks'
+import { TaskStatus } from '../lib/api'
 import { Card } from '../components/ui'
 
 export default function Home() {
@@ -10,7 +11,7 @@ export default function Home() {
   const { data: codebases } = useCodebases()
   const { data: tasks } = useAllTasks()
 
-  const activeTasks = tasks?.filter(t => t.status !== 'complete') ?? []
+  const activeTasks = tasks?.filter(t => t.status !== TaskStatus.COMPLETE) ?? []
 
   return (
     <div className="space-y-8 h-full overflow-auto">

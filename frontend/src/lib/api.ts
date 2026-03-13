@@ -1,5 +1,12 @@
 import { createWebSocketEventStream } from './websocketStream'
 
+export enum TaskStatus {
+  PLANNING = 'planning',
+  IMPLEMENTING = 'implementing',
+  PR_OPEN = 'pr_open',
+  COMPLETE = 'complete',
+}
+
 export interface Project {
   id: number
   name: string
@@ -16,7 +23,7 @@ export interface WorkflowActionInfo {
 export interface Task {
   id: number
   title: string
-  status: string
+  status: TaskStatus
   project_id: number
   codebase_id: number
   conversation_id: number
@@ -34,7 +41,7 @@ export interface TaskListItem {
   project_id: number
   project_name: string
   codebase_id: number
-  status: string
+  status: TaskStatus
   created_at: string
 }
 

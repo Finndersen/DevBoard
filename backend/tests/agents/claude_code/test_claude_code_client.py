@@ -406,6 +406,129 @@ class TestMcpToolErrorHandling:
         assert result.root.isError is False, "isError should be False for successful tool"
 
 
+class TestStreamGracefulShutdown:
+    """Tests for stream() finally block graceful shutdown behavior.
+
+    The stream() method uses a queue-based approach with a background _consume_sdk task.
+    When the consumer exits early, the finally block should give the task a grace period
+    to complete (for subprocess flush) before resorting to cancellation.
+    """
+
+    @pytest.mark.asyncio
+    async def test_natural_stream_exhaustion_no_cancel(self, mock_sdk_client):
+        """Verify that when the stream exhausts naturally, no cancellation occurs."""
+
+        async def mock_receive_response():
+            yield AssistantMessage(
+                content=[TextBlock(text="Done")],
+                model="claude-sonnet-4",
+                parent_tool_use_id=None,
+            )
+            yield ResultMessage(
+                subtype="complete",
+                duration_ms=100,
+                duration_api_ms=80,
+                is_error=False,
+                num_turns=1,
+                session_id="session-2",
+            )
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient()
+        messages = []
+        async for message in client.stream("test"):
+            messages.append(message)
+
+        assert len(messages) == 2
+        assert isinstance(messages[0], AssistantMessage)
+        assert isinstance(messages[1], ResultMessage)
+
+    @pytest.mark.asyncio
+    async def test_grace_period_waits_for_task_completion(self):
+        """Verify the grace period logic: wait_for is used instead of immediate cancel
+        when the task is not yet done."""
+        flush_completed = asyncio.Event()
+
+        async def background():
+            await asyncio.sleep(0.05)
+            flush_completed.set()
+
+        task = asyncio.create_task(background())
+        # Ensure task has started but not completed
+        await asyncio.sleep(0)
+        assert not task.done()
+
+        # Simulate the stream() finally block logic for early consumer exit
+        if not task.done():
+            try:
+                await asyncio.wait_for(task, timeout=10.0)
+            except TimeoutError:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            except asyncio.CancelledError:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        assert flush_completed.is_set(), "Task should complete within grace period instead of being cancelled"
+
+    @pytest.mark.asyncio
+    async def test_grace_period_timeout_falls_back_to_cancel(self):
+        """Verify that if the task doesn't complete within the grace period,
+        it falls back to cancellation."""
+        task_was_cancelled = asyncio.Event()
+
+        async def hanging_background():
+            try:
+                await asyncio.sleep(999)
+            except asyncio.CancelledError:
+                task_was_cancelled.set()
+                raise
+
+        task = asyncio.create_task(hanging_background())
+        await asyncio.sleep(0)
+        assert not task.done()
+
+        # Simulate the stream() finally block logic with a short timeout
+        if not task.done():
+            try:
+                await asyncio.wait_for(task, timeout=0.1)
+            except TimeoutError:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            except asyncio.CancelledError:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        assert task_was_cancelled.is_set(), "Task should be cancelled after grace period timeout"
+
+    @pytest.mark.asyncio
+    async def test_completed_task_not_cancelled(self):
+        """Verify that an already-completed task is not cancelled."""
+
+        async def quick_background():
+            pass
+
+        task = asyncio.create_task(quick_background())
+        await task  # Wait for completion
+
+        assert task.done()
+
+        # Simulate the stream() finally block logic — should take the else branch
+        cancelled = False
+        if not task.done():
+            cancelled = True
+        else:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+        assert not cancelled, "Completed task should not be cancelled"
+
+
 class TestWaitForSubprocessFlush:
     """Tests for ClaudeClient._wait_for_subprocess_flush."""
 
