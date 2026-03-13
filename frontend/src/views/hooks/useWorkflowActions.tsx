@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { Task, GitHubPRStatusResponse } from '../../lib/api'
+import type { Task, GitHubPRStatusResponse, TaskGitStatus } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { Button } from '../../components/ui'
@@ -14,11 +14,30 @@ const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.complete_no_merge': 'Complete task (no merge)',
 }
 
+function getActionLabel(
+  actionKey: string,
+  gitStatus: TaskGitStatus | null,
+  prStatus: GitHubPRStatusResponse | null
+): string {
+  if (actionKey === 'task.merge_and_finalise' && prStatus?.merged) {
+    return 'Complete task'
+  }
+
+  const needsRebase = gitStatus?.has_conflicts && gitStatus.commits_behind > 0
+  if (needsRebase) {
+    if (actionKey === 'task.approve_and_merge') return 'Rebase & merge locally'
+    if (actionKey === 'task.approve_and_create_pr') return 'Rebase & create PR'
+  }
+
+  return WORKFLOW_ACTION_LABELS[actionKey] ?? actionKey
+}
+
 interface UseWorkflowActionsParams {
   task: Task | null
   prStatus: GitHubPRStatusResponse | null
   specificationContent: string | undefined
   refetch: () => Promise<void>
+  gitStatus?: TaskGitStatus | null
 }
 
 interface UseWorkflowActionsResult {
@@ -29,7 +48,7 @@ interface UseWorkflowActionsResult {
   handleTriggerRebase: () => void
 }
 
-export function useWorkflowActions({ task, prStatus, specificationContent, refetch }: UseWorkflowActionsParams): UseWorkflowActionsResult {
+export function useWorkflowActions({ task, prStatus, specificationContent, refetch, gitStatus }: UseWorkflowActionsParams): UseWorkflowActionsResult {
   const [streamingMessage, setStreamingMessage] = useState('')
 
   const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
@@ -113,9 +132,7 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
               className={config.className}
               disabled={isDisabled}
             >
-              {action.key === 'task.merge_and_finalise' && prStatus?.merged
-                ? 'Complete task'
-                : (WORKFLOW_ACTION_LABELS[action.key] ?? action.key)}
+              {getActionLabel(action.key, gitStatus ?? null, prStatus)}
             </Button>
           )
         })}

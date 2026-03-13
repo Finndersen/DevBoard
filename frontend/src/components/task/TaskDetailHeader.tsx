@@ -96,6 +96,7 @@ export function TaskDetailHeader({
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
+  const hasBranchWarning = gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap
 
   // Close codebase selector when clicking outside
   useEffect(() => {
@@ -263,9 +264,11 @@ export function TaskDetailHeader({
               <button
                 onClick={onOpenBranchStatusModal}
                 className={`flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${
-                  gitStatus.worktree_slot_path
-                    ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
-                    : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ' + textColors.secondary
+                  hasBranchWarning
+                    ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
+                    : gitStatus.worktree_slot_path
+                      ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                      : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ' + textColors.secondary
                 }`}
                 title={gitStatus.branch_name}
                 disabled={branchStatusLoading}
@@ -276,6 +279,11 @@ export function TaskDetailHeader({
                 )}
                 {gitStatus.commits_behind > 0 && (
                   <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">↓{gitStatus.commits_behind}</span>
+                )}
+                {hasBranchWarning && (
+                  <svg className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
                 )}
               </button>
             )}

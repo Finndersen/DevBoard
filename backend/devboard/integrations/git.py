@@ -730,6 +730,32 @@ class GitRepoIntegration:
             return 0
         return len([line for line in output.splitlines() if line.strip()])
 
+    async def get_uncommitted_file_paths(self) -> list[str]:
+        """Get deduplicated file paths with uncommitted changes (staged + unstaged).
+
+        Returns:
+            List of file paths that have staged or unstaged changes
+        """
+        unstaged = await self._run_git_command(["diff", "--name-only"], raise_on_error=False)
+        staged = await self._run_git_command(["diff", "--name-only", "--cached"], raise_on_error=False)
+        paths = set()
+        for output in (unstaged, staged):
+            paths.update(f for f in output.strip().split("\n") if f)
+        return sorted(paths)
+
+    async def get_changed_file_paths(self, commit_a: str, commit_b: str) -> list[str]:
+        """Get file paths changed between two commits.
+
+        Args:
+            commit_a: Starting commit reference
+            commit_b: Ending commit reference
+
+        Returns:
+            List of file paths changed between the two commits
+        """
+        output = await self._run_git_command(["diff", "--name-only", commit_a, commit_b], raise_on_error=False)
+        return [f for f in output.strip().split("\n") if f]
+
     async def get_conflicted_files(self) -> list[str]:
         """Get list of files with unmerged conflicts.
 

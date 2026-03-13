@@ -68,6 +68,22 @@ def create_github_pr_tool(
                 "Please commit all changes before creating the pull request."
             )
 
+        # Fetch latest remote state so conflict check is against up-to-date base branch
+        main_git = GitRepoIntegration(task.codebase.local_path)
+        try:
+            await main_git.fetch()
+        except Exception:
+            pass  # Fetch failure is non-fatal - continue with local state
+
+        # Check for merge conflicts with base branch
+        comparison = await main_git.get_branch_comparison(task.branch_name, task.base_branch)
+        if comparison.has_conflicts:
+            raise ModelRetry(
+                "Cannot create PR: merge conflicts detected between the feature branch and base branch. "
+                "Please call rebase_task_branch() to rebase onto the base branch and resolve conflicts, "
+                "then call create_pull_request() again."
+            )
+
         try:
             # Get repository wrapper (API call happens here)
             github_repo = await github_integration.get_repository_from_url(task.codebase.repository_url)

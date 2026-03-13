@@ -324,6 +324,7 @@ export interface TaskGitStatus {
   main_repo_current_branch: string | null
   // Rebase state
   rebase_in_progress: boolean
+  has_uncommitted_base_overlap: boolean
 }
 
 export interface WorktreeSlotInfo {

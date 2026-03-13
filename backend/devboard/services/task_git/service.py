@@ -58,6 +58,7 @@ class TaskGitService:
         main_repo_current_branch = await main_git.get_current_branch()
 
         rebase_in_progress = False
+        worktree_git = None
         if worktree_slot_path:
             worktree_git = GitRepoIntegration(worktree_slot_path)
             rebase_in_progress = worktree_git.is_rebase_in_progress()
@@ -82,6 +83,15 @@ class TaskGitService:
 
         comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
 
+        has_uncommitted_base_overlap = False
+        if worktree_git and branch_exists:
+            uncommitted_files = await worktree_git.get_uncommitted_file_paths()
+            if uncommitted_files:
+                fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
+                if fork_point:
+                    base_changed_files = await git.get_changed_file_paths(fork_point, task.base_branch)
+                    has_uncommitted_base_overlap = bool(set(uncommitted_files) & set(base_changed_files))
+
         return TaskGitStatus(
             branch_name=task.branch_name,
             branch_exists=True,
@@ -94,6 +104,7 @@ class TaskGitService:
             main_repo_is_clean=main_repo_is_clean,
             main_repo_current_branch=main_repo_current_branch,
             rebase_in_progress=rebase_in_progress,
+            has_uncommitted_base_overlap=has_uncommitted_base_overlap,
         )
 
     async def merge_task_branch(
