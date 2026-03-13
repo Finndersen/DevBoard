@@ -186,19 +186,16 @@ Falls back to plain text for unknown extensions.
 - Batch submit button for multiple pending comments
 - Shows comment count and clear all option
 
-**PRInlineCommentThread** (`frontend/src/components/documents/PRInlineCommentThread.tsx`):
-- Renders a GitHub PR review comment thread inline in the diff at the corresponding line
-- Amber/orange styling to distinguish from internal developer comments (blue)
-- Shows original comment and replies (read-only)
-- "Send to agent" button formats comment context and sends to the implementation agent
-
-**PRGeneralComments** (`frontend/src/components/documents/PRGeneralComments.tsx`):
-- Renders review-level comments and standalone comment threads at the bottom of the File Changes tab
-- Shown for `pr_open` tasks when PR feedback is available
-- Same "Send to agent" functionality as inline PR comments
+**CommentsTab** (`frontend/src/components/task/CommentsTab.tsx`):
+- Dedicated "PR Comments" tab rendering all PR feedback (reviews, general threads, file-specific inline threads)
+- File-specific threads display file path, line number, and `diff_hunk` context
+- Always-visible "Send to agent" textarea and button below each comment/thread (no toggle)
+- Grouped with section headings ("Reviews", "General Comments", "File Comments") only when multiple sections have content
 
 **Integration** (`frontend/src/views/TaskDetail.tsx`):
-- Adds "Changes" tab to task detail view
+- Adds "File Changes" tab for pure diff viewing and "PR Comments" tab for review feedback
+- PR Comments tab visible when `prFeedback` has reviews or standalone threads
+- Both tabs show count badges (file count and comment count respectively)
 - Fetches diff data when tab first opened
 - Provides manual refresh capability
 - Provides `onSubmitComments` callback that sends review comments to the task's conversation

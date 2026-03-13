@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, CheckCircleIcon, TagIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, TagIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
@@ -23,6 +23,7 @@ import { TaskDetailHeader } from '../components/task/TaskDetailHeader'
 import { SpecificationTab } from '../components/task/SpecificationTab'
 import { PlanTab } from '../components/task/PlanTab'
 import { ChangesTab } from '../components/task/ChangesTab'
+import { CommentsTab } from '../components/task/CommentsTab'
 import { SummaryTab } from '../components/task/SummaryTab'
 
 const WORKFLOW_ACTION_LABELS: Record<string, string> = {
@@ -33,6 +34,20 @@ const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.approve_and_create_pr': 'Approve & Create PR',
   'task.merge_and_finalise': 'Merge PR & Complete',
   'task.finalise': 'Complete Task',
+}
+
+function countPRComments(fb: PRFeedbackResponse): number {
+  let count = 0
+  for (const r of fb.reviews) {
+    if (r.body.trim()) count++
+    for (const t of r.comment_threads) {
+      count += 1 + t.replies.length
+    }
+  }
+  for (const t of fb.standalone_threads) {
+    count += 1 + t.replies.length
+  }
+  return count
 }
 
 interface TaskDetailProps {
@@ -192,7 +207,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Update tab title when task data is loaded
   useTabTitle('task', id)
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'summary'>('specification')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'comments' | 'summary'>('specification')
   const [streamingMessage, setStreamingMessage] = useState<string>('')
 
   // Use ref to store refetch function to avoid dependency issues
@@ -521,10 +536,11 @@ function TaskDetail({ id }: TaskDetailProps) {
                 {/* Navigation Tabs */}
                 <nav className="flex space-x-6">
                   {[
-                    { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon },
-                    ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon }] : []),
-                    ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon }] : []),
-                    ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon }] : []),
+                    { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
+                    ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
+                    ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
+                    ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
+                    ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -537,6 +553,11 @@ function TaskDetail({ id }: TaskDetailProps) {
                     >
                       <tab.icon className="w-4 h-4" />
                       <span>{tab.name}</span>
+                      {tab.badge != null && tab.badge > 0 && (
+                        <span className="text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-1.5">
+                          {tab.badge}
+                        </span>
+                      )}
                       {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
                         <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
                       )}
@@ -583,7 +604,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                 diffLoading={diffLoading}
                 branchInfoLoading={branchInfoLoading}
                 lastDiffUpdate={lastDiffUpdate}
-                prFeedback={prFeedback}
                 onRefresh={handleDiffRefresh}
                 onSubmitComments={handleSubmitReviewComments}
                 isStreaming={isConversationStreaming}
@@ -591,6 +611,13 @@ function TaskDetail({ id }: TaskDetailProps) {
                   codeReviewStatus,
                   onAutoReview: handleAutoReview,
                 })}
+              />
+            )}
+
+            {activeTab === 'comments' && prFeedback && (
+              <CommentsTab
+                prFeedback={prFeedback}
+                onSubmitComments={handleSubmitReviewComments}
               />
             )}
 

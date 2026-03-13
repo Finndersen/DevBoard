@@ -2,11 +2,9 @@ import { ChevronRightIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useEffect, useState, useCallback, useMemo, Fragment, startTransition, useRef } from 'react'
-import type { PRFeedbackCommentThread } from '../../lib/api'
 import { useDiffReviewOptional } from '../../contexts/DiffReviewContext'
 import DiffLineCommentButton from './DiffLineCommentButton'
 import DiffLineCommentForm from './DiffLineCommentForm'
-import PRInlineCommentThread from './PRInlineCommentThread'
 
 interface GitDiffViewerProps {
   diff: string
@@ -19,8 +17,6 @@ interface GitDiffViewerProps {
   className?: string
   isNewFile?: boolean
   isDeleted?: boolean
-  prComments?: PRFeedbackCommentThread[]
-  onSubmitPRComment?: (message: string) => void
 }
 
 interface DiffLine {
@@ -150,7 +146,7 @@ function parseDiff(rawDiff: string): DiffLine[] {
   return result
 }
 
-export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded = false, className = '', isNewFile, isDeleted, prComments, onSubmitPRComment }: GitDiffViewerProps) {
+export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded = false, className = '', isNewFile, isDeleted }: GitDiffViewerProps) {
   // Collapse/expand state
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   // Track which diff line index has the comment form open (not line number, since those can duplicate)
@@ -394,19 +390,6 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
                       />
                     </div>
                   )}
-                  {/* PR review comments for this line */}
-                  {prComments && onSubmitPRComment && line.type !== 'hunk' && prComments
-                    .filter(thread => thread.original.line === (line.newLineNum ?? line.oldLineNum))
-                    .map(thread => (
-                      <div
-                        key={thread.original.id}
-                        className="sticky left-0"
-                        style={{ width: containerWidth ? `${containerWidth}px` : '100%' }}
-                      >
-                        <PRInlineCommentThread thread={thread} onSubmit={onSubmitPRComment} />
-                      </div>
-                    ))
-                  }
                 </Fragment>
               )
             })}

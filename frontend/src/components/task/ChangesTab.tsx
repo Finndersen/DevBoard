@@ -1,4 +1,4 @@
-import type { TaskBranchInfo, TaskDiffResponse, PRFeedbackResponse } from '../../lib/api'
+import type { TaskBranchInfo, TaskDiffResponse } from '../../lib/api'
 import type { CodeReviewStatus } from '../../views/hooks/useCodeReviewStatus'
 import AllFilesDiffViewer from '../documents/AllFilesDiffViewer'
 
@@ -8,7 +8,6 @@ interface ChangesTabProps {
   diffLoading: boolean
   branchInfoLoading: boolean
   lastDiffUpdate: string | null
-  prFeedback: PRFeedbackResponse | null
   onRefresh: (view: string) => Promise<void>
   onSubmitComments: (message: string) => void
   codeReviewStatus?: CodeReviewStatus
@@ -22,7 +21,6 @@ export function ChangesTab({
   diffLoading,
   branchInfoLoading,
   lastDiffUpdate,
-  prFeedback,
   onRefresh,
   onSubmitComments,
   codeReviewStatus,
@@ -38,7 +36,6 @@ export function ChangesTab({
         onRefresh={onRefresh}
         lastUpdated={lastDiffUpdate}
         onSubmitComments={onSubmitComments}
-        prFeedback={prFeedback}
         codeReviewStatus={codeReviewStatus}
         onAutoReview={onAutoReview}
         isStreaming={isStreaming}
