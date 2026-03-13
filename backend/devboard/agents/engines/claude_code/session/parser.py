@@ -129,6 +129,10 @@ def parse_session_message(entry: MessageEntry, line_num: int) -> SessionMessage 
         if command_name:
             command = f"{command_name} {command_args}".strip() if command_args else command_name
 
+        # Skip entries that carry no useful information (no command and no output)
+        if not command and not local_cmd_stdout:
+            return None
+
         return LocalCommandSessionMessage(
             uuid=uuid,
             timestamp=timestamp,
