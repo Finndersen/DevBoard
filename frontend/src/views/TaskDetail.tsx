@@ -339,6 +339,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     agentChatRef.current?.sendMessage('Run review_code_changes tool to review your code changes')
   }, [])
 
+  const handleResolveConflicts = useCallback(() => {
+    agentChatRef.current?.sendMessage('Rebase on base branch, resolve merge conflicts and force-push changes')
+  }, [])
+
   const { status: codeReviewStatus } = useCodeReviewStatus(task?.conversation_id ?? null)
 
   // Cleanup diff refresh timeout on unmount
@@ -502,6 +506,8 @@ function TaskDetail({ id }: TaskDetailProps) {
         onDeleteTask={handleDeleteTask}
         deleteLoading={deleteLoading}
         deleteError={deleteError}
+        onResolveConflicts={handleResolveConflicts}
+        isConversationStreaming={isConversationStreaming}
       />
 
       {/* Main Content Layout */}

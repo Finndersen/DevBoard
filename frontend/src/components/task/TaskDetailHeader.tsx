@@ -10,6 +10,7 @@ import {
   FolderIcon,
   ChatBubbleLeftIcon,
   ArrowPathIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
@@ -54,6 +55,8 @@ interface TaskDetailHeaderProps {
   onDeleteTask: (deleteBranch: boolean) => void
   deleteLoading: boolean
   deleteError: unknown
+  onResolveConflicts: () => void
+  isConversationStreaming: boolean
 }
 
 const getStatusVariant = (status: TaskStatus): 'default' | 'success' | 'warning' | 'error' | 'info' => {
@@ -87,6 +90,8 @@ export function TaskDetailHeader({
   onDeleteTask,
   deleteLoading,
   deleteError,
+  onResolveConflicts,
+  isConversationStreaming,
 }: TaskDetailHeaderProps) {
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -298,6 +303,17 @@ export function TaskDetailHeader({
                         <span>{prStatus.comment_count}</span>
                       </span>
                     )}
+                  </button>
+                )}
+                {prStatus?.mergeable_state?.toUpperCase() === 'DIRTY' && (
+                  <button
+                    onClick={onResolveConflicts}
+                    disabled={isConversationStreaming}
+                    className={`flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                    title="Rebase and resolve conflicts"
+                    aria-label="Rebase and resolve conflicts"
+                  >
+                    <WrenchScrewdriverIcon className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {task.status === TaskStatus.PR_OPEN && (
