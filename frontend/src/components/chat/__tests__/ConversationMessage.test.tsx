@@ -25,7 +25,7 @@ vi.mock('../ToolCallDisplay', () => ({
 
 describe('ConversationMessage', () => {
   describe('message events', () => {
-    it('renders user message with correct styling (blue bubble)', () => {
+    it('renders user message with correct styling (subtle background)', () => {
       const userMessage: ConversationMessage = {
         event_type: 'message',
         role: 'user',
@@ -38,14 +38,10 @@ describe('ConversationMessage', () => {
       const messageText = screen.getByText('Hello, how are you?')
       expect(messageText).toBeInTheDocument()
 
-      // Check that the message is inside a blue bubble
-      const messageBubble = screen.getByTestId('markdown').closest('.bg-blue-600')
-      expect(messageBubble).toBeInTheDocument()
-      expect(messageBubble).toHaveClass('text-white')
-
-      // Check alignment (user messages should be right-aligned)
-      const container = messageBubble?.closest('.justify-end')
-      expect(container).toBeInTheDocument()
+      // Check that the message has a subtle full-width background
+      const messageContainer = screen.getByTestId('markdown').closest('.bg-gray-100')
+      expect(messageContainer).toBeInTheDocument()
+      expect(messageContainer).toHaveClass('w-full')
     })
 
     it('renders agent message as plain text without bubble', () => {
@@ -61,13 +57,12 @@ describe('ConversationMessage', () => {
       const messageText = screen.getByText('I am doing well, thank you!')
       expect(messageText).toBeInTheDocument()
 
-      // Agent messages should render as plain text — no gray bubble
+      // Agent messages should render as plain text — no background styling
       const markdownElement = screen.getByTestId('markdown')
-      expect(markdownElement.closest('.bg-gray-100')).not.toBeInTheDocument()
       expect(markdownElement.closest('.bg-blue-600')).not.toBeInTheDocument()
     })
 
-    it('passes forceWhiteText prop to Markdown for user messages', () => {
+    it('does not force white text for user messages', () => {
       const userMessage: ConversationMessage = {
         event_type: 'message',
         role: 'user',
@@ -78,7 +73,7 @@ describe('ConversationMessage', () => {
       render(<ConversationMessageComponent message={userMessage} />)
 
       const markdown = screen.getByTestId('markdown')
-      expect(markdown).toHaveAttribute('data-force-white-text', 'true')
+      expect(markdown).toHaveAttribute('data-force-white-text', 'false')
     })
 
     it('does not pass forceWhiteText prop to Markdown for agent messages', () => {

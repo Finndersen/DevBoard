@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { ClipboardDocumentListIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ConversationEvent } from '../../lib/api'
@@ -165,6 +166,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
               : `${textColors.secondary} hover:${textColors.primary}`
           }`}
         >
+          <ClipboardDocumentListIcon className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Plan
         </button>
         <button
@@ -175,6 +177,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
               : `${textColors.secondary} hover:${textColors.primary}`
           }`}
         >
+          <CodeBracketIcon className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Implementation
         </button>
       </div>

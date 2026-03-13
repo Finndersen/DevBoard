@@ -101,15 +101,14 @@ describe('ConversationChat', () => {
       expect(screen.getByText('What is the status?')).toBeInTheDocument()
     })
 
-    // Check that user messages have correct styling
+    // Check that user messages have correct styling (subtle full-width background)
     const userMessageText = screen.getByText('What is the status?')
-    const userBubble = userMessageText.closest('.bg-blue-600')
-    expect(userBubble).toBeInTheDocument()
+    const userContainer = userMessageText.closest('.bg-gray-100')
+    expect(userContainer).toBeInTheDocument()
 
-    // Check that assistant messages have correct styling
+    // Check that assistant messages render without background
     const assistantMessageText = screen.getByText('The project is progressing well.')
-    const assistantBubble = assistantMessageText.closest('.bg-gray-100')
-    expect(assistantBubble).toBeInTheDocument()
+    expect(assistantMessageText).toBeInTheDocument()
   })
 
   it('sends new message when form is submitted', async () => {

@@ -14,22 +14,18 @@ interface PendingMessageProps {
 export default function PendingMessageComponent({ message, onRetry }: PendingMessageProps) {
   return (
     <div className="flex flex-col w-full">
-      <div className="flex w-full justify-end">
-        {/* Message bubble with pending status styling and content-based width */}
-        <div className={`${getPendingMessageBubbleClasses(message.status)} max-w-full min-w-[200px]`}>
-          <Markdown forceWhiteText={true}>
-            {message.text_content}
-          </Markdown>
-          {/* Status icon at bottom-right */}
-          <div className="flex justify-end items-center mt-1">
-            <span className="text-xs">{getStatusIcon(message.status)}</span>
-          </div>
+      <div className={`${getPendingMessageBubbleClasses(message.status)}`}>
+        <Markdown forceWhiteText={false}>
+          {message.text_content}
+        </Markdown>
+        <div className="flex items-center mt-1">
+          <span className="text-xs">{getStatusIcon(message.status)}</span>
         </div>
       </div>
 
       {/* Retry button for failed messages */}
       {message.status === 'failed' && onRetry && (
-        <div className="mt-1 flex items-center space-x-2 justify-end">
+        <div className="mt-1 flex items-center space-x-2">
           <Button
             variant="ghost"
             size="sm"

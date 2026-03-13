@@ -2,34 +2,39 @@
  * Shared styling utilities for message components
  */
 
-export const getMessageAlignment = (isUser: boolean) => 
-  isUser ? 'justify-end' : 'justify-start'
+export const getMessageAlignment = (_isUser: boolean) =>
+  'justify-start'
 
-export const getMessageContainerAlignment = (isUser: boolean) =>
-  isUser ? 'items-end' : 'items-start'
+export const getMessageContainerAlignment = (_isUser: boolean) =>
+  'items-start'
+
+export const getUserMessageClasses = (additionalClasses?: string) => {
+  return `w-full px-3 py-2 text-sm bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white ${additionalClasses || ''}`
+}
 
 export const getMessageBubbleClasses = (isUser: boolean, additionalClasses?: string) => {
+  if (isUser) {
+    return getUserMessageClasses(additionalClasses)
+  }
   const baseClasses = 'rounded-lg px-3 py-1.5 text-sm'
-  const colorClasses = isUser
-    ? 'bg-blue-600 text-white'
-    : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+  const colorClasses = 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
 
   return `${baseClasses} ${colorClasses} ${additionalClasses || ''}`
 }
 
 export const getPendingMessageBubbleClasses = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {
-  const baseClasses = 'rounded-lg px-3 py-1.5 text-sm text-white'
+  const baseClasses = 'w-full px-3 py-2 text-sm text-gray-900 dark:text-white'
 
   switch (status) {
     case 'failed':
-      return `${baseClasses} bg-red-500`
+      return `${baseClasses} bg-red-500/10 dark:bg-red-500/10`
     case 'pending':
-      return `${baseClasses} bg-blue-400 opacity-75`
+      return `${baseClasses} bg-gray-100 dark:bg-white/[0.06] opacity-75`
     case 'awaiting_approval':
-      return `${baseClasses} bg-blue-500 opacity-90`
+      return `${baseClasses} bg-gray-100 dark:bg-white/[0.06] opacity-90`
     case 'sent':
     default:
-      return `${baseClasses} bg-blue-600`
+      return `${baseClasses} bg-gray-100 dark:bg-white/[0.06]`
   }
 }
 

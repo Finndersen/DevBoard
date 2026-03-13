@@ -1,51 +1,66 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType, LocalCommand } from '../../lib/api'
 import {
-  getMessageBubbleClasses
+  getUserMessageClasses
 } from '../../styles/messageStyles'
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
 function LocalCommandDisplay({ message, highlightRing }: { message: LocalCommand; highlightRing: string }) {
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
   const isShell = message.command_type === 'shell'
   const hasOutput = message.output.length > 0
 
-  const colorClasses = message.is_error
-    ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/25 hover:border-red-400/60 hover:text-red-300'
-    : isShell
-      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-300'
-      : 'bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/25 hover:border-violet-400/60 hover:text-violet-300'
+  // Strip leading slash from command if present — the icon already provides the prefix
+  const displayCommand = isShell ? message.command : message.command.replace(/^\//, '')
 
   const icon = isShell ? (
-    <span className="font-mono text-xs font-bold">&gt;_</span>
+    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">&gt;_</span>
   ) : (
-    <span className="font-mono text-xs font-bold">/</span>
+    <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">/</span>
   )
 
   return (
-    <div className="flex w-full justify-center my-1">
+    <div className="flex w-full min-w-0">
       <button
-        onClick={hasOutput ? () => setIsModalOpen(true) : undefined}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors ${colorClasses} ${hasOutput ? 'cursor-pointer' : 'cursor-default'} ${highlightRing}`}
-        title={hasOutput ? 'Click to view output' : undefined}
+        onClick={hasOutput ? () => setIsExpanded(!isExpanded) : undefined}
+        className={`rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-gray-800/30 ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-gray-800/50 cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
       >
-        {icon}
-        <span className="font-mono">{message.command}</span>
-        {hasOutput && (
-          <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
+        <div className="px-3 py-1.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {icon}
+            <span className="text-xs text-gray-900 dark:text-gray-200 font-mono truncate">
+              {displayCommand}
+            </span>
+            {message.is_error && (
+              <svg className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+          {hasOutput && (
+            <svg
+              className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
+        </div>
+
+        {isExpanded && hasOutput && (
+          <div className="border-t border-gray-300 dark:border-gray-600 select-text min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800/50">
+              <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-gray-700 select-text cursor-text whitespace-pre-wrap overflow-x-auto">
+                {message.output}
+              </pre>
+            </div>
+          </div>
         )}
       </button>
-      {hasOutput && (
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={message.command} maxWidth="4xl">
-          <pre className="text-sm font-mono whitespace-pre-wrap text-gray-300 bg-gray-900 rounded p-3 overflow-x-auto">
-            {message.output}
-          </pre>
-        </Modal>
-      )}
     </div>
   )
 }
@@ -112,8 +127,9 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     if (isUser) {
       return (
-        <div className="flex w-full justify-end">
-          <div className={`${getMessageBubbleClasses(true)} max-w-full min-w-[200px] rounded-lg ${highlightRing}`}>
+        <div className={`${getUserMessageClasses()} ${highlightRing} flex`}>
+          <div className="w-0.5 flex-shrink-0 rounded-full bg-blue-400 dark:bg-blue-500 mr-3" />
+          <div className="flex-1 min-w-0">
             <div className="relative">
               <div
                 ref={contentRef}
@@ -124,19 +140,19 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
                   maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
                 }}
               >
-                <Markdown forceWhiteText={true}>
+                <Markdown forceWhiteText={false}>
                   {message.text_content}
                 </Markdown>
               </div>
               {needsExpansion && !isExpanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-blue-600 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-gray-100 dark:from-[rgba(255,255,255,0.06)] to-transparent" />
               )}
             </div>
             {needsExpansion && (
               <div className="flex justify-center mt-1">
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="text-xs font-medium hover:underline text-blue-100 hover:text-white"
+                  className="text-xs font-medium hover:underline text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 >
                   {isExpanded ? '▲ Show less' : '▼ Show more'}
                 </button>
@@ -248,8 +264,9 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     )
   }
 
-  // Local commands (shell commands or slash commands) - render as compact inline indicators
+  // Local commands (shell commands or slash commands) - render as expandable cards
   if (message.event_type === 'local_command') {
+    if (!message.command) return null
     return <LocalCommandDisplay message={message} highlightRing={highlightRing} />
   }
 
