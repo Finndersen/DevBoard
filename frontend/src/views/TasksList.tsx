@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnTabActivation } from '../hooks'
 import { useModal } from '../hooks/useModal'
@@ -37,7 +37,13 @@ function getStatusColor(status: TaskStatus) {
 }
 
 export default function TasksList() {
-  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined)
+  const location = useLocation()
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
+    const param = new URLSearchParams(location.search).get('project_id')
+    if (!param) return undefined
+    const parsed = Number(param)
+    return Number.isNaN(parsed) ? undefined : parsed
+  })
   const { data: tasks, loading: tasksLoading, error: tasksError, refetch: refetchTasks } = useAllTasks(selectedProjectId)
   const { data: projects } = useProjects()
   const { data: openPRsData, refetch: refetchOpenPRs } = useOpenPRs()

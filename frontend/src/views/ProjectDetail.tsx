@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
@@ -286,7 +286,11 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={() => navigate(`/tasks?project_id=${id}`)} variant="outline" size="sm">
+              <ListBulletIcon className="w-4 h-4 mr-2" />
+              View Tasks
+            </Button>
             <Button onClick={createTaskModal.open} size="sm">
               <PlusIcon className="w-4 h-4 mr-2" />
               New Task
