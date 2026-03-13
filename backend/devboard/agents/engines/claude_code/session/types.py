@@ -124,8 +124,21 @@ class AssistantEntry(BaseMessageEntry):
     requestId: str
 
 
-# Union type for message entries (user/assistant only)
-MessageEntry = UserEntry | AssistantEntry
+class SystemLocalCommandEntry(TypedDict):
+    """System local_command entry in JSONL file."""
+
+    type: str  # "system"
+    subtype: str  # "local_command"
+    content: str
+    level: NotRequired[str]
+    uuid: str
+    timestamp: str
+    isSidechain: NotRequired[bool]
+    sessionId: NotRequired[str]
+
+
+# Union type for message entries (user/assistant and system local_command)
+MessageEntry = UserEntry | AssistantEntry | SystemLocalCommandEntry
 
 # Union type for all JSONL entry types (includes non-message entries like summaries)
 JSONLEntry = SummaryEntry | MessageEntry

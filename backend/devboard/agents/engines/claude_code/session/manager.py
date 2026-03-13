@@ -11,7 +11,6 @@ from devboard.agents.engines.claude_code.config_parser import ClaudeConfigParser
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
-from devboard.agents.engines.claude_code.session.parser import _HOOK_MESSAGE_TAGS
 from devboard.agents.engines.claude_code.session.service import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
 from devboard.integrations.shell import execute_shell_command
@@ -279,7 +278,8 @@ class ClaudeSessionManager:
 
                     if not text:
                         continue
-                    if any(text.startswith(tag) for tag in _HOOK_MESSAGE_TAGS):
+                    # Skip local commands, hooks, caveats, and tool interruptions
+                    if text.startswith(("<bash-", "<command-", "<local-command-", "[Request interrupted")):
                         continue
 
                     return text[:_LABEL_MAX_LENGTH], False

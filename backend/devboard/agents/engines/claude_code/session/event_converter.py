@@ -13,6 +13,7 @@ from devboard.agents.engines.claude_code.message_parser import (
     convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session.models import (
+    LocalCommandSessionMessage,
     MetaSessionMessage,
     SessionMessage,
     UserSessionMessage,
@@ -20,6 +21,7 @@ from devboard.agents.engines.claude_code.session.models import (
 from devboard.agents.engines.claude_code.utils import normalize_tool_name
 from devboard.agents.events import (
     ConversationEvent,
+    LocalCommand,
     MessageRole,
     MetaMessage,
     TextMessage,
@@ -49,6 +51,19 @@ def session_messages_to_events(
                 MetaMessage(
                     meta_type=session_msg.meta_type,
                     text_content=session_msg.text_content,
+                    timestamp=session_msg.timestamp,
+                    uuid=session_msg.uuid,
+                )
+            )
+            continue
+
+        if isinstance(session_msg, LocalCommandSessionMessage):
+            events.append(
+                LocalCommand(
+                    command_type=session_msg.command_type,
+                    command=session_msg.command,
+                    output=session_msg.output,
+                    is_error=session_msg.is_error,
                     timestamp=session_msg.timestamp,
                     uuid=session_msg.uuid,
                 )

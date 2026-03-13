@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from devboard.agents.engines.claude_code.session.types import TextBlockDict, ToolResultBlockDict, ToolUseBlockDict
-from devboard.agents.events import MetaMessageType
+from devboard.agents.events import LocalCommandType, MetaMessageType
 
 
 @dataclass
@@ -55,5 +55,15 @@ class MetaSessionMessage(BaseSessionMessage):
     text_content: str = ""
 
 
+@dataclass
+class LocalCommandSessionMessage(BaseSessionMessage):
+    """Local command executed during a Claude Code session (shell or slash command)."""
+
+    command_type: LocalCommandType = LocalCommandType.SHELL
+    command: str = ""
+    output: str = ""
+    is_error: bool = False
+
+
 # Union type for all parsed session message variants
-SessionMessage = UserSessionMessage | AssistantSessionMessage | MetaSessionMessage
+SessionMessage = UserSessionMessage | AssistantSessionMessage | MetaSessionMessage | LocalCommandSessionMessage

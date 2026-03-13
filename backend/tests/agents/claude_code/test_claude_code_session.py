@@ -10,17 +10,23 @@ from devboard.agents.engines.claude_code.session import (
     AssistantSessionMessage,
     ClaudeCodeSessionMigrator,
     ClaudeCodeSessionService,
+    LocalCommandSessionMessage,
     MetaSessionMessage,
     UserSessionMessage,
 )
+from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
 from devboard.agents.engines.claude_code.session.file_locator import (
     find_all_session_todo_files,
     find_main_session_todo_file,
     find_session_file,
     find_sub_agent_session_file,
 )
-from devboard.agents.engines.claude_code.session.parser import is_message_entry, parse_session_message
-from devboard.agents.events import MetaMessageType
+from devboard.agents.engines.claude_code.session.parser import (
+    _merge_local_command_messages,
+    is_message_entry,
+    parse_session_message,
+)
+from devboard.agents.events import LocalCommand, LocalCommandType, MetaMessageType
 from devboard.api.schemas.claude_code_todo import TodoPriority, TodoStatus
 
 
@@ -80,14 +86,15 @@ class TestClaudeCodeSessionService:
         assert session_msg.meta_type == MetaMessageType.COMPACT_SUMMARY
         assert session_msg.text_content == "Summary of conversation so far..."
 
-    def test_parse_user_message_meta(self):
-        """Test parsing a user message with isMeta flag produces MetaSessionMessage."""
+    def test_parse_user_message_meta_with_source_tool_use_id(self):
+        """Test parsing a user message with isMeta and sourceToolUseID produces MetaSessionMessage."""
         entry = {
             "type": "user",
             "uuid": "user-meta-1",
             "timestamp": "2025-10-08T15:10:57.769Z",
             "isSidechain": False,
             "isMeta": True,
+            "sourceToolUseID": "toolu_abc123",
             "message": {"role": "user", "content": "Skill prompt content here..."},
         }
 
@@ -105,6 +112,7 @@ class TestClaudeCodeSessionService:
             "timestamp": "2025-10-08T15:10:57.769Z",
             "isSidechain": False,
             "isMeta": True,
+            "sourceToolUseID": "toolu_abc456",
             "message": {
                 "role": "user",
                 "content": [
@@ -119,6 +127,240 @@ class TestClaudeCodeSessionService:
         assert isinstance(session_msg, MetaSessionMessage)
         assert session_msg.meta_type == MetaMessageType.SKILL_CONTENT
         assert session_msg.text_content == "First skill block.\nSecond skill block."
+
+    def test_parse_user_message_meta_without_source_tool_use_id_returns_none(self):
+        """Test that isMeta=True without sourceToolUseID returns None (covers 'Continue' messages, hooks)."""
+        entry = {
+            "type": "user",
+            "uuid": "user-meta-continue",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "isMeta": True,
+            "message": {"role": "user", "content": "Continue from where you left off."},
+        }
+
+        session_msg = parse_session_message(entry, line_num=6)
+
+        assert session_msg is None
+
+    def test_parse_user_message_meta_skill_fallback_base_directory(self):
+        """Test isMeta without sourceToolUseID but with 'Base directory' prefix returns SKILL_CONTENT."""
+        entry = {
+            "type": "user",
+            "uuid": "user-meta-base-dir",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "isMeta": True,
+            "message": {"role": "user", "content": "Base directory for this skill: /home/user/project"},
+        }
+
+        session_msg = parse_session_message(entry, line_num=6)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.SKILL_CONTENT
+        assert session_msg.text_content == "Base directory for this skill: /home/user/project"
+
+    def test_parse_bash_command(self):
+        """Test parsing user entry with bash-input XML tag."""
+        entry = {
+            "type": "user",
+            "uuid": "user-bash-cmd",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": "<bash-input>git status</bash-input>"},
+        }
+
+        session_msg = parse_session_message(entry, line_num=1)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.command_type == LocalCommandType.SHELL
+        assert session_msg.command == "git status"
+        assert session_msg.output == ""
+        assert session_msg.is_error is False
+
+    def test_parse_bash_output(self):
+        """Test parsing user entry with bash-stdout/bash-stderr tags."""
+        entry = {
+            "type": "user",
+            "uuid": "user-bash-out",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {
+                "role": "user",
+                "content": "<bash-stdout>On branch main</bash-stdout><bash-stderr></bash-stderr>",
+            },
+        }
+
+        session_msg = parse_session_message(entry, line_num=2)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.command_type == LocalCommandType.SHELL
+        assert session_msg.command == ""
+        assert session_msg.output == "On branch main"
+        assert session_msg.is_error is False
+
+    def test_parse_bash_error(self):
+        """Test that bash-stderr with content sets is_error=True."""
+        entry = {
+            "type": "user",
+            "uuid": "user-bash-err",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {
+                "role": "user",
+                "content": "<bash-stdout></bash-stdout><bash-stderr>fatal: not a git repository</bash-stderr>",
+            },
+        }
+
+        session_msg = parse_session_message(entry, line_num=3)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.is_error is True
+
+    def test_parse_slash_command(self):
+        """Test parsing user entry with command-name/command-args XML tags."""
+        entry = {
+            "type": "user",
+            "uuid": "user-slash-cmd",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {
+                "role": "user",
+                "content": "<command-name>/model</command-name><command-args>sonnet</command-args>",
+            },
+        }
+
+        session_msg = parse_session_message(entry, line_num=4)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.command_type == LocalCommandType.SLASH_COMMAND
+        assert session_msg.command == "/model sonnet"
+
+    def test_parse_slash_command_output(self):
+        """Test parsing user entry with local-command-stdout tag."""
+        entry = {
+            "type": "user",
+            "uuid": "user-slash-out",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": "<local-command-stdout>Set model to opus</local-command-stdout>"},
+        }
+
+        session_msg = parse_session_message(entry, line_num=5)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.command_type == LocalCommandType.SLASH_COMMAND
+        assert session_msg.command == ""
+        assert session_msg.output == "Set model to opus"
+
+    def test_parse_system_local_command_entry(self):
+        """Test parsing system entry with subtype=local_command."""
+        entry = {
+            "type": "system",
+            "subtype": "local_command",
+            "uuid": "sys-cmd-1",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "content": "<command-name>/model</command-name><command-args>sonnet</command-args><local-command-stdout>Model set</local-command-stdout>",
+        }
+
+        assert is_message_entry(entry) is True
+
+        session_msg = parse_session_message(entry, line_num=10)
+
+        assert isinstance(session_msg, LocalCommandSessionMessage)
+        assert session_msg.command_type == LocalCommandType.SLASH_COMMAND
+        assert session_msg.command == "/model sonnet"
+        assert session_msg.output == "Model set"
+
+    def test_is_message_entry_system_local_command(self):
+        """Test that system local_command entries are recognized as message entries."""
+        assert is_message_entry({"type": "system", "subtype": "local_command"}) is True
+        assert is_message_entry({"type": "system", "subtype": "compact_boundary"}) is False
+        assert is_message_entry({"type": "system"}) is False
+
+    def test_merge_local_command_messages(self):
+        """Test that consecutive command+output messages are merged into a single message."""
+        from datetime import datetime
+
+        base = {
+            "uuid": "u1",
+            "timestamp": datetime(2025, 10, 8, 15, 10),
+            "line_num": 1,
+            "is_sidechain": False,
+        }
+        cmd_msg = LocalCommandSessionMessage(
+            **base,
+            command_type=LocalCommandType.SHELL,
+            command="git status",
+        )
+        output_msg = LocalCommandSessionMessage(
+            uuid="u2",
+            timestamp=datetime(2025, 10, 8, 15, 10, 1),
+            line_num=2,
+            is_sidechain=False,
+            command_type=LocalCommandType.SHELL,
+            output="On branch main",
+        )
+
+        merged = _merge_local_command_messages([cmd_msg, output_msg])
+
+        assert len(merged) == 1
+        assert isinstance(merged[0], LocalCommandSessionMessage)
+        assert merged[0].command == "git status"
+        assert merged[0].output == "On branch main"
+
+    def test_merge_does_not_merge_different_command_types(self):
+        """Test that merge does not merge when command types differ."""
+        from datetime import datetime
+
+        cmd_msg = LocalCommandSessionMessage(
+            uuid="u1",
+            timestamp=datetime(2025, 10, 8, 15, 10),
+            line_num=1,
+            is_sidechain=False,
+            command_type=LocalCommandType.SHELL,
+            command="git status",
+        )
+        output_msg = LocalCommandSessionMessage(
+            uuid="u2",
+            timestamp=datetime(2025, 10, 8, 15, 10, 1),
+            line_num=2,
+            is_sidechain=False,
+            command_type=LocalCommandType.SLASH_COMMAND,
+            output="Some output",
+        )
+
+        merged = _merge_local_command_messages([cmd_msg, output_msg])
+
+        assert len(merged) == 2
+
+    def test_local_command_session_message_to_event(self):
+        """Test converting LocalCommandSessionMessage to LocalCommand event."""
+        from datetime import datetime
+
+        messages = [
+            LocalCommandSessionMessage(
+                uuid="u1",
+                timestamp=datetime(2025, 10, 8, 15, 10),
+                line_num=1,
+                is_sidechain=False,
+                command_type=LocalCommandType.SHELL,
+                command="git status",
+                output="On branch main",
+                is_error=False,
+            ),
+        ]
+
+        events = session_messages_to_events(messages)
+
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, LocalCommand)
+        assert event.event_type == "local_command"
+        assert event.command_type == LocalCommandType.SHELL
+        assert event.command == "git status"
+        assert event.output == "On branch main"
+        assert event.is_error is False
 
     def test_parse_assistant_text_message(self):
         """Test parsing an assistant message with text content."""

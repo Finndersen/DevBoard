@@ -1,11 +1,54 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType } from '../../lib/api'
+import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType, LocalCommand } from '../../lib/api'
 import {
   getMessageBubbleClasses
 } from '../../styles/messageStyles'
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
+
+function LocalCommandDisplay({ message, highlightRing }: { message: LocalCommand; highlightRing: string }) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const isShell = message.command_type === 'shell'
+  const hasOutput = message.output.length > 0
+
+  const colorClasses = message.is_error
+    ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/25 hover:border-red-400/60 hover:text-red-300'
+    : isShell
+      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-400/60 hover:text-emerald-300'
+      : 'bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/25 hover:border-violet-400/60 hover:text-violet-300'
+
+  const icon = isShell ? (
+    <span className="font-mono text-xs font-bold">&gt;_</span>
+  ) : (
+    <span className="font-mono text-xs font-bold">/</span>
+  )
+
+  return (
+    <div className="flex w-full justify-center my-1">
+      <button
+        onClick={hasOutput ? () => setIsModalOpen(true) : undefined}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors ${colorClasses} ${hasOutput ? 'cursor-pointer' : 'cursor-default'} ${highlightRing}`}
+        title={hasOutput ? 'Click to view output' : undefined}
+      >
+        {icon}
+        <span className="font-mono">{message.command}</span>
+        {hasOutput && (
+          <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        )}
+      </button>
+      {hasOutput && (
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={message.command} maxWidth="4xl">
+          <pre className="text-sm font-mono whitespace-pre-wrap text-gray-300 bg-gray-900 rounded p-3 overflow-x-auto">
+            {message.output}
+          </pre>
+        </Modal>
+      )}
+    </div>
+  )
+}
 
 function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknown> | null): string | null {
   switch (type) {
@@ -203,6 +246,11 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
         </div>
       </div>
     )
+  }
+
+  // Local commands (shell commands or slash commands) - render as compact inline indicators
+  if (message.event_type === 'local_command') {
+    return <LocalCommandDisplay message={message} highlightRing={highlightRing} />
   }
 
   // Meta messages (compact summaries, skill content) - render as clickable indicator that opens a modal

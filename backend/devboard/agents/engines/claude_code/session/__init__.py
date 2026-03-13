@@ -8,6 +8,7 @@ from devboard.agents.engines.claude_code.session.manager instead.
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
 from devboard.agents.engines.claude_code.session.models import (
     AssistantSessionMessage,
+    LocalCommandSessionMessage,
     MetaSessionMessage,
     SessionMessage,
     UserSessionMessage,
@@ -19,6 +20,7 @@ __all__ = [
     "ClaudeCodeSessionMigrator",
     "SessionMessage",
     "AssistantSessionMessage",
+    "LocalCommandSessionMessage",
     "MetaSessionMessage",
     "UserSessionMessage",
 ]

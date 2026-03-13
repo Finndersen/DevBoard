@@ -19,6 +19,7 @@ class ConversationEventType(StrEnum):
     TOOL_CALL_REQUEST = "tool_call_request"
     SYSTEM = "system"
     META_MESSAGE = "meta_message"
+    LOCAL_COMMAND = "local_command"
 
 
 class MetaMessageType(StrEnum):
@@ -26,6 +27,13 @@ class MetaMessageType(StrEnum):
 
     COMPACT_SUMMARY = "compact_summary"
     SKILL_CONTENT = "skill_content"
+
+
+class LocalCommandType(StrEnum):
+    """Type of local command."""
+
+    SHELL = "shell"
+    SLASH_COMMAND = "slash_command"
 
 
 class SystemEventType(StrEnum):
@@ -98,6 +106,18 @@ class MetaMessage(BaseModel):
     uuid: str | None = None
 
 
+class LocalCommand(BaseModel):
+    """Local command executed during a Claude Code session."""
+
+    event_type: Literal["local_command"] = "local_command"
+    command_type: LocalCommandType
+    command: str
+    output: str = ""
+    is_error: bool = False
+    timestamp: datetime.datetime
+    uuid: str | None = None
+
+
 class SystemEvent(BaseModel):
     """System-level event for entity changes and workflow notifications.
 
@@ -144,6 +164,8 @@ def describe_event(event: "ConversationEvent") -> str:
         return f"ToolResult(tool_call_id={event.tool_call_id[-8:]}, {status}, {len(event.result_content)} chars)"
     elif isinstance(event, ToolCallRequest):
         return f"ToolCallRequest(tool={event.tool_name})"
+    elif isinstance(event, LocalCommand):
+        return f"LocalCommand(type={event.command_type}, command={event.command!r})"
     elif isinstance(event, MetaMessage):
         return f"MetaMessage(type={event.meta_type})"
     elif isinstance(event, SystemEvent):
@@ -154,6 +176,6 @@ def describe_event(event: "ConversationEvent") -> str:
 
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage,
+    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage | LocalCommand,
     Field(discriminator="event_type"),
 ]
