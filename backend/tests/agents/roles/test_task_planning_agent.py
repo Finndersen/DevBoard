@@ -59,7 +59,7 @@ class TestTaskPlanningRoleWithSpec:
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
-            parent_conversation_id=None,
+            conversation_id=None,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -145,7 +145,7 @@ class TestTaskPlanningRoleWithPlan:
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
-            parent_conversation_id=None,
+            conversation_id=None,
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -463,7 +463,7 @@ class TestRoleToolSelection:
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
-            parent_conversation_id=None,
+            conversation_id=None,
         )
 
         tools = role.get_tools()
@@ -490,7 +490,7 @@ class TestRoleToolSelection:
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
-            parent_conversation_id=None,
+            conversation_id=None,
         )
 
         tools = role.get_tools()
@@ -513,7 +513,7 @@ class TestRoleToolSelection:
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
-            parent_conversation_id=None,
+            conversation_id=None,
         )
 
         tools = role.get_tools()

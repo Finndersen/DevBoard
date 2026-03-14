@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ListBulletIcon,
+  ClipboardDocumentListIcon,
   FolderIcon,
   CodeBracketIcon,
   ChatBubbleLeftRightIcon,
@@ -15,12 +13,15 @@ import type { ActiveExecutionsResponse, ConversationListItem } from '../../lib/a
 import { textColors } from '../../styles/designSystem'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
-  project_qa: 'Project QA',
+  project: 'Project',
+  project_qa: 'Project',
   task_specification: 'Specification',
   task_planning: 'Planning',
   task_implementation: 'Implementation',
   task_pr_review: 'PR Review',
   codebase_qa: 'Codebase QA',
+  investigation: 'Investigation',
+  code_review: 'Code Review',
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -38,10 +39,31 @@ function formatRelativeTime(isoDate: string): string {
   return date.toLocaleDateString()
 }
 
+function getAgentRoleColor(agentRole: string): string {
+  switch (agentRole) {
+    case 'task_specification':
+    case 'task_planning':
+      return 'text-blue-600 dark:text-blue-400'
+    case 'task_implementation':
+      return 'text-purple-600 dark:text-purple-400'
+    case 'task_pr_review':
+      return 'text-amber-600 dark:text-amber-400'
+    case 'project':
+    case 'project_qa':
+    case 'codebase_qa':
+    case 'investigation':
+      return 'text-teal-600 dark:text-teal-400'
+    case 'code_review':
+      return 'text-amber-600 dark:text-amber-400'
+    default:
+      return 'text-gray-500 dark:text-gray-500'
+  }
+}
+
 function getEntityIcon(entityType: string) {
   switch (entityType.toUpperCase()) {
     case 'TASK':
-      return ListBulletIcon
+      return ClipboardDocumentListIcon
     case 'PROJECT':
       return FolderIcon
     case 'CODEBASE':
@@ -53,11 +75,9 @@ function getEntityIcon(entityType: string) {
 
 interface ConversationsPanelProps {
   activeExecutions: ActiveExecutionsResponse | null
-  collapsed: boolean
-  onToggleCollapse: () => void
 }
 
-export default function ConversationsPanel({ activeExecutions, collapsed, onToggleCollapse }: ConversationsPanelProps) {
+export default function ConversationsPanel({ activeExecutions }: ConversationsPanelProps) {
   const { data: conversations, loading, error } = useConversations()
   const openTab = useUIStore(s => s.openTab)
 
@@ -130,33 +150,11 @@ export default function ConversationsPanel({ activeExecutions, collapsed, onTogg
     })
   }
 
-  if (collapsed) {
-    return (
-      <div className="w-10 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center pt-5">
-        <button
-          onClick={onToggleCollapse}
-          className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
-          aria-label="Expand conversations panel"
-          title="Expand conversations"
-        >
-          <ChevronRightIcon className="w-4 h-4" />
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className="w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200">
+    <div className="w-72 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200">
       {/* Header */}
-      <div className="h-16 flex items-center justify-between px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <h2 className={`text-sm font-semibold ${textColors.primary}`}>Conversations</h2>
-        <button
-          onClick={onToggleCollapse}
-          className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
-          aria-label="Collapse conversations panel"
-        >
-          <ChevronLeftIcon className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Conversation list */}
@@ -189,6 +187,7 @@ export default function ConversationsPanel({ activeExecutions, collapsed, onTogg
               const needsAttention = needsAttentionIds.has(item.id)
               const isPulsing = pulsingIds.has(item.id)
               const roleLabel = AGENT_ROLE_LABELS[item.agent_role] ?? item.agent_role
+              const roleColor = getAgentRoleColor(item.agent_role)
               const timestamp = item.last_activity_at ?? item.created_at
 
               return (
@@ -215,8 +214,9 @@ export default function ConversationsPanel({ activeExecutions, collapsed, onTogg
                     )}
                   </div>
                   {/* Row 2: Role + timestamp */}
-                  <div className={`text-xs mt-0.5 ml-6 ${textColors.muted}`}>
-                    {roleLabel} · {formatRelativeTime(timestamp)}
+                  <div className="text-xs mt-0.5 ml-6">
+                    <span className={roleColor}>{roleLabel}</span>
+                    <span className={textColors.muted}> · {formatRelativeTime(timestamp)}</span>
                   </div>
                 </button>
               )

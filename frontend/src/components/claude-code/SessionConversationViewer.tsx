@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { ClipboardDocumentListIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
@@ -9,9 +10,11 @@ interface SessionConversationViewerProps {
   sessionId: string
   linkedSessionId?: string | null
   highlightUuids?: string[]
+  onActiveTabChange?: (tab: TabId) => void
+  tabBarRight?: ReactNode
 }
 
-type TabId = 'plan' | 'implementation'
+export type TabId = 'plan' | 'implementation'
 
 function MessagePane({
   loading,
@@ -97,7 +100,7 @@ function MessagePane({
   )
 }
 
-export function SessionConversationViewer({ sessionId, linkedSessionId, highlightUuids }: SessionConversationViewerProps) {
+export function SessionConversationViewer({ sessionId, linkedSessionId, highlightUuids, onActiveTabChange, tabBarRight }: SessionConversationViewerProps) {
   const [planMessages, setPlanMessages] = useState<ConversationEvent[]>([])
   const [implMessages, setImplMessages] = useState<ConversationEvent[]>([])
   const [planLoading, setPlanLoading] = useState(false)
@@ -135,31 +138,43 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
 
   useEffect(() => {
     setActiveTab('plan')
+    onActiveTabChange?.('plan')
     if (linkedSessionId) {
       void Promise.all([loadPlanMessages(), loadImplMessages()])
     } else {
       void loadPlanMessages()
     }
-  }, [sessionId, linkedSessionId, loadPlanMessages, loadImplMessages])
+  }, [sessionId, linkedSessionId, loadPlanMessages, loadImplMessages]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!linkedSessionId) {
     return (
-      <MessagePane
-        loading={planLoading}
-        error={planError}
-        messages={planMessages}
-        onRetry={loadPlanMessages}
-        highlightUuids={highlightUuids}
-        sessionId={sessionId}
-      />
+      <div className="h-full flex flex-col overflow-hidden">
+        {tabBarRight && (
+          <div className="flex items-center border-b border-gray-200 dark:border-gray-700 shrink-0 px-4 py-2">
+            <div className="ml-auto flex items-center">
+              {tabBarRight}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 overflow-hidden">
+          <MessagePane
+            loading={planLoading}
+            error={planError}
+            messages={planMessages}
+            onRetry={loadPlanMessages}
+            highlightUuids={highlightUuids}
+            sessionId={sessionId}
+          />
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div className="flex items-center border-b border-gray-200 dark:border-gray-700 shrink-0">
         <button
-          onClick={() => setActiveTab('plan')}
+          onClick={() => { setActiveTab('plan'); onActiveTabChange?.('plan') }}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'plan'
               ? `border-b-2 border-blue-500 ${textColors.accent}`
@@ -170,7 +185,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
           Plan
         </button>
         <button
-          onClick={() => setActiveTab('implementation')}
+          onClick={() => { setActiveTab('implementation'); onActiveTabChange?.('implementation') }}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'implementation'
               ? `border-b-2 border-blue-500 ${textColors.accent}`
@@ -180,6 +195,11 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
           <CodeBracketIcon className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Implementation
         </button>
+        {tabBarRight && (
+          <div className="ml-auto pr-4 flex items-center">
+            {tabBarRight}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-hidden">
         {activeTab === 'plan' ? (

@@ -319,27 +319,29 @@ def create_code_review_tool(
 
         prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
 
+Here is relevant context required for the code review:
+
 ## Project
 
 **{task.project.name}**: {task.project.description}
 
 ### Project Specification
 
-```markdown
+<document>
 {task.project.specification.content or "<EMPTY>"}
-```
+</document>
 
 ## Task Specification
 
-```
+<document>
 {task.specification.content}
-```
+</document>
 
 ## Implementation Plan
 
-```
+<document>
 {task.implementation_plan.content}
-```
+</document>
 
 ## Diff Summary
 

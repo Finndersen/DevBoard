@@ -38,7 +38,7 @@ export default function NavigationMenu() {
   } = useUIStore()
 
   const isCompact = navigationCompactMode
-  const panelWidth = isCompact ? 'w-16' : 'w-56'
+  const panelWidth = isCompact ? 'w-16' : 'w-44'
 
   return (
     <div

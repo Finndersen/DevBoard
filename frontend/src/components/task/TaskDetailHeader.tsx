@@ -270,7 +270,15 @@ export function TaskDetailHeader({
                       ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
                       : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 ' + textColors.secondary
                 }`}
-                title={gitStatus.branch_name}
+                title={
+                  gitStatus.has_conflicts
+                    ? 'Branch has conflicts with base branch'
+                    : gitStatus.has_uncommitted_base_overlap
+                      ? 'Uncommitted changes overlap with base branch'
+                      : gitStatus.remote_fetch_failed
+                        ? 'Remote fetch failed — showing local state'
+                        : gitStatus.branch_name
+                }
                 disabled={branchStatusLoading}
               >
                 <GitBranchIcon className="w-4 h-4" />

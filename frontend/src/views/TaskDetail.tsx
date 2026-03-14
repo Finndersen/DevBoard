@@ -86,7 +86,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { mutate: updateDocument } = useUpdateDocument()
 
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
-  const { closeTab, findTabByEntity } = useUIStore()
+  const { closeTab, findTabByEntity, invalidateConversations } = useUIStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
 
@@ -294,11 +294,12 @@ function TaskDetail({ id }: TaskDetailProps) {
       await deleteTaskFromStore(String(task.id))
       await fetchProjectTasks(String(task.project_id))
 
-      // Close the task's tab if it exists
+      // Close the task's tab and refresh conversation list
       const tab = findTabByEntity('task', String(task.id))
       if (tab) {
         closeTab(tab.id)
       }
+      invalidateConversations()
 
       // Show success notification
       addNotification({
@@ -318,7 +319,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       console.error('Failed to delete task:', error)
       // Error will be shown via deleteError state
     }
-  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, addNotification, navigate])
+  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, invalidateConversations, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {

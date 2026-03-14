@@ -73,6 +73,7 @@ async def run_agent_for_conversation(
             )
 
         async for event in agent_stream:
+            await asyncio.to_thread(db.commit)
             await event_queue.put(event)
 
         await asyncio.to_thread(db.commit)

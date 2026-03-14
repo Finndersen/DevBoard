@@ -7,6 +7,7 @@ import type { ClaudeCodeProject, ClaudeCodeSession, SessionSearchResult } from '
 import { ProjectListPanel } from './ProjectListPanel'
 import { SessionListPanel, AGENT_ROLE_LABELS } from './SessionListPanel'
 import { SessionConversationViewer } from './SessionConversationViewer'
+import type { TabId } from './SessionConversationViewer'
 import { SessionSearch } from './SessionSearch'
 import { GoToSession } from './GoToSession'
 
@@ -30,6 +31,7 @@ export default function SessionsTab() {
   const [excludeSubAgents, setExcludeSubAgents] = useState(false)
   const [searchResults, setSearchResults] = useState<SessionSearchResult[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [viewerActiveTab, setViewerActiveTab] = useState<TabId>('plan')
 
   const selectedSession = sessions.find(s => s.session_id === selectedSessionId) ?? null
   const filteredSessions = sessions.filter(s => {
@@ -235,19 +237,6 @@ export default function SessionsTab() {
               {selectedSession?.label ?? 'Session'}
             </h2>
             <div className={`flex items-center gap-2 text-xs ${textColors.muted} min-w-0`}>
-              <span className="font-mono truncate">{selectedSessionId}</span>
-              {selectedSession?.session_role === 'plan' && selectedSession?.linked_session_id && (
-                <>
-                  <span className="shrink-0">|</span>
-                  <span className="font-mono truncate">{selectedSession.linked_session_id}</span>
-                </>
-              )}
-              {selectedSession?.start_time && (
-                <>
-                  <span className="shrink-0">·</span>
-                  <span className="shrink-0">{new Date(selectedSession.start_time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                </>
-              )}
               {selectedSession?.task_info && (
                 <>
                   <span className="shrink-0">·</span>
@@ -285,6 +274,29 @@ export default function SessionsTab() {
               sessionId={selectedSessionId}
               linkedSessionId={selectedSession?.linked_session_id ?? null}
               highlightUuids={highlightUuids}
+              onActiveTabChange={setViewerActiveTab}
+              tabBarRight={(() => {
+                const isCombined = selectedSession?.session_role === 'plan' && !!selectedSession?.linked_session_id
+                const showImplTab = isCombined && viewerActiveTab === 'implementation'
+                const displaySessionId = showImplTab ? selectedSession!.linked_session_id! : selectedSessionId
+                const implSession = showImplTab
+                  ? sessions.find(s => s.session_id === selectedSession!.linked_session_id)
+                  : null
+                const displayTime = showImplTab && implSession?.start_time
+                  ? implSession.start_time
+                  : selectedSession?.start_time
+                return (
+                  <span className={`flex items-center gap-2 text-xs ${textColors.muted}`}>
+                    <span className="font-mono truncate">{displaySessionId}</span>
+                    {displayTime && (
+                      <>
+                        <span className="shrink-0">·</span>
+                        <span className="shrink-0">{new Date(displayTime).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      </>
+                    )}
+                  </span>
+                )
+              })()}
             />
           </div>
         </div>

@@ -14,7 +14,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const { createTaskModalOpen, closeCreateTaskModal, conversationsPanelCollapsed, toggleConversationsPanel } = useUIStore()
+  const { createTaskModalOpen, closeCreateTaskModal } = useUIStore()
   const { data: activeExecutions, loading: activeExecutionsLoading, refetch: refetchActiveExecutions } = useActiveExecutions(false)
 
   return (
@@ -23,11 +23,7 @@ export default function AppShell({ children }: AppShellProps) {
       <NavigationMenu />
 
       {/* Conversations Panel */}
-      <ConversationsPanel
-        activeExecutions={activeExecutions}
-        collapsed={conversationsPanelCollapsed}
-        onToggleCollapse={toggleConversationsPanel}
-      />
+      <ConversationsPanel activeExecutions={activeExecutions} />
 
       {/* Right column */}
       <div className="flex flex-col flex-1 min-w-0">

@@ -40,11 +40,11 @@ def _format_codebase_info(task: Task) -> str:
 
 
 def _format_document_section(title: str, content: str | None) -> str:
-    """Format a document section with markdown code block."""
+    """Format a document section with XML-style document tags."""
     return f"""{title}:
-```markdown
+<document>
 {content or "<EMPTY>"}
-```"""
+</document>"""
 
 
 def _format_task_specification(task: Task) -> str:

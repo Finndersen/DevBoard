@@ -47,12 +47,11 @@ export default function TabContentContainer() {
           role="tabpanel"
           aria-hidden={!isActive}
           style={{
-            display: 'block',
+            position: 'absolute',
+            inset: 0,
             visibility: isActive ? 'visible' : 'hidden',
-            position: isActive ? 'relative' : 'absolute',
             pointerEvents: isActive ? 'auto' : 'none',
-            height: '100%',
-            ...(isActive ? {} : { inset: 0 }),
+            zIndex: isActive ? 1 : 0,
           }}
         >
           <TabContextProvider tabId={tab.id}>
@@ -89,5 +88,5 @@ export default function TabContentContainer() {
     )
   }
 
-  return <>{renderedTabs}</>
+  return <div className="relative h-full">{renderedTabs}</div>
 }
