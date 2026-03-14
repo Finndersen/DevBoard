@@ -1,5 +1,7 @@
 """Project repository for project data access operations."""
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -34,13 +36,20 @@ class ProjectRepository(BaseRepository[Project]):
         stmt = select(Project)
         return list(self.db.execute(stmt).scalars().all())
 
-    def create(self, name: str, description: str | None, specification: "Document") -> Project:
+    def create(
+        self,
+        name: str,
+        description: str | None,
+        specification: "Document",
+        custom_fields: dict[str, Any] | None = None,
+    ) -> Project:
         """Create a new project.
 
         Args:
             name: Project name
             description: Project description (optional)
             specification: Specification document instance
+            custom_fields: Optional custom field values
 
         Returns:
             Created project with assigned ID
@@ -49,6 +58,7 @@ class ProjectRepository(BaseRepository[Project]):
             name=name,
             description=description,
             specification_document_id=specification.id,
+            custom_fields=custom_fields,
         )
 
         self.db.add(project)

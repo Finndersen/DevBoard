@@ -14,7 +14,9 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 
 **Purpose**: High-level containers for related work
 
-**Key Fields**: `id`, `name`, `details`, `current_status`, timestamps
+**Key Fields**: `id`, `name`, `description`, `custom_fields` (JSON, nullable), timestamps
+
+**Custom Fields**: `custom_fields` stores arbitrary key-value data as JSON (e.g., `{"jira_project_id": "PROJ", "team": "Backend"}`). Field definitions are managed globally via `CustomFieldDefinition` scoped to `entity_type='project'`.
 
 **Relationships**:
 - `tasks`: One-to-many with Task

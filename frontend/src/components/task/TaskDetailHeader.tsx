@@ -336,6 +336,7 @@ export function TaskDetailHeader({
                 )}
               </div>
             )}
+
           </div>
         </div>
 

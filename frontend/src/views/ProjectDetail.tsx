@@ -8,13 +8,15 @@ import { Button, Card, Input } from '../components/ui'
 import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
 import { textColors, layouts, loadingSpinner } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
-import type { Codebase } from '../lib/api'
+import type { Codebase, CustomFieldDefinition } from '../lib/api'
 import { useModal, useEditableField, useProject, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
+import { useNotificationStore } from '../stores/notificationStore'
+import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
 interface ProjectDetailProps {
   id: string
@@ -25,6 +27,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()
   const migrateStream = useConversationStreamStore(state => state.migrateStream)
+  const { addNotification } = useNotificationStore()
 
   // Update tab title when project data is loaded
   useTabTitle('project', id)
@@ -104,6 +107,29 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       setStoreProject(project)
     }
   }, [project, setStoreProject])
+
+  // Custom fields state
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+  const [customFieldSaving, setCustomFieldSaving] = useState(false)
+
+  useEffect(() => {
+    apiClient.getCustomFieldDefinitions('project')
+      .then(setCustomFieldDefinitions)
+      .catch(err => console.error('Failed to load project custom field definitions:', err))
+  }, [])
+
+  const handleCustomFieldChange = useCallback(async (fieldName: string, value: unknown) => {
+    if (!project) return
+    setCustomFieldSaving(true)
+    try {
+      await apiClient.updateProject(id!, { custom_fields: { [fieldName]: value } })
+      await refetchProject()
+    } catch {
+      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
+    } finally {
+      setCustomFieldSaving(false)
+    }
+  }, [project, id, refetchProject, addNotification])
 
   // Handle project specification updates from MCP tools during stream processing
   const projectSpecificationMatcher = useCallback(
@@ -287,6 +313,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            <CustomFieldsPopover
+              customFields={project.custom_fields}
+              fieldDefinitions={customFieldDefinitions}
+              onFieldChange={handleCustomFieldChange}
+              saving={customFieldSaving}
+            />
             <Button onClick={() => navigate(`/tasks?project_id=${id}`)} variant="outline" size="sm">
               <ListBulletIcon className="w-4 h-4 mr-2" />
               View Tasks

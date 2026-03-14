@@ -1,42 +1,46 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { PlusIcon, PencilIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline'
 import { Card, Button, Modal, ConfirmDialog } from '../ui'
 import { CustomFieldForm } from './CustomFieldForm'
 import { apiClient } from '../../lib/api'
-import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate } from '../../lib/api'
+import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate, CustomFieldEntityType } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 
+const ENTITY_TYPE_LABELS: Record<'task' | 'project', string> = {
+  task: 'Task',
+  project: 'Project',
+}
+
 export function CustomFieldSettings() {
+  const [activeEntityType, setActiveEntityType] = useState<CustomFieldEntityType>('task')
   const [fields, setFields] = useState<CustomFieldDefinition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Modal state
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingField, setEditingField] = useState<CustomFieldDefinition | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Delete confirmation state
   const [deleteConfirmField, setDeleteConfirmField] = useState<CustomFieldDefinition | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const loadFields = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await apiClient.getCustomFieldDefinitions('task')
-      setFields(data)
-    } catch (err) {
-      console.error('Failed to load custom fields:', err)
-      setError('Failed to load task custom fields')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const entityLabel = ENTITY_TYPE_LABELS[activeEntityType as 'task' | 'project'] ?? activeEntityType
 
   useEffect(() => {
-    loadFields()
-  }, [loadFields])
+    let stale = false
+    setLoading(true)
+    setError(null)
+    apiClient.getCustomFieldDefinitions(activeEntityType)
+      .then(data => { if (!stale) setFields(data) })
+      .catch(err => {
+        if (!stale) {
+          console.error('Failed to load custom fields:', err)
+          setError(`Failed to load ${entityLabel.toLowerCase()} custom fields`)
+        }
+      })
+      .finally(() => { if (!stale) setLoading(false) })
+    return () => { stale = true }
+  }, [activeEntityType, entityLabel])
 
   const handleCreate = () => {
     setEditingField(null)
@@ -62,7 +66,7 @@ export function CustomFieldSettings() {
       setDeleteConfirmField(null)
     } catch (err) {
       console.error('Failed to delete custom field:', err)
-      setError('Failed to delete task custom field')
+      setError(`Failed to delete ${entityLabel.toLowerCase()} custom field`)
     } finally {
       setIsDeleting(false)
     }
@@ -73,12 +77,13 @@ export function CustomFieldSettings() {
       setIsSaving(true)
 
       if (editingField) {
-        // Update existing field
         const updated = await apiClient.updateCustomFieldDefinition(editingField.id, data as CustomFieldUpdate)
         setFields(prev => prev.map(f => f.id === updated.id ? updated : f))
       } else {
-        // Create new field
-        const created = await apiClient.createCustomFieldDefinition(data as CustomFieldCreate)
+        const created = await apiClient.createCustomFieldDefinition({
+          ...(data as CustomFieldCreate),
+          entity_type: activeEntityType,
+        })
         setFields(prev => [...prev, created])
       }
 
@@ -86,7 +91,7 @@ export function CustomFieldSettings() {
       setEditingField(null)
     } catch (err) {
       console.error('Failed to save custom field:', err)
-      throw err // Let the form handle the error display
+      throw err
     } finally {
       setIsSaving(false)
     }
@@ -95,6 +100,12 @@ export function CustomFieldSettings() {
   const handleFormClose = () => {
     setIsFormOpen(false)
     setEditingField(null)
+  }
+
+  const handleTabChange = (entityType: CustomFieldEntityType) => {
+    setActiveEntityType(entityType)
+    setFields([])
+    setError(null)
   }
 
   const getTypeLabel = (type: string) => {
@@ -115,28 +126,13 @@ export function CustomFieldSettings() {
     }
   }
 
-  if (loading) {
-    return (
-      <Card className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
-          <div className="space-y-3">
-            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
   return (
     <>
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <TagIcon className="w-5 h-5 text-gray-400" />
-            <h3 className={`text-lg font-medium ${textColors.primary}`}>Task Custom Fields</h3>
+            <h3 className={`text-lg font-medium ${textColors.primary}`}>Custom Fields</h3>
           </div>
           <Button variant="primary" size="sm" onClick={handleCreate}>
             <PlusIcon className="w-4 h-4 mr-1" />
@@ -144,8 +140,24 @@ export function CustomFieldSettings() {
           </Button>
         </div>
 
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+          {(['task', 'project'] as const).map(entityType => (
+            <button
+              key={entityType}
+              onClick={() => handleTabChange(entityType)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeEntityType === entityType
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              {ENTITY_TYPE_LABELS[entityType]} Fields
+            </button>
+          ))}
+        </div>
+
         <p className={`text-sm ${textColors.secondary} mb-6`}>
-          Define custom fields that can be added to tasks. These fields are available globally across all projects.
+          Define custom fields that can be added to {entityLabel.toLowerCase()}s. These fields are available globally across all projects.
         </p>
 
         {error && (
@@ -154,12 +166,20 @@ export function CustomFieldSettings() {
           </div>
         )}
 
-        {fields.length === 0 ? (
+        {loading ? (
+          <div className="animate-pulse space-y-4">
+            <div className="space-y-3">
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+          </div>
+        ) : fields.length === 0 ? (
           <div className="text-center py-8">
             <TagIcon className="mx-auto h-12 w-12 text-gray-400" />
-            <h4 className="mt-4 text-sm font-medium text-gray-900 dark:text-white">No task custom fields</h4>
+            <h4 className="mt-4 text-sm font-medium text-gray-900 dark:text-white">No {entityLabel.toLowerCase()} custom fields</h4>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Get started by creating a custom field for your tasks.
+              Get started by creating a custom field for your {entityLabel.toLowerCase()}s.
             </p>
             <Button variant="primary" size="sm" className="mt-4" onClick={handleCreate}>
               <PlusIcon className="w-4 h-4 mr-1" />
@@ -217,28 +237,27 @@ export function CustomFieldSettings() {
         )}
       </Card>
 
-      {/* Create/Edit Modal */}
       <Modal
         isOpen={isFormOpen}
         onClose={handleFormClose}
-        title={editingField ? 'Edit Task Custom Field' : 'Create Task Custom Field'}
+        title={editingField ? `Edit ${entityLabel} Custom Field` : `Create ${entityLabel} Custom Field`}
         maxWidth="lg"
       >
         <CustomFieldForm
           field={editingField}
+          entityType={activeEntityType}
           onSubmit={handleFormSubmit}
           onCancel={handleFormClose}
           isSaving={isSaving}
         />
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteConfirmField}
         onClose={() => setDeleteConfirmField(null)}
         onConfirm={confirmDelete}
-        title="Delete Task Custom Field"
-        message={`Are you sure you want to delete the field "${deleteConfirmField?.name}"? Existing task values will be retained but displayed as plain text.`}
+        title={`Delete ${entityLabel} Custom Field`}
+        message={`Are you sure you want to delete the field "${deleteConfirmField?.name}"? Existing ${entityLabel.toLowerCase()} values will be retained but displayed as plain text.`}
         confirmText="Delete"
         variant="danger"
         loading={isDeleting}

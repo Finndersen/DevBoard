@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Button, Input } from '../ui'
-import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate, CustomFieldType } from '../../lib/api'
+import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate, CustomFieldType, CustomFieldEntityType } from '../../lib/api'
 
 interface CustomFieldFormProps {
   field: CustomFieldDefinition | null
+  entityType: CustomFieldEntityType
   onSubmit: (data: CustomFieldCreate | CustomFieldUpdate) => Promise<void>
   onCancel: () => void
   isSaving: boolean
 }
 
-export function CustomFieldForm({ field, onSubmit, onCancel, isSaving }: CustomFieldFormProps) {
+export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSaving }: CustomFieldFormProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [type, setType] = useState<CustomFieldType>('text')
@@ -191,7 +192,7 @@ export function CustomFieldForm({ field, onSubmit, onCancel, isSaving }: CustomF
         <div>
           <h4 className="text-sm font-medium text-gray-900 dark:text-white">Required Field</h4>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Make this field mandatory when creating new tasks
+            Make this field mandatory when creating new {entityType === 'task' ? 'tasks' : entityType === 'project' ? 'projects' : `${entityType}s`}
           </p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">

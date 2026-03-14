@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PlusIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { useUIStore } from '../stores/uiStore'
 import { useProjects, useCreateProject } from '../hooks'
-import type { Project } from '../lib/api'
+import { apiClient } from '../lib/api'
+import type { Project, CustomFieldDefinition } from '../lib/api'
 import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
 import { loadingSpinner } from '../styles/designSystem'
 import ViewHeader from '../components/layout/ViewHeader'
+import { CustomFieldInputs } from '../components/common/CustomFieldInputs'
 
 export default function ProjectsList() {
   const navigate = useNavigate()
@@ -16,6 +18,42 @@ export default function ProjectsList() {
   const { mutate: createProject, loading: creatingProject } = useCreateProject()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({ name: '', description: '' })
+
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
+
+  useEffect(() => {
+    if (showCreateModal) {
+      setCustomFieldsLoading(true)
+      apiClient.getCustomFieldDefinitions('project')
+        .then(fields => {
+          setCustomFieldDefinitions(fields)
+          const initialValues: Record<string, unknown> = {}
+          fields.forEach(field => {
+            initialValues[field.name] = field.type === 'boolean' ? false : ''
+          })
+          setCustomFieldValues(initialValues)
+        })
+        .catch(err => console.error('Failed to load project custom fields:', err))
+        .finally(() => setCustomFieldsLoading(false))
+    } else {
+      setCustomFieldDefinitions([])
+      setCustomFieldValues({})
+    }
+  }, [showCreateModal])
+
+  const handleCustomFieldChange = useCallback((fieldName: string, value: unknown) => {
+    setCustomFieldValues(prev => ({ ...prev, [fieldName]: value }))
+  }, [])
+
+  const areMandatoryFieldsFilled = useCallback(() => {
+    const mandatoryFields = customFieldDefinitions.filter(f => f.mandatory)
+    return mandatoryFields.every(field => {
+      const value = customFieldValues[field.name]
+      return value !== undefined && value !== null && value !== ''
+    })
+  }, [customFieldDefinitions, customFieldValues])
 
   const handleOpenProject = (project: Project) => {
     openTab({
@@ -28,6 +66,13 @@ export default function ProjectsList() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const customFields: Record<string, unknown> = {}
+      Object.entries(customFieldValues).forEach(([name, value]) => {
+        if (value !== '' && value !== null && value !== undefined) {
+          customFields[name] = value
+        }
+      })
+
       const createdProject = await createProject({
         name: newProject.name,
         description: newProject.description,
@@ -39,7 +84,8 @@ export default function ProjectsList() {
           created_at: '',
           updated_at: ''
         },
-        default_conversation_id: null
+        default_conversation_id: null,
+        custom_fields: Object.keys(customFields).length > 0 ? customFields : null,
       })
       await refetch()
       setShowCreateModal(false)
@@ -127,11 +173,17 @@ export default function ProjectsList() {
             onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
             rows={3}
           />
+          <CustomFieldInputs
+            definitions={customFieldDefinitions}
+            values={customFieldValues}
+            onChange={handleCustomFieldChange}
+            loading={customFieldsLoading}
+          />
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" onClick={() => setShowCreateModal(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={creatingProject || !newProject.name}>
+            <Button type="submit" disabled={creatingProject || !newProject.name || !areMandatoryFieldsFilled()}>
               {creatingProject ? 'Creating...' : 'Create Project'}
             </Button>
           </div>
@@ -139,5 +191,4 @@ export default function ProjectsList() {
       </Modal>
     </div>
   )
-
 }

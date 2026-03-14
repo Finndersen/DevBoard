@@ -4,6 +4,8 @@ Handles project creation and conversation lifecycle management.
 Ensures proper agent configuration for project-level conversations.
 """
 
+from typing import Any
+
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
@@ -37,6 +39,7 @@ class ProjectService:
         self,
         name: str,
         description: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Project:
         """Create a new project with initial conversation.
 
@@ -46,6 +49,7 @@ class ProjectService:
         Args:
             name: Project name
             description: Optional project description
+            custom_fields: Optional custom field values
 
         Returns:
             Created Project instance with active conversation
@@ -58,6 +62,7 @@ class ProjectService:
             name=name,
             description=description,
             specification=specification_doc,
+            custom_fields=custom_fields,
         )
 
         # Create initial conversation

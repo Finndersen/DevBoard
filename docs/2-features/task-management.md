@@ -132,6 +132,15 @@ Link to Jira tickets, GitHub issues, and other external work items:
 - **Context Provider Integration**: External resources provide context to agents
 - **Multiple Links**: Tasks can link to multiple external items
 
+### Custom Fields
+
+Attach metadata to tasks using globally-defined custom fields:
+
+- **Field Types**: Text (free-form), Boolean (toggle), Enum (dropdown)
+- **Field Management**: Define task-scoped fields in Settings → Custom Fields → Task Fields tab
+- **Inline Editing**: View and edit field values via the collapsible panel in task detail (TagIcon button in the header)
+- **Mandatory Enforcement**: Mandatory fields are required at task creation time
+
 ## Document-Centric
 
 Maintain living specification and implementation plan documents:

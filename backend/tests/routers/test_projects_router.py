@@ -5,13 +5,15 @@ import pytest
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
-from devboard.db.models import ParentEntityType
+from devboard.db.models import CustomFieldType, ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
+from devboard.db.models.enums import EntityType
 from devboard.db.repositories import (
     CodebaseRepository,
     ContextProviderResourceRepository,
     ConversationRepository,
+    CustomFieldRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
@@ -199,6 +201,155 @@ class TestProjectsRouter:
         response = client.delete("/api/projects/999")
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
+
+
+class TestProjectCustomFieldsRouter:
+    """Test project custom fields endpoints."""
+
+    def test_create_project_with_custom_fields(self, client, db_session):
+        """Test creating a project with custom field values persists them."""
+        project_data = {
+            "name": "CF Test Project",
+            "description": "A project with custom fields",
+            "custom_fields": {"priority": "high", "reviewed": True},
+        }
+        response = client.post("/api/projects/", json=project_data)
+        assert response.status_code == 200
+
+        project = response.json()
+        assert project["custom_fields"] == {"priority": "high", "reviewed": True}
+
+    def test_create_project_no_custom_fields(self, client):
+        """Test creating a project without custom fields returns null custom_fields."""
+        project_data = {"name": "No CF Project", "description": "No custom fields"}
+        response = client.post("/api/projects/", json=project_data)
+        assert response.status_code == 200
+        assert response.json()["custom_fields"] is None
+
+    def test_create_project_missing_mandatory_field_returns_400(self, client, db_session):
+        """Test creating a project when mandatory custom fields are missing returns 400."""
+        custom_field_repo = CustomFieldRepository(db_session)
+        custom_field_repo.create(
+            name="team",
+            field_type=CustomFieldType.TEXT,
+            entity_type=EntityType.PROJECT,
+            mandatory=True,
+        )
+        db_session.commit()
+
+        response = client.post("/api/projects/", json={"name": "Missing CF Project", "description": "desc"})
+        assert response.status_code == 400
+        assert "team" in response.json()["detail"]
+
+    def test_create_project_with_mandatory_field_filled(self, client, db_session):
+        """Test creating a project with all mandatory custom fields filled succeeds."""
+        custom_field_repo = CustomFieldRepository(db_session)
+        custom_field_repo.create(
+            name="owner",
+            field_type=CustomFieldType.TEXT,
+            entity_type=EntityType.PROJECT,
+            mandatory=True,
+        )
+        db_session.commit()
+
+        project_data = {
+            "name": "With Mandatory CF",
+            "description": "desc",
+            "custom_fields": {"owner": "alice"},
+        }
+        response = client.post("/api/projects/", json=project_data)
+        assert response.status_code == 200
+        assert response.json()["custom_fields"] == {"owner": "alice"}
+
+    def test_get_project_returns_custom_fields(self, client, db_session):
+        """Test that get_project endpoint includes custom_fields in response."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        conversation_repo = ConversationRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="CF Get Project",
+            description="desc",
+            specification=spec_doc,
+            custom_fields={"status": "active"},
+        )
+        conversation_repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=created_project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="openai:gpt-4",
+            is_active=True,
+        )
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{created_project.id}")
+        assert response.status_code == 200
+        assert response.json()["custom_fields"] == {"status": "active"}
+
+    def test_update_project_custom_fields_merges_values(self, client, db_session):
+        """Test updating custom fields merges provided values with existing ones."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Merge CF Project",
+            description="desc",
+            specification=spec_doc,
+            custom_fields={"existing": "value", "other": "kept"},
+        )
+        db_session.commit()
+
+        response = client.patch(
+            f"/api/projects/{created_project.id}", json={"custom_fields": {"existing": "updated", "new": "added"}}
+        )
+        assert response.status_code == 200
+
+        project = response.json()
+        assert project["custom_fields"] == {"existing": "updated", "other": "kept", "new": "added"}
+
+    def test_update_project_custom_fields_removes_none_values(self, client, db_session):
+        """Test updating custom fields with None values removes those keys."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Remove CF Project",
+            description="desc",
+            specification=spec_doc,
+            custom_fields={"keep": "value", "remove": "this"},
+        )
+        db_session.commit()
+
+        response = client.patch(f"/api/projects/{created_project.id}", json={"custom_fields": {"remove": None}})
+        assert response.status_code == 200
+
+        project = response.json()
+        assert project["custom_fields"] == {"keep": "value"}
+
+    def test_update_project_without_custom_fields_leaves_them_unchanged(self, client, db_session):
+        """Test that updates not including custom_fields leave them unchanged."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name="Unchanged CF Project",
+            description="desc",
+            specification=spec_doc,
+            custom_fields={"preserved": "value"},
+        )
+        db_session.commit()
+
+        response = client.patch(f"/api/projects/{created_project.id}", json={"name": "Updated Name"})
+        assert response.status_code == 200
+
+        project = response.json()
+        assert project["name"] == "Updated Name"
+        assert project["custom_fields"] == {"preserved": "value"}
 
 
 class TestProjectResourcesRouter:

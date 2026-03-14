@@ -1,6 +1,7 @@
 """Project Pydantic schemas."""
 
 import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -17,6 +18,7 @@ class ProjectCreate(BaseModel):
 
     name: str
     description: str
+    custom_fields: dict[str, Any] | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -25,6 +27,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     specification: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class ProjectResponse(ProjectBase):
@@ -33,6 +36,7 @@ class ProjectResponse(ProjectBase):
     id: int
     created_at: datetime.datetime
     default_conversation_id: int | None = None
+    custom_fields: dict[str, Any] | None = None
 
     # Document ID - content fetched separately via /api/documents/{id}
     specification_document_id: int

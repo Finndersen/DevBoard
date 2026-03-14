@@ -5,6 +5,7 @@ import { apiClient } from '../../lib/api'
 import type { Codebase, CustomFieldDefinition } from '../../lib/api'
 import { useProjects, useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
+import { CustomFieldInputs } from '../common/CustomFieldInputs'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -341,58 +342,12 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         )}
 
         {/* Custom Fields */}
-        {!customFieldsLoading && customFieldDefinitions.length > 0 && (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Custom Fields</h4>
-            <div className="space-y-4">
-              {customFieldDefinitions.map(field => (
-                <div key={field.id}>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {field.name}
-                    {field.mandatory && <span className="text-red-500 ml-1">*</span>}
-                  </label>
-                  {field.description && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{field.description}</p>
-                  )}
-
-                  {field.type === 'text' && (
-                    <Input
-                      type="text"
-                      value={(customFieldValues[field.name] as string) || ''}
-                      onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                      placeholder={`Enter ${field.name}`}
-                    />
-                  )}
-
-                  {field.type === 'boolean' && (
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={(customFieldValues[field.name] as boolean) || false}
-                        onChange={(e) => handleCustomFieldChange(field.name, e.target.checked)}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"></div>
-                    </label>
-                  )}
-
-                  {field.type === 'enum' && field.options && (
-                    <select
-                      value={(customFieldValues[field.name] as string) || ''}
-                      onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    >
-                      <option value="">Select {field.name}</option>
-                      {field.options.map(option => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <CustomFieldInputs
+          definitions={customFieldDefinitions}
+          values={customFieldValues}
+          onChange={handleCustomFieldChange}
+          loading={customFieldsLoading}
+        />
 
         <div className="flex justify-end space-x-3 pt-4">
           <Button

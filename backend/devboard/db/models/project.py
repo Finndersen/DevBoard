@@ -1,9 +1,9 @@
 """Project-related database models."""
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import (
@@ -27,6 +27,9 @@ class Project(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(300))
+
+    # Custom field values stored as JSON (e.g., {"jira_project_id": "PROJ", "team": "Backend"})
+    custom_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Document relationship
     specification_document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))

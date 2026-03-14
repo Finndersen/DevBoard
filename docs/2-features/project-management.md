@@ -44,6 +44,16 @@ Link external resources and maintain project-specific context:
 - Documentation pages
 - Any URL-based resource
 
+### Custom Fields
+
+Attach arbitrary metadata to projects using globally-defined custom fields:
+
+- **Field Types**: Text (free-form), Boolean (toggle), Enum (dropdown)
+- **Field Management**: Define project-scoped fields in Settings → Custom Fields → Project Fields tab
+- **Project Creation**: Mandatory fields are enforced during project creation
+- **Inline Editing**: View and edit custom field values via the collapsible panel in project detail (TagIcon button in the header)
+- **Merge Semantics**: Updates merge provided values into existing fields; set a value to `null` to remove it
+
 ### Conversational Interface
 
 Ask questions and get AI-powered insights about project status:

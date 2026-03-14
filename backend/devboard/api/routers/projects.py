@@ -9,6 +9,7 @@ from devboard.api.dependencies.entities import get_verified_codebase, get_verifi
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
     get_conversation_repository,
+    get_custom_field_repository,
     get_document_repository,
     get_project_repository,
     get_task_repository,
@@ -33,10 +34,12 @@ from devboard.api.schemas import (
 )
 from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.models import ParentEntityType
+from devboard.db.models.enums import EntityType
 from devboard.db.models.project import Project
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
+    CustomFieldRepository,
     DocumentRepository,
     ProjectRepository,
     TaskRepository,
@@ -72,12 +75,28 @@ async def create_project(
     project_service: ProjectService = Depends(get_project_service),
     project_repo: ProjectRepository = Depends(get_project_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
     """Create a new project with initial conversation."""
+    mandatory_fields = custom_field_repo.get_mandatory_fields(entity_type=EntityType.PROJECT)
+    if mandatory_fields:
+        custom_fields = project.custom_fields or {}
+        missing_fields = [
+            field.name
+            for field in mandatory_fields
+            if field.name not in custom_fields or custom_fields[field.name] is None or custom_fields[field.name] == ""
+        ]
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required custom fields: {', '.join(missing_fields)}",
+            )
+
     # Create project using service (creates project + document + conversation)
     created_project = project_service.create_project(
         name=project.name,
         description=project.description,
+        custom_fields=project.custom_fields,
     )
     project_repo.db.commit()
     project_repo.db.refresh(created_project)
@@ -92,6 +111,7 @@ async def create_project(
         created_at=created_project.created_at,
         specification_document_id=created_project.specification.id,
         default_conversation_id=conversation.id,
+        custom_fields=created_project.custom_fields,
     )
 
 
@@ -113,6 +133,7 @@ async def get_project(
         created_at=project.created_at,
         specification_document_id=project.specification.id,
         default_conversation_id=conversation.id,
+        custom_fields=project.custom_fields,
     )
 
 
@@ -131,6 +152,17 @@ async def update_project(
     if specification is not None:
         # Update the specification document content
         document_repo.update_content(project.specification, specification)
+
+    # Handle custom fields with merge semantics: merge provided fields, remove keys set to None
+    custom_fields = update_data.pop("custom_fields", None)
+    if custom_fields is not None:
+        merged = dict(project.custom_fields or {})
+        for key, value in custom_fields.items():
+            if value is None:
+                merged.pop(key, None)
+            else:
+                merged[key] = value
+        project.custom_fields = merged
 
     # Update other project fields
     for field, value in update_data.items():

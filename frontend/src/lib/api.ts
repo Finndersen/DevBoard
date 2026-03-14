@@ -14,6 +14,7 @@ export interface Project {
   description: string
   default_conversation_id: number | null
   created_at: string
+  custom_fields: Record<string, unknown> | null
 }
 
 export interface WorkflowActionInfo {

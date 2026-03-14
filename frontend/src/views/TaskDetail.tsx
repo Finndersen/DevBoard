@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, TagIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
-import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
+import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
@@ -13,7 +13,6 @@ import { Button, Card, ErrorMessage } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
-import TaskCustomFieldsModal from '../components/modals/TaskCustomFieldsModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
@@ -25,6 +24,7 @@ import { PlanTab } from '../components/task/PlanTab'
 import { ChangesTab } from '../components/task/ChangesTab'
 import { CommentsTab } from '../components/task/CommentsTab'
 import { SummaryTab } from '../components/task/SummaryTab'
+import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
 const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.create_implementation_plan': 'Create Implementation Plan',
@@ -90,20 +90,29 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
 
-  // PR status for tasks in PR_OPEN state (used to disable merge button when not mergeable)
-  const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
-  const [prStatusLoading, setPrStatusLoading] = useState(false)
-  // PR feedback (reviews and comments) for tasks in PR_OPEN state
-  const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
-
-  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
+  // Custom fields state
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
 
   useEffect(() => {
     apiClient.getCustomFieldDefinitions('task')
       .then(setCustomFieldDefinitions)
-      .catch(err => console.error('Failed to load custom field definitions:', err))
+      .catch(err => console.error('Failed to load task custom field definitions:', err))
   }, [])
+
+  const handleCustomFieldChange = useCallback(async (fieldName: string, value: unknown) => {
+    if (!task) return
+    try {
+      await updateTask({ id: task.id, task: { custom_fields: { [fieldName]: value } } as unknown as Partial<Task> })
+    } catch {
+      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
+    }
+  }, [task, updateTask, addNotification])
+
+  // PR status for tasks with a PR (pr_open or complete)
+  const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
+  const [prStatusLoading, setPrStatusLoading] = useState(false)
+  // PR feedback (reviews and comments) for tasks in PR_OPEN state
+  const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
 
   // Fetch PR status when task has a PR (pr_open or complete)
   // Fetch PR feedback only for pr_open (active review)
@@ -245,7 +254,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [])
 
   // Use enhanced useMutation with optimistic updates (eliminates refetch!)
-  const { mutate: updateTask, error: updateError } = useUpdateTask({
+  const { mutate: updateTask, loading: updateTaskLoading, error: updateError } = useUpdateTask({
     updateCache
   })
 
@@ -600,18 +609,12 @@ function TaskDetail({ id }: TaskDetailProps) {
                   ))}
                 </nav>
 
-                {/* Action Buttons */}
-                <div className="flex items-center space-x-2">
-                  {task.custom_fields && Object.keys(task.custom_fields).length > 0 && (
-                    <button
-                      onClick={() => setShowCustomFieldsModal(true)}
-                      className={`p-1.5 rounded text-sm border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
-                      title={`${Object.keys(task.custom_fields).length} custom field${Object.keys(task.custom_fields).length !== 1 ? 's' : ''}`}
-                    >
-                      <TagIcon className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                <CustomFieldsPopover
+                  customFields={task.custom_fields}
+                  fieldDefinitions={customFieldDefinitions}
+                  onFieldChange={handleCustomFieldChange}
+                  saving={updateTaskLoading}
+                />
               </div>
             </div>
           </div>
@@ -675,13 +678,6 @@ function TaskDetail({ id }: TaskDetailProps) {
         isStreaming={isConversationStreaming}
       />
 
-      {/* Custom Fields Modal */}
-      <TaskCustomFieldsModal
-        isOpen={showCustomFieldsModal}
-        onClose={() => setShowCustomFieldsModal(false)}
-        customFields={task.custom_fields || {}}
-        fieldDefinitions={customFieldDefinitions}
-      />
     </div>
   )
 }
