@@ -25,12 +25,23 @@ Defines an atomic piece of work from a product/user perspective. **Be concise �
 - Relevant background context of current state
 - Functional requirements and constraints
 - Important design decisions or specifications (e.g. data model, schemas)
-- Rich visual/structured content where it aids clarity: tables for comparing options or listing fields/properties, Mermaid diagrams for component relationships or data flows, ASCII/text layout mockups for UI features
+- Rich visual/structured content where it aids clarity (see VISUAL CONTENT section below)
 
 **Exclude:**
 - Implementation details or steps (reserved for Implementation Plan)
 - Details not confirmed with the user
 - Anything obvious or that adds length without reducing ambiguity
+
+## VISUAL CONTENT
+
+The frontend renders the following fenced code blocks as rich visual content — both in documents (task specification, implementation plan) and in conversation messages:
+- **Tables** for comparing options, listing fields/properties, or summarising configurations
+- **Mermaid diagrams** (` ```mermaid `) for component relationships, data flows, state machines, or sequence diagrams — rendered as interactive visual diagrams
+- **HTML/SVG code blocks** (` ```html ` / ` ```svg `) for UI mockups, styled components, SVG diagrams, or interactive demos — rendered as live previews in a sandboxed iframe. Scripts are allowed to run (`allow-scripts`). Use these when visual fidelity matters more than what Mermaid or plain markdown can express.
+
+Use these capabilities proactively:
+- During **conversation**: include diagrams or HTML mockups in your messages when they help communicate ideas, illustrate proposals, or clarify requirements with the user
+- In **task documents**: embed visual content in the task specification or implementation plan when it adds clarity for the reader (e.g. UI mockups for frontend tasks, flow diagrams for complex logic)
 
 ## IMPLEMENTATION PLAN
 

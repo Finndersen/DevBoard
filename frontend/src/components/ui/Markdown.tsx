@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import CodeBlock from './CodeBlock'
+import HtmlPreview from './HtmlPreview'
 import MermaidDiagram from './MermaidDiagram'
 import MermaidDiagramModal from './MermaidDiagramModal'
 
@@ -81,6 +82,10 @@ export default function Markdown({
             onExpandClick={() => setModalCode(codeString)}
           />
         )
+      }
+
+      if (language === 'html' || language === 'svg') {
+        return <HtmlPreview code={codeString} language={language} />
       }
 
       return <CodeBlock code={codeString} language={language} />

@@ -56,6 +56,22 @@ describe('Markdown', () => {
     expect(container.firstChild).toHaveClass('prose-invert')
   })
 
+  it('renders html code blocks as HtmlPreview', () => {
+    const markdown = '```html\n<div>Hello</div>\n```'
+    renderWithProvider(<Markdown>{markdown}</Markdown>)
+    const iframe = screen.getByTitle('HTML Preview')
+    expect(iframe).toBeInTheDocument()
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts')
+  })
+
+  it('renders svg code blocks as HtmlPreview', () => {
+    const markdown = '```svg\n<svg><rect /></svg>\n```'
+    renderWithProvider(<Markdown>{markdown}</Markdown>)
+    const iframe = screen.getByTitle('SVG Preview')
+    expect(iframe).toBeInTheDocument()
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts')
+  })
+
   it('applies custom className', () => {
     const { container } = renderWithProvider(
       <Markdown className="custom-class">Test</Markdown>
