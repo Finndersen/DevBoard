@@ -20,6 +20,13 @@ class SessionTaskInfo(TypedDict):
     agent_role: str
 
 
+class SessionSubAgentInfo(TypedDict):
+    external_session_id: str
+    agent_role: str
+    parent_task_id: int | None
+    parent_task_title: str | None
+
+
 class ConversationListRow(TypedDict):
     conversation: Conversation
     parent_entity_name: str
@@ -182,6 +189,41 @@ class ConversationRepository(BaseRepository[Conversation]):
                 task_id=row.id,
                 task_title=row.title,
                 agent_role=row.agent_role.value if hasattr(row.agent_role, "value") else row.agent_role,
+            )
+            for row in rows
+        }
+
+    def get_sub_agent_info_by_session_ids(self, session_ids: set[str]) -> dict[str, SessionSubAgentInfo]:
+        """Get sub-agent info for a set of session IDs.
+
+        Returns a dict keyed by external_session_id for sessions that are sub-agent conversations
+        (i.e. have a parent_conversation_id set).
+        """
+        from devboard.db.models.task import Task
+
+        stmt = (
+            select(
+                Conversation.external_session_id,
+                Conversation.agent_role,
+                Task.id,
+                Task.title,
+            )
+            .outerjoin(
+                Task,
+                (Task.id == Conversation.parent_entity_id) & (Conversation.parent_entity_type == ParentEntityType.TASK),
+            )
+            .where(
+                Conversation.external_session_id.in_(session_ids),
+                Conversation.parent_conversation_id.is_not(None),
+            )
+        )
+        rows = self.db.execute(stmt).all()
+        return {
+            row.external_session_id: SessionSubAgentInfo(
+                external_session_id=row.external_session_id,
+                agent_role=row.agent_role.value if hasattr(row.agent_role, "value") else row.agent_role,
+                parent_task_id=row.id,
+                parent_task_title=row.title,
             )
             for row in rows
         }

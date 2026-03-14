@@ -664,6 +664,12 @@ export interface SessionTaskInfo {
   agent_role: string
 }
 
+export interface SubAgentInfo {
+  agent_role: string
+  parent_task_id: number | null
+  parent_task_title: string | null
+}
+
 export interface ClaudeCodeSession {
   session_id: string
   label: string
@@ -674,6 +680,7 @@ export interface ClaudeCodeSession {
   linked_session_id: string | null
   session_role: 'plan' | 'implementation' | null
   task_info: SessionTaskInfo | null
+  sub_agent_info: SubAgentInfo | null
 }
 
 export interface SessionSearchResult {

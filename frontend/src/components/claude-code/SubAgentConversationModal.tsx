@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
 import type { ConversationEvent } from '../../lib/api'
-import { apiClient } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 import ConversationMessageList from '../chat/ConversationMessageList'
 import { Modal } from '../ui'
@@ -9,19 +8,19 @@ import { Modal } from '../ui'
 interface SubAgentConversationModalProps {
   isOpen: boolean
   onClose: () => void
-  sessionId: string
-  agentId: string
+  fetchMessages: () => Promise<ConversationEvent[]>
   title: string
   subagentType?: string
+  subtitle?: string
 }
 
 export default function SubAgentConversationModal({
   isOpen,
   onClose,
-  sessionId,
-  agentId,
+  fetchMessages,
   title,
   subagentType,
+  subtitle,
 }: SubAgentConversationModalProps) {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -31,20 +30,20 @@ export default function SubAgentConversationModal({
     setLoading(true)
     setError(null)
     try {
-      const data = await apiClient.getClaudeCodeSubAgentMessages(sessionId, agentId)
+      const data = await fetchMessages()
       setMessages(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sub-agent conversation')
     } finally {
       setLoading(false)
     }
-  }, [sessionId, agentId])
+  }, [fetchMessages])
 
   useEffect(() => {
-    if (isOpen && agentId) {
+    if (isOpen) {
       loadMessages()
     }
-  }, [isOpen, agentId, loadMessages])
+  }, [isOpen, loadMessages])
 
   const modalTitle = (
     <span className="flex items-center gap-2 min-w-0 w-full">
@@ -54,9 +53,11 @@ export default function SubAgentConversationModal({
           {subagentType}
         </span>
       )}
-      <span className="ml-auto flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 font-mono">
-        {agentId}
-      </span>
+      {subtitle && (
+        <span className="ml-auto flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 font-mono">
+          {subtitle}
+        </span>
+      )}
     </span>
   )
 

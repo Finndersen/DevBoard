@@ -27,11 +27,16 @@ export default function SessionsTab() {
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [projectsError, setProjectsError] = useState<string | null>(null)
   const [excludeEmpty, setExcludeEmpty] = useState(true)
+  const [excludeSubAgents, setExcludeSubAgents] = useState(false)
   const [searchResults, setSearchResults] = useState<SessionSearchResult[]>([])
   const [searchQuery, setSearchQuery] = useState('')
 
   const selectedSession = sessions.find(s => s.session_id === selectedSessionId) ?? null
-  const filteredSessions = excludeEmpty ? sessions.filter(s => !s.is_empty) : sessions
+  const filteredSessions = sessions.filter(s => {
+    if (excludeEmpty && s.is_empty) return false
+    if (excludeSubAgents && s.sub_agent_info !== null) return false
+    return true
+  })
 
   const isSearchActive = searchQuery.trim().length > 0
 
@@ -199,10 +204,16 @@ export default function SessionsTab() {
         <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center justify-between">
             <h2 className={`text-sm font-semibold ${textColors.primary}`}>Sessions</h2>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
-              <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
-              Hide empty
-            </label>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+                <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
+                Hide empty
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+                <input type="checkbox" checked={excludeSubAgents} onChange={e => setExcludeSubAgents(e.target.checked)} />
+                Hide sub-agents
+              </label>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             <SessionListPanel
@@ -248,6 +259,22 @@ export default function SessionsTab() {
                   </button>
                   <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                     {AGENT_ROLE_LABELS[selectedSession.task_info.agent_role] ?? selectedSession.task_info.agent_role}
+                  </span>
+                </>
+              )}
+              {selectedSession?.sub_agent_info && (
+                <>
+                  <span className="shrink-0">·</span>
+                  {selectedSession.sub_agent_info.parent_task_id && (
+                    <button
+                      onClick={() => navigate(`/tasks/${selectedSession.sub_agent_info!.parent_task_id}`)}
+                      className="text-blue-600 dark:text-blue-400 hover:underline truncate"
+                    >
+                      {selectedSession.sub_agent_info.parent_task_title}
+                    </button>
+                  )}
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    {AGENT_ROLE_LABELS[selectedSession.sub_agent_info.agent_role] ?? selectedSession.sub_agent_info.agent_role}
                   </span>
                 </>
               )}

@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 
 import type { ToolCall, ToolResult } from '../../lib/api'
+import { apiClient } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
@@ -33,7 +34,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
     )
   }, [toolCall.tool_name, toolCall.tool_args, codebaseLocalPath])
 
-  // Extract agentId from Task tool results
+  // Extract agentId from Task tool results (Claude Code native sub-agents)
   const subAgentInfo = useMemo(() => {
     if ((toolCall.tool_name !== 'Task' && toolCall.tool_name !== 'Agent') || !sessionId || !toolResult?.result_content) return null
     const match = toolResult.result_content.match(/agentId:\s*(\S+)/)
@@ -43,6 +44,32 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
     const subagentType = args?.subagent_type as string | undefined
     return { agentId: match[1], description: description ?? 'Sub-agent conversation', subagentType }
   }, [toolCall.tool_name, toolCall.tool_args, toolResult?.result_content, sessionId])
+
+  // Extract conversation_id from DevBoard sub-agent tool results (investigate_codebase / review_code_changes)
+  const devboardSubAgentInfo = useMemo(() => {
+    if (!['investigate_codebase', 'review_code_changes'].includes(toolCall.tool_name) || !toolResult?.result_content) return null
+    try {
+      const data = JSON.parse(toolResult.result_content)
+      if (typeof data.conversation_id !== 'number') return null
+      return {
+        conversationId: data.conversation_id as number,
+        description: toolCall.tool_name === 'investigate_codebase' ? 'Investigation' : 'Code Review',
+      }
+    } catch {
+      return null
+    }
+  }, [toolCall.tool_name, toolResult?.result_content])
+
+  // Has any kind of sub-agent conversation to show
+  const hasSubAgentConversation = subAgentInfo !== null || devboardSubAgentInfo !== null
+
+  // Build fetchMessages callback for the modal
+  const fetchMessages = useCallback(() => {
+    if (subAgentInfo) {
+      return apiClient.getClaudeCodeSubAgentMessages(sessionId!, subAgentInfo.agentId)
+    }
+    return apiClient.getConversationMessages(devboardSubAgentInfo!.conversationId)
+  }, [subAgentInfo, devboardSubAgentInfo, sessionId])
 
   // Determine status
   const status = isError ? 'error' : hasResult ? 'complete' : 'running'
@@ -111,7 +138,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
               <span className="text-xs text-blue-600 dark:text-blue-400">Running...</span>
             )}
             {/* View sub-agent conversation button */}
-            {subAgentInfo && (
+            {hasSubAgentConversation && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setIsSubAgentModalOpen(true) }}
@@ -180,14 +207,14 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
             </div>
           )}
         </button>
-      {subAgentInfo && (
+      {hasSubAgentConversation && (
         <SubAgentConversationModal
           isOpen={isSubAgentModalOpen}
           onClose={() => setIsSubAgentModalOpen(false)}
-          sessionId={sessionId!}
-          agentId={subAgentInfo.agentId}
-          title={subAgentInfo.description}
-          subagentType={subAgentInfo.subagentType}
+          fetchMessages={fetchMessages}
+          title={subAgentInfo?.description ?? devboardSubAgentInfo!.description}
+          subagentType={subAgentInfo?.subagentType ?? devboardSubAgentInfo?.description}
+          subtitle={subAgentInfo?.agentId}
         />
       )}
     </div>

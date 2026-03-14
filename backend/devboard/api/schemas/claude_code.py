@@ -21,6 +21,12 @@ class SessionTaskInfoResponse(BaseModel):
     agent_role: str
 
 
+class SubAgentInfoResponse(BaseModel):
+    agent_role: str
+    parent_task_id: int | None
+    parent_task_title: str | None
+
+
 class ClaudeCodeSessionResponse(BaseModel):
     session_id: str
     label: str
@@ -31,6 +37,7 @@ class ClaudeCodeSessionResponse(BaseModel):
     linked_session_id: str | None = None
     session_role: str | None = None
     task_info: SessionTaskInfoResponse | None = None
+    sub_agent_info: SubAgentInfoResponse | None = None
 
 
 class SessionLocateResponse(BaseModel):

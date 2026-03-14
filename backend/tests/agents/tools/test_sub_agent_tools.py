@@ -157,12 +157,12 @@ class TestCreateCodebaseInvestigationTool:
 
         assert "query" in params
         assert "codebase_name" in params
-        assert "session_id" in params
+        assert "conversation_id" in params
 
         assert params["query"].annotation is str
         assert params["codebase_name"].annotation is not str  # Should be Literal type
-        assert params["session_id"].annotation == int | None
-        assert params["session_id"].default is None
+        assert params["conversation_id"].annotation == int | None
+        assert params["conversation_id"].default is None
 
     @pytest.mark.asyncio
     async def test_investigate_creates_conversation_and_returns_json_with_conversation_id(
@@ -192,7 +192,7 @@ class TestCreateCodebaseInvestigationTool:
         parsed = json.loads(result)
         assert parsed == {
             "result": "Investigation result",
-            "session_id": 42,
+            "conversation_id": 42,
         }
         mock_conversation_repo.create.assert_called_once()
 
@@ -220,10 +220,10 @@ class TestCreateCodebaseInvestigationTool:
             "devboard.api.dependencies.factories.create_agent_execution_service",
             return_value=mock_execution_service,
         ):
-            result = await tool.function(codebase_name="backend", query="Follow-up question", session_id=99)
+            result = await tool.function(codebase_name="backend", query="Follow-up question", conversation_id=99)
 
         parsed = json.loads(result)
-        assert parsed["session_id"] == 99
+        assert parsed["conversation_id"] == 99
         mock_conversation_repo.get_by_id.assert_called_once_with(99)
         mock_conversation_repo.create.assert_not_called()
 
@@ -236,8 +236,8 @@ class TestCreateCodebaseInvestigationTool:
 
         _active_investigation_sessions.add(55)
         try:
-            with pytest.raises(ModelRetry, match="session_id '55'.*already in use"):
-                await tool.function(codebase_name="backend", query="How does X work?", session_id=55)
+            with pytest.raises(ModelRetry, match="conversation_id '55'.*already in use"):
+                await tool.function(codebase_name="backend", query="How does X work?", conversation_id=55)
         finally:
             _active_investigation_sessions.discard(55)
 
@@ -263,7 +263,7 @@ class TestCreateCodebaseInvestigationTool:
             "devboard.api.dependencies.factories.create_agent_execution_service",
             return_value=mock_execution_service,
         ):
-            await tool.function(codebase_name="backend", query="How does X work?", session_id=77)
+            await tool.function(codebase_name="backend", query="How does X work?", conversation_id=77)
 
         assert 77 not in _active_investigation_sessions
 
@@ -287,7 +287,7 @@ class TestCreateCodebaseInvestigationTool:
             return_value=mock_execution_service,
         ):
             with pytest.raises(RuntimeError, match="Agent failed"):
-                await tool.function(codebase_name="backend", query="How does X work?", session_id=88)
+                await tool.function(codebase_name="backend", query="How does X work?", conversation_id=88)
 
         assert 88 not in _active_investigation_sessions
 
@@ -295,7 +295,7 @@ class TestCreateCodebaseInvestigationTool:
     async def test_none_session_id_does_not_interact_with_active_sessions(
         self, mock_codebases, mock_agent_config_service, mock_conversation_repo
     ):
-        """Test that session_id=None does not add to or interact with active sessions."""
+        """Test that conversation_id=None does not add to or interact with active sessions."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
@@ -313,7 +313,7 @@ class TestCreateCodebaseInvestigationTool:
             "devboard.api.dependencies.factories.create_agent_execution_service",
             return_value=mock_execution_service,
         ):
-            await tool.function(codebase_name="backend", query="How does X work?", session_id=None)
+            await tool.function(codebase_name="backend", query="How does X work?", conversation_id=None)
 
         assert _active_investigation_sessions == sessions_before
 
@@ -340,7 +340,7 @@ class TestCreateCodebaseInvestigationTool:
                 return_value=mock_execution_service,
             ):
                 # Should not raise ModelRetry since 200 is different from 100
-                await tool.function(codebase_name="backend", query="How does X work?", session_id=200)
+                await tool.function(codebase_name="backend", query="How does X work?", conversation_id=200)
         finally:
             _active_investigation_sessions.discard(100)
 
@@ -609,7 +609,7 @@ class TestRunSubAgent:
         """Test that concurrent calls with the same conversation_id raise ModelRetry."""
         _active_sub_agent_conversations.add(777)
         try:
-            with pytest.raises(ModelRetry, match="session_id '777'.*already in use"):
+            with pytest.raises(ModelRetry, match="conversation_id '777'.*already in use"):
                 await run_sub_agent(
                     role=mock_role,
                     role_type=AgentRoleType.CODE_REVIEW,
@@ -791,7 +791,7 @@ class TestCreateCodeReviewTool:
         mock_run.assert_not_called()
         parsed = json.loads(result)
         assert "No changes to review" in parsed["result"]
-        assert parsed["session_id"] is None
+        assert parsed["conversation_id"] is None
 
     @pytest.mark.asyncio
     async def test_review_calls_run_sub_agent_with_code_review_role_type(
@@ -832,7 +832,7 @@ class TestCreateCodeReviewTool:
         assert call_kwargs["parent_entity_id"] == 1
 
         parsed = json.loads(result)
-        assert parsed == {"result": "Review complete", "session_id": None}
+        assert parsed == {"result": "Review complete", "conversation_id": 42}
 
     @pytest.mark.asyncio
     async def test_prompt_includes_spec_plan_and_diff(

@@ -14,6 +14,8 @@ export const AGENT_ROLE_LABELS: Record<string, string> = {
   task_planning: 'Planning',
   task_implementation: 'Implementation',
   task_pr_review: 'PR Review',
+  investigation: 'Investigation',
+  code_review: 'Code Review',
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -97,6 +99,19 @@ export function SessionListPanel({ sessions, selectedSessionId, loading, onSelec
                   </span>
                   <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                     {AGENT_ROLE_LABELS[session.task_info.agent_role] ?? session.task_info.agent_role}
+                  </span>
+                </div>
+              )}
+              {session.sub_agent_info && (
+                <div className="mt-1 flex items-center gap-1.5 text-xs">
+                  <ClipboardDocumentListIcon className="w-3 h-3 shrink-0 text-gray-400" />
+                  {session.sub_agent_info.parent_task_title && (
+                    <span className={`truncate ${textColors.secondary}`}>
+                      {session.sub_agent_info.parent_task_title}
+                    </span>
+                  )}
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    {AGENT_ROLE_LABELS[session.sub_agent_info.agent_role] ?? session.sub_agent_info.agent_role}
                   </span>
                 </div>
               )}

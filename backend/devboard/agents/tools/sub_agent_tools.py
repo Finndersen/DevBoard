@@ -60,18 +60,18 @@ async def run_sub_agent(
         # Resumption path: validate and guard against concurrent use
         if conversation_id in _active_sub_agent_conversations:
             raise ModelRetry(
-                f"session_id '{conversation_id}' is already in use by a concurrent investigation. "
-                "Concurrent calls with the same session_id are not supported. "
-                "Either wait for the previous investigation to complete before making a follow-up call with this session_id, "
-                "or omit session_id to start independent parallel investigations."
+                f"conversation_id '{conversation_id}' is already in use by a concurrent investigation. "
+                "Concurrent calls with the same conversation_id are not supported. "
+                "Either wait for the previous investigation to complete before making a follow-up call with this conversation_id, "
+                "or omit conversation_id to start independent parallel investigations."
             )
         conversation = conversation_repo.get_by_id(conversation_id)
         if conversation is None:
             raise ModelRetry(
-                f"session_id '{conversation_id}' not found. Start a new investigation by omitting session_id."
+                f"conversation_id '{conversation_id}' not found. Start a new investigation by omitting conversation_id."
             )
         if conversation.parent_conversation_id != parent_conversation_id:
-            raise ModelRetry(f"session_id '{conversation_id}' does not belong to this conversation context.")
+            raise ModelRetry(f"conversation_id '{conversation_id}' does not belong to this conversation context.")
         _active_sub_agent_conversations.add(conversation_id)
     else:
         # New conversation path
@@ -158,7 +158,7 @@ def create_multi_codebase_investigation_tool(
         cb_config.codebase.name: cb_config for cb_config in codebases
     }
 
-    async def investigate_codebase(codebase_name: str, query: str, session_id: int | None = None) -> str:
+    async def investigate_codebase(codebase_name: str, query: str, conversation_id: int | None = None) -> str:
         """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
 
         Use this tool when you need detailed information about:
@@ -175,10 +175,10 @@ def create_multi_codebase_investigation_tool(
         Guidelines:
         - Be specific about what you want to know and what level of detail is required.
         - Make your query targeted about one specific topic. You may call this tool multiple times in parallel for
-          **independent** investigations (each with no `session_id`, or with **different** `session_id` values).
-        - **IMPORTANT**: Do NOT make concurrent calls with the same `session_id`. Concurrent calls sharing a `session_id`
+          **independent** investigations (each with no `conversation_id`, or with **different** `conversation_id` values).
+        - **IMPORTANT**: Do NOT make concurrent calls with the same `conversation_id`. Concurrent calls sharing a `conversation_id`
           will fail. When continuing a previous investigation session, calls must be sequential — wait for the previous
-          call to return before making a follow-up call with this `session_id`.
+          call to return before making a follow-up call with this `conversation_id`.
         - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
           focus its analysis and provide more accurate and targeted answers.
         - Indicate specific directories or files to focus on if possible.
@@ -186,13 +186,13 @@ def create_multi_codebase_investigation_tool(
         Args:
             query: Specific question about the codebase. Be as detailed as possible about what you want to know.
             codebase_name: Name of the codebase to investigate. Choose from the available codebases.
-            session_id: Optional session ID from a prior call to this tool. Provide it when continuing a previous
-                investigation where the prior session already has relevant context, to resume rather than starting fresh.
+            conversation_id: Optional conversation ID from a prior call to this tool. Provide it when continuing a previous
+                investigation where the prior conversation already has relevant context, to resume rather than starting fresh.
 
         Returns:
             A JSON string with two keys:
             - `result`: The investigation answer with file paths, code references, and implementation details.
-            - `session_id`: An opaque session identifier to pass back on follow-up calls, or null if unavailable.
+            - `conversation_id`: A conversation identifier to pass back on follow-up calls, or null if unavailable.
         """
         codebase_config = codebase_map[codebase_name]
         investigation_role = CodebaseInvestigationAgentRole(
@@ -208,9 +208,9 @@ def create_multi_codebase_investigation_tool(
             parent_entity_type=parent_entity_type,
             parent_entity_id=parent_entity_id,
             parent_conversation_id=parent_conversation_id,
-            conversation_id=session_id,
+            conversation_id=conversation_id,
         )
-        return json.dumps({"result": sub_agent_result.result, "session_id": sub_agent_result.conversation_id})
+        return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
@@ -303,13 +303,13 @@ def create_code_review_tool(
         Returns:
             A JSON string with:
             - `result`: Structured review with Summary and Findings (Critical/Important/Suggestions)
-            - `session_id`: Always null (code review is single-shot)
+            - `conversation_id`: The conversation identifier for the review session.
         """
         working_dir = task.get_current_workspace_dir()
         diff = await task_git_service.get_task_all_changes(task)
 
         if not diff.files:
-            return json.dumps({"result": "No changes to review — the task diff is empty.", "session_id": None})
+            return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})
 
         full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
 
@@ -371,6 +371,6 @@ def create_code_review_tool(
             parent_entity_id=task.id,
             parent_conversation_id=parent_conversation_id,
         )
-        return json.dumps({"result": sub_agent_result.result, "session_id": None})
+        return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 
     return Tool(function=review_code_changes, name="review_code_changes")

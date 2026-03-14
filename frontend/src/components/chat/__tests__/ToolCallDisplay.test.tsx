@@ -5,9 +5,20 @@ import { render, mockNavigate } from '../../../test/utils'
 import ToolCallDisplay from '../ToolCallDisplay'
 import type { ToolCall, ToolResult } from '../../../lib/api'
 
+vi.mock('../../../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/api')>('../../../lib/api')
+  return {
+    ...actual,
+    apiClient: {
+      getClaudeCodeSubAgentMessages: vi.fn().mockResolvedValue([]),
+      getConversationMessages: vi.fn().mockResolvedValue([]),
+    },
+  }
+})
+
 vi.mock('../../claude-code/SubAgentConversationModal', () => ({
-  default: ({ isOpen, sessionId, agentId, title, subagentType }: { isOpen: boolean; onClose: () => void; sessionId: string; agentId: string; title: string; subagentType?: string }) => (
-    isOpen ? <div data-testid="sub-agent-modal" data-session-id={sessionId} data-agent-id={agentId} data-subagent-type={subagentType}>{title}</div> : null
+  default: ({ isOpen, title, subagentType, subtitle }: { isOpen: boolean; onClose: () => void; fetchMessages: () => Promise<unknown[]>; title: string; subagentType?: string; subtitle?: string }) => (
+    isOpen ? <div data-testid="sub-agent-modal" data-subagent-type={subagentType} data-subtitle={subtitle}>{title}</div> : null
   ),
 }))
 
@@ -687,14 +698,14 @@ describe('ToolCallDisplay', () => {
 
     const validResultContent = JSON.stringify({
       result: '## Summary\n\nThe auth module handles JWT tokens.\n\n- Token validation\n- User lookup',
-      session_id: 'session-abc-123',
+      conversation_id: 42,
     })
 
     it('renders investigate_codebase result as markdown when expanded', async () => {
       const user = userEvent.setup()
       render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent)} />)
 
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getAllByRole('button')[0])
 
       expect(screen.getByRole('heading', { name: 'Summary' })).toBeInTheDocument()
       expect(screen.getByText(/auth module handles JWT tokens/)).toBeInTheDocument()
@@ -709,7 +720,7 @@ describe('ToolCallDisplay', () => {
       }
       const reviewResult = JSON.stringify({
         result: '## Review\n\nCode looks good.',
-        session_id: null,
+        conversation_id: null,
       })
 
       render(<ToolCallDisplay toolCall={reviewToolCall} toolResult={subAgentResult(reviewToolCall, reviewResult)} />)
@@ -720,39 +731,39 @@ describe('ToolCallDisplay', () => {
       expect(screen.getByText('Code looks good.')).toBeInTheDocument()
     })
 
-    it('displays session_id when present', async () => {
+    it('displays conversation_id when present', async () => {
       const user = userEvent.setup()
       render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent)} />)
 
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getAllByRole('button')[0])
 
-      expect(screen.getByText('Session: session-abc-123')).toBeInTheDocument()
+      expect(screen.getByText('Conversation: 42')).toBeInTheDocument()
     })
 
-    it('does not display session_id when null', async () => {
+    it('does not display conversation_id when null', async () => {
       const user = userEvent.setup()
       const resultWithNullSession = JSON.stringify({
         result: '## Summary\n\nSome result text.',
-        session_id: null,
+        conversation_id: null,
       })
 
       render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, resultWithNullSession)} />)
 
       await user.click(screen.getByRole('button'))
 
-      expect(screen.queryByText(/^Session:/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/^Conversation:/)).not.toBeInTheDocument()
     })
 
     it('falls back to formatted JSON when result content has invalid shape', async () => {
       const user = userEvent.setup()
       const invalidShapeContent = JSON.stringify({
         result: 123,  // Wrong type - should be string
-        session_id: 'session-abc-123',
+        conversation_id: 42,
       })
 
       render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, invalidShapeContent)} />)
 
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getAllByRole('button')[0])
 
       expect(screen.getByText(/"result": 123/)).toBeInTheDocument()
       expect(screen.queryByRole('heading')).not.toBeInTheDocument()
@@ -772,7 +783,7 @@ describe('ToolCallDisplay', () => {
       const user = userEvent.setup()
       render(<ToolCallDisplay toolCall={investigateToolCall} toolResult={subAgentResult(investigateToolCall, validResultContent, true)} />)
 
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getAllByRole('button')[0])
 
       expect(screen.getByText('Error:')).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Summary' })).not.toBeInTheDocument()
@@ -970,8 +981,7 @@ describe('ToolCallDisplay', () => {
 
       const modal = screen.getByTestId('sub-agent-modal')
       expect(modal).toBeInTheDocument()
-      expect(modal).toHaveAttribute('data-session-id', 'parent-session-123')
-      expect(modal).toHaveAttribute('data-agent-id', 'ac2a274')
+      expect(modal).toHaveAttribute('data-subtitle', 'ac2a274')
       expect(modal).toHaveTextContent('Investigate auth module')
     })
 
@@ -1027,6 +1037,116 @@ describe('ToolCallDisplay', () => {
 
       const modal = screen.getByTestId('sub-agent-modal')
       expect(modal).toHaveTextContent('Sub-agent conversation')
+    })
+  })
+
+  describe('DevBoard Sub-Agent Conversation Button', () => {
+    const investigateToolCall: ToolCall = {
+      event_type: 'tool_call',
+      tool_call_id: 'call_investigate',
+      tool_name: 'investigate_codebase',
+      tool_args: { query: 'How does auth work?', codebase_name: 'backend' },
+      timestamp: '2024-01-01T10:00:00Z',
+    }
+
+    const investigateResultWithConversationId: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_investigate',
+      result_content: JSON.stringify({
+        result: '## Summary\n\nAuth uses JWT tokens.',
+        conversation_id: 99,
+      }),
+      is_error: false,
+      timestamp: '2024-01-01T10:00:30Z',
+    }
+
+    const investigateResultWithNullConversationId: ToolResult = {
+      event_type: 'tool_result',
+      tool_call_id: 'call_investigate',
+      result_content: JSON.stringify({
+        result: '## Summary\n\nAuth uses JWT tokens.',
+        conversation_id: null,
+      }),
+      is_error: false,
+      timestamp: '2024-01-01T10:00:30Z',
+    }
+
+    it('shows view conversation button when investigate_codebase has conversation_id', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={investigateToolCall}
+          toolResult={investigateResultWithConversationId}
+        />
+      )
+
+      expect(screen.getByTitle('View sub-agent conversation')).toBeInTheDocument()
+    })
+
+    it('does not show view conversation button when conversation_id is null', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={investigateToolCall}
+          toolResult={investigateResultWithNullConversationId}
+        />
+      )
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+
+    it('does not require sessionId prop for DevBoard sub-agent tools', () => {
+      render(
+        <ToolCallDisplay
+          toolCall={investigateToolCall}
+          toolResult={investigateResultWithConversationId}
+        />
+      )
+
+      expect(screen.getByTitle('View sub-agent conversation')).toBeInTheDocument()
+    })
+
+    it('shows view conversation button for review_code_changes with conversation_id', () => {
+      const reviewToolCall: ToolCall = {
+        ...investigateToolCall,
+        tool_call_id: 'call_review',
+        tool_name: 'review_code_changes',
+        tool_args: {},
+      }
+      const reviewResult: ToolResult = {
+        event_type: 'tool_result',
+        tool_call_id: 'call_review',
+        result_content: JSON.stringify({
+          result: '## Review\n\nLooks good.',
+          conversation_id: 55,
+        }),
+        is_error: false,
+        timestamp: '2024-01-01T10:00:30Z',
+      }
+
+      render(<ToolCallDisplay toolCall={reviewToolCall} toolResult={reviewResult} />)
+
+      expect(screen.getByTitle('View sub-agent conversation')).toBeInTheDocument()
+    })
+
+    it('opens modal with Investigation title for investigate_codebase', async () => {
+      const user = userEvent.setup()
+      render(
+        <ToolCallDisplay
+          toolCall={investigateToolCall}
+          toolResult={investigateResultWithConversationId}
+        />
+      )
+
+      await user.click(screen.getByTitle('View sub-agent conversation'))
+
+      const modal = screen.getByTestId('sub-agent-modal')
+      expect(modal).toBeInTheDocument()
+      expect(modal).toHaveTextContent('Investigation')
+    })
+
+    it('does not show view conversation button when no result yet', () => {
+      render(<ToolCallDisplay toolCall={investigateToolCall} />)
+
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
     })
   })
 })

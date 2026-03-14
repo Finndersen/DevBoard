@@ -11,6 +11,7 @@ from devboard.api.schemas.claude_code import (
     SessionLocateResponse,
     SessionSearchResultResponse,
     SessionTaskInfoResponse,
+    SubAgentInfoResponse,
 )
 from devboard.db.repositories.conversation import ConversationRepository
 
@@ -43,6 +44,7 @@ async def list_sessions(
 
     session_ids = {s.session_id for s in sessions}
     task_info_by_session = conversation_repo.get_task_info_by_session_ids(session_ids)
+    sub_agent_info_by_session = conversation_repo.get_sub_agent_info_by_session_ids(session_ids)
 
     results = []
     for s in sessions:
@@ -56,7 +58,17 @@ async def list_sessions(
             if task_info_data
             else None
         )
-        results.append(ClaudeCodeSessionResponse(**s.__dict__, task_info=task_info))
+        sub_agent_data = sub_agent_info_by_session.get(s.session_id)
+        sub_agent_info = (
+            SubAgentInfoResponse(
+                agent_role=sub_agent_data["agent_role"],
+                parent_task_id=sub_agent_data["parent_task_id"],
+                parent_task_title=sub_agent_data["parent_task_title"],
+            )
+            if sub_agent_data
+            else None
+        )
+        results.append(ClaudeCodeSessionResponse(**s.__dict__, task_info=task_info, sub_agent_info=sub_agent_info))
     return results
 
 
