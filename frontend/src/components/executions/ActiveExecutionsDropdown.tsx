@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowPathIcon, StopIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
-import { useActiveExecutions } from '../../hooks/useActiveExecutions'
 import { useUIStore } from '../../stores/uiStore'
 import { apiClient } from '../../lib/api'
-import type { ActiveExecutionItem } from '../../lib/api'
+import type { ActiveExecutionItem, ActiveExecutionsResponse } from '../../lib/api'
+
+const FAST_POLL_INTERVAL_MS = 5000
 
 function formatElapsed(startedAt: string): string {
   const diffMs = Date.now() - new Date(startedAt).getTime()
@@ -29,15 +30,27 @@ function AgentIcon({ className }: { className?: string }) {
   )
 }
 
-export default function ActiveExecutionsDropdown() {
+interface ActiveExecutionsDropdownProps {
+  data: ActiveExecutionsResponse | null
+  loading: boolean
+  refetch: () => Promise<void>
+}
+
+export default function ActiveExecutionsDropdown({ data, loading, refetch }: ActiveExecutionsDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { data, loading, refetch } = useActiveExecutions(isOpen)
   const openTab = useUIStore(s => s.openTab)
   const [interruptingIds, setInterruptingIds] = useState<Set<number>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
 
   const executions = data?.executions ?? []
   const count = executions.length
+
+  // Fast poll when dropdown is open
+  useEffect(() => {
+    if (!isOpen) return
+    const interval = setInterval(refetch, FAST_POLL_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [isOpen, refetch])
 
   const handleRefresh = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()

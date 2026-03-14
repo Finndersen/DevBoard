@@ -626,6 +626,16 @@ export interface ConversationResponse {
   created_at: string
 }
 
+export interface ConversationListItem {
+  id: number
+  parent_entity_type: string
+  parent_entity_id: number
+  agent_role: string
+  last_activity_at: string | null
+  created_at: string
+  parent_entity_name: string
+}
+
 // Todo list types for Claude Code conversations
 export type TodoStatus = 'pending' | 'in_progress' | 'completed'
 
@@ -859,6 +869,10 @@ export class ApiClient {
   }
 
   // Unified Conversation API
+  async getConversations(): Promise<ConversationListItem[]> {
+    return this.request<ConversationListItem[]>('/api/conversations')
+  }
+
   async getConversation(conversationId: number | string): Promise<ConversationResponse> {
     return this.request<ConversationResponse>(`/api/conversations/${conversationId}`)
   }

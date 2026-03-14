@@ -134,3 +134,47 @@ class TestConversationTodosEndpoint:
         """Should return 404 for nonexistent conversation."""
         response = client.get("/api/conversations/99999/todos")
         assert response.status_code == 404
+
+
+class TestListConversationsEndpoint:
+    """Tests for GET /api/conversations/ endpoint."""
+
+    def test_returns_conversations_list(self, client, db_session, test_task):
+        """Should return a list of top-level conversations with parent entity names."""
+        response = client.get("/api/conversations/")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert isinstance(data, list)
+        # test_task fixture creates conversations for project and task
+        assert len(data) >= 1
+
+        # Verify response shape
+        item = data[0]
+        assert "id" in item
+        assert "parent_entity_type" in item
+        assert "parent_entity_id" in item
+        assert "agent_role" in item
+        assert "last_activity_at" in item
+        assert "created_at" in item
+        assert "parent_entity_name" in item
+
+    def test_excludes_completed_task_conversations(self, client, db_session, test_task):
+        """Should not include conversations for completed tasks."""
+        # Mark the test task as complete
+        test_task.status = "complete"
+        db_session.commit()
+
+        response = client.get("/api/conversations/")
+        assert response.status_code == 200
+
+        data = response.json()
+        # The task conversation should be excluded since task is complete
+        task_convs = [c for c in data if c["parent_entity_type"] == "TASK" and c["parent_entity_id"] == test_task.id]
+        assert len(task_convs) == 0
+
+    def test_returns_empty_list_when_no_conversations(self, client, db_session):
+        """Should return empty list when there are no conversations."""
+        response = client.get("/api/conversations/")
+        assert response.status_code == 200
+        assert response.json() == []

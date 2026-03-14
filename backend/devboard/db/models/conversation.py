@@ -86,6 +86,7 @@ class Conversation(Base):
     archived_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
+    last_activity_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
 
     # Relationships
     messages: Mapped[list["ConversationMessage"]] = relationship(

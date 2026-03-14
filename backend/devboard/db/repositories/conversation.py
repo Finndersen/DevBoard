@@ -5,6 +5,7 @@ from typing import TypedDict
 
 from pydantic_ai.messages import ModelMessage
 from sqlalchemy import delete, select
+from sqlalchemy.orm import aliased
 
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
@@ -17,6 +18,11 @@ class SessionTaskInfo(TypedDict):
     task_id: int
     task_title: str
     agent_role: str
+
+
+class ConversationListRow(TypedDict):
+    conversation: Conversation
+    parent_entity_name: str
 
 
 class NoActiveConversationError(Exception):
@@ -108,6 +114,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             external_session_id=external_session_id,
             is_active=is_active,
             parent_conversation_id=parent_conversation_id,
+            last_activity_at=datetime.datetime.now(datetime.UTC),
         )
 
         self.db.add(conversation)
@@ -191,6 +198,72 @@ class ConversationRepository(BaseRepository[Conversation]):
         conversation.external_session_id = session_id
         self.db.flush()
 
+    def get_all_top_level(self) -> list[ConversationListRow]:
+        """Get all top-level, non-archived conversations ordered by last activity.
+
+        Excludes sub-conversations, archived conversations, and conversations
+        belonging to completed tasks. Includes enriched parent entity names
+        via left outer joins to avoid N+1 queries.
+        """
+        from devboard.db.models.codebase import Codebase
+        from devboard.db.models.project import Project
+        from devboard.db.models.task import Task, TaskStatus
+
+        TaskAlias = aliased(Task)
+        ProjectAlias = aliased(Project)
+        CodebaseAlias = aliased(Codebase)
+
+        stmt = (
+            select(
+                Conversation,
+                TaskAlias.title.label("task_title"),
+                ProjectAlias.name.label("project_name"),
+                CodebaseAlias.name.label("codebase_name"),
+                TaskAlias.status.label("task_status"),
+            )
+            .outerjoin(
+                TaskAlias,
+                (Conversation.parent_entity_type == ParentEntityType.TASK)
+                & (Conversation.parent_entity_id == TaskAlias.id),
+            )
+            .outerjoin(
+                ProjectAlias,
+                (Conversation.parent_entity_type == ParentEntityType.PROJECT)
+                & (Conversation.parent_entity_id == ProjectAlias.id),
+            )
+            .outerjoin(
+                CodebaseAlias,
+                (Conversation.parent_entity_type == ParentEntityType.CODEBASE)
+                & (Conversation.parent_entity_id == CodebaseAlias.id),
+            )
+            .where(
+                Conversation.parent_conversation_id.is_(None),
+                Conversation.archived_at.is_(None),
+            )
+            # Exclude conversations for completed tasks
+            .where(
+                ~(
+                    (Conversation.parent_entity_type == ParentEntityType.TASK)
+                    & (TaskAlias.status == TaskStatus.COMPLETE)
+                )
+            )
+            .order_by(Conversation.last_activity_at.desc().nullslast())
+        )
+
+        rows = self.db.execute(stmt).all()
+        result: list[ConversationListRow] = []
+        for row in rows:
+            conversation = row[0]
+            entity_type = conversation.parent_entity_type
+            if entity_type == ParentEntityType.TASK:
+                name = row.task_title or ""
+            elif entity_type == ParentEntityType.PROJECT:
+                name = row.project_name or ""
+            else:
+                name = row.codebase_name or ""
+            result.append(ConversationListRow(conversation=conversation, parent_entity_name=name))
+        return result
+
     # Message methods (for internal agent messages)
     def get_messages(
         self,
@@ -213,6 +286,13 @@ class ConversationRepository(BaseRepository[Conversation]):
         db_message = ConversationMessage.from_pydantic_message(conversation_id, message)
         self.db.add(db_message)
         self.db.flush()
+
+        # Update last_activity_at on the conversation
+        conversation = self.db.get(Conversation, conversation_id)
+        if conversation:
+            conversation.last_activity_at = datetime.datetime.now(datetime.UTC)
+            self.db.flush()
+
         return db_message
 
     def delete_messages(self, conversation_id: int) -> int:

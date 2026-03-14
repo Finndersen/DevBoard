@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 from pydantic_ai.messages import (
     ModelRequest,
@@ -324,3 +326,286 @@ class TestGetTaskInfoBySessionIds:
         assert set(result.keys()) == {"session-1", "session-2"}
         assert result["session-1"]["agent_role"] == "task_planning"
         assert result["session-2"]["agent_role"] == "task_implementation"
+
+
+class TestLastActivityAt:
+    """Tests for last_activity_at tracking."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_create_sets_last_activity_at(self, repo: ConversationRepository, project: Project):
+        """Creating a conversation sets last_activity_at."""
+        conversation = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        assert conversation.last_activity_at is not None
+
+    def test_create_message_updates_last_activity_at(
+        self, repo: ConversationRepository, project: Project, db_session: Session
+    ):
+        """Creating a message updates the conversation's last_activity_at."""
+        conversation = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+        original_activity = conversation.last_activity_at
+
+        message = ModelRequest(parts=[UserPromptPart(content="Test")])
+        repo.create_message(conversation.id, message)
+        db_session.flush()
+
+        updated = repo.get_by_id(conversation.id)
+        assert updated is not None
+        assert updated.last_activity_at is not None
+        assert updated.last_activity_at >= original_activity  # type: ignore[operator]
+
+
+class TestGetAllTopLevel:
+    """Tests for ConversationRepository.get_all_top_level."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="My Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_returns_top_level_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Returns non-archived, top-level conversations."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        conversation_ids = [r["conversation"].id for r in result]
+        assert conv.id in conversation_ids
+        # Verify parent entity name
+        matching = [r for r in result if r["conversation"].id == conv.id]
+        assert matching[0]["parent_entity_name"] == "My Project"
+
+    def test_excludes_archived_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Archived conversations are excluded."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+        repo.archive_conversation(conv.id)
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        conversation_ids = [r["conversation"].id for r in result]
+        assert conv.id not in conversation_ids
+
+    def test_excludes_sub_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Sub-conversations (with parent_conversation_id) are excluded."""
+        parent = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        sub = Conversation(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            parent_conversation_id=parent.id,
+            last_activity_at=datetime.datetime.now(datetime.UTC),
+        )
+        db_session.add(sub)
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        conversation_ids = [r["conversation"].id for r in result]
+        assert parent.id in conversation_ids
+        assert sub.id not in conversation_ids
+
+    def test_excludes_completed_task_conversations(
+        self, repo: ConversationRepository, db_session: Session, test_codebase
+    ):
+        """Conversations for completed tasks are excluded."""
+        document_repo = DocumentRepository(db_session)
+        project_repo = ProjectRepository(db_session)
+        task_repo = TaskRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Complete Task",
+            status=TaskStatus.COMPLETE,
+            specification=task_spec_doc,
+            base_branch="main",
+            branch_name="branch",
+            codebase_id=test_codebase.id,
+        )
+        db_session.flush()
+
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        conversation_ids = [r["conversation"].id for r in result]
+        assert conv.id not in conversation_ids
+
+    def test_includes_non_complete_task_conversations(
+        self, repo: ConversationRepository, db_session: Session, test_codebase
+    ):
+        """Conversations for non-complete tasks are included with correct entity name."""
+        document_repo = DocumentRepository(db_session)
+        project_repo = ProjectRepository(db_session)
+        task_repo = TaskRepository(db_session)
+
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Active Task",
+            status=TaskStatus.PLANNING,
+            specification=task_spec_doc,
+            base_branch="main",
+            branch_name="branch",
+            codebase_id=test_codebase.id,
+        )
+        db_session.flush()
+
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        matching = [r for r in result if r["conversation"].id == conv.id]
+        assert len(matching) == 1
+        assert matching[0]["parent_entity_name"] == "Active Task"
+
+    def test_enriches_entity_name_for_all_types(
+        self, repo: ConversationRepository, project: Project, db_session: Session, test_codebase
+    ):
+        """Conversations for all entity types return the correct parent entity name."""
+        document_repo = DocumentRepository(db_session)
+        task_repo = TaskRepository(db_session)
+
+        # Project conversation (project already exists)
+        conv_proj = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+
+        # Task conversation
+        task_spec = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+        task = task_repo.create(
+            project_id=project.id,
+            title="Enrichment Task",
+            status=TaskStatus.PLANNING,
+            specification=task_spec,
+            base_branch="main",
+            branch_name="branch",
+            codebase_id=test_codebase.id,
+        )
+        db_session.flush()
+        conv_task = repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+
+        # Codebase conversation
+        conv_cb = repo.create(
+            parent_entity_type=ParentEntityType.CODEBASE,
+            parent_entity_id=test_codebase.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        by_id = {r["conversation"].id: r["parent_entity_name"] for r in result}
+
+        assert by_id[conv_proj.id] == "My Project"
+        assert by_id[conv_task.id] == "Enrichment Task"
+        assert by_id[conv_cb.id] == "Test Codebase"
+
+    def test_ordered_by_last_activity_desc(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Results are ordered by last_activity_at descending."""
+        conv1 = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv1.last_activity_at = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        conv2 = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            is_active=False,
+        )
+        conv2.last_activity_at = datetime.datetime(2026, 3, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        # conv2 should come first (more recent)
+        result_ids = [r["conversation"].id for r in result]
+        idx1 = result_ids.index(conv1.id)
+        idx2 = result_ids.index(conv2.id)
+        assert idx2 < idx1

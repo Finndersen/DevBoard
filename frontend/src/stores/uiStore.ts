@@ -28,6 +28,7 @@ interface UIState {
   tabs: TabState[]
   activeTabId: string | null
   navigationCompactMode: boolean
+  conversationsPanelCollapsed: boolean
   visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
   shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
   createTaskModalOpen: boolean
@@ -45,6 +46,9 @@ interface UIActions {
   // Navigation menu
   setNavigationCompactMode: (compact: boolean) => void
   toggleNavigationCompactMode: () => void
+
+  // Conversations panel
+  toggleConversationsPanel: () => void
 
   // Create task modal
   openCreateTaskModal: () => void
@@ -71,6 +75,7 @@ export const useUIStore = create<UIStore>()(
       tabs: [],
       activeTabId: null,
       navigationCompactMode: false,
+      conversationsPanelCollapsed: false,
       visitedTabs: new Set<string>(),
       shouldPushHistory: false,
       createTaskModalOpen: false,
@@ -205,6 +210,12 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
+      toggleConversationsPanel: () => {
+        set((draft) => {
+          draft.conversationsPanelCollapsed = !draft.conversationsPanelCollapsed
+        })
+      },
+
       openCreateTaskModal: () => {
         set((draft) => {
           draft.createTaskModalOpen = true
@@ -261,7 +272,8 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
-        navigationCompactMode: state.navigationCompactMode
+        navigationCompactMode: state.navigationCompactMode,
+        conversationsPanelCollapsed: state.conversationsPanelCollapsed,
       })
     }
   )

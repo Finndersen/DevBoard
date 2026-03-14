@@ -6,7 +6,17 @@ export default {
   ],
   darkMode: 'class',
   theme: {
-    extend: {},
+    extend: {
+      keyframes: {
+        'attention-pulse': {
+          '0%, 100%': { backgroundColor: 'transparent' },
+          '50%': { backgroundColor: 'rgb(59 130 246 / 0.15)' },
+        },
+      },
+      animation: {
+        'attention-pulse': 'attention-pulse 0.6s ease-in-out 3',
+      },
+    },
   },
   plugins: [
     require('@tailwindcss/forms'),

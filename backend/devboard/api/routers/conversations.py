@@ -25,13 +25,33 @@ from devboard.api.schemas.agent_conversation import (
 )
 from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import ResetConversationResponse
-from devboard.api.schemas.conversation import ConversationResponse
+from devboard.api.schemas.conversation import ConversationListResponse, ConversationResponse
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
 
 router = APIRouter()
+
+
+@router.get("/", response_model=list[ConversationListResponse])
+async def list_conversations(
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> list[ConversationListResponse]:
+    """List all top-level, non-archived conversations ordered by recent activity."""
+    rows = conversation_repo.get_all_top_level()
+    return [
+        ConversationListResponse(
+            id=row["conversation"].id,
+            parent_entity_type=row["conversation"].parent_entity_type,
+            parent_entity_id=row["conversation"].parent_entity_id,
+            agent_role=row["conversation"].agent_role,
+            last_activity_at=row["conversation"].last_activity_at,
+            created_at=row["conversation"].created_at,
+            parent_entity_name=row["parent_entity_name"],
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
