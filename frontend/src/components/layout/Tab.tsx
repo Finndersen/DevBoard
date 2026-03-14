@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import {
   XMarkIcon,
   FolderIcon,
@@ -17,17 +17,26 @@ interface TabProps {
   onClose: (e: MouseEvent) => void
 }
 
-function getActivityIndicator(status: ActivityStatus): string {
+function PulsingGreenDot() {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+    </span>
+  )
+}
+
+function getActivityIndicator(status: ActivityStatus): ReactNode {
   switch (status.type) {
     case 'new_messages':
       return `●${status.count > 1 ? status.count : ''}`
     case 'agent_working':
-      return '⚡'
+      return <PulsingGreenDot />
     case 'action_required':
       return '🔴'
     case 'idle':
     default:
-      return ''
+      return null
   }
 }
 
@@ -36,7 +45,7 @@ function getActivityColor(status: ActivityStatus): string {
     case 'new_messages':
       return 'text-blue-600 dark:text-blue-400'
     case 'agent_working':
-      return 'text-yellow-600 dark:text-yellow-400 animate-pulse'
+      return ''
     case 'action_required':
       return 'text-red-600 dark:text-red-400'
     default:

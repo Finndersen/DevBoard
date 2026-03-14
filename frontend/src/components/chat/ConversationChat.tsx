@@ -7,7 +7,6 @@ import { createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
 import ConversationInput from './ConversationInput'
 import TodoPanel from './TodoPanel'
-import { useUIStore } from '../../stores/uiStore'
 import { useStreamSubscription } from './hooks/useStreamSubscription'
 import { useToolApprovalLogic } from './hooks/useToolApprovalLogic'
 import { useConversationHistory } from './hooks/useConversationHistory'
@@ -86,8 +85,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
   const initialMessageSentRef = useRef(false)
 
-  const { setTabActivityStatus, getActiveTab } = useUIStore()
-
   const { getPendingMessages } = usePendingMessages()
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
   const pendingMessages = useMemo(() => getPendingMessages(pendingKey), [getPendingMessages, pendingKey])
@@ -107,23 +104,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   const { inputMessage, setInputMessage, handleSendMessage } = useMessageQueueing(
     conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook
   )
-
-  const updateCurrentTabStatus = useCallback((status: { type: 'idle' } | { type: 'new_messages'; count: number } | { type: 'agent_working' } | { type: 'action_required' }) => {
-    const activeTab = getActiveTab()
-    if (activeTab) {
-      setTabActivityStatus(activeTab.id, status)
-    }
-  }, [getActiveTab, setTabActivityStatus])
-
-  useEffect(() => {
-    if (isStreaming || isRunningAction) {
-      updateCurrentTabStatus({ type: 'agent_working' })
-    } else if (pendingApprovals.length > 0) {
-      updateCurrentTabStatus({ type: 'action_required' })
-    } else {
-      updateCurrentTabStatus({ type: 'idle' })
-    }
-  }, [isStreaming, isRunningAction, pendingApprovals.length, updateCurrentTabStatus])
 
   // Retry handler - bypasses guards, reuses existing pending message
   const handleRetryMessage = useCallback(async (messageId: string) => {

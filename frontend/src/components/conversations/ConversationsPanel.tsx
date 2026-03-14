@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ClipboardDocumentListIcon,
   FolderIcon,
@@ -7,10 +7,12 @@ import {
   ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useUIStore } from '../../stores/uiStore'
 import type { TabType } from '../../stores/uiStore'
-import type { ActiveExecutionsResponse, ConversationListItem } from '../../lib/api'
+import type { ConversationListItem } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
+import { useTabStreamStatus } from '../../hooks/useTabStreamStatus'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',
@@ -73,33 +75,41 @@ function getEntityIcon(entityType: string) {
   }
 }
 
-interface ConversationsPanelProps {
-  activeExecutions: ActiveExecutionsResponse | null
-}
-
-export default function ConversationsPanel({ activeExecutions }: ConversationsPanelProps) {
+export default function ConversationsPanel() {
   const { data: conversations, loading, error } = useConversations()
   const openTab = useUIStore(s => s.openTab)
 
-  // Memoize active conversation IDs to avoid recomputing on every render
-  const activeConversationIds = useMemo(
-    () => new Set(activeExecutions?.executions.map(e => e.conversation_id) ?? []),
-    [activeExecutions?.executions],
+  // Derive streaming conversation IDs from the stream store
+  const streamingConversationIds = useConversationStreamStore(
+    useCallback((state) => {
+      const ids = new Set<number>()
+      for (const [id, stream] of state.activeStreams) {
+        if (stream.isStreaming) ids.add(id)
+      }
+      return ids
+    }, []),
+    // Custom equality to avoid re-renders when the Set contents haven't changed
+    (a, b) => {
+      if (a.size !== b.size) return false
+      for (const id of a) {
+        if (!b.has(id)) return false
+      }
+      return true
+    }
   )
 
-  // Track "needs attention" conversations (previously active, now completed)
+  // Track "needs attention" conversations (previously streaming, now completed)
   const [needsAttentionIds, setNeedsAttentionIds] = useState<Set<number>>(new Set())
-  // Track recently-added attention IDs for pulse animation
   const [pulsingIds, setPulsingIds] = useState<Set<number>>(new Set())
-  const prevActiveIdsRef = useRef<Set<number>>(new Set())
+  const prevStreamingIdsRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
-    const prevActiveIds = prevActiveIdsRef.current
+    const prevIds = prevStreamingIdsRef.current
 
-    // Find conversations that were active but are no longer
+    // Find conversations that were streaming but are no longer
     const newlyCompleted = new Set<number>()
-    for (const id of prevActiveIds) {
-      if (!activeConversationIds.has(id)) {
+    for (const id of prevIds) {
+      if (!streamingConversationIds.has(id)) {
         newlyCompleted.add(id)
       }
     }
@@ -112,7 +122,6 @@ export default function ConversationsPanel({ activeExecutions }: ConversationsPa
         }
         return next
       })
-      // Trigger pulse animation for newly completed conversations
       setPulsingIds(prev => {
         const next = new Set(prev)
         for (const id of newlyCompleted) {
@@ -120,7 +129,6 @@ export default function ConversationsPanel({ activeExecutions }: ConversationsPa
         }
         return next
       })
-      // Clear pulsing state after animation completes
       setTimeout(() => {
         setPulsingIds(prev => {
           const next = new Set(prev)
@@ -132,8 +140,11 @@ export default function ConversationsPanel({ activeExecutions }: ConversationsPa
       }, 2000)
     }
 
-    prevActiveIdsRef.current = new Set(activeConversationIds)
-  }, [activeConversationIds])
+    prevStreamingIdsRef.current = new Set(streamingConversationIds)
+  }, [streamingConversationIds])
+
+  // Sync tab activity status from stream store
+  useTabStreamStatus(conversations)
 
   const handleClick = (item: ConversationListItem) => {
     const tabType = item.parent_entity_type.toLowerCase() as TabType
@@ -142,7 +153,6 @@ export default function ConversationsPanel({ activeExecutions }: ConversationsPa
       entityId: String(item.parent_entity_id),
       title: item.parent_entity_name,
     })
-    // Clear "needs attention" for this conversation
     setNeedsAttentionIds(prev => {
       const next = new Set(prev)
       next.delete(item.id)
@@ -183,7 +193,7 @@ export default function ConversationsPanel({ activeExecutions }: ConversationsPa
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
             {conversations.map(item => {
               const EntityIcon = getEntityIcon(item.parent_entity_type)
-              const isActive = activeConversationIds.has(item.id)
+              const isActive = streamingConversationIds.has(item.id)
               const needsAttention = needsAttentionIds.has(item.id)
               const isPulsing = pulsingIds.has(item.id)
               const roleLabel = AGENT_ROLE_LABELS[item.agent_role] ?? item.agent_role

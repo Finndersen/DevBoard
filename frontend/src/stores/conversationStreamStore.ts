@@ -44,6 +44,25 @@ const eventHandlerRegistries = new Map<number, EventHandlerRegistry>()
 const conversationIdRefs = new Map<number, { current: number }>()
 
 /**
+ * Stream lifecycle callbacks (not in Zustand state).
+ * Fired on 'active' (stream started/reconnected) and 'complete' (stream finished) events.
+ * Used by ConversationsPanel to refetch the conversation list at the right moments.
+ */
+type StreamLifecycleEvent = 'active' | 'complete'
+type StreamLifecycleCallback = (conversationId: number, event: StreamLifecycleEvent) => void
+const streamLifecycleCallbacks = new Set<StreamLifecycleCallback>()
+
+function notifyStreamLifecycle(conversationId: number, event: StreamLifecycleEvent) {
+  for (const cb of streamLifecycleCallbacks) {
+    try {
+      cb(conversationId, event)
+    } catch (err) {
+      console.error('[StreamStore] lifecycle callback error:', err)
+    }
+  }
+}
+
+/**
  * Store state containing streaming state and conversation messages.
  */
 interface ConversationStreamState {
@@ -203,6 +222,12 @@ interface ConversationStreamActions {
    * @param conversationId - The conversation with an active execution
    */
   reconnectStream: (conversationId: number) => Promise<void>
+
+  /**
+   * Register a callback to be invoked on stream lifecycle events ('active' and 'complete').
+   * Returns an unsubscribe function.
+   */
+  registerStreamLifecycleCallback: (cb: StreamLifecycleCallback) => () => void
 }
 
 type ConversationStreamStore = ConversationStreamState & ConversationStreamActions
@@ -281,11 +306,17 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
 
       try {
+        // Wrap onFirstEvent to also notify lifecycle callbacks
+        const wrappedOnFirstEvent = async () => {
+          if (onFirstEvent) await onFirstEvent()
+          notifyStreamLifecycle(conversationIdRef.current, 'active')
+        }
+
         // Process the provided stream events and collect tool requests
         // Use conversationIdRef.current so closures see the current ID (may change during migration)
         const { toolRequests } = await processConversationStream({
           stream,
-          onFirstEvent,
+          onFirstEvent: wrappedOnFirstEvent,
           onEvent: (event) => {
             // Add event to store using ref.current (updated by migrateStream)
             get().addEvent(conversationIdRef.current, event)
@@ -366,6 +397,8 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           draftStream.isStreaming = false
         }
       })
+
+      notifyStreamLifecycle(conversationId, 'complete')
 
       // Invoke stream complete handlers if registry exists
       const registry = eventHandlerRegistries.get(conversationId)
@@ -510,6 +543,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Use conversationIdRef.current so closures see the current ID (may change during migration)
         const { toolRequests } = await processConversationStream({
           stream: approvalStream,
+          onFirstEvent: () => notifyStreamLifecycle(conversationIdRef.current, 'active'),
           onEvent: (event) => {
             get().addEvent(conversationIdRef.current, event)
           },
@@ -635,6 +669,11 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       console.log('[StreamStore] Stream migrated successfully, allActiveStreams:', Array.from(get().activeStreams.keys()))
     },
 
+    registerStreamLifecycleCallback: (cb) => {
+      streamLifecycleCallbacks.add(cb)
+      return () => { streamLifecycleCallbacks.delete(cb) }
+    },
+
     reconnectStream: async (conversationId) => {
       // Don't reconnect if already streaming
       if (get().isConversationStreaming(conversationId)) return
@@ -653,6 +692,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           isQueued: false,
         })
       })
+
+      // Notify immediately — reconnections are for already-running executions
+      // where last_activity_at is already current
+      notifyStreamLifecycle(conversationId, 'active')
 
       try {
         const stream = createWebSocketEventStream(conversationId)

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHand
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
+import RunningIndicator from './RunningIndicator'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
 import ClearChatHistoryModal from '../modals/ClearChatHistoryModal'
@@ -139,6 +140,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 title
               )}
             </h3>
+            {conversationId && <RunningIndicator conversationId={conversationId} />}
           </div>
           <div className="flex items-center space-x-3">
             {conversation?.external_session_id && (

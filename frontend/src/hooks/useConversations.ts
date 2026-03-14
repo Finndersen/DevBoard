@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient } from '../lib/api'
 import type { ConversationListItem } from '../lib/api'
 import { useUIStore } from '../stores/uiStore'
-
-const POLL_INTERVAL_MS = 30000
+import { useConversationStreamStore } from '../stores/conversationStreamStore'
 
 export function useConversations() {
   const [data, setData] = useState<ConversationListItem[] | null>(null)
@@ -27,10 +26,27 @@ export function useConversations() {
     }
   }, [])
 
+  // Fetch once on mount
   useEffect(() => {
     fetchConversations()
-    const interval = setInterval(fetchConversations, POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
+  }, [fetchConversations])
+
+  // Refetch on stream lifecycle events (active / complete) with debounce
+  useEffect(() => {
+    const registerCallback = useConversationStreamStore.getState().registerStreamLifecycleCallback
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const unsubscribe = registerCallback(() => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchConversations()
+      }, 300)
+    })
+
+    return () => {
+      unsubscribe()
+      if (debounceTimer) clearTimeout(debounceTimer)
+    }
   }, [fetchConversations])
 
   // Re-fetch when conversationsVersion changes (e.g. after task deletion)
