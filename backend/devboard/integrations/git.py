@@ -775,16 +775,21 @@ class GitRepoIntegration:
         """
         await self._run_git_command(["switch", "--detach"])
 
-    async def fetch(self, remote: str = "origin") -> None:
+    async def fetch(self, remote: str = "origin", branch: str | None = None, timeout: float = 30.0) -> None:
         """Fetch latest changes from a remote.
 
         Args:
             remote: Remote name to fetch from (default: origin)
+            branch: Optional specific branch to fetch (default: fetch all)
+            timeout: Command timeout in seconds (default: 30.0)
 
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["fetch", remote])
+        args = ["fetch", remote]
+        if branch:
+            args.append(branch)
+        await self._run_git_command(args, timeout=timeout)
 
     async def rebase_branch(self, branch: str, onto: str, abort_on_conflict: bool = True) -> str:
         """Rebase a branch onto another branch.

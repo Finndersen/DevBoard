@@ -1,10 +1,11 @@
-"""Tests for TaskGitService.get_task_git_status() uncommitted base overlap computation."""
+"""Tests for TaskGitService."""
 
 from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import pytest
 
 from devboard.db.models.task import Task
+from devboard.integrations.shell import ShellCommandExecutionError, ShellCommandTimeoutError
 from devboard.integrations.types import BranchComparison
 from devboard.services.task_git.service import TaskGitService
 
@@ -63,6 +64,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
             main_git.get_fork_point = AsyncMock(return_value="abc123")
             main_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/other.py"])
+            main_git.fetch = AsyncMock()
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -92,6 +94,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
             main_git.get_fork_point = AsyncMock(return_value="abc123")
             main_git.get_changed_file_paths = AsyncMock(return_value=["src/base_only.py"])
+            main_git.fetch = AsyncMock()
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -119,6 +122,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_current_branch = AsyncMock(return_value="main")
             main_git.branch_exists = AsyncMock(return_value=True)
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
+            main_git.fetch = AsyncMock()
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -146,6 +150,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_current_branch = AsyncMock(return_value="main")
             main_git.branch_exists = AsyncMock(return_value=True)
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
+            main_git.fetch = AsyncMock()
 
             MockGit.return_value = main_git
 
@@ -165,6 +170,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.branch_exists = AsyncMock(return_value=True)
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
             main_git.get_fork_point = AsyncMock(return_value=None)
+            main_git.fetch = AsyncMock()
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -180,3 +186,152 @@ class TestGetTaskGitStatusUncommittedOverlap:
             status = await service.get_task_git_status(mock_task)
 
         assert status.has_uncommitted_base_overlap is False
+
+
+class TestEnsureTaskBranchFetch:
+    """Tests for remote fetch behaviour in ensure_task_branch."""
+
+    @pytest.mark.asyncio
+    async def test_fetches_before_creating_branch(self, mock_task_no_worktree):
+        """Fetch is called after branch_exists check but before branch creation."""
+        service = TaskGitService()
+        call_order: list[str] = []
+        fetch_kwargs: dict = {}
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+
+            async def mock_fetch(**kwargs):
+                call_order.append("fetch")
+                fetch_kwargs.update(kwargs)
+
+            async def mock_branch_exists(name):
+                call_order.append("branch_exists")
+                return False
+
+            async def mock_create_branch(name, base):
+                call_order.append("create_branch")
+
+            git.fetch = mock_fetch
+            git.branch_exists = mock_branch_exists
+            git.create_branch = mock_create_branch
+            MockGit.return_value = git
+
+            await service.ensure_task_branch(mock_task_no_worktree)
+
+        assert call_order == ["branch_exists", "fetch", "create_branch"]
+        assert fetch_kwargs == {"branch": "main", "timeout": 10.0}
+
+    @pytest.mark.asyncio
+    async def test_fetch_failure_still_creates_branch(self, mock_task_no_worktree):
+        """Branch is still created when fetch fails."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.fetch = AsyncMock(side_effect=ShellCommandExecutionError("network error"))
+            git.branch_exists = AsyncMock(return_value=False)
+            git.create_branch = AsyncMock()
+            MockGit.return_value = git
+
+            result = await service.ensure_task_branch(mock_task_no_worktree)
+
+        assert result == "feature/test-branch"
+        git.create_branch.assert_called_once_with("feature/test-branch", "main")
+
+    @pytest.mark.asyncio
+    async def test_fetch_timeout_still_creates_branch(self, mock_task_no_worktree):
+        """Branch is still created when fetch times out."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.fetch = AsyncMock(side_effect=ShellCommandTimeoutError("timed out"))
+            git.branch_exists = AsyncMock(return_value=False)
+            git.create_branch = AsyncMock()
+            MockGit.return_value = git
+
+            result = await service.ensure_task_branch(mock_task_no_worktree)
+
+        assert result == "feature/test-branch"
+        git.create_branch.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_existing_branch_skips_fetch(self, mock_task_no_worktree):
+        """Fetch is not called when branch already exists."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.fetch = AsyncMock()
+            git.branch_exists = AsyncMock(return_value=True)
+            MockGit.return_value = git
+
+            await service.ensure_task_branch(mock_task_no_worktree)
+
+        git.fetch.assert_not_called()
+
+
+class TestGetTaskGitStatusFetch:
+    """Tests for remote fetch behaviour in get_task_git_status."""
+
+    @pytest.fixture
+    def comparison(self):
+        return BranchComparison(ahead=2, behind=1, can_merge=True, has_conflicts=False)
+
+    @pytest.mark.asyncio
+    async def test_fetches_before_comparison(self, mock_task_no_worktree, comparison):
+        """Fetch is called before branch comparison and remote_fetch_failed is False on success."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.has_uncommitted_changes = AsyncMock(return_value=True)
+            git.get_current_branch = AsyncMock(return_value="main")
+            git.branch_exists = AsyncMock(return_value=True)
+            git.fetch = AsyncMock()
+            git.get_branch_comparison = AsyncMock(return_value=comparison)
+            MockGit.return_value = git
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.remote_fetch_failed is False
+        git.fetch.assert_called_once_with(branch="main", timeout=10.0)
+
+    @pytest.mark.asyncio
+    async def test_fetch_failure_returns_stale_flag(self, mock_task_no_worktree, comparison):
+        """remote_fetch_failed is True when fetch fails, status still returned."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.has_uncommitted_changes = AsyncMock(return_value=True)
+            git.get_current_branch = AsyncMock(return_value="main")
+            git.branch_exists = AsyncMock(return_value=True)
+            git.fetch = AsyncMock(side_effect=ShellCommandExecutionError("network error"))
+            git.get_branch_comparison = AsyncMock(return_value=comparison)
+            MockGit.return_value = git
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.remote_fetch_failed is True
+        assert status.commits_ahead == 2
+        assert status.commits_behind == 1
+
+    @pytest.mark.asyncio
+    async def test_no_fetch_when_branch_missing(self, mock_task_no_worktree):
+        """Fetch is not called when branch doesn't exist."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.has_uncommitted_changes = AsyncMock(return_value=True)
+            git.get_current_branch = AsyncMock(return_value="main")
+            git.branch_exists = AsyncMock(return_value=False)
+            git.fetch = AsyncMock()
+            MockGit.return_value = git
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.remote_fetch_failed is False
+        git.fetch.assert_not_called()

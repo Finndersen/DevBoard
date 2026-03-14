@@ -1,6 +1,6 @@
 """Tests for Git integration methods."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -949,3 +949,40 @@ class TestReleaseBranchFromWorktree:
 
         assert result.worktree_path == str(temp_git_repo)
         assert "switch_detach" in calls
+
+
+class TestFetch:
+    """Tests for fetch() method with branch and timeout parameters."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_scoped_to_branch(self, temp_git_repo):
+        """Fetch with branch argument passes branch to git command."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ""
+            await git.fetch(branch="main")
+
+        mock_cmd.assert_called_once_with(["fetch", "origin", "main"], timeout=30.0)
+
+    @pytest.mark.asyncio
+    async def test_fetch_without_branch(self, temp_git_repo):
+        """Fetch without branch argument does not append branch."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ""
+            await git.fetch()
+
+        mock_cmd.assert_called_once_with(["fetch", "origin"], timeout=30.0)
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_custom_timeout(self, temp_git_repo):
+        """Fetch passes custom timeout to _run_git_command."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ""
+            await git.fetch(branch="main", timeout=10.0)
+
+        mock_cmd.assert_called_once_with(["fetch", "origin", "main"], timeout=10.0)

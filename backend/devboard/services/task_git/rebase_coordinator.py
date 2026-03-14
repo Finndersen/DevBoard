@@ -71,7 +71,7 @@ class TaskRebaseCoordinator:
         fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
 
         try:
-            await git.fetch()
+            await git.fetch(branch=task.base_branch)
         except ShellCommandExecutionError:
             pass  # Fetch failure is non-fatal - continue with local state
 

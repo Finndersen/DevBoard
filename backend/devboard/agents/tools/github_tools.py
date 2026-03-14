@@ -71,7 +71,7 @@ def create_github_pr_tool(
         # Fetch latest remote state so conflict check is against up-to-date base branch
         main_git = GitRepoIntegration(task.codebase.local_path)
         try:
-            await main_git.fetch()
+            await main_git.fetch(branch=task.base_branch)
         except Exception:
             pass  # Fetch failure is non-fatal - continue with local state
 

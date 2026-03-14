@@ -5,6 +5,7 @@ import logfire
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import Task
 from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.shell import ShellCommandError
 from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
 from devboard.services.task_git.merge_strategy import get_merge_strategy
 from devboard.services.task_git.rebase_coordinator import TaskRebaseCoordinator
@@ -13,6 +14,18 @@ from devboard.services.task_git.types import MergeOutcome, MergeResult, RebaseRe
 
 class TaskGitService:
     """Service for task git operations."""
+
+    async def _fetch_remote_gracefully(self, git: GitRepoIntegration, base_branch: str) -> bool:
+        """Attempt to fetch the base branch from remote, returning success status.
+
+        Returns True if fetch succeeded, False if it failed (logged as warning).
+        """
+        try:
+            await git.fetch(branch=base_branch, timeout=10.0)
+            return True
+        except ShellCommandError as e:
+            logfire.warn(f"Remote fetch failed for base branch '{base_branch}' (proceeding with local state): {e}")
+            return False
 
     async def ensure_task_branch(self, task: Task) -> str:
         """Ensure task's git branch exists, creating it if necessary.
@@ -26,7 +39,9 @@ class TaskGitService:
         branch_name = task.branch_name
 
         git = GitRepoIntegration(task.codebase.local_path)
+
         if not await git.branch_exists(branch_name):
+            await self._fetch_remote_gracefully(git, task.base_branch)
             await git.create_branch(branch_name, task.base_branch)
             logfire.info(f"Created branch {branch_name} from {task.base_branch} for task {task.id}")
         else:
@@ -81,6 +96,8 @@ class TaskGitService:
                 rebase_in_progress=rebase_in_progress,
             )
 
+        fetch_succeeded = await self._fetch_remote_gracefully(git, task.base_branch)
+
         comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
 
         has_uncommitted_base_overlap = False
@@ -105,6 +122,7 @@ class TaskGitService:
             main_repo_current_branch=main_repo_current_branch,
             rebase_in_progress=rebase_in_progress,
             has_uncommitted_base_overlap=has_uncommitted_base_overlap,
+            remote_fetch_failed=not fetch_succeeded,
         )
 
     async def merge_task_branch(

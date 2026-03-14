@@ -96,7 +96,7 @@ export function TaskDetailHeader({
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
-  const hasBranchWarning = gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap
+  const hasBranchWarning = gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap || gitStatus?.remote_fetch_failed
 
   // Close codebase selector when clicking outside
   useEffect(() => {

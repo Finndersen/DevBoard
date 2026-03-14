@@ -129,6 +129,7 @@ class TaskGitStatus(BaseModel):
     main_repo_current_branch: str
     rebase_in_progress: bool
     has_uncommitted_base_overlap: bool = False
+    remote_fetch_failed: bool = False
 
 
 def _stash_conflict_message(repo_path: str) -> str:
