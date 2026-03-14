@@ -33,6 +33,7 @@ def mock_git():
     git.stash_pop = AsyncMock()
     git.get_checked_out_location = AsyncMock(return_value=None)
     git.has_uncommitted_changes = AsyncMock(return_value=False)
+    git.get_changed_file_paths = AsyncMock(return_value=[])
     git.get_current_branch = AsyncMock(return_value="main")
     git.checkout_branch = AsyncMock()
     git.merge_squash = AsyncMock(return_value="abc123")
@@ -69,18 +70,18 @@ def task_git_service():
 
 
 @pytest.mark.asyncio
-async def test_merge_blocked_when_base_branch_workdir_has_uncommitted_changes(
+async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(
     task_git_service, mock_task, mock_git, mock_worktree_git
 ):
-    """merge_task_feature_branch returns ERROR when base branch workdir has uncommitted changes."""
+    """merge_task_feature_branch returns ERROR when uncommitted changes overlap with feature branch."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
-    mock_worktree_git.has_uncommitted_changes = AsyncMock(return_value=True)
+    mock_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/feature_only.py"])
+    mock_worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/shared.py", "src/local.py"])
 
     with (
         patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git) as MockGit,
         patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_worktree_git),
     ):
-        # Make the second construction (for the worktree path) return mock_worktree_git
         MockGit.side_effect = [mock_git, mock_worktree_git]
 
         result = await task_git_service.merge_task_feature_branch(mock_task)
@@ -88,11 +89,35 @@ async def test_merge_blocked_when_base_branch_workdir_has_uncommitted_changes(
     assert result == MergeResult(
         outcome=MergeOutcome.ERROR,
         merge_method=MergeMethod.SQUASH,
-        message="Cannot merge: the base branch 'main' working directory at '/worktrees/main' has uncommitted changes. Please commit or stash your changes first.",
+        message=(
+            "Cannot merge: uncommitted changes in '/worktrees/main' overlap with feature branch changes:\n"
+            "  - src/shared.py\n"
+            "Please commit or stash these files first."
+        ),
     )
-    mock_worktree_git.has_uncommitted_changes.assert_called_once()
     # Branch should NOT be released when the check fails (would leave worktree in detached HEAD)
     mock_git.release_branch_from_worktree.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_merge_proceeds_when_uncommitted_changes_do_not_overlap(
+    task_git_service, mock_task, mock_git, mock_worktree_git
+):
+    """merge_task_feature_branch proceeds when uncommitted changes don't overlap with feature branch."""
+    mock_git.get_checked_out_location.return_value = "/worktrees/main"
+    mock_git.get_changed_file_paths = AsyncMock(return_value=["src/feature_only.py"])
+    mock_worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/local_only.py"])
+    mock_worktree_git.merge_squash = AsyncMock(return_value="abc123")
+
+    with (
+        patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit,
+        patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_worktree_git),
+    ):
+        MockGit.side_effect = [mock_git, mock_worktree_git]
+
+        result = await task_git_service.merge_task_feature_branch(mock_task)
+
+    assert result.outcome == MergeOutcome.SUCCESS
 
 
 @pytest.mark.asyncio
@@ -101,7 +126,7 @@ async def test_merge_proceeds_when_base_branch_workdir_is_clean(
 ):
     """merge_task_feature_branch proceeds when base branch workdir has no uncommitted changes."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
-    mock_worktree_git.has_uncommitted_changes = AsyncMock(return_value=False)
+    mock_worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=[])
     mock_worktree_git.merge_squash = AsyncMock(return_value="abc123")
 
     with (

@@ -240,18 +240,23 @@ class TaskGitService:
                 message=f"Branch {task.branch_name} has no new commits - already merged or up-to-date with {task.base_branch}",
             )
 
-        # Check for uncommitted changes in base branch workdir BEFORE releasing
-        # the feature branch, to avoid leaving the worktree in detached HEAD state
-        # if this check fails.
+        # Check for uncommitted changes in base branch workdir that overlap with
+        # feature branch changes. Non-overlapping uncommitted changes are safe —
+        # the merge strategies already handle stash/unstash.
         checkout_path = await git.get_checked_out_location(task.base_branch)
         if checkout_path:
             base_git = GitRepoIntegration(checkout_path)
-            if await base_git.has_uncommitted_changes():
-                return MergeResult(
-                    outcome=MergeOutcome.ERROR,
-                    merge_method=merge_method,
-                    message=f"Cannot merge: the base branch '{task.base_branch}' working directory at '{checkout_path}' has uncommitted changes. Please commit or stash your changes first.",
-                )
+            uncommitted_files = await base_git.get_uncommitted_file_paths()
+            if uncommitted_files:
+                feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name)
+                overlapping = set(uncommitted_files) & set(feature_files)
+                if overlapping:
+                    file_list = "\n".join(f"  - {f}" for f in sorted(overlapping))
+                    return MergeResult(
+                        outcome=MergeOutcome.ERROR,
+                        merge_method=merge_method,
+                        message=f"Cannot merge: uncommitted changes in '{checkout_path}' overlap with feature branch changes:\n{file_list}\nPlease commit or stash these files first.",
+                    )
 
         release_result = await git.release_branch_from_worktree(task.branch_name)
         if release_result.worktree_path:
