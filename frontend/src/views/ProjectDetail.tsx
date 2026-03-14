@@ -301,10 +301,18 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
       {/* Tab Content */}
       {activeTab === 'editor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 flex-1 min-h-0 overflow-hidden">
-          {/* Left Side - Project Specification */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
+          {/* Left Side - Chat */}
+          <AgentChat
+            conversationId={project.default_conversation_id}
+            placeholder="Ask a question about this project..."
+            emptyStateMessage="Ask me anything about this project!"
+            className="h-full flex flex-col overflow-hidden"
+            onConversationReset={handleConversationReset}
+          />
+
+          {/* Right Side - Project Specification */}
           <div className="flex flex-col overflow-hidden">
-            {/* Specification Document Section */}
             <Card padding="xs" className="h-full flex flex-col overflow-hidden">
               <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
               <div className="flex-1 overflow-hidden flex flex-col">
@@ -318,15 +326,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               </div>
             </Card>
           </div>
-
-          {/* Right Side - Chat */}
-          <AgentChat
-            conversationId={project.default_conversation_id}
-            placeholder="Ask a question about this project..."
-            emptyStateMessage="Ask me anything about this project!"
-            className="h-full flex flex-col overflow-hidden"
-            onConversationReset={handleConversationReset}
-          />
         </div>
       )}
 

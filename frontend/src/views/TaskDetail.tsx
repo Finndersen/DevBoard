@@ -543,7 +543,26 @@ function TaskDetail({ id }: TaskDetailProps) {
 
       {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
-        {/* Left Column: Document Content with Integrated Tabs */}
+        {/* Left Column: Task Agent Chat */}
+        <div className="h-full overflow-hidden">
+          <AgentChat
+            ref={agentChatRef}
+            conversationId={task.conversation_id}
+            placeholder="Ask me to help with task specification or implementation planning..."
+            emptyStateMessage="Welcome to the Task Agent!"
+            className="h-full flex flex-col overflow-hidden"
+            padding="xs"
+            isRunningAction={isConversationStreaming}
+            actionMessage={streamingMessage}
+            initialMessage={pendingInitialMessage}
+            onInitialMessageSent={() => setPendingInitialMessage(null)}
+            codebaseLocalPath={selectedCodebase?.local_path}
+            isDisabled={task.status === TaskStatus.COMPLETE}
+            onConversationReset={handleConversationReset}
+          />
+        </div>
+
+        {/* Right Column: Document Content with Integrated Tabs */}
         <Card padding="none" className="h-full flex flex-col overflow-hidden">
           {/* Card Header with Tabs */}
           <div className="border-b border-gray-200 dark:border-gray-700">
@@ -643,24 +662,6 @@ function TaskDetail({ id }: TaskDetailProps) {
           </div>
         </Card>
 
-        {/* Right Column: Task Agent Chat */}
-        <div className="h-full overflow-hidden">
-          <AgentChat
-            ref={agentChatRef}
-            conversationId={task.conversation_id}
-            placeholder="Ask me to help with task specification or implementation planning..."
-            emptyStateMessage="Welcome to the Task Agent!"
-            className="h-full flex flex-col overflow-hidden"
-            padding="xs"
-            isRunningAction={isConversationStreaming}
-            actionMessage={streamingMessage}
-            initialMessage={pendingInitialMessage}
-            onInitialMessageSent={() => setPendingInitialMessage(null)}
-            codebaseLocalPath={selectedCodebase?.local_path}
-            isDisabled={task.status === TaskStatus.COMPLETE}
-            onConversationReset={handleConversationReset}
-          />
-        </div>
       </div>
 
       {/* Branch Status Modal */}
