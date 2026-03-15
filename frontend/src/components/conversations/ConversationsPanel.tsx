@@ -159,7 +159,7 @@ export default function ConversationsPanel() {
   }
 
   return (
-    <div className="w-72 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200">
+    <div className="w-80 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200">
       {/* Header */}
       <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <h2 className={`text-sm font-semibold ${textColors.primary}`}>Conversations</h2>
@@ -226,6 +226,12 @@ export default function ConversationsPanel() {
                     <span className={roleColor}>{roleLabel}</span>
                     <span className={textColors.muted}> · {formatRelativeTime(timestamp)}</span>
                   </div>
+                  {/* Row 3: Project name (task conversations only) */}
+                  {item.project_name && (
+                    <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
+                      {item.project_name}
+                    </div>
+                  )}
                 </button>
               )
             })}

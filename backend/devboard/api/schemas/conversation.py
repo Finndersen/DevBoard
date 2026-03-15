@@ -31,3 +31,4 @@ class ConversationListResponse(BaseModel):
     last_activity_at: datetime.datetime | None
     created_at: datetime.datetime
     parent_entity_name: str
+    project_name: str | None = None

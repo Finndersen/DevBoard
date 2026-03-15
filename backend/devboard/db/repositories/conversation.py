@@ -30,6 +30,7 @@ class SessionSubAgentInfo(TypedDict):
 class ConversationListRow(TypedDict):
     conversation: Conversation
     parent_entity_name: str
+    project_name: str | None
 
 
 class NoActiveConversationError(Exception):
@@ -263,6 +264,7 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         TaskAlias = aliased(Task)
         ProjectAlias = aliased(Project)
+        TaskProjectAlias = aliased(Project)
         CodebaseAlias = aliased(Codebase)
 
         stmt = (
@@ -272,6 +274,7 @@ class ConversationRepository(BaseRepository[Conversation]):
                 ProjectAlias.name.label("project_name"),
                 CodebaseAlias.name.label("codebase_name"),
                 TaskAlias.status.label("task_status"),
+                TaskProjectAlias.name.label("task_project_name"),
             )
             .outerjoin(
                 TaskAlias,
@@ -287,6 +290,10 @@ class ConversationRepository(BaseRepository[Conversation]):
                 CodebaseAlias,
                 (Conversation.parent_entity_type == ParentEntityType.CODEBASE)
                 & (Conversation.parent_entity_id == CodebaseAlias.id),
+            )
+            .outerjoin(
+                TaskProjectAlias,
+                TaskAlias.project_id == TaskProjectAlias.id,
             )
             .where(
                 Conversation.parent_conversation_id.is_(None),
@@ -307,13 +314,17 @@ class ConversationRepository(BaseRepository[Conversation]):
         for row in rows:
             conversation = row[0]
             entity_type = conversation.parent_entity_type
+            project_name: str | None = None
             if entity_type == ParentEntityType.TASK:
                 name = row.task_title or ""
+                project_name = row.task_project_name
             elif entity_type == ParentEntityType.PROJECT:
                 name = row.project_name or ""
             else:
                 name = row.codebase_name or ""
-            result.append(ConversationListRow(conversation=conversation, parent_entity_name=name))
+            result.append(
+                ConversationListRow(conversation=conversation, parent_entity_name=name, project_name=project_name)
+            )
         return result
 
     # Message methods (for internal agent messages)

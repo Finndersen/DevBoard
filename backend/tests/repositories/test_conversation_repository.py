@@ -574,11 +574,14 @@ class TestGetAllTopLevel:
         db_session.flush()
 
         result = repo.get_all_top_level()
-        by_id = {r["conversation"].id: r["parent_entity_name"] for r in result}
+        by_id = {r["conversation"].id: r for r in result}
 
-        assert by_id[conv_proj.id] == "My Project"
-        assert by_id[conv_task.id] == "Enrichment Task"
-        assert by_id[conv_cb.id] == "Test Codebase"
+        assert by_id[conv_proj.id]["parent_entity_name"] == "My Project"
+        assert by_id[conv_proj.id]["project_name"] is None
+        assert by_id[conv_task.id]["parent_entity_name"] == "Enrichment Task"
+        assert by_id[conv_task.id]["project_name"] == "My Project"
+        assert by_id[conv_cb.id]["parent_entity_name"] == "Test Codebase"
+        assert by_id[conv_cb.id]["project_name"] is None
 
     def test_ordered_by_last_activity_desc(self, repo: ConversationRepository, project: Project, db_session: Session):
         """Results are ordered by last_activity_at descending."""

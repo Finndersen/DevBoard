@@ -158,6 +158,7 @@ class TestListConversationsEndpoint:
         assert "last_activity_at" in item
         assert "created_at" in item
         assert "parent_entity_name" in item
+        assert "project_name" in item
 
     def test_excludes_completed_task_conversations(self, client, db_session, test_task):
         """Should not include conversations for completed tasks."""

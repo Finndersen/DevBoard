@@ -635,6 +635,7 @@ export interface ConversationListItem {
   last_activity_at: string | null
   created_at: string
   parent_entity_name: string
+  project_name: string | null
 }
 
 // Todo list types for Claude Code conversations
