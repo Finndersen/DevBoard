@@ -79,10 +79,11 @@ class ClaudeSessionManager:
         dir_mtimes = self._scan_project_dir_mtimes()
 
         results: list[ClaudeCodeProjectInfo] = []
+        seen_paths: set[str] = set()
         for config_project in config_projects:
             encoded_path = ClaudeCodeSessionMigrator.encode_path_for_claude_projects(config_project.path)
 
-            if encoded_path not in dir_mtimes:
+            if encoded_path not in dir_mtimes or encoded_path in seen_paths:
                 continue
 
             project_dir = self.claude_projects_dir / encoded_path
@@ -91,6 +92,7 @@ class ClaudeSessionManager:
             if session_count == 0:
                 continue
 
+            seen_paths.add(encoded_path)
             results.append(
                 ClaudeCodeProjectInfo(
                     path=config_project.path,

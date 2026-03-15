@@ -367,7 +367,7 @@ class ClaudeClient:
                         try:
                             async for message in client.receive_response():
                                 message_desc = describe_message(message)
-                                logfire.info(f"Received message: {message_desc}")
+                                logfire.info(f"Received message: {message_desc}", message=message)
                                 await queue.put(message)
                         except asyncio.CancelledError:
                             # Consumer disconnected during streaming.
