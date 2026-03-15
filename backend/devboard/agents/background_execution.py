@@ -45,6 +45,13 @@ async def run_agent_for_conversation(
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
 
+        # Update last_activity_at immediately so the conversation list reorders
+        # correctly when the frontend refetches on stream start. This is the only
+        # update for engines (e.g. Claude Code) that don't persist messages via
+        # create_message().
+        services.conversation_repo.touch(conversation)
+        await asyncio.to_thread(db.commit)
+
         role = await create_agent_role_for_conversation(
             conversation=conversation,
             document_repo=services.document_repo,
