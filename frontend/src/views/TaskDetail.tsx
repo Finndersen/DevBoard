@@ -99,15 +99,6 @@ function TaskDetail({ id }: TaskDetailProps) {
       .catch(err => console.error('Failed to load task custom field definitions:', err))
   }, [])
 
-  const handleCustomFieldChange = useCallback(async (fieldName: string, value: unknown) => {
-    if (!task) return
-    try {
-      await updateTask({ id: task.id, task: { custom_fields: { [fieldName]: value } } as unknown as Partial<Task> })
-    } catch {
-      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
-    }
-  }, [task, updateTask, addNotification])
-
   // PR status for tasks with a PR (pr_open or complete)
   const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
   const [prStatusLoading, setPrStatusLoading] = useState(false)
@@ -257,6 +248,15 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { mutate: updateTask, loading: updateTaskLoading, error: updateError } = useUpdateTask({
     updateCache
   })
+
+  const handleCustomFieldChange = useCallback(async (fieldName: string, value: unknown) => {
+    if (!task) return
+    try {
+      await updateTask({ id: task.id, task: { custom_fields: { [fieldName]: value } } as unknown as Partial<Task> })
+    } catch {
+      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
+    }
+  }, [task, updateTask, addNotification])
 
   // Memoize save functions to prevent infinite re-creation of useEditableField hooks
   const saveTitleField = useCallback((value: string) =>

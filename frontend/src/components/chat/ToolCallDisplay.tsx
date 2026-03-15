@@ -101,9 +101,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
   return (
     <div className="flex w-full min-w-0">
       {/* Collapsed Tool Call Card */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded) } }}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
@@ -206,7 +209,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
               })()}
             </div>
           )}
-        </button>
+        </div>
       {hasSubAgentConversation && (
         <SubAgentConversationModal
           isOpen={isSubAgentModalOpen}
