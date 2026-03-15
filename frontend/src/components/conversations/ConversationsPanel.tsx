@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   ClipboardDocumentListIcon,
   FolderIcon,
@@ -79,23 +79,21 @@ export default function ConversationsPanel() {
   const { data: conversations, loading, error } = useConversations()
   const openTab = useUIStore(s => s.openTab)
 
-  // Derive streaming conversation IDs from the stream store
-  const streamingConversationIds = useConversationStreamStore(
+  // Return a stable primitive string from the selector — useSyncExternalStore requires
+  // getSnapshot to return a cached reference, so returning a new Set on every call causes
+  // the "getSnapshot should be cached" warning and infinite loops.
+  const streamingIdsStr = useConversationStreamStore(
     useCallback((state) => {
-      const ids = new Set<number>()
+      const ids: number[] = []
       for (const [id, stream] of state.activeStreams) {
-        if (stream.isStreaming) ids.add(id)
+        if (stream.isStreaming) ids.push(id)
       }
-      return ids
-    }, []),
-    // Custom equality to avoid re-renders when the Set contents haven't changed
-    (a, b) => {
-      if (a.size !== b.size) return false
-      for (const id of a) {
-        if (!b.has(id)) return false
-      }
-      return true
-    }
+      return ids.sort((a, b) => a - b).join(',')
+    }, [])
+  )
+  const streamingConversationIds = useMemo(
+    () => new Set(streamingIdsStr ? streamingIdsStr.split(',').map(Number) : []),
+    [streamingIdsStr]
   )
 
   // Track "needs attention" conversations (previously streaming, now completed)

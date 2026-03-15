@@ -4,42 +4,28 @@ import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useUIStore } from '../stores/uiStore'
 import type { TabType } from '../stores/uiStore'
 
-interface StreamSummary {
-  isStreaming: boolean
-  hasPendingTools: boolean
-}
-
 /**
  * Synchronises tab activity status from conversationStreamStore.
  * Maps tabs → conversations via the conversation list, then checks streaming state.
  */
 export function useTabStreamStatus(conversations: ConversationListItem[] | null) {
-  const tabs = useUIStore(s => s.tabs)
+  // Subscribe only to tab identity changes (not activityStatus mutations), to avoid
+  // an infinite loop where setTabActivityStatus → tabs change → effect re-runs → repeat.
+  const tabIds = useUIStore(s => s.tabs.map(t => t.id).join(','))
   const setTabActivityStatus = useUIStore(s => s.setTabActivityStatus)
 
-  // Derive a stable summary of stream states to avoid re-rendering on every Map mutation.
-  // Only re-renders when actual streaming/pending-tools state changes.
-  const streamSummaries = useConversationStreamStore(
+  // Return a stable primitive string from the selector — useSyncExternalStore requires
+  // getSnapshot to return a cached reference, so returning a new Map on every call causes
+  // the "getSnapshot should be cached" warning and infinite loops.
+  const streamStateKey = useConversationStreamStore(
     useCallback((state) => {
-      const result = new Map<number, StreamSummary>()
+      const parts: string[] = []
       for (const [id, stream] of state.activeStreams) {
-        result.set(id, {
-          isStreaming: stream.isStreaming,
-          hasPendingTools: (stream.pendingToolRequests?.length ?? 0) > 0,
-        })
+        const isPending = (stream.pendingToolRequests?.length ?? 0) > 0
+        parts.push(`${id}:${stream.isStreaming ? 1 : 0}:${isPending ? 1 : 0}`)
       }
-      return result
-    }, []),
-    (a, b) => {
-      if (a.size !== b.size) return false
-      for (const [id, summaryA] of a) {
-        const summaryB = b.get(id)
-        if (!summaryB || summaryA.isStreaming !== summaryB.isStreaming || summaryA.hasPendingTools !== summaryB.hasPendingTools) {
-          return false
-        }
-      }
-      return true
-    }
+      return parts.sort().join(';')
+    }, [])
   )
 
   useEffect(() => {
@@ -55,19 +41,25 @@ export function useTabStreamStatus(conversations: ConversationListItem[] | null)
       }
     }
 
-    for (const tab of tabs) {
+    const { activeStreams } = useConversationStreamStore.getState()
+
+    for (const tab of useUIStore.getState().tabs) {
       const key = `${tab.type as TabType}:${tab.entityId}`
       const conversationId = entityToConversation.get(key)
-      if (!conversationId) continue
+      if (!conversationId) {
+        // No conversation in the list (e.g. completed task excluded by API) — ensure idle
+        setTabActivityStatus(tab.id, { type: 'idle' })
+        continue
+      }
 
-      const summary = streamSummaries.get(conversationId)
-      if (summary?.isStreaming) {
+      const stream = activeStreams.get(conversationId)
+      if (stream?.isStreaming) {
         setTabActivityStatus(tab.id, { type: 'agent_working' })
-      } else if (summary?.hasPendingTools) {
+      } else if ((stream?.pendingToolRequests?.length ?? 0) > 0) {
         setTabActivityStatus(tab.id, { type: 'action_required' })
       } else {
         setTabActivityStatus(tab.id, { type: 'idle' })
       }
     }
-  }, [conversations, tabs, streamSummaries, setTabActivityStatus])
+  }, [conversations, tabIds, streamStateKey, setTabActivityStatus])
 }
