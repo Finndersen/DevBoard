@@ -134,7 +134,7 @@ class TaskPRReviewAgentRole(AgentRole):
 
         Same as implementation role - needs full codebase editing capabilities.
         """
-        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Write"]
+        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Agent", "Write"]
 
     @property
     def include_builtin_system_prompt(self) -> bool:

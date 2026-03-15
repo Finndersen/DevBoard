@@ -187,5 +187,6 @@ class TaskPlanningAgentRole(AgentRole):
             "TaskGet",
             "TaskUpdate",
             "TaskList",
+            "Task",
             "Agent",
         ]

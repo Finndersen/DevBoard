@@ -181,6 +181,7 @@ class TaskImplementationAgentRole(AgentRole):
             "TaskUpdate",
             "TaskList",
             "Agent",
+            "Task",
             "Skill",
             "TodoWrite",
         ]
