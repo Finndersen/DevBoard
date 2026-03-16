@@ -101,7 +101,7 @@ export default function ProjectConversationSelector({
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 dark:text-gray-500 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 hover:text-gray-300 transition-colors max-w-[200px]"
+        className="flex items-center gap-1 px-2 py-1 text-xs text-gray-300 dark:text-gray-400 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 hover:text-gray-200 transition-colors min-w-[280px] max-w-[400px]"
       >
         <span className="truncate">{displayTitle}</span>
         <ChevronDownIcon className="w-3 h-3 flex-shrink-0" />
@@ -117,7 +117,7 @@ export default function ProjectConversationSelector({
           />
 
           {/* Menu */}
-          <div className="absolute left-0 mt-1 w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden">
+          <div className="absolute right-0 mt-1 w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden">
             {/* Cap warning */}
             {atCap && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-900/50 text-yellow-400 text-xs">

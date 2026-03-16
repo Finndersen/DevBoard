@@ -289,19 +289,9 @@ export const useUIStore = create<UIStore>()(
     {
       name: STORAGE_KEY,
       partialize: (state) => ({
-        cachedViews: state.cachedViews,
-        activeViewId: state.activeViewId,
         navigationCompactMode: state.navigationCompactMode,
         draftMessages: state.draftMessages,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        // Sync hasDraft flags from draftMessages on hydration
-        for (const view of state.cachedViews) {
-          const key = draftKey(view.type, view.entityId)
-          view.hasDraft = !!state.draftMessages[key]
-        }
-      }
     }
   )
 )

@@ -134,9 +134,9 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   return (
     <>
       <Card padding={padding} className={className}>
-        <div className="flex items-center justify-between mb-2 flex-shrink-0">
-          <div className="flex items-center">
-            <ChatBubbleLeftIcon className="w-5 h-5 mr-2 text-blue-600" />
+        <div className="relative flex items-center justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <ChatBubbleLeftIcon className="w-5 h-5 text-blue-600 shrink-0" />
             <h3 className={`text-lg font-medium ${textColors.primary}`}>
               {loadingConversation ? (
                 <span className="text-gray-400 dark:text-gray-500">Loading...</span>
@@ -144,9 +144,22 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 title
               )}
             </h3>
-            {conversationSelector}
             {conversationId && <RunningIndicator conversationId={conversationId} />}
           </div>
+          {(conversationSelector || onNewConversation) && (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-2">
+              {conversationSelector}
+              {onNewConversation && (
+                <button
+                  onClick={onNewConversation}
+                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                  title="New Conversation"
+                >
+                  <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center space-x-3">
             {conversation?.external_session_id && (
               <button
@@ -155,15 +168,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 title="View session ID"
               >
                 <InformationCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              </button>
-            )}
-            {onNewConversation && (
-              <button
-                onClick={onNewConversation}
-                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                title="New Conversation"
-              >
-                <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             )}
             {conversationId && !loadingConversation && (

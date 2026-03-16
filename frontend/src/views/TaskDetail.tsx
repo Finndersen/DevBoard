@@ -174,6 +174,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Get stream store methods for workflow actions
   const migrateStream = useConversationStreamStore(state => state.migrateStream)
   const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
+  const addEvent = useConversationStreamStore(state => state.addEvent)
   const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
   const isConversationStreaming = useConversationStreamStore(
     state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
@@ -410,6 +411,14 @@ function TaskDetail({ id }: TaskDetailProps) {
       await refetch()
 
       if (result.conversation_id) {
+        if (result.prompt) {
+          addEvent(result.conversation_id, {
+            event_type: 'message',
+            role: 'user',
+            text_content: result.prompt,
+            timestamp: new Date().toISOString(),
+          })
+        }
         // Explicitly open WebSocket for the conversation. This is necessary when the
         // workflow action reuses the same conversation (e.g. CreateImplementationPlan),
         // because useStreamSubscription's reconnectAttempted guard prevents re-checking.
