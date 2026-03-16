@@ -7,6 +7,18 @@ import { render } from '../../../test/utils'
 import TodoPanel from '../TodoPanel'
 import ConversationEventHandlerProvider from '../ConversationEventHandlerProvider'
 
+let capturedStreamCompleteHandler: (() => void) | null = null
+
+vi.mock('../../../hooks/useConversationEventHandlers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../hooks/useConversationEventHandlers')>()
+  return {
+    ...actual,
+    useStreamCompleteHandler: (handler: () => void) => {
+      capturedStreamCompleteHandler = handler
+    },
+  }
+})
+
 describe('TodoPanel', () => {
   const mockConversationId = 1
 
@@ -35,6 +47,7 @@ describe('TodoPanel', () => {
   ]
 
   beforeEach(() => {
+    capturedStreamCompleteHandler = null
     vi.clearAllMocks()
     server.resetHandlers()
   })
@@ -250,6 +263,87 @@ describe('TodoPanel', () => {
       // Completed todo should have line-through styling
       const completedTodo = screen.getByText('Fix the bug')
       expect(completedTodo).toHaveClass('line-through')
+    })
+  })
+
+  it('refreshes todos on stream complete for claude_code engine', async () => {
+    capturedStreamCompleteHandler = null
+
+    const initialTodos = [
+      {
+        content: 'Fix the bug',
+        status: 'completed',
+        active_form: 'Fixing the bug',
+        priority: null,
+        id: 'todo-1',
+      },
+      {
+        content: 'Write tests',
+        status: 'in_progress',
+        active_form: 'Writing tests',
+        priority: null,
+        id: 'todo-2',
+      },
+      {
+        content: 'Update docs',
+        status: 'pending',
+        active_form: 'Updating docs',
+        priority: null,
+        id: 'todo-3',
+      },
+    ]
+
+    server.use(
+      http.get('*/api/conversations/1/todos', () => {
+        return HttpResponse.json(initialTodos)
+      })
+    )
+
+    renderWithProvider(
+      <TodoPanel conversationId={mockConversationId} engine="claude_code" />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Tasks: 1/3 completed')).toBeInTheDocument()
+    })
+
+    // Update MSW handler to return updated todos (2 completed instead of 1)
+    const updatedTodos = [
+      {
+        content: 'Fix the bug',
+        status: 'completed',
+        active_form: 'Fixing the bug',
+        priority: null,
+        id: 'todo-1',
+      },
+      {
+        content: 'Write tests',
+        status: 'completed',
+        active_form: 'Writing tests',
+        priority: null,
+        id: 'todo-2',
+      },
+      {
+        content: 'Update docs',
+        status: 'in_progress',
+        active_form: 'Updating docs',
+        priority: null,
+        id: 'todo-3',
+      },
+    ]
+
+    server.use(
+      http.get('*/api/conversations/1/todos', () => {
+        return HttpResponse.json(updatedTodos)
+      })
+    )
+
+    // Invoke the captured stream-complete handler to trigger refetch
+    expect(capturedStreamCompleteHandler).not.toBeNull()
+    capturedStreamCompleteHandler!()
+
+    await waitFor(() => {
+      expect(screen.getByText('Tasks: 2/3 completed')).toBeInTheDocument()
     })
   })
 })

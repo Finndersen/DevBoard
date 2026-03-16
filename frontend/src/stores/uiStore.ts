@@ -55,7 +55,8 @@ interface UIActions {
   updateViewActivity: (viewId: string) => void
 
   // Draft messages
-  setDraftMessage: (viewType: ViewType, entityId: string, text: string) => void
+  setHasDraft: (viewType: ViewType, entityId: string, hasDraft: boolean) => void
+  saveDraftText: (viewType: ViewType, entityId: string, text: string) => void
   getDraftMessage: (viewType: ViewType, entityId: string) => string
   clearDraftMessage: (viewType: ViewType, entityId: string) => void
 
@@ -240,18 +241,22 @@ export const useUIStore = create<UIStore>()(
       },
 
       // Draft messages
-      setDraftMessage: (viewType, entityId, text) => {
+      setHasDraft: (viewType, entityId, hasDraft) => {
+        set((draft) => {
+          const view = draft.cachedViews.find(v => v.type === viewType && v.entityId === entityId)
+          if (view && view.hasDraft !== hasDraft) {
+            view.hasDraft = hasDraft
+          }
+        })
+      },
+
+      saveDraftText: (viewType, entityId, text) => {
         set((draft) => {
           const key = draftKey(viewType, entityId)
           if (text) {
             draft.draftMessages[key] = text
           } else {
             delete draft.draftMessages[key]
-          }
-          // Update hasDraft on corresponding cached view
-          const view = draft.cachedViews.find(v => v.type === viewType && v.entityId === entityId)
-          if (view) {
-            view.hasDraft = !!text
           }
         })
       },

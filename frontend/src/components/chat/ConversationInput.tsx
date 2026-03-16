@@ -112,7 +112,7 @@ export default function ConversationInput({
           onChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
           placeholder={effectivePlaceholder}
-          className={`w-full resize-none ${needsScroll ? 'overflow-y-auto' : 'overflow-hidden'} ${standardChatInputClasses} ${hasText ? 'pr-8' : ''}`}
+          className={`w-full resize-none ${needsScroll ? 'overflow-y-auto' : 'overflow-hidden'} ${standardChatInputClasses} ${hasText ? 'pr-8' : ''} ${isQueued ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500 bg-amber-50/50 dark:bg-amber-900/10 text-opacity-70' : ''}`}
           rows={1}
         />
         {hasText && (

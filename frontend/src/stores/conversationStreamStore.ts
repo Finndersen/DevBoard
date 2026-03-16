@@ -321,7 +321,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
             // Add event to store using ref.current (updated by migrateStream)
             get().addEvent(conversationIdRef.current, event)
           },
-          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current)
+          getEventHandlerRegistry: () => eventHandlerRegistries.get(conversationIdRef.current)
         })
 
         // Store tool requests if any
@@ -547,7 +547,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           onEvent: (event) => {
             get().addEvent(conversationIdRef.current, event)
           },
-          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current)
+          getEventHandlerRegistry: () => eventHandlerRegistries.get(conversationIdRef.current)
         })
 
         // Store new tool requests if any
@@ -705,7 +705,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           onEvent: (event) => {
             get().addEvent(conversationIdRef.current, event)
           },
-          eventHandlerRegistry: eventHandlerRegistries.get(conversationIdRef.current),
+          getEventHandlerRegistry: () => eventHandlerRegistries.get(conversationIdRef.current),
         })
 
         if (toolRequests.length > 0) {

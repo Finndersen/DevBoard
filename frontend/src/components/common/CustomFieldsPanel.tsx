@@ -25,9 +25,7 @@ export function CustomFieldsPopover({
 
   const fieldCount = customFields ? Object.keys(customFields).length : 0
   const hasDefinitions = fieldDefinitions.length > 0
-
-  // Hide button entirely when no fields and no definitions
-  if (!hasDefinitions && fieldCount === 0) return null
+  const shouldRender = hasDefinitions || fieldCount > 0
 
   const allFieldNames = new Set([
     ...fieldDefinitions.map(d => d.name),
@@ -102,6 +100,8 @@ export function CustomFieldsPopover({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen])
+
+  if (!shouldRender) return null
 
   return (
     <div className="relative" ref={popoverRef}>

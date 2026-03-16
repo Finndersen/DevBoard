@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronUpIcon, CheckCircleIcon } from '@heroicons/reac
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid'
 import { apiClient } from '../../lib/api'
 import type { TodoItem } from '../../lib/api'
-import { useToolResultHandler } from '../../hooks/useConversationEventHandlers'
+import { useToolResultHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 import { textColors } from '../../styles/designSystem'
 
 interface TodoPanelProps {
@@ -42,6 +42,13 @@ const TodoPanel = ({ conversationId, engine }: TodoPanelProps) => {
       if (isCollapsed) {
         setHasUpdates(true)
       }
+    }
+  })
+
+  // Refresh todos on stream complete as a fallback in case tool result handlers missed events
+  useStreamCompleteHandler(() => {
+    if (engine === 'claude_code') {
+      fetchTodos()
     }
   })
 

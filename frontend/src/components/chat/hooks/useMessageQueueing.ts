@@ -4,6 +4,8 @@ import { useConversationStreamStore } from '../../../stores/conversationStreamSt
 import { useUIStore, type ViewType } from '../../../stores/uiStore'
 import { useStreamCompleteHandler } from '../../../hooks/useConversationEventHandlers'
 
+const DRAFT_SAVE_DELAY_MS = 500
+
 export function useMessageQueueing(
   conversationId: number,
   isStreaming: boolean,
@@ -18,10 +20,36 @@ export function useMessageQueueing(
   const [inputMessage, setInputMessageRaw] = useState(
     () => useUIStore.getState().getDraftMessage(viewType, entityId)
   )
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hadTextRef = useRef(!!inputMessage.trim())
 
   const setInputMessage = useCallback((text: string) => {
     setInputMessageRaw(text)
-    useUIStore.getState().setDraftMessage(viewType, entityId, text)
+
+    // Update hasDraft flag immediately but only on empty↔non-empty transitions
+    const hasText = !!text.trim()
+    if (hasText !== hadTextRef.current) {
+      hadTextRef.current = hasText
+      useUIStore.getState().setHasDraft(viewType, entityId, hasText)
+    }
+
+    // Debounce persisting the actual draft text
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
+    draftSaveTimerRef.current = setTimeout(() => {
+      useUIStore.getState().saveDraftText(viewType, entityId, text)
+    }, DRAFT_SAVE_DELAY_MS)
+  }, [viewType, entityId])
+
+  // Save draft text on unmount
+  useEffect(() => {
+    return () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current)
+      }
+      // Flush current input to store on unmount
+      useUIStore.getState().saveDraftText(viewType, entityId, inputMessage)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally capture initial refs only; flushed via ref
   }, [viewType, entityId])
 
   const handleSendMessage = useCallback(async () => {
@@ -34,6 +62,8 @@ export function useMessageQueueing(
     }
 
     setInputMessageRaw('')
+    hadTextRef.current = false
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
     useUIStore.getState().clearDraftMessage(viewType, entityId)
     await sendMessageViaHook(messageText)
   }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook, viewType, entityId])
@@ -52,8 +82,6 @@ export function useMessageQueueing(
   useStreamCompleteHandler(useCallback(() => {
     const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
 
-    // Only send queued message when the agent's entire turn is complete
-    // (no pending tool requests that need approval first)
     if (
       currentStreamState?.isQueued &&
       inputMessage.trim() &&
@@ -61,6 +89,8 @@ export function useMessageQueueing(
     ) {
       const messageToSend = inputMessage.trim()
       setInputMessageRaw('')
+      hadTextRef.current = false
+      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
       useUIStore.getState().clearDraftMessage(viewType, entityId)
       setQueued(conversationId, false)
       sendMessageViaHook(messageToSend)

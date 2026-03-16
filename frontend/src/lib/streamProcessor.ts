@@ -6,7 +6,7 @@ export interface StreamProcessorOptions {
   stream: AsyncGenerator<ConversationEvent>
   onFirstEvent?: () => void | Promise<void>
   onEvent: (event: ConversationEvent) => void | Promise<void>
-  eventHandlerRegistry?: EventHandlerRegistry
+  getEventHandlerRegistry?: () => EventHandlerRegistry | undefined
 }
 
 export interface StreamProcessorResult {
@@ -44,7 +44,7 @@ export interface StreamProcessorResult {
 export async function processConversationStream(
   options: StreamProcessorOptions
 ): Promise<StreamProcessorResult> {
-  const { stream, onFirstEvent, onEvent, eventHandlerRegistry } = options
+  const { stream, onFirstEvent, onEvent, getEventHandlerRegistry } = options
   const toolRequests: ToolCallRequest[] = []
   const toolCallMap = new Map<string, string>() // Maps tool_call_id -> tool_name
   const completedToolCalls = new Set<string>() // tool_call_ids that received results
@@ -102,12 +102,16 @@ export async function processConversationStream(
 
       // Invoke event handlers for tool results and system events
       // Error handling ensures handler failures don't crash the stream
-      if (eventHandlerRegistry && (event.event_type === 'tool_result' || event.event_type === 'system')) {
-        try {
-          await invokeEventHandlers(event, eventHandlerRegistry, toolCallMap)
-        } catch (error) {
-          console.error('Error invoking event handlers:', error)
-          // Continue processing stream despite handler errors
+      // Uses lazy getter so handlers registered after stream start are still found
+      if (getEventHandlerRegistry && (event.event_type === 'tool_result' || event.event_type === 'system')) {
+        const registry = getEventHandlerRegistry()
+        if (registry) {
+          try {
+            await invokeEventHandlers(event, registry, toolCallMap)
+          } catch (error) {
+            console.error('Error invoking event handlers:', error)
+            // Continue processing stream despite handler errors
+          }
         }
       }
 
