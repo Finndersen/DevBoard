@@ -128,6 +128,8 @@ class Conversation(Base):
             raise RuntimeError(msg)
 
         if self.parent_entity_type == ParentEntityType.TASK:
+            from .implementation_plan import ImplementationPlan
+
             # Eager load document relationships for agent context building
             stmt = (
                 select(Task)
@@ -135,6 +137,7 @@ class Conversation(Base):
                     joinedload(Task.specification),
                     joinedload(Task.implementation_plan),
                     joinedload(Task.change_summary),
+                    joinedload(Task.implementation_plan_structured).joinedload(ImplementationPlan.steps),
                 )
                 .where(Task.id == self.parent_entity_id)
             )

@@ -76,6 +76,8 @@ class Task(Base):
     )
     implementation_plan_structured: Mapped["ImplementationPlan | None"] = relationship(
         back_populates="task",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     @property

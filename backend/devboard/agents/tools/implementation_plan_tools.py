@@ -42,7 +42,7 @@ def create_set_implementation_plan_steps_tool(
         Args:
             steps: Ordered list of implementation steps. Each step has:
                 - title: Short summary of the step
-                - type: One of 'code_change', 'documentation', 'testing', 'code_review'
+                - type: One of 'code_change', 'documentation', 'validation', 'code_review'
                 - dependencies: List of step numbers (1-indexed positions) this step depends on
                 - details: Detailed markdown instructions for execution
             overview: Optional brief summary of the implementation approach
@@ -83,7 +83,7 @@ def create_add_implementation_step_tool(
 
         Args:
             title: Short summary of the step
-            type: One of 'code_change', 'documentation', 'testing'
+            type: One of 'code_change', 'documentation', 'validation', 'code_review'
             details: Detailed markdown instructions for execution
             dependencies: List of step numbers this step depends on (default: none)
         """

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Task, TaskStatus
 from devboard.db.models.base import task_context_resource_association
+from devboard.db.models.implementation_plan import ImplementationPlan
 from devboard.db.repositories.base import BaseRepository
 
 
@@ -76,6 +77,7 @@ class TaskRepository(BaseRepository[Task]):
                 joinedload(Task.specification),
                 joinedload(Task.implementation_plan),
                 joinedload(Task.change_summary),
+                joinedload(Task.implementation_plan_structured).joinedload(ImplementationPlan.steps),
             )
         return self.db.execute(stmt).unique().scalar_one_or_none()
 
@@ -134,6 +136,16 @@ class TaskRepository(BaseRepository[Task]):
         stmt = delete(task_context_resource_association).where(task_context_resource_association.c.task_id == task.id)
         result = self.db.execute(stmt)
         return result.rowcount  # type: ignore[attr-defined]
+
+    def delete_implementation_plan_structured(self, task: Task) -> None:
+        """Delete the structured implementation plan for a task if it exists.
+
+        Args:
+            task: Task whose structured plan should be deleted
+        """
+        if task.implementation_plan_structured:
+            self.db.delete(task.implementation_plan_structured)
+            self.db.flush()
 
     def delete(self, task: Task) -> None:
         """Delete a task entity.

@@ -80,7 +80,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Fetch documents separately - only when task is loaded with valid document IDs
   const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
   const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
-  const { data: implementationPlan, refetch: refetchImplementationPlan2 } = useImplementationPlan(task?.implementation_plan_id ?? null)
+  const { data: implementationPlan, refetch: refetchImplementationPlan2 } = useImplementationPlan(task?.implementation_plan_id ? task.id : null)
   const { data: changeSummaryDoc } = useDocument(task?.change_summary_document_id ?? null)
 
   // Document update mutation

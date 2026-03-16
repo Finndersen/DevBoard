@@ -24,7 +24,7 @@ from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
-IMPLEMENTATION_SYSTEM_PROMPT = """
+_PROMPT_BASE = """
 You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
 
 Your role is to:
@@ -49,16 +49,7 @@ WORKFLOW:
 
 Then execute in order:
 
-1. IMPLEMENT CODE CHANGES
-   - Break the implementation plan into discrete, independently executable steps
-   - Make edits directly using Edit/Write tools by default
-   - Use the `Agent` tool to launch sub-agents only for implementation steps that are broad enough to
-     warrant delegation — i.e. multi-file edits across different areas of the codebase, or parallel
-     independent steps (e.g. implementing a feature and writing its tests simultaneously)
-   - Do NOT break a single implementation step into sub-steps for sub-agents — delegate the whole step or do it directly
-   - Update the internal to-do list as each step completes
-   - If a `docs/` directory is present, investigate and update appropriate documentation sections,
-     adding or updating any missing or incorrect documentation
+{implement_section}
 
 2. CODE REVIEW (if a `code_review` step is in the plan)
    - After executing the `code_review` step, read its findings from the step outcome
@@ -70,8 +61,7 @@ Then execute in order:
    - Confirm everything works as expected before finalising
 
 IMPORTANT BEHAVIOUR GUIDELINES:
-- Default to making edits directly; only use sub-agents for implementation steps with broad, multi-file scope
-  or for parallelising independent steps
+{behaviour_guidelines}
 - When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
 - If the user asks a question about the implementation, investigate and respond with a helpful answer and proposed changes, but DO NOT apply any changes until confirmed by the user.
 - Use the Edit tool for existing files, Write tool for new files
@@ -79,6 +69,52 @@ IMPORTANT BEHAVIOUR GUIDELINES:
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
 - When creating commits, DO NOT add Claude Code attribution messages
 """
+
+_STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
+1. IMPLEMENT CODE CHANGES
+   - Use the `execute_implementation_step` tool to execute each step — do NOT implement steps directly
+     with Edit/Write tools. This ensures step statuses are tracked in the plan.
+   - Consult the EXECUTION GRAPH in the task context to identify which steps can run in parallel
+   - Execute independent steps concurrently by calling `execute_implementation_step` for each in a
+     single message (multiple tool calls); wait for dependencies to complete before proceeding
+   - Update the internal to-do list as each step completes
+   - If a `docs/` directory is present, investigate and update appropriate documentation sections\
+"""
+
+_STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES = """\
+- ALWAYS use `execute_implementation_step` for every plan step — never bypass it by editing directly\
+"""
+
+_DOCUMENT_PLAN_IMPLEMENT_SECTION = """\
+1. IMPLEMENT CODE CHANGES
+   - Break the implementation plan into discrete, independently executable steps
+   - Make edits directly using Edit/Write tools by default
+   - Use the `Agent` tool to launch sub-agents only for implementation steps that are broad enough to
+     warrant delegation — i.e. multi-file edits across different areas of the codebase, or parallel
+     independent steps (e.g. implementing a feature and writing its tests simultaneously)
+   - Do NOT break a single implementation step into sub-steps for sub-agents — delegate the whole step or do it directly
+   - Update the internal to-do list as each step completes
+   - If a `docs/` directory is present, investigate and update appropriate documentation sections,
+     adding or updating any missing or incorrect documentation\
+"""
+
+_DOCUMENT_PLAN_BEHAVIOUR_GUIDELINES = """\
+- Default to making edits directly; only use sub-agents for implementation steps with broad, multi-file scope
+  or for parallelising independent steps\
+"""
+
+
+def _build_system_prompt(has_structured_plan: bool) -> str:
+    if has_structured_plan:
+        implement_section = _STRUCTURED_PLAN_IMPLEMENT_SECTION
+        behaviour_guidelines = _STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES
+    else:
+        implement_section = _DOCUMENT_PLAN_IMPLEMENT_SECTION
+        behaviour_guidelines = _DOCUMENT_PLAN_BEHAVIOUR_GUIDELINES
+    return _PROMPT_BASE.format(
+        implement_section=implement_section,
+        behaviour_guidelines=behaviour_guidelines,
+    )
 
 
 class TaskImplementationAgentRole(AgentRole):
@@ -108,7 +144,7 @@ class TaskImplementationAgentRole(AgentRole):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
-        return IMPLEMENTATION_SYSTEM_PROMPT
+        return _build_system_prompt(has_structured_plan=self.task.implementation_plan_structured is not None)
 
     def get_tools(self) -> list[Tool]:
         """Get tools for task implementation role."""

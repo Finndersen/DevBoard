@@ -233,12 +233,11 @@ export function PlanTab({ taskId, implementationPlan, onPlanUpdated, implementat
     )
   }
 
-  // Legacy Document-based plan
+  // Legacy Document-based plan (read-only)
   if (implementationPlanDoc !== undefined) {
     return (
       <MarkdownDocumentEditor
         content={implementationPlanDoc?.content}
-        field={planField}
         placeholder="Enter implementation plan in Markdown format..."
         emptyText="No implementation plan provided."
       />

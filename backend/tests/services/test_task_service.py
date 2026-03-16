@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from devboard.db.models.codebase import MergeMethod
-from devboard.db.models.document import DocumentType
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
 from devboard.services.task_git_service import MergeOutcome, MergeResult
 from devboard.services.task_service import TaskService
@@ -62,19 +61,6 @@ def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, 
 
 
 @pytest.fixture
-def task_in_planning_no_plan():
-    """Create a task in PLANNING state without implementation plan."""
-    task = MagicMock(spec=Task)
-    task.id = 1
-    task.status = TaskStatus.PLANNING
-    task.specification = MagicMock()
-    task.specification.content = "# Task Specification\n\nTest content"
-    task.implementation_plan = None
-    task.implementation_plan_id = None
-    return task
-
-
-@pytest.fixture
 def task_in_planning():
     """Create a task in PLANNING state with implementation plan content."""
     task = MagicMock(spec=Task)
@@ -103,6 +89,22 @@ def task_in_planning_empty_plan():
 
 
 @pytest.fixture
+def task_in_planning_no_plan():
+    """Create a task in PLANNING state with no implementation plan."""
+    task = MagicMock(spec=Task)
+    task.id = 6
+    task.status = TaskStatus.PLANNING
+    task.specification = MagicMock()
+    task.specification.content = "# Task Specification\n\nTest content"
+    task.implementation_plan = None
+    task.implementation_plan_id = None
+    task.implementation_plan_structured = None
+    # Mock verify_status_transition to succeed by default (no exception)
+    task.verify_status_transition.return_value = None
+    return task
+
+
+@pytest.fixture
 def task_in_implementing():
     """Create a task in IMPLEMENTING state."""
     task = MagicMock(spec=Task)
@@ -113,49 +115,6 @@ def task_in_implementing():
     task.implementation_plan = MagicMock()
     task.implementation_plan.content = "# Implementation Plan\n\nTest plan"
     return task
-
-
-class TestCreateImplementationPlan:
-    """Tests for TaskService.create_implementation_plan()."""
-
-    def test_successful_creation(self, task_service, task_in_planning_no_plan, mock_document_repo, mock_task_repo):
-        """Test successful creation of implementation plan."""
-        # Execute
-        result = task_service.create_implementation_plan(task_in_planning_no_plan)
-
-        # Verify implementation_plan document was created
-        mock_document_repo.create.assert_called_once_with(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-
-        # Verify implementation_plan was assigned
-        assert task_in_planning_no_plan.implementation_plan_id == 999
-
-        # Verify task was updated in repository
-        mock_task_repo.update.assert_called_once_with(task_in_planning_no_plan)
-
-        # Verify result is the updated task
-        assert result == task_in_planning_no_plan
-
-        # Verify task status was NOT changed (still PLANNING)
-        assert task_in_planning_no_plan.status == TaskStatus.PLANNING
-
-    def test_creation_fails_when_plan_exists(self, task_service, task_in_planning, mock_document_repo):
-        """Test creation fails when implementation_plan already exists."""
-        with pytest.raises(ValueError, match="already has an implementation plan"):
-            task_service.create_implementation_plan(task_in_planning)
-
-        # Verify no document was created
-        mock_document_repo.create.assert_not_called()
-
-    def test_creation_fails_wrong_status(self, task_service, task_in_implementing, mock_document_repo):
-        """Test creation fails when task is not in PLANNING status."""
-        # Remove the plan so it doesn't fail on the plan check first
-        task_in_implementing.implementation_plan = None
-
-        with pytest.raises(InvalidStatusTransitionError, match="must be in PLANNING status"):
-            task_service.create_implementation_plan(task_in_implementing)
-
-        # Verify no document was created
-        mock_document_repo.create.assert_not_called()
 
 
 class TestTransitionToImplementing:

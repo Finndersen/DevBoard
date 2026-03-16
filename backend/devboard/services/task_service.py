@@ -14,7 +14,7 @@ from devboard.db.models import ParentEntityType
 from devboard.db.models.custom_field import CustomFieldDefinition
 from devboard.db.models.document import DocumentType
 from devboard.db.models.enums import EntityType
-from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
+from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
@@ -110,40 +110,6 @@ class TaskService:
 
         return task
 
-    def create_implementation_plan(self, task: Task) -> Task:
-        """Create implementation plan document for a task.
-
-        Creates the implementation_plan document if it doesn't exist.
-        Does not change task status - task remains in PLANNING.
-
-        Args:
-            task: Task to create implementation plan for
-
-        Returns:
-            Updated task instance with implementation_plan
-
-        Raises:
-            InvalidTaskStatusError: If task is not in PLANNING status
-            ValueError: If task already has an implementation plan
-        """
-        # Verify current status
-        if task.status != TaskStatus.PLANNING:
-            raise InvalidStatusTransitionError(
-                f"Cannot create implementation plan: task {task.id} must be in PLANNING status, "
-                f"currently in {task.status.value}"
-            )
-
-        # Check if implementation plan already exists
-        if task.implementation_plan:
-            raise ValueError(f"Task {task.id} already has an implementation plan")
-
-        # Create implementation_plan document
-        implementation_plan_doc = self.document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        task.implementation_plan_id = implementation_plan_doc.id
-        task.implementation_plan = implementation_plan_doc
-
-        return self.task_repo.update(task)
-
     def transition_to_implementing(self, task: Task) -> Task:
         """Transition task from PLANNING to IMPLEMENTING status.
 
@@ -188,6 +154,9 @@ class TaskService:
 
         if task.implementation_plan_id:
             self.document_repo.delete_by_id(task.implementation_plan_id)
+
+        # Explicitly delete structured plan (also cascade-deleted by ORM, belt-and-suspenders)
+        self.task_repo.delete_implementation_plan_structured(task)
 
         # 3. Delete the task itself
         self.task_repo.delete(task)
