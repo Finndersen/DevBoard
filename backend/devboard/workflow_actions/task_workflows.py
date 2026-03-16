@@ -111,6 +111,8 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
 
     IMPLEMENTING_PROMPT = """Use the `rebase_task_branch` tool to rebase this task's feature branch onto the base branch.
 
+The tool handles stashing any uncommitted changes automatically — no need to check git status or stash manually beforehand.
+
 The tool is idempotent - if a rebase is already in progress, it will continue it.
 If you encounter merge conflicts:
 1. The tool will tell you which files have conflicts

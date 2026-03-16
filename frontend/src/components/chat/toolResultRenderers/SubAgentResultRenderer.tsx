@@ -1,5 +1,5 @@
 /**
- * Rich renderer for investigate_codebase and review_code_changes tool results.
+ * Rich renderer for investigate_codebase and execute_implementation_step tool results.
  * Renders the result field as formatted markdown and displays conversation_id as metadata.
  */
 

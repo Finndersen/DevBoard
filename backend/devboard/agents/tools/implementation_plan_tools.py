@@ -8,11 +8,16 @@ from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles import AgentRoleType
+from devboard.agents.roles.code_review import CodeReviewAgentRole
+from devboard.agents.roles.step_execution import StepExecutionAgentRole
+from devboard.agents.tools.sub_agent_tools import build_code_review_prompt, run_sub_agent
+from devboard.api.schemas.document import DocumentEdit
+from devboard.db.models import ParentEntityType
 from devboard.db.models.implementation_plan import ImplementationStepStatus, ImplementationStepType
 from devboard.db.models.task import Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.services.task_git.service import TaskGitService
-from devboard.services.task_implementation_plan import TaskImplementationPlanService
+from devboard.services.task_implementation_plan import DependencyNotResolvedError, TaskImplementationPlanService
 
 
 class StepInput(BaseModel):
@@ -52,7 +57,7 @@ def create_set_implementation_plan_steps_tool(
 
         steps_data = [s.model_dump() for s in steps]
         try:
-            plan_service.create_plan_with_steps(task.id, steps_data, overview)
+            plan_service.create_plan_with_steps(task_id=task.id, steps_data=steps_data, overview=overview)
         except ValueError as e:
             raise ModelRetry(f"Invalid dependency graph: {e}") from e
         plan_service.commit()
@@ -204,6 +209,69 @@ def create_edit_implementation_plan_overview_tool(
     )
 
 
+def create_read_implementation_step_details_tool(
+    task: Task,
+    plan_service: TaskImplementationPlanService,
+) -> Tool:
+    def read_implementation_step_details(step_number: int) -> str:
+        """Read the full details/instructions of a specific implementation plan step.
+
+        Args:
+            step_number: The step number to read details for
+        """
+        plan = task.implementation_plan_structured
+        if not plan:
+            raise ModelRetry("No implementation plan exists.")
+
+        step = plan_service.get_step_by_number(plan, step_number)
+        if not step:
+            raise ModelRetry(f"Step {step_number} not found.")
+
+        return step.details
+
+    return Tool(
+        function=read_implementation_step_details,
+        name="read_implementation_step_details",
+        requires_approval=False,
+        takes_ctx=False,
+    )
+
+
+def create_edit_implementation_step_details_tool(
+    task: Task,
+    plan_service: TaskImplementationPlanService,
+) -> Tool:
+    def edit_implementation_step_details(step_number: int, edits: list[DocumentEdit]) -> str:
+        """Apply targeted find-replace edits to a step's details field.
+
+        Use this instead of edit_implementation_step when making small or partial
+        changes to a step's details — avoids re-transmitting the entire content.
+
+        Args:
+            step_number: The step number to edit
+            edits: List of find-replace edits. Each edit has:
+                - old_string: Exact text to find (must be unique within the details)
+                - new_string: Replacement text
+        """
+        plan = task.implementation_plan_structured
+        if not plan:
+            raise ModelRetry("No implementation plan exists.")
+
+        try:
+            plan_service.edit_step_details(plan, step_number, edits)
+        except ValueError as e:
+            raise ModelRetry(str(e)) from e
+        plan_service.commit()
+        return f"Step {step_number} details updated."
+
+    return Tool(
+        function=edit_implementation_step_details,
+        name="edit_implementation_step_details",
+        requires_approval=False,
+        takes_ctx=False,
+    )
+
+
 # --- Implementation (Coordination) Agent Tools ---
 
 
@@ -215,14 +283,25 @@ def create_execute_implementation_step_tool(
     parent_conversation_id: int | None,
     task_git_service: TaskGitService,
 ) -> Tool:
-    async def execute_implementation_step(step_number: int) -> str:
+    async def execute_implementation_step(
+        step_number: int,
+        force_run: bool = False,
+        notes: str | None = None,
+    ) -> str:
         """Execute a specific implementation step by delegating to a step execution sub-agent.
 
-        The step must be in 'pending' status and all its dependency steps must be 'complete'.
+        The step must be in 'pending' or 'failed' status and all its dependency steps must be 'complete'.
+        Failed steps can be retried by calling this tool again.
         The sub-agent will receive the step's details as instructions along with relevant context.
 
         Args:
             step_number: The step number to execute
+            force_run: If True, skip status and dependency validation. Use only to
+                recover plans stuck in an inconsistent state (e.g. step left in
+                'running' after a crash, or a failed dependency you want to bypass).
+            notes: Optional context/notes to provide to the execution agent — e.g. a
+                change in approach or considerations based on outcomes of previous steps.
+                Appended to the sub-agent prompt.
 
         Returns:
             JSON string with the step execution outcome and conversation_id
@@ -235,53 +314,43 @@ def create_execute_implementation_step_tool(
         if not step:
             raise ModelRetry(f"Step {step_number} not found.")
 
-        if step.status != ImplementationStepStatus.PENDING:
-            raise ModelRetry(f"Step {step_number} is in '{step.status}' status, expected 'pending'.")
+        if not force_run:
+            EXECUTABLE_STATUSES = {ImplementationStepStatus.PENDING, ImplementationStepStatus.FAILED}
+            if step.status not in EXECUTABLE_STATUSES:
+                raise ModelRetry(f"Step {step_number} is in '{step.status}' status, expected 'pending' or 'failed'.")
+            try:
+                plan_service.check_dependencies_resolved(plan, step)
+            except DependencyNotResolvedError as e:
+                raise ModelRetry(str(e)) from e
 
-        # Check all dependencies are resolved (complete or skipped)
-        resolved_statuses = {ImplementationStepStatus.COMPLETE, ImplementationStepStatus.SKIPPED}
-        for dep_num in step.dependencies or []:
-            dep_step = plan_service.get_step_by_number(plan, dep_num)
-            if not dep_step or dep_step.status not in resolved_statuses:
-                dep_status = dep_step.status if dep_step else "not found"
-                raise ModelRetry(
-                    f"Dependency step {dep_num} is not resolved (status: {dep_status}). "
-                    f"Cannot execute step {step_number} until all dependencies are complete or skipped."
-                )
-
-        # Set step to running
-        plan_service.set_step_status(plan, step_number, ImplementationStepStatus.RUNNING)
-        plan_service.commit()
+        plan_service.set_step_status(step, ImplementationStepStatus.RUNNING)
 
         try:
-            from devboard.agents.tools.sub_agent_tools import run_sub_agent
-            from devboard.db.models import ParentEntityType
-
             if step.type == ImplementationStepType.CODE_REVIEW:
-                from devboard.agents.roles.code_review import CodeReviewAgentRole
-                from devboard.agents.tools.sub_agent_tools import build_code_review_prompt
-
                 diff = await task_git_service.get_task_all_changes(task)
                 if not diff.files:
                     plan_service.set_step_status(
-                        plan,
-                        step_number,
+                        step,
                         ImplementationStepStatus.COMPLETE,
                         "No changes to review — the task diff is empty.",
                     )
-                    plan_service.commit()
                     return json.dumps(
-                        {"result": "No changes to review — the task diff is empty.", "conversation_id": None}
+                        {
+                            "result": "No changes to review — the task diff is empty.",
+                            "conversation_id": None,
+                            "step_type": step.type,
+                        }
                     )
 
                 role = CodeReviewAgentRole(task=task)
-                prompt = build_code_review_prompt(diff, step.details or None)
+                additional_context = "\n\n".join(filter(None, [step.details or None, notes]))
+                prompt = build_code_review_prompt(diff=diff, additional_context=additional_context or None)
                 role_type = AgentRoleType.CODE_REVIEW
             else:
-                from devboard.agents.roles.step_execution import StepExecutionAgentRole
-
                 role = StepExecutionAgentRole(task=task, step=step)
-                prompt = step.details
+                prompt = f"## Step {step.step_number}: {step.title}\n\n{step.details}"
+                if notes:
+                    prompt += f"\n\n## Coordinator Notes\n\n{notes}"
                 role_type = AgentRoleType.STEP_EXECUTION
 
             sub_agent_result = await run_sub_agent(
@@ -295,28 +364,19 @@ def create_execute_implementation_step_tool(
                 parent_conversation_id=parent_conversation_id,
             )
 
-            # Update step status on success
-            plan_service.set_step_status(plan, step_number, ImplementationStepStatus.COMPLETE, sub_agent_result.result)
-            plan_service.commit()
+            plan_service.set_step_status(step, ImplementationStepStatus.COMPLETE, sub_agent_result.result)
 
             return json.dumps(
                 {
                     "result": sub_agent_result.result,
                     "conversation_id": sub_agent_result.conversation_id,
+                    "step_type": step.type,
                 }
             )
 
         except Exception as e:
-            # Update step status on failure
-            plan_service.set_step_status(plan, step_number, ImplementationStepStatus.FAILED, str(e))
-            plan_service.commit()
-
-            return json.dumps(
-                {
-                    "result": f"Step {step_number} failed: {e}",
-                    "conversation_id": None,
-                }
-            )
+            plan_service.set_step_status(step, ImplementationStepStatus.FAILED, str(e))
+            raise ModelRetry(f"Step {step_number} failed: {e}") from e
 
     return Tool(
         function=execute_implementation_step,

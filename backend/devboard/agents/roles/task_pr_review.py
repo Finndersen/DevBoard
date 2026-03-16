@@ -63,7 +63,7 @@ def format_pr_status(status: PRStatus) -> str:
 
 def build_task_pr_review_context(task: Task, pr_status_content: str = "") -> str:
     """Build context for PR review agent."""
-    return build_task_context(task, pr_status_content=pr_status_content)
+    return build_task_context(task, include_step_outcomes=True, pr_status_content=pr_status_content)
 
 
 class TaskPRReviewAgentRole(AgentRole):

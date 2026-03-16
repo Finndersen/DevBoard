@@ -21,12 +21,21 @@ export function useCodeReviewStatus(conversationId: number | null): { status: Co
       }
     }
 
-    // Find the latest successful review_code_changes tool result
+    // Find the latest successful review_code_changes or execute_implementation_step (code_review) tool result
     let latestReviewTimestamp: string | null = null
     for (const event of messages) {
       if (event.event_type === 'tool_result') {
         const toolResult = event as ToolResult
-        if (!toolResult.is_error && toolCallNames.get(toolResult.tool_call_id) === 'review_code_changes') {
+        const toolName = toolCallNames.get(toolResult.tool_call_id) ?? ''
+        const isDirectReview = toolName === 'review_code_changes'
+        const isStepReview = toolName === 'execute_implementation_step' && (() => {
+          try {
+            return JSON.parse(toolResult.result_content)?.step_type === 'code_review'
+          } catch {
+            return false
+          }
+        })()
+        if (!toolResult.is_error && (isDirectReview || isStepReview)) {
           if (latestReviewTimestamp === null || toolResult.timestamp > latestReviewTimestamp) {
             latestReviewTimestamp = toolResult.timestamp
           }

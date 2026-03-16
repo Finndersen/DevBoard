@@ -48,7 +48,7 @@ def create_document_edit_tool(
         # Commit changes so that new content can be retrieved before stream ends
         document_repo.commit()
 
-        return f"Edits applied successfully to {document.document_type}."
+        return f"Edits applied successfully to {document.document_type}. Your context will be dynamically updated to reflect these changes."
 
     return Tool(
         function=edit_document_tool,
@@ -95,7 +95,7 @@ def create_set_document_content_tool(
         # Commit changes so that new content can be retrieved before stream ends
         document_repo.commit()
 
-        return f"Content set successfully for {document.document_type}."
+        return f"Successfully set content for {document.document_type}. Your context will be dynamically updated to reflect these changes."
 
     # Determine approval requirement: use provided value or smart logic based on content
     if requires_approval is None:

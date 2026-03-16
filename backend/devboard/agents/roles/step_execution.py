@@ -10,7 +10,8 @@ from devboard.db.models.task import Task
 STEP_TYPE_PREAMBLES = {
     ImplementationStepType.CODE_CHANGE: (
         "You are implementing a specific code change as part of a larger implementation plan. "
-        "Focus on making the described changes cleanly and completely."
+        "Focus on making the described changes cleanly and completely. "
+        "Write tests for new functionality but do NOT run them — a later validation step handles that."
     ),
     ImplementationStepType.DOCUMENTATION: (
         "You are updating documentation as part of a larger implementation plan. Focus on accuracy and completeness."
@@ -52,7 +53,7 @@ class StepExecutionAgentRole(AgentRole):
         return []
 
     async def get_context_content(self) -> str:
-        return build_task_context(self.task, current_step_number=self.step.step_number)
+        return build_task_context(self.task, include_step_outcomes=True)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

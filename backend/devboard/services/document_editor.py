@@ -131,7 +131,3 @@ class DocumentEditorService:
         logfire.info("Edit applied", find_length=len(edit.old_string), replace_length=len(edit.new_string))
 
         return EditResult(success=True, content=new_content)
-
-
-# Global document editor service instance
-document_editor_service = DocumentEditorService()

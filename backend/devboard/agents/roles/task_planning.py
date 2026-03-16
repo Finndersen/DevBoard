@@ -10,7 +10,9 @@ from devboard.agents.tools import (
 from devboard.agents.tools.implementation_plan_tools import (
     create_add_implementation_step_tool,
     create_edit_implementation_plan_overview_tool,
+    create_edit_implementation_step_details_tool,
     create_edit_implementation_step_tool,
+    create_read_implementation_step_details_tool,
     create_remove_implementation_step_tool,
     create_set_implementation_plan_steps_tool,
 )
@@ -86,6 +88,9 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - Relevant test file paths or patterns to follow
 - Critical design details where non-obvious (field names/types, endpoint signatures, interfaces)
 - Key design decisions or tradeoffs
+
+**Reviewing Existing Steps:**
+When modifying an existing plan, use `read_implementation_step_details` to review the full details of existing steps before making changes. This ensures edits are informed by the current step content.
 
 **Step Details Should Exclude:**
 - Content already in the Task Specification
@@ -174,8 +179,10 @@ class TaskPlanningAgentRole(AgentRole):
                     [
                         create_add_implementation_step_tool(self.task, self.plan_service),
                         create_edit_implementation_step_tool(self.task, self.plan_service),
+                        create_edit_implementation_step_details_tool(self.task, self.plan_service),
                         create_remove_implementation_step_tool(self.task, self.plan_service),
                         create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
+                        create_read_implementation_step_details_tool(self.task, self.plan_service),
                     ]
                 )
         else:
@@ -222,16 +229,4 @@ class TaskPlanningAgentRole(AgentRole):
     @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role."""
-        return [
-            "WebFetch",
-            "WebSearch",
-            "Read",
-            "Skill",
-            "Bash",
-            "TaskCreate",
-            "TaskGet",
-            "TaskUpdate",
-            "TaskList",
-            "Task",
-            "Agent",
-        ]
+        return ["WebFetch", "WebSearch", "Read", "Skill", "Bash"]

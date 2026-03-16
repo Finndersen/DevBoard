@@ -64,8 +64,8 @@ class TaskRebaseCoordinator:
         cls, task: Task, git: GitRepoIntegration, repo_path: str, stash_message: str
     ) -> RebaseResult:
         """Start a new rebase operation."""
-        if await git.has_uncommitted_changes():
-            await git.stash_push(include_untracked=True, message=stash_message)
+        stash_ref = await git.stash_push(include_untracked=True, message=stash_message)
+        if stash_ref:
             logfire.info(f"Stashed uncommitted changes for task {task.id}")
 
         fork_point = await git.get_fork_point(task.base_branch, task.branch_name)

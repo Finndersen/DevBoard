@@ -3,6 +3,7 @@
 from collections import defaultdict
 from typing import Any
 
+from devboard.api.schemas.document import DocumentEdit
 from devboard.db.models.implementation_plan import (
     ImplementationPlan,
     ImplementationStep,
@@ -10,6 +11,11 @@ from devboard.db.models.implementation_plan import (
     ImplementationStepType,
 )
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
+from devboard.services.document_editor import DocumentEditorService
+
+
+class DependencyNotResolvedError(Exception):
+    """Raised when a step's dependencies have not been resolved."""
 
 
 class TaskImplementationPlanService:
@@ -113,18 +119,52 @@ class TaskImplementationPlanService:
 
     def set_step_status(
         self,
-        plan: ImplementationPlan,
-        step_number: int,
+        step: ImplementationStep,
         status: ImplementationStepStatus,
         outcome: str | None = None,
     ) -> ImplementationStep:
-        """Update a step's execution status and optional outcome."""
-        step = self.plan_repo.get_step_by_number(plan.id, step_number)
-        if not step:
-            raise ValueError(f"Step {step_number} not found")
+        """Update a step's execution status and optional outcome, then commit."""
         step.status = status
         if outcome is not None:
             step.outcome = outcome
+        self.plan_repo.update_step(step)
+        self.plan_repo.commit()
+        return step
+
+    def check_dependencies_resolved(self, plan: ImplementationPlan, step: ImplementationStep) -> None:
+        """Validate all dependency steps are complete or skipped.
+
+        Raises:
+            DependencyNotResolvedError: If any dependency is not resolved.
+        """
+        resolved_statuses = {ImplementationStepStatus.COMPLETE, ImplementationStepStatus.SKIPPED}
+        steps_by_number = {s.step_number: s for s in plan.steps}
+        for dep_num in step.dependencies or []:
+            dep_step = steps_by_number.get(dep_num)
+            if not dep_step or dep_step.status not in resolved_statuses:
+                dep_status = dep_step.status if dep_step else "not found"
+                raise DependencyNotResolvedError(
+                    f"Dependency step {dep_num} is not resolved (status: {dep_status}). "
+                    f"Cannot execute step {step.step_number} until all dependencies are complete or skipped."
+                )
+
+    def edit_step_details(
+        self,
+        plan: ImplementationPlan,
+        step_number: int,
+        edits: list[DocumentEdit],
+    ) -> ImplementationStep:
+        step = self.plan_repo.get_step_by_number(plan.id, step_number)
+        if not step:
+            raise ValueError(f"Step {step_number} not found")
+        if not step.details:
+            raise ValueError(f"Step {step_number} has no details to edit")
+
+        result = DocumentEditorService().apply_edits(step.details, edits)
+        if not result.success:
+            raise ValueError(f"Failed to apply edits: {'; '.join(result.errors)}")
+
+        step.details = result.content
         self.plan_repo.update_step(step)
         return step
 

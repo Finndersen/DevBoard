@@ -60,11 +60,17 @@ def _format_implementation_plan(task: Task) -> str:
     return _format_document_section("IMPLEMENTATION PLAN", content)
 
 
-def _format_implementation_plan_structured(task: Task, current_step_number: int | None = None) -> str:
+def _format_implementation_plan_structured(
+    task: Task,
+    *,
+    include_step_outcomes: bool = False,
+) -> str:
     """Format structured implementation plan with steps summary.
 
-    When current_step_number is provided (step execution context), shows full outcomes
-    and marks the current step. Otherwise truncates outcomes to 200 chars.
+    Args:
+        task: Task with structured implementation plan
+        include_step_outcomes: If True, include full step outcomes for completed steps.
+            If False (default), outcomes are omitted entirely.
     """
     plan = task.implementation_plan_structured
     if not plan:
@@ -78,14 +84,9 @@ def _format_implementation_plan_structured(task: Task, current_step_number: int 
     lines.append("\nSteps:")
     for step in plan.steps:
         deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
-        current_marker = " <<< CURRENT STEP" if step.step_number == current_step_number else ""
-        lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}{current_marker}")
-        if step.outcome:
-            if current_step_number is not None:
-                lines.append(f"     Outcome: {step.outcome}")
-            else:
-                outcome_preview = step.outcome[:200] + "..." if len(step.outcome) > 200 else step.outcome
-                lines.append(f"     Outcome: {outcome_preview}")
+        lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}")
+        if include_step_outcomes and step.outcome:
+            lines.append(f"     Outcome: {step.outcome}")
 
     return "\n".join(lines)
 
@@ -149,16 +150,16 @@ def build_task_context(
     task: Task,
     *,
     include_project_specification: bool = True,
+    include_step_outcomes: bool = False,
     pr_status_content: str = "",
-    current_step_number: int | None = None,
 ) -> str:
     """Build standardized task context for agent roles.
 
     Args:
         task: Task instance with eager-loaded relationships
         include_project_specification: Whether to include the full project specification document
+        include_step_outcomes: Whether to include full step outcomes in the structured plan
         pr_status_content: Formatted PR status string (for PR review role)
-        current_step_number: If provided, marks this step as current in the plan and shows full outcomes (for step execution sub-agents)
 
     Returns:
         Formatted context string with consistent structure.
@@ -177,7 +178,7 @@ def build_task_context(
 
     # Prefer structured plan, fall back to Document plan
     if task.implementation_plan_structured:
-        sections.append(_format_implementation_plan_structured(task, current_step_number=current_step_number))
+        sections.append(_format_implementation_plan_structured(task, include_step_outcomes=include_step_outcomes))
         execution_graph = build_execution_graph_context(task)
         if execution_graph:
             sections.append(execution_graph)

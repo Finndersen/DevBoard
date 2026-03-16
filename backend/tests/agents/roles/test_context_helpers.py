@@ -184,3 +184,85 @@ class TestBuildTaskContext:
         assert "PROJECT SPECIFICATION:" not in result
         assert "TASK SPECIFICATION:" in result
         assert "IMPLEMENTATION PLAN:" in result
+
+    def test_structured_plan_omits_outcomes_by_default(self, mock_task: MagicMock):
+        mock_task.implementation_plan = None
+
+        plan = MagicMock()
+        plan.overview = "Test overview"
+        step1 = MagicMock()
+        step1.step_number = 1
+        step1.status = "complete"
+        step1.title = "First step"
+        step1.type = "code_change"
+        step1.dependencies = []
+        step1.outcome = "Step 1 completed successfully"
+        step2 = MagicMock()
+        step2.step_number = 2
+        step2.status = "pending"
+        step2.title = "Second step"
+        step2.type = "validation"
+        step2.dependencies = [1]
+        step2.outcome = None
+        plan.steps = [step1, step2]
+        mock_task.implementation_plan_structured = plan
+
+        result = build_task_context(mock_task)
+
+        assert "First step" in result
+        assert "Second step" in result
+        assert "Step 1 completed successfully" not in result
+
+    def test_structured_plan_includes_outcomes_when_flag_set(self, mock_task: MagicMock):
+        mock_task.implementation_plan = None
+
+        plan = MagicMock()
+        plan.overview = "Test overview"
+        step1 = MagicMock()
+        step1.step_number = 1
+        step1.status = "complete"
+        step1.title = "First step"
+        step1.type = "code_change"
+        step1.dependencies = []
+        step1.outcome = "Step 1 completed successfully"
+        step2 = MagicMock()
+        step2.step_number = 2
+        step2.status = "pending"
+        step2.title = "Second step"
+        step2.type = "validation"
+        step2.dependencies = [1]
+        step2.outcome = None
+        plan.steps = [step1, step2]
+        mock_task.implementation_plan_structured = plan
+
+        result = build_task_context(mock_task, include_step_outcomes=True)
+
+        assert "First step" in result
+        assert "Second step" in result
+        assert "Step 1 completed successfully" in result
+
+    def test_structured_plan_no_current_step_marker(self, mock_task: MagicMock):
+        mock_task.implementation_plan = None
+
+        plan = MagicMock()
+        plan.overview = "Test overview"
+        step1 = MagicMock()
+        step1.step_number = 1
+        step1.status = "complete"
+        step1.title = "First step"
+        step1.type = "code_change"
+        step1.dependencies = []
+        step1.outcome = "Done"
+        step2 = MagicMock()
+        step2.step_number = 2
+        step2.status = "pending"
+        step2.title = "Second step"
+        step2.type = "validation"
+        step2.dependencies = [1]
+        step2.outcome = None
+        plan.steps = [step1, step2]
+        mock_task.implementation_plan_structured = plan
+
+        result = build_task_context(mock_task)
+
+        assert "CURRENT STEP" not in result

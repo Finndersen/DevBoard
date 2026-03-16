@@ -12,8 +12,11 @@ from devboard.agents.tools import (
     create_rebase_task_branch_tool,
     create_set_document_content_tool,
 )
-from devboard.agents.tools.implementation_plan_tools import create_execute_implementation_step_tool
-from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
+from devboard.agents.tools.implementation_plan_tools import (
+    create_execute_implementation_step_tool,
+    create_read_implementation_step_details_tool,
+)
+from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
@@ -74,9 +77,12 @@ _STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
 1. IMPLEMENT CODE CHANGES
    - Use the `execute_implementation_step` tool to execute each step — do NOT implement steps directly
      with Edit/Write tools. This ensures step statuses are tracked in the plan.
+   - Do NOT use `read_implementation_step_details` before executing steps — each step execution sub-agent
+     is automatically provided the full step details and all required context
    - Consult the EXECUTION GRAPH in the task context to identify which steps can run in parallel
    - Execute independent steps concurrently by calling `execute_implementation_step` for each in a
      single message (multiple tool calls); wait for dependencies to complete before proceeding
+   - If a step fails or gets stuck, you can retry it by calling `execute_implementation_step` again
    - Update the internal to-do list as each step completes
    - If a `docs/` directory is present, investigate and update appropriate documentation sections\
 """
@@ -164,15 +170,18 @@ class TaskImplementationAgentRole(AgentRole):
 
         # Implementation plan tools: structured plan or Document-based
         if has_structured_plan:
-            tools.append(
-                create_execute_implementation_step_tool(
-                    self.task,
-                    self.plan_service,
-                    self.agent_config_service,
-                    self.conversation_repo,
-                    self.conversation_id,
-                    self.task_git_service,
-                )
+            tools.extend(
+                [
+                    create_execute_implementation_step_tool(
+                        self.task,
+                        self.plan_service,
+                        self.agent_config_service,
+                        self.conversation_repo,
+                        self.conversation_id,
+                        self.task_git_service,
+                    ),
+                    create_read_implementation_step_details_tool(self.task, self.plan_service),
+                ]
             )
         elif has_document_plan and self.task.implementation_plan is not None:
             tools.extend(
@@ -193,13 +202,6 @@ class TaskImplementationAgentRole(AgentRole):
                 create_task_codebase_investigation_tool(
                     self.task,
                     self.agent_config_service,
-                    conversation_repo=self.conversation_repo,
-                    parent_conversation_id=self.conversation_id,
-                ),
-                create_code_review_tool(
-                    self.task,
-                    self.agent_config_service,
-                    self.task_git_service,
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
                 ),

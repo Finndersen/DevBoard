@@ -122,4 +122,4 @@ class CodeReviewAgentRole(AgentRole):
         return ["Bash"]
 
     async def get_context_content(self) -> str:
-        return build_task_context(self._task)
+        return build_task_context(self._task, include_step_outcomes=True)

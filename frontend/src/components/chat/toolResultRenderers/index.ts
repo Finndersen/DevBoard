@@ -35,7 +35,7 @@ export type RichResultRenderer = ComponentType<RichResultRendererProps>
 const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
   investigate_codebase: SubAgentResultRenderer,
-  review_code_changes: SubAgentResultRenderer,
+  execute_implementation_step: SubAgentResultRenderer,
 }
 
 /**
