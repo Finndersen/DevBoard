@@ -91,7 +91,11 @@ async def get_conversation_messages(
     return await history_service.get_conversation_messages()
 
 
-def _start_agent_execution(conversation: Conversation, message_or_approvals: str | ToolApprovals) -> dict[str, int]:
+def _start_agent_execution(
+    conversation: Conversation,
+    message_or_approvals: str | ToolApprovals,
+    conversation_repo: ConversationRepository,
+) -> dict[str, int]:
     """Validate conversation state and start a background agent execution.
 
     Returns:
@@ -104,6 +108,10 @@ def _start_agent_execution(conversation: Conversation, message_or_approvals: str
     conversation_parent = conversation.get_parent_entity()
     if isinstance(conversation_parent, Task) and conversation_parent.status == TaskStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Cannot send messages for completed tasks")
+
+    # Touch last_activity_at now so the conversation list is correctly ordered
+    # as soon as this request completes, before the background task starts.
+    conversation_repo.update_last_activity(conversation)
 
     cid = conversation.id
     try:
@@ -123,6 +131,7 @@ def _start_agent_execution(conversation: Conversation, message_or_approvals: str
 async def send_conversation_message(
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> dict[str, int]:
     """Send a message and start a background agent execution.
 
@@ -135,13 +144,14 @@ async def send_conversation_message(
     Raises:
         HTTPException 409: If an execution is already active
     """
-    return _start_agent_execution(conversation, request.message)
+    return _start_agent_execution(conversation, request.message, conversation_repo)
 
 
 @router.post("/{conversation_id}/approve-tools")
 async def approve_conversation_tools(
     request: ToolApprovals,
     conversation: Conversation = Depends(get_verified_conversation),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> dict[str, int]:
     """Submit tool approvals and resume background agent execution.
 
@@ -154,7 +164,7 @@ async def approve_conversation_tools(
     Raises:
         HTTPException 409: If an execution is already active
     """
-    return _start_agent_execution(conversation, request)
+    return _start_agent_execution(conversation, request, conversation_repo)
 
 
 @router.post("/{conversation_id}/interrupt")

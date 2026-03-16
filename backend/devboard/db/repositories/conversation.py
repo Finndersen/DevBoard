@@ -130,13 +130,7 @@ class ConversationRepository(BaseRepository[Conversation]):
 
         return conversation
 
-    def touch(self, conversation: Conversation) -> None:
-        """Update last_activity_at to now.
-
-        Called at the start of every agent execution so that the conversation
-        rises to the top of the list even for engines (e.g. Claude Code) that
-        don't persist messages through create_message().
-        """
+    def update_last_activity(self, conversation: Conversation) -> None:
         conversation.last_activity_at = datetime.datetime.now(datetime.UTC)
         self.db.flush()
 

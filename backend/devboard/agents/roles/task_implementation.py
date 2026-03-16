@@ -36,6 +36,9 @@ AVAILABLE CAPABILITIES:
 3. INVESTIGATION: Read files, search code, run bash commands for testing/verification
    - Use `investigate_codebase` for questions requiring multi-step, multi-file investigation (e.g. understanding patterns, architecture, finding where related functionality lives). Do NOT use it to read a specific known file — use the `Read` tool directly instead.
 4. BUILTIN TOOLS: Custom task management tools (e.g. complete_task_with_local_merge, create_pull_request, merge_pr_and_complete_task, rebase_task_branch) are available (possibly with the `mcp__builtin_tools__` prefix).
+5. SUB-AGENTS (Agent tool): Launch sub-agents for broad implementation steps that span multiple files.
+   Each sub-agent should handle an entire implementation step, not a sub-step.
+   Do NOT use sub-agents for small-scoped or single-file changes — make those edits directly.
 
 WORKFLOW:
 - Review the implementation plan and understand requirements
@@ -45,9 +48,15 @@ WORKFLOW:
 Then execute in order:
 
 1. IMPLEMENT CODE CHANGES
-   - Work through the implementation plan step by step, launching sub-agents (via the `Agent` tool) to implement each step where possible
-   - Update the internal to-do list as progress is made
-   - If a `docs/` directory is present, investigate and update appropriate documentation sections to reflect new changes, adding or updating any missing or incorrect documentation
+   - Break the implementation plan into discrete, independently executable steps
+   - Make edits directly using Edit/Write tools by default
+   - Use the `Agent` tool to launch sub-agents only for implementation steps that are broad enough to
+     warrant delegation — i.e. multi-file edits across different areas of the codebase, or parallel
+     independent steps (e.g. implementing a feature and writing its tests simultaneously)
+   - Do NOT break a single implementation step into sub-steps for sub-agents — delegate the whole step or do it directly
+   - Update the internal to-do list as each step completes
+   - If a `docs/` directory is present, investigate and update appropriate documentation sections,
+     adding or updating any missing or incorrect documentation
 
 2. CODE REVIEW
    - For non-trivial changes, call `review_code_changes()` to perform a self-review before finalisation. You can optionally provide a `context` message to give the reviewer additional information — e.g. explaining why changes diverge from the specification or implementation plan, known limitations, or areas to focus on.
@@ -59,6 +68,8 @@ Then execute in order:
    - Confirm everything works as expected before finalising
 
 IMPORTANT BEHAVIOUR GUIDELINES:
+- Default to making edits directly; only use sub-agents for implementation steps with broad, multi-file scope
+  or for parallelising independent steps
 - When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
 - If the user asks a question about the implementation, investigate and respond with a helpful answer and proposed changes, but DO NOT apply any changes until confirmed by the user.
 - Use the Edit tool for existing files, Write tool for new files
@@ -66,11 +77,6 @@ IMPORTANT BEHAVIOUR GUIDELINES:
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
 - When creating commits, DO NOT add Claude Code attribution messages
 """
-
-
-def build_task_implementation_context(task: Task) -> str:
-    """Build context for task implementation agent."""
-    return build_task_context(task)
 
 
 class TaskImplementationAgentRole(AgentRole):
@@ -162,7 +168,7 @@ class TaskImplementationAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, specification, and implementation plan
         """
-        return build_task_implementation_context(self.task)
+        return build_task_context(self.task)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
