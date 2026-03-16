@@ -94,7 +94,7 @@ class TaskImplementationAgentRole(AgentRole):
         github_integration: GitHubIntegration,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
-        plan_service: TaskImplementationPlanService | None = None,
+        plan_service: TaskImplementationPlanService,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -127,7 +127,7 @@ class TaskImplementationAgentRole(AgentRole):
         ]
 
         # Implementation plan tools: structured plan or Document-based
-        if has_structured_plan and self.plan_service:
+        if has_structured_plan:
             tools.append(
                 create_execute_implementation_step_tool(
                     self.task,
