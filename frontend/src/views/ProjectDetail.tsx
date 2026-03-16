@@ -11,7 +11,7 @@ import { apiClient } from '../lib/api'
 import type { Codebase, CustomFieldDefinition } from '../lib/api'
 import { useModal, useEditableField, useProject, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
 import { useCodebases } from '../hooks/useCodebases'
-import { useTabTitle } from '../hooks/useTabTitle'
+import { useViewTitle } from '../hooks/useViewTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
@@ -30,7 +30,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const { addNotification } = useNotificationStore()
 
   // Update tab title when project data is loaded
-  useTabTitle('project', id)
+  useViewTitle('project', id)
 
   // Fetch data using hooks
   const { data: project, loading: projectLoading, refetch: refetchProject, setData: setProject } = useProject(id!)

@@ -9,10 +9,10 @@ import {
 import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useUIStore } from '../../stores/uiStore'
-import type { TabType } from '../../stores/uiStore'
+import type { ViewType } from '../../stores/uiStore'
 import type { ConversationListItem } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
-import { useTabStreamStatus } from '../../hooks/useTabStreamStatus'
+import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',
@@ -77,7 +77,17 @@ function getEntityIcon(entityType: string) {
 
 export default function ConversationsPanel() {
   const { data: conversations, loading, error } = useConversations()
-  const openTab = useUIStore(s => s.openTab)
+  const navigateTo = useUIStore(s => s.navigateTo)
+  const activeViewId = useUIStore(s => s.activeViewId)
+  const cachedViews = useUIStore(s => s.cachedViews)
+  // Subscribe only to which entities have drafts (not content) to avoid re-renders on every keystroke
+  const draftKeysStr = useUIStore(
+    useCallback((s) => Object.keys(s.draftMessages).sort().join(','), [])
+  )
+  const draftKeys = useMemo(
+    () => new Set(draftKeysStr ? draftKeysStr.split(',') : []),
+    [draftKeysStr]
+  )
 
   // Return a stable primitive string from the selector — useSyncExternalStore requires
   // getSnapshot to return a cached reference, so returning a new Set on every call causes
@@ -95,6 +105,15 @@ export default function ConversationsPanel() {
     () => new Set(streamingIdsStr ? streamingIdsStr.split(',').map(Number) : []),
     [streamingIdsStr]
   )
+
+  const displayConversations = useMemo(() => {
+    if (!conversations) return null
+    return [...conversations].sort((a, b) => {
+      const aStreaming = streamingConversationIds.has(a.id) ? 1 : 0
+      const bStreaming = streamingConversationIds.has(b.id) ? 1 : 0
+      return bStreaming - aStreaming
+    })
+  }, [conversations, streamingConversationIds])
 
   // Track "needs attention" conversations (previously streaming, now completed)
   const [needsAttentionIds, setNeedsAttentionIds] = useState<Set<number>>(new Set())
@@ -141,13 +160,15 @@ export default function ConversationsPanel() {
     prevStreamingIdsRef.current = new Set(streamingConversationIds)
   }, [streamingConversationIds])
 
-  // Sync tab activity status from stream store
-  useTabStreamStatus(conversations)
+  // Sync view activity status from stream store
+  useViewStreamStatus(conversations)
+
+  const activeView = cachedViews.find(v => v.id === activeViewId)
 
   const handleClick = (item: ConversationListItem) => {
-    const tabType = item.parent_entity_type.toLowerCase() as TabType
-    openTab({
-      type: tabType,
+    const viewType = item.parent_entity_type.toLowerCase() as ViewType
+    navigateTo({
+      type: viewType,
       entityId: String(item.parent_entity_id),
       title: item.parent_entity_name,
     })
@@ -189,7 +210,7 @@ export default function ConversationsPanel() {
 
         {conversations && conversations.length > 0 && (
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-            {conversations.map(item => {
+            {displayConversations!.map(item => {
               const EntityIcon = getEntityIcon(item.parent_entity_type)
               const isActive = streamingConversationIds.has(item.id)
               const needsAttention = needsAttentionIds.has(item.id)
@@ -197,23 +218,37 @@ export default function ConversationsPanel() {
               const roleLabel = AGENT_ROLE_LABELS[item.agent_role] ?? item.agent_role
               const roleColor = getAgentRoleColor(item.agent_role)
               const timestamp = item.last_activity_at ?? item.created_at
+              const isSelected = !!(
+                activeView &&
+                item.parent_entity_type.toLowerCase() === activeView.type &&
+                String(item.parent_entity_id) === activeView.entityId
+              )
+              const hasDraft = draftKeys.has(`${item.parent_entity_type.toLowerCase()}:${item.parent_entity_id}`)
+
+              let borderStyle: string
+              if (needsAttention) {
+                borderStyle = 'border-l-2 border-l-blue-500 bg-blue-50/50 dark:bg-blue-900/10'
+              } else if (isSelected) {
+                borderStyle = 'border-l-2 border-l-gray-400 dark:border-l-gray-500 bg-gray-100 dark:bg-gray-700/70'
+              } else {
+                borderStyle = 'border-l-2 border-l-transparent'
+              }
 
               return (
                 <button
                   key={item.id}
                   onClick={() => handleClick(item)}
-                  className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
-                    needsAttention
-                      ? 'border-l-2 border-l-blue-500 bg-blue-50/50 dark:bg-blue-900/10'
-                      : 'border-l-2 border-l-transparent'
-                  } ${isPulsing ? 'animate-attention-pulse' : ''}`}
+                  className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${borderStyle} ${isPulsing ? 'animate-attention-pulse' : ''}`}
                 >
-                  {/* Row 1: Icon + name + activity dot */}
+                  {/* Row 1: Icon + name + draft indicator + activity dot */}
                   <div className="flex items-center gap-2 min-w-0">
                     <EntityIcon className={`w-4 h-4 shrink-0 ${textColors.secondary}`} />
                     <span className={`text-sm truncate flex-1 ${textColors.primary}`}>
                       {item.parent_entity_name}
                     </span>
+                    {hasDraft && (
+                      <span className="shrink-0 text-xs" title="Has draft">✏️</span>
+                    )}
                     {isActive && (
                       <span className="relative flex h-2 w-2 shrink-0">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />

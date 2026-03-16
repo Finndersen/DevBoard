@@ -1,25 +1,25 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useUIStore } from '../stores/uiStore'
-import type { TabType } from '../stores/uiStore'
+import type { ViewType } from '../stores/uiStore'
 
 /**
- * Hook to synchronize URL with tab state
- * - On URL change: Opens/switches to appropriate tab
- * - On tab switch: Updates URL
+ * Hook to synchronize URL with view state
+ * - On URL change: Opens/switches to appropriate view
+ * - On view switch: Updates URL
  */
 export function useURLSync() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { openTab, switchTab, getActiveTab, findTabByEntity } = useUIStore()
-  const activeTabId = useUIStore(state => state.activeTabId)
+  const { navigateTo, switchTab, getActiveView, findViewByEntity } = useUIStore()
+  const activeViewId = useUIStore(state => state.activeViewId)
   const shouldPushHistory = useUIStore(state => state.shouldPushHistory)
 
   // Track if we initiated the navigation to avoid pushing duplicate history entries
   const isNavigatingRef = useRef(false)
 
-  // Parse URL to determine tab type and entity ID
-  const parseURL = (pathname: string): { type: TabType; entityId: string; title: string } | null => {
+  // Parse URL to determine view type and entity ID
+  const parseURL = (pathname: string): { type: ViewType; entityId: string; title: string } | null => {
     // Home
     if (pathname === '/') {
       return { type: 'home', entityId: 'main', title: 'Home' }
@@ -72,7 +72,7 @@ export function useURLSync() {
     return null
   }
 
-  // Sync URL to tabs (URL changed -> open/switch tab)
+  // Sync URL to views (URL changed -> open/switch view)
   useEffect(() => {
     // Skip if we initiated this navigation
     if (isNavigatingRef.current) {
@@ -80,31 +80,31 @@ export function useURLSync() {
       return
     }
 
-    const tabInfo = parseURL(location.pathname)
-    if (!tabInfo) return
+    const viewInfo = parseURL(location.pathname)
+    if (!viewInfo) return
 
-    // Check if tab already exists
-    const existingTab = findTabByEntity(tabInfo.type, tabInfo.entityId)
-    if (existingTab) {
-      // Switch to existing tab if not already active
+    // Check if view already exists
+    const existingView = findViewByEntity(viewInfo.type, viewInfo.entityId)
+    if (existingView) {
+      // Switch to existing view if not already active
       // Pass fromUrlSync=true to avoid setting shouldPushHistory (URL already changed)
-      switchTab(existingTab.id, { fromUrlSync: true })
+      switchTab(existingView.id, { fromUrlSync: true })
     } else {
-      // Open new tab
+      // Open new view
       // Pass fromUrlSync=true to avoid setting shouldPushHistory (URL already changed)
-      openTab(tabInfo, { fromUrlSync: true })
+      navigateTo(viewInfo, { fromUrlSync: true })
     }
-  }, [location.pathname, openTab, switchTab, findTabByEntity])
+  }, [location.pathname, navigateTo, switchTab, findViewByEntity])
 
-  // Sync tabs to URL (active tab changed -> update URL)
+  // Sync views to URL (active view changed -> update URL)
   useEffect(() => {
-    const activeTab = getActiveTab()
-    if (!activeTab) return
+    const activeView = getActiveView()
+    if (!activeView) return
 
-    // Generate URL from active tab (base path only, ignore query params)
+    // Generate URL from active view (base path only, ignore query params)
     let targetPath = '/'
 
-    switch (activeTab.type) {
+    switch (activeView.type) {
       case 'home':
         targetPath = '/'
         break
@@ -118,13 +118,13 @@ export function useURLSync() {
         targetPath = '/codebases'
         break
       case 'project':
-        targetPath = `/projects/${activeTab.entityId}`
+        targetPath = `/projects/${activeView.entityId}`
         break
       case 'task':
-        targetPath = `/tasks/${activeTab.entityId}`
+        targetPath = `/tasks/${activeView.entityId}`
         break
       case 'codebase':
-        targetPath = `/codebases/${activeTab.entityId}`
+        targetPath = `/codebases/${activeView.entityId}`
         break
       case 'settings':
         targetPath = '/settings'
@@ -144,10 +144,10 @@ export function useURLSync() {
       isNavigatingRef.current = true
 
       // Determine if we should push or replace:
-      // - Push for new tabs (shouldPushHistory = true) to create history entries
-      // - Replace when already on the same tab (shouldPushHistory = false) to avoid duplicates
-      // Use the flag from the store which is set by openTab/switchTab
+      // - Push for new views (shouldPushHistory = true) to create history entries
+      // - Replace when already on the same view (shouldPushHistory = false) to avoid duplicates
+      // Use the flag from the store which is set by navigateTo/switchTab
       navigate(targetPath, { replace: !shouldPushHistory })
     }
-  }, [activeTabId, location.pathname, navigate, getActiveTab, shouldPushHistory])
+  }, [activeViewId, location.pathname, navigate, getActiveView, shouldPushHistory])
 }

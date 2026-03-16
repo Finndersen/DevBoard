@@ -1,22 +1,25 @@
-import type { ReactNode } from 'react'
-import TabBar from './TabBar'
 import NavigationMenu from './NavigationMenu'
+import ViewContainer from './ViewContainer'
 import NotificationsPanel from '../notifications/NotificationsPanel'
 import GitHubPRDropdown from '../github/GitHubPRDropdown'
 import ConversationsPanel from '../conversations/ConversationsPanel'
 import CreateTaskModal from '../modals/CreateTaskModal'
 import { useUIStore } from '../../stores/uiStore'
 import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
+import { useURLSync } from '../../hooks/useURLSync'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 
-interface AppShellProps {
-  children: ReactNode
-}
-
-export default function AppShell({ children }: AppShellProps) {
+export default function AppShell() {
   const { createTaskModalOpen, closeCreateTaskModal } = useUIStore()
 
   // Bootstrap active streams on app startup
   useStreamBootstrap()
+
+  // Synchronize URL with view state
+  useURLSync()
+
+  // Enable global keyboard shortcuts
+  useKeyboardShortcuts()
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-row">
@@ -35,14 +38,9 @@ export default function AppShell({ children }: AppShellProps) {
           <NotificationsPanel />
         </div>
 
-        {/* Tab bar row */}
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-          <TabBar />
-        </div>
-
         {/* Main Content */}
         <main className="flex-1 min-w-0 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
-          {children}
+          <ViewContainer />
         </main>
       </div>
       {createTaskModalOpen && (

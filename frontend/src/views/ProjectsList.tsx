@@ -12,7 +12,7 @@ import { CustomFieldInputs } from '../components/common/CustomFieldInputs'
 
 export default function ProjectsList() {
   const navigate = useNavigate()
-  const { openTab } = useUIStore()
+  const { navigateTo } = useUIStore()
 
   const { data: projects, loading, error, refetch } = useProjects()
   const { mutate: createProject, loading: creatingProject } = useCreateProject()
@@ -56,7 +56,7 @@ export default function ProjectsList() {
   }, [customFieldDefinitions, customFieldValues])
 
   const handleOpenProject = (project: Project) => {
-    openTab({
+    navigateTo({
       type: 'project',
       entityId: String(project.id),
       title: project.name

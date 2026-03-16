@@ -10,7 +10,7 @@ import { loadingSpinner } from '../styles/designSystem'
 import ViewHeader from '../components/layout/ViewHeader'
 
 export default function CodebasesList() {
-  const { openTab } = useUIStore()
+  const { navigateTo } = useUIStore()
   const { fetchCodebases } = useDataStore()
 
   const { data: codebases, loading, error, refetch } = useCodebases()
@@ -22,7 +22,7 @@ export default function CodebasesList() {
   }, [fetchCodebases])
 
   const handleOpenCodebase = (codebase: Codebase) => {
-    openTab({
+    navigateTo({
       type: 'codebase',
       entityId: String(codebase.id),
       title: codebase.name

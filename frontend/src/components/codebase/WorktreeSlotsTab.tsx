@@ -10,7 +10,7 @@ interface WorktreeSlotsTabProps {
 }
 
 export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) {
-  const { openTab } = useUIStore()
+  const { navigateTo } = useUIStore()
   const [poolStatus, setPoolStatus] = useState<WorktreePoolStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -134,7 +134,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                 <span className={`shrink-0 ${textColors.secondary}`}>Locked by:</span>
                 <button
                   className="text-orange-600 dark:text-orange-400 hover:underline truncate min-w-0 text-left"
-                  onClick={() => openTab({ type: 'task', entityId: String(slot.locked_by_task!.id), title: slot.locked_by_task!.title })}
+                  onClick={() => navigateTo({ type: 'task', entityId: String(slot.locked_by_task!.id), title: slot.locked_by_task!.title })}
                 >
                   Task {slot.locked_by_task.id}: {slot.locked_by_task.title}
                 </button>
@@ -146,7 +146,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                 <span className={`shrink-0 ${textColors.secondary}`}>Last active task:</span>
                 <button
                   className="text-blue-600 dark:text-blue-400 hover:underline truncate min-w-0 text-left"
-                  onClick={() => openTab({ type: 'task', entityId: String(slot.last_used_by_task!.id), title: slot.last_used_by_task!.title })}
+                  onClick={() => navigateTo({ type: 'task', entityId: String(slot.last_used_by_task!.id), title: slot.last_used_by_task!.title })}
                 >
                   Task {slot.last_used_by_task.id}: {slot.last_used_by_task.title}
                 </button>

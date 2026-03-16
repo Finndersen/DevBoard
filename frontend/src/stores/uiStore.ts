@@ -1,12 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import { enableMapSet } from 'immer'
 
-// Enable Immer's MapSet plugin for Set and Map support
-enableMapSet()
-
-export type TabType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'claude-code' | 'tasks-list' | 'projects-list' | 'codebases-list'
+export type ViewType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'claude-code' | 'tasks-list' | 'projects-list' | 'codebases-list'
 
 export type ActivityStatus =
   | { type: 'idle' }
@@ -14,34 +10,34 @@ export type ActivityStatus =
   | { type: 'agent_working' }
   | { type: 'action_required' }
 
-export interface TabState {
-  id: string // Unique tab instance ID (UUID)
-  type: TabType
-  entityId: string // ID of entity being displayed (or special values like 'main' for home)
+export interface CachedViewState {
+  id: string
+  type: ViewType
+  entityId: string
   title: string
   activityStatus: ActivityStatus
-  hasUnsavedChanges: boolean
+  hasDraft: boolean
   lastActivity: Date
 }
 
+const MAX_CACHED_VIEWS = 12
+
 interface UIState {
-  tabs: TabState[]
-  activeTabId: string | null
+  cachedViews: CachedViewState[]
+  activeViewId: string | null
   navigationCompactMode: boolean
-  conversationsVersion: number // Incremented to trigger conversation list refresh
-  visitedTabs: Set<string> // Track which tabs have been mounted (session-only, not persisted)
-  shouldPushHistory: boolean // Track if next navigation should push to history (session-only, not persisted)
+  conversationsVersion: number
+  draftMessages: Record<string, string>
+  shouldPushHistory: boolean
   createTaskModalOpen: boolean
 }
 
 interface UIActions {
-  // Tab management
-  openTab: (tabData: Omit<TabState, 'id' | 'activityStatus' | 'hasUnsavedChanges' | 'lastActivity'>, options?: { fromUrlSync?: boolean }) => string
-  closeTab: (tabId: string) => void
-  switchTab: (tabId: string, options?: { fromUrlSync?: boolean }) => void
-  updateTab: (tabId: string, updates: Partial<Omit<TabState, 'id'>>) => void
-  reorderTabs: (fromIndex: number, toIndex: number) => void
-  markTabVisited: (tabId: string) => void
+  // View cache management
+  navigateTo: (viewData: Omit<CachedViewState, 'id' | 'activityStatus' | 'hasDraft' | 'lastActivity'>, options?: { fromUrlSync?: boolean }) => string
+  evictView: (viewId: string) => void
+  switchTab: (viewId: string, options?: { fromUrlSync?: boolean }) => void
+  updateView: (viewId: string, updates: Partial<Omit<CachedViewState, 'id'>>) => void
 
   // Navigation menu
   setNavigationCompactMode: (compact: boolean) => void
@@ -55,145 +51,140 @@ interface UIActions {
   closeCreateTaskModal: () => void
 
   // Activity status updates
-  setTabActivityStatus: (tabId: string, status: ActivityStatus) => void
-  setTabUnsavedChanges: (tabId: string, hasChanges: boolean) => void
-  updateTabActivity: (tabId: string) => void
+  setViewActivityStatus: (viewId: string, status: ActivityStatus) => void
+  updateViewActivity: (viewId: string) => void
+
+  // Draft messages
+  setDraftMessage: (viewType: ViewType, entityId: string, text: string) => void
+  getDraftMessage: (viewType: ViewType, entityId: string) => string
+  clearDraftMessage: (viewType: ViewType, entityId: string) => void
 
   // Utilities
-  findTabByEntity: (type: TabType, entityId: string) => TabState | undefined
-  getActiveTab: () => TabState | undefined
+  findViewByEntity: (type: ViewType, entityId: string) => CachedViewState | undefined
+  getActiveView: () => CachedViewState | undefined
 }
 
 type UIStore = UIState & UIActions
 
 const STORAGE_KEY = 'devboard-ui-state'
 
+function draftKey(viewType: ViewType, entityId: string): string {
+  return `${viewType}:${entityId}`
+}
+
 export const useUIStore = create<UIStore>()(
   persist(
     immer((set, get) => ({
       // Initial state
-      tabs: [],
-      activeTabId: null,
+      cachedViews: [],
+      activeViewId: null,
       navigationCompactMode: false,
       conversationsVersion: 0,
-      visitedTabs: new Set<string>(),
+      draftMessages: {},
       shouldPushHistory: false,
       createTaskModalOpen: false,
 
-      // Tab management actions
-      openTab: (tabData, options = {}) => {
+      // View cache management actions
+      navigateTo: (viewData, options = {}) => {
         const state = get()
 
-        // Check if tab already exists for this entity
-        const existingTab = state.findTabByEntity(tabData.type, tabData.entityId)
-        if (existingTab) {
-          // Switch to existing tab instead of creating duplicate
+        // Check if view already exists for this entity
+        const existingView = state.findViewByEntity(viewData.type, viewData.entityId)
+        if (existingView) {
+          // Switch to existing view instead of creating duplicate
           set((draft) => {
-            const wasActive = draft.activeTabId === existingTab.id
-            draft.activeTabId = existingTab.id
-            draft.visitedTabs.add(existingTab.id)
-            // Only set shouldPushHistory if not from URL sync
+            const wasActive = draft.activeViewId === existingView.id
+            draft.activeViewId = existingView.id
             if (!options.fromUrlSync) {
-              // Push to history if switching FROM a different tab (not already active)
-              // Replace if already on this tab (just updating URL, e.g., query params)
               draft.shouldPushHistory = !wasActive
             }
-            const tab = draft.tabs.find(t => t.id === existingTab.id)
-            if (tab) {
-              tab.lastActivity = new Date()
+            const view = draft.cachedViews.find(v => v.id === existingView.id)
+            if (view) {
+              view.lastActivity = new Date()
             }
           })
-          return existingTab.id
+          return existingView.id
         }
 
-        // Create new tab
-        const newTabId = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        const newTab: TabState = {
-          ...tabData,
-          id: newTabId,
+        // Create new view
+        const newViewId = `view-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        const key = draftKey(viewData.type, viewData.entityId)
+        const newView: CachedViewState = {
+          ...viewData,
+          id: newViewId,
           activityStatus: { type: 'idle' },
-          hasUnsavedChanges: false,
+          hasDraft: !!state.draftMessages[key],
           lastActivity: new Date()
         }
 
         set((draft) => {
-          draft.tabs.push(newTab)
-          draft.activeTabId = newTabId
-          draft.visitedTabs.add(newTabId)
-          // Only set shouldPushHistory if not from URL sync (which means URL already changed)
+          // LRU eviction: if cache is full, evict least recently used non-draft entry
+          if (draft.cachedViews.length >= MAX_CACHED_VIEWS) {
+            const candidates = draft.cachedViews
+              .filter(v => !v.hasDraft && v.id !== draft.activeViewId)
+              .sort((a, b) => new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime())
+
+            if (candidates.length > 0) {
+              const evictIdx = draft.cachedViews.findIndex(v => v.id === candidates[0].id)
+              if (evictIdx !== -1) {
+                draft.cachedViews.splice(evictIdx, 1)
+              }
+            }
+            // If all entries are draft-pinned, allow cache to exceed max size
+          }
+
+          draft.cachedViews.push(newView)
+          draft.activeViewId = newViewId
           if (!options.fromUrlSync) {
-            draft.shouldPushHistory = true // Push to history when opening new tab
+            draft.shouldPushHistory = true
           }
         })
 
-        return newTabId
+        return newViewId
       },
 
-      closeTab: (tabId) => {
+      evictView: (viewId) => {
         set((draft) => {
-          const tabIndex = draft.tabs.findIndex(t => t.id === tabId)
-          if (tabIndex === -1) return
+          const viewIndex = draft.cachedViews.findIndex(v => v.id === viewId)
+          if (viewIndex === -1) return
 
-          // Remove the tab
-          draft.tabs.splice(tabIndex, 1)
-          draft.visitedTabs.delete(tabId)
+          draft.cachedViews.splice(viewIndex, 1)
 
-          // Update active tab if necessary
-          if (draft.activeTabId === tabId) {
-            if (draft.tabs.length === 0) {
-              draft.activeTabId = null
+          if (draft.activeViewId === viewId) {
+            if (draft.cachedViews.length === 0) {
+              draft.activeViewId = null
             } else {
-              // When switching to another tab after close, use replace (not push)
               draft.shouldPushHistory = false
-              if (tabIndex >= draft.tabs.length) {
-                // Select previous tab
-                draft.activeTabId = draft.tabs[draft.tabs.length - 1].id
+              if (viewIndex >= draft.cachedViews.length) {
+                draft.activeViewId = draft.cachedViews[draft.cachedViews.length - 1].id
               } else {
-                // Select next tab
-                draft.activeTabId = draft.tabs[tabIndex].id
+                draft.activeViewId = draft.cachedViews[viewIndex].id
               }
             }
           }
         })
       },
 
-      switchTab: (tabId, options = {}) => {
+      switchTab: (viewId, options = {}) => {
         set((draft) => {
-          const tab = draft.tabs.find(t => t.id === tabId)
-          if (tab) {
-            const wasActive = draft.activeTabId === tabId
-            draft.activeTabId = tabId
-            draft.visitedTabs.add(tabId)
-            // Only set shouldPushHistory if not from URL sync (which means URL already changed)
+          const view = draft.cachedViews.find(v => v.id === viewId)
+          if (view) {
+            const wasActive = draft.activeViewId === viewId
+            draft.activeViewId = viewId
             if (!options.fromUrlSync) {
-              // Push to history if switching FROM a different tab (not already active)
-              // Replace if already on this tab (shouldn't happen, but handle it)
               draft.shouldPushHistory = !wasActive
             }
-            tab.lastActivity = new Date()
+            view.lastActivity = new Date()
           }
         })
       },
 
-      updateTab: (tabId, updates) => {
+      updateView: (viewId, updates) => {
         set((draft) => {
-          const tab = draft.tabs.find(t => t.id === tabId)
-          if (tab) {
-            Object.assign(tab, updates)
+          const view = draft.cachedViews.find(v => v.id === viewId)
+          if (view) {
+            Object.assign(view, updates)
           }
-        })
-      },
-
-      reorderTabs: (fromIndex, toIndex) => {
-        set((draft) => {
-          const [movedTab] = draft.tabs.splice(fromIndex, 1)
-          draft.tabs.splice(toIndex, 0, movedTab)
-        })
-      },
-
-      markTabVisited: (tabId) => {
-        set((draft) => {
-          draft.visitedTabs.add(tabId)
         })
       },
 
@@ -229,51 +220,83 @@ export const useUIStore = create<UIStore>()(
       },
 
       // Activity status
-      setTabActivityStatus: (tabId, status) => {
+      setViewActivityStatus: (viewId, status) => {
         set((draft) => {
-          const tab = draft.tabs.find(t => t.id === tabId)
-          if (tab) {
-            tab.activityStatus = status
-            tab.lastActivity = new Date()
+          const view = draft.cachedViews.find(v => v.id === viewId)
+          if (view) {
+            view.activityStatus = status
+            view.lastActivity = new Date()
           }
         })
       },
 
-      setTabUnsavedChanges: (tabId, hasChanges) => {
+      updateViewActivity: (viewId) => {
         set((draft) => {
-          const tab = draft.tabs.find(t => t.id === tabId)
-          if (tab) {
-            tab.hasUnsavedChanges = hasChanges
+          const view = draft.cachedViews.find(v => v.id === viewId)
+          if (view) {
+            view.lastActivity = new Date()
           }
         })
       },
 
-      updateTabActivity: (tabId) => {
+      // Draft messages
+      setDraftMessage: (viewType, entityId, text) => {
         set((draft) => {
-          const tab = draft.tabs.find(t => t.id === tabId)
-          if (tab) {
-            tab.lastActivity = new Date()
+          const key = draftKey(viewType, entityId)
+          if (text) {
+            draft.draftMessages[key] = text
+          } else {
+            delete draft.draftMessages[key]
+          }
+          // Update hasDraft on corresponding cached view
+          const view = draft.cachedViews.find(v => v.type === viewType && v.entityId === entityId)
+          if (view) {
+            view.hasDraft = !!text
+          }
+        })
+      },
+
+      getDraftMessage: (viewType, entityId) => {
+        return get().draftMessages[draftKey(viewType, entityId)] ?? ''
+      },
+
+      clearDraftMessage: (viewType, entityId) => {
+        set((draft) => {
+          const key = draftKey(viewType, entityId)
+          delete draft.draftMessages[key]
+          const view = draft.cachedViews.find(v => v.type === viewType && v.entityId === entityId)
+          if (view) {
+            view.hasDraft = false
           }
         })
       },
 
       // Utilities
-      findTabByEntity: (type, entityId) => {
-        return get().tabs.find(t => t.type === type && t.entityId === entityId)
+      findViewByEntity: (type, entityId) => {
+        return get().cachedViews.find(v => v.type === type && v.entityId === entityId)
       },
 
-      getActiveTab: () => {
+      getActiveView: () => {
         const state = get()
-        return state.tabs.find(t => t.id === state.activeTabId)
+        return state.cachedViews.find(v => v.id === state.activeViewId)
       }
     })),
     {
       name: STORAGE_KEY,
       partialize: (state) => ({
-        tabs: state.tabs,
-        activeTabId: state.activeTabId,
+        cachedViews: state.cachedViews,
+        activeViewId: state.activeViewId,
         navigationCompactMode: state.navigationCompactMode,
-      })
+        draftMessages: state.draftMessages,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        // Sync hasDraft flags from draftMessages on hydration
+        for (const view of state.cachedViews) {
+          const key = draftKey(view.type, view.entityId)
+          view.hasDraft = !!state.draftMessages[key]
+        }
+      }
     }
   )
 )

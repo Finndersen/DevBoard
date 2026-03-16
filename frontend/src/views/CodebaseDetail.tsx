@@ -2,7 +2,7 @@ import { useEffect, useCallback, memo, useRef, useState } from 'react'
 import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon, CommandLineIcon } from '@heroicons/react/24/outline'
 import type { Codebase, MergeMethod, BranchHandling } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
-import { useTabTitle } from '../hooks/useTabTitle'
+import { useViewTitle } from '../hooks/useViewTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Card, Input, Textarea, ErrorMessage, Button } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
@@ -49,7 +49,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   }, [codebase, setCodebase])
 
   // Update tab title when codebase data is loaded
-  useTabTitle('codebase', id)
+  useViewTitle('codebase', id)
 
   // Use ref to store refetch function to avoid dependency issues
   const refetchRef = useRef(refetch)

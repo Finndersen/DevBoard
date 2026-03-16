@@ -2,17 +2,17 @@ import { useEffect, useCallback } from 'react'
 import type { ConversationListItem } from '../lib/api'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useUIStore } from '../stores/uiStore'
-import type { TabType } from '../stores/uiStore'
+import type { ViewType } from '../stores/uiStore'
 
 /**
- * Synchronises tab activity status from conversationStreamStore.
- * Maps tabs → conversations via the conversation list, then checks streaming state.
+ * Synchronises view activity status from conversationStreamStore.
+ * Maps views → conversations via the conversation list, then checks streaming state.
  */
-export function useTabStreamStatus(conversations: ConversationListItem[] | null) {
-  // Subscribe only to tab identity changes (not activityStatus mutations), to avoid
-  // an infinite loop where setTabActivityStatus → tabs change → effect re-runs → repeat.
-  const tabIds = useUIStore(s => s.tabs.map(t => t.id).join(','))
-  const setTabActivityStatus = useUIStore(s => s.setTabActivityStatus)
+export function useViewStreamStatus(conversations: ConversationListItem[] | null) {
+  // Subscribe only to view identity changes (not activityStatus mutations), to avoid
+  // an infinite loop where setViewActivityStatus → cachedViews change → effect re-runs → repeat.
+  const viewIds = useUIStore(s => s.cachedViews.map(v => v.id).join(','))
+  const setViewActivityStatus = useUIStore(s => s.setViewActivityStatus)
 
   // Return a stable primitive string from the selector — useSyncExternalStore requires
   // getSnapshot to return a cached reference, so returning a new Map on every call causes
@@ -43,23 +43,23 @@ export function useTabStreamStatus(conversations: ConversationListItem[] | null)
 
     const { activeStreams } = useConversationStreamStore.getState()
 
-    for (const tab of useUIStore.getState().tabs) {
-      const key = `${tab.type as TabType}:${tab.entityId}`
+    for (const view of useUIStore.getState().cachedViews) {
+      const key = `${view.type as ViewType}:${view.entityId}`
       const conversationId = entityToConversation.get(key)
       if (!conversationId) {
         // No conversation in the list (e.g. completed task excluded by API) — ensure idle
-        setTabActivityStatus(tab.id, { type: 'idle' })
+        setViewActivityStatus(view.id, { type: 'idle' })
         continue
       }
 
       const stream = activeStreams.get(conversationId)
       if (stream?.isStreaming) {
-        setTabActivityStatus(tab.id, { type: 'agent_working' })
+        setViewActivityStatus(view.id, { type: 'agent_working' })
       } else if ((stream?.pendingToolRequests?.length ?? 0) > 0) {
-        setTabActivityStatus(tab.id, { type: 'action_required' })
+        setViewActivityStatus(view.id, { type: 'action_required' })
       } else {
-        setTabActivityStatus(tab.id, { type: 'idle' })
+        setViewActivityStatus(view.id, { type: 'idle' })
       }
     }
-  }, [conversations, tabIds, streamStateKey, setTabActivityStatus])
+  }, [conversations, viewIds, streamStateKey, setViewActivityStatus])
 }

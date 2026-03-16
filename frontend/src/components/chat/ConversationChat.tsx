@@ -12,6 +12,7 @@ import { useToolApprovalLogic } from './hooks/useToolApprovalLogic'
 import { useConversationHistory } from './hooks/useConversationHistory'
 import { useAutoScroll } from './hooks/useAutoScroll'
 import { useMessageQueueing } from './hooks/useMessageQueueing'
+import { useViewContext } from '../../contexts/ViewContext'
 
 /**
  * Handle exposed by ConversationChat ref for external message submission.
@@ -101,8 +102,10 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     messages, pendingMessage, isRunningAction
   )
 
+  const { viewType, entityId } = useViewContext()
+
   const { inputMessage, setInputMessage, handleSendMessage } = useMessageQueueing(
-    conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook
+    conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook, viewType, entityId
   )
 
   // Retry handler - bypasses guards, reuses existing pending message

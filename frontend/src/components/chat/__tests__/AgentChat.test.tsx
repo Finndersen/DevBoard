@@ -13,6 +13,10 @@ vi.mock('../../../stores/approvalsStore', () => ({
   useApprovals: vi.fn(() => [])
 }))
 
+vi.mock('../../../contexts/ViewContext', () => ({
+  useViewContext: () => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })
+}))
+
 describe('AgentChat', () => {
   const mockConversationId = 1
   const mockClearApprovals = vi.fn()

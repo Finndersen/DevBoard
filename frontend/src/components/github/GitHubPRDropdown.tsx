@@ -33,7 +33,7 @@ function PRIcon({ className }: { className?: string }) {
 
 export default function GitHubPRDropdown() {
   const { data, loading, refetch } = useOpenPRs()
-  const openTab = useUIStore(s => s.openTab)
+  const navigateTo = useUIStore(s => s.navigateTo)
   const [isOpen, setIsOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -48,7 +48,7 @@ export default function GitHubPRDropdown() {
   const handleOpenTask = (e: React.MouseEvent, pr: OpenPRItem) => {
     e.stopPropagation()
     if (pr.task_id) {
-      openTab({ type: 'task', entityId: String(pr.task_id), title: pr.task_title || `Task #${pr.task_id}` })
+      navigateTo({ type: 'task', entityId: String(pr.task_id), title: pr.task_title || `Task #${pr.task_id}` })
       setIsOpen(false)
     }
   }

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
-import { useAllTasks, useProjects, useRefetchOnTabActivation } from '../hooks'
+import { useAllTasks, useProjects, useRefetchOnViewActivation } from '../hooks'
 import { useModal } from '../hooks/useModal'
 import { useOpenPRs } from '../hooks/useGitHubPRs'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
@@ -59,7 +59,7 @@ export default function TasksList() {
     }
   }, [refetchTasks, refetchOpenPRs])
 
-  useRefetchOnTabActivation([refetchTasks, refetchOpenPRs])
+  useRefetchOnViewActivation([refetchTasks, refetchOpenPRs])
 
   const prByTaskId = useMemo(() => {
     const map = new Map<number, OpenPRItem>()

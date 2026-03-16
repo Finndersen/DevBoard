@@ -9,6 +9,10 @@ import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import TaskDetail from '../TaskDetail'
 
+vi.mock('../../contexts/ViewContext', () => ({
+  useViewContext: () => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })
+}))
+
 // Helper to create NDJSON streaming response
 const createStreamingResponse = (events: any[]) => {
   const ndjson = events.map(e => JSON.stringify(e)).join('\n') + '\n'

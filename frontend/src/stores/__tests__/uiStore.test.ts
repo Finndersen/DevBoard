@@ -1,198 +1,278 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useUIStore } from '../uiStore'
-import type { TabType } from '../uiStore'
+import type { ViewType } from '../uiStore'
 
-describe('uiStore - visitedTabs tracking', () => {
-  beforeEach(() => {
-    // Reset store before each test
-    const store = useUIStore.getState()
-    store.tabs.forEach((tab) => store.closeTab(tab.id))
-    useUIStore.setState({ visitedTabs: new Set() })
+function resetStore() {
+  useUIStore.setState({
+    cachedViews: [],
+    activeViewId: null,
+    draftMessages: {},
+    shouldPushHistory: false,
+  })
+}
+
+describe('uiStore - view cache management', () => {
+  beforeEach(resetStore)
+
+  it('initializes with empty cachedViews', () => {
+    const { cachedViews } = useUIStore.getState()
+    expect(cachedViews).toEqual([])
   })
 
-  it('initializes with empty visitedTabs set', () => {
-    const { visitedTabs } = useUIStore.getState()
-    expect(visitedTabs).toBeInstanceOf(Set)
-    expect(visitedTabs.size).toBe(0)
-  })
+  it('creates a new view when navigating', () => {
+    const { navigateTo } = useUIStore.getState()
 
-  it('marks tab as visited when opening a new tab', () => {
-    const { openTab } = useUIStore.getState()
-
-    const tabId = openTab({
-      type: 'home' as TabType,
+    const viewId = navigateTo({
+      type: 'home' as ViewType,
       entityId: 'main',
       title: 'Home'
     })
 
-    const { visitedTabs } = useUIStore.getState()
-    expect(visitedTabs.has(tabId)).toBe(true)
+    const { cachedViews, activeViewId } = useUIStore.getState()
+    expect(cachedViews).toHaveLength(1)
+    expect(cachedViews[0].id).toBe(viewId)
+    expect(activeViewId).toBe(viewId)
   })
 
-  it('marks tab as visited when switching to existing tab', () => {
-    const { openTab, switchTab, visitedTabs, closeTab } = useUIStore.getState()
+  it('switches to existing view when navigating to same entity', () => {
+    const { navigateTo } = useUIStore.getState()
 
-    // Open first tab
-    const tab1Id = openTab({
-      type: 'home' as TabType,
-      entityId: 'main',
-      title: 'Home'
-    })
-
-    // Open second tab
-    const tab2Id = openTab({
-      type: 'task' as TabType,
+    const view1Id = navigateTo({
+      type: 'task' as ViewType,
       entityId: 'task1',
       title: 'Task 1'
     })
 
-    // Clear visitedTabs to simulate page refresh
-    useUIStore.setState({ visitedTabs: new Set() })
-    expect(visitedTabs.size).toBe(0)
-
-    // Switch to first tab
-    switchTab(tab1Id)
-    const updatedVisitedTabs = useUIStore.getState().visitedTabs
-    expect(updatedVisitedTabs.has(tab1Id)).toBe(true)
-    expect(updatedVisitedTabs.has(tab2Id)).toBe(false)
-
-    // Switch to second tab
-    switchTab(tab2Id)
-    const finalVisitedTabs = useUIStore.getState().visitedTabs
-    expect(finalVisitedTabs.has(tab1Id)).toBe(true)
-    expect(finalVisitedTabs.has(tab2Id)).toBe(true)
-
-    // Clean up
-    closeTab(tab1Id)
-    closeTab(tab2Id)
-  })
-
-  it('removes tab from visitedTabs when closing tab', () => {
-    const { openTab, closeTab } = useUIStore.getState()
-
-    const tabId = openTab({
-      type: 'task' as TabType,
+    const view2Id = navigateTo({
+      type: 'task' as ViewType,
       entityId: 'task1',
       title: 'Task 1'
     })
 
-    let visitedTabs = useUIStore.getState().visitedTabs
-    expect(visitedTabs.has(tabId)).toBe(true)
-
-    closeTab(tabId)
-    visitedTabs = useUIStore.getState().visitedTabs
-    expect(visitedTabs.has(tabId)).toBe(false)
+    expect(view1Id).toBe(view2Id)
+    expect(useUIStore.getState().cachedViews).toHaveLength(1)
   })
 
-  it('tracks multiple visited tabs independently', () => {
-    const { openTab } = useUIStore.getState()
+  it('switches active view with switchTab', () => {
+    const { navigateTo, switchTab } = useUIStore.getState()
 
-    const tab1Id = openTab({
-      type: 'home' as TabType,
-      entityId: 'main',
-      title: 'Home'
-    })
+    const view1Id = navigateTo({ type: 'home', entityId: 'main', title: 'Home' })
+    const view2Id = navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
 
-    const tab2Id = openTab({
-      type: 'task' as TabType,
-      entityId: 'task1',
-      title: 'Task 1'
-    })
+    expect(useUIStore.getState().activeViewId).toBe(view2Id)
 
-    const tab3Id = openTab({
-      type: 'project' as TabType,
-      entityId: 'project1',
-      title: 'Project 1'
-    })
-
-    const { visitedTabs } = useUIStore.getState()
-    expect(visitedTabs.has(tab1Id)).toBe(true)
-    expect(visitedTabs.has(tab2Id)).toBe(true)
-    expect(visitedTabs.has(tab3Id)).toBe(true)
-    expect(visitedTabs.size).toBe(3)
+    switchTab(view1Id)
+    expect(useUIStore.getState().activeViewId).toBe(view1Id)
   })
 
-  it('marks tab as visited when opening existing tab by entity', () => {
-    const { openTab, visitedTabs, closeTab } = useUIStore.getState()
+  it('removes view from cachedViews when evicting', () => {
+    const { navigateTo, evictView } = useUIStore.getState()
 
-    // Open first tab
-    const tab1Id = openTab({
-      type: 'task' as TabType,
-      entityId: 'task1',
-      title: 'Task 1'
-    })
+    const viewId = navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
+    expect(useUIStore.getState().cachedViews).toHaveLength(1)
 
-    // Clear visitedTabs to simulate it being unmarked
-    useUIStore.setState({ visitedTabs: new Set() })
-
-    // Try to open same tab again (should switch to existing)
-    const tab2Id = openTab({
-      type: 'task' as TabType,
-      entityId: 'task1',
-      title: 'Task 1'
-    })
-
-    // Should be the same tab ID
-    expect(tab1Id).toBe(tab2Id)
-
-    // Should be marked as visited
-    const updatedVisitedTabs = useUIStore.getState().visitedTabs
-    expect(updatedVisitedTabs.has(tab1Id)).toBe(true)
-
-    // Clean up
-    closeTab(tab1Id)
+    evictView(viewId)
+    expect(useUIStore.getState().cachedViews).toHaveLength(0)
   })
 
-  it('markTabVisited action adds tab to visitedTabs set', () => {
-    const { openTab, markTabVisited, closeTab } = useUIStore.getState()
+  it('tracks multiple views independently', () => {
+    const { navigateTo } = useUIStore.getState()
 
-    const tabId = openTab({
-      type: 'home' as TabType,
-      entityId: 'main',
-      title: 'Home'
-    })
+    navigateTo({ type: 'home', entityId: 'main', title: 'Home' })
+    navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
+    navigateTo({ type: 'project', entityId: 'project1', title: 'Project 1' })
 
-    // Clear visitedTabs
-    useUIStore.setState({ visitedTabs: new Set() })
-    let visitedTabs = useUIStore.getState().visitedTabs
-    expect(visitedTabs.has(tabId)).toBe(false)
-
-    // Mark as visited
-    markTabVisited(tabId)
-    visitedTabs = useUIStore.getState().visitedTabs
-    expect(visitedTabs.has(tabId)).toBe(true)
-
-    // Clean up
-    closeTab(tabId)
+    expect(useUIStore.getState().cachedViews).toHaveLength(3)
   })
 
-  it('maintains visitedTabs across tab switches', () => {
-    const { openTab, switchTab } = useUIStore.getState()
+  it('finds view by entity type and ID', () => {
+    const { navigateTo, findViewByEntity } = useUIStore.getState()
 
-    const tab1Id = openTab({
-      type: 'home' as TabType,
-      entityId: 'main',
-      title: 'Home'
-    })
+    const viewId = navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
 
-    const tab2Id = openTab({
-      type: 'task' as TabType,
-      entityId: 'task1',
-      title: 'Task 1'
-    })
+    expect(findViewByEntity('task', 'task1')?.id).toBe(viewId)
+    expect(findViewByEntity('project', 'task1')).toBeUndefined()
+  })
 
-    let visitedTabs = useUIStore.getState().visitedTabs
-    // Both should be visited
-    expect(visitedTabs.has(tab1Id)).toBe(true)
-    expect(visitedTabs.has(tab2Id)).toBe(true)
+  it('updates view properties', () => {
+    const { navigateTo, updateView } = useUIStore.getState()
 
-    // Switch back to first tab
-    switchTab(tab1Id)
-    visitedTabs = useUIStore.getState().visitedTabs
+    const viewId = navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
+    updateView(viewId, { title: 'Updated Title' })
 
-    // Both should still be visited
-    expect(visitedTabs.has(tab1Id)).toBe(true)
-    expect(visitedTabs.has(tab2Id)).toBe(true)
+    expect(useUIStore.getState().cachedViews[0].title).toBe('Updated Title')
+  })
+
+  it('updates lastActivity on navigation to existing view', () => {
+    const { navigateTo } = useUIStore.getState()
+
+    navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
+    const firstActivity = new Date(useUIStore.getState().cachedViews[0].lastActivity).getTime()
+
+    // Navigate to something else, then back
+    navigateTo({ type: 'home', entityId: 'main', title: 'Home' })
+    navigateTo({ type: 'task', entityId: 'task1', title: 'Task 1' })
+
+    const secondActivity = new Date(useUIStore.getState().cachedViews[0].lastActivity).getTime()
+    expect(secondActivity).toBeGreaterThanOrEqual(firstActivity)
+  })
+})
+
+describe('uiStore - LRU eviction', () => {
+  beforeEach(resetStore)
+
+  it('evicts LRU entry when cache exceeds max size', () => {
+    const { navigateTo } = useUIStore.getState()
+
+    // Fill cache to max (12 views)
+    const viewIds: string[] = []
+    for (let i = 0; i < 12; i++) {
+      viewIds.push(navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` }))
+    }
+    expect(useUIStore.getState().cachedViews).toHaveLength(12)
+
+    // Adding one more should evict the oldest (task0, since all others were accessed more recently)
+    navigateTo({ type: 'task', entityId: 'task99', title: 'Task 99' })
+
+    const state = useUIStore.getState()
+    expect(state.cachedViews).toHaveLength(12)
+    // task0 should have been evicted (least recently used)
+    expect(state.findViewByEntity('task', 'task0')).toBeUndefined()
+    // task99 should exist
+    expect(state.findViewByEntity('task', 'task99')).toBeDefined()
+  })
+
+  it('does not evict the active view', () => {
+    const { navigateTo, switchTab } = useUIStore.getState()
+
+    // Create 12 views
+    const viewIds: string[] = []
+    for (let i = 0; i < 12; i++) {
+      viewIds.push(navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` }))
+    }
+
+    // Switch back to the first view (task0), making it active and updating its lastActivity
+    switchTab(viewIds[0])
+
+    // Now add a new view — task1 should be evicted (oldest non-active), not task0
+    navigateTo({ type: 'task', entityId: 'task99', title: 'Task 99' })
+
+    const state = useUIStore.getState()
+    // task0 is still the activeView, should NOT be evicted
+    expect(state.findViewByEntity('task', 'task0')).toBeDefined()
+    // task1 was the oldest non-active, should be evicted
+    expect(state.findViewByEntity('task', 'task1')).toBeUndefined()
+  })
+
+  it('does not evict views with drafts', () => {
+    const { navigateTo, setDraftMessage } = useUIStore.getState()
+
+    // Create 12 views
+    for (let i = 0; i < 12; i++) {
+      navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` })
+    }
+
+    // Set draft on task0 (the oldest view)
+    setDraftMessage('task', 'task0', 'Work in progress...')
+
+    // Add a new view — task1 should be evicted (oldest without draft), not task0
+    navigateTo({ type: 'task', entityId: 'task99', title: 'Task 99' })
+
+    const state = useUIStore.getState()
+    expect(state.findViewByEntity('task', 'task0')).toBeDefined()
+    expect(state.findViewByEntity('task', 'task1')).toBeUndefined()
+  })
+
+  it('allows cache to exceed max when all entries have drafts', () => {
+    const { navigateTo, setDraftMessage } = useUIStore.getState()
+
+    // Create 12 views all with drafts
+    for (let i = 0; i < 12; i++) {
+      navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` })
+      setDraftMessage('task', `task${i}`, `Draft ${i}`)
+    }
+
+    // Add one more — cache should exceed max since all are draft-pinned
+    navigateTo({ type: 'task', entityId: 'task99', title: 'Task 99' })
+
+    expect(useUIStore.getState().cachedViews).toHaveLength(13)
+  })
+})
+
+describe('uiStore - draft messages', () => {
+  beforeEach(resetStore)
+
+  it('sets and gets draft messages', () => {
+    const { setDraftMessage, getDraftMessage } = useUIStore.getState()
+
+    setDraftMessage('task', '1', 'Hello draft')
+    expect(getDraftMessage('task', '1')).toBe('Hello draft')
+  })
+
+  it('returns empty string for non-existent drafts', () => {
+    const { getDraftMessage } = useUIStore.getState()
+    expect(getDraftMessage('task', '999')).toBe('')
+  })
+
+  it('clears draft messages', () => {
+    const { setDraftMessage, clearDraftMessage, getDraftMessage } = useUIStore.getState()
+
+    setDraftMessage('task', '1', 'Hello draft')
+    expect(getDraftMessage('task', '1')).toBe('Hello draft')
+
+    clearDraftMessage('task', '1')
+    expect(getDraftMessage('task', '1')).toBe('')
+  })
+
+  it('sets hasDraft flag on cached view when draft is set', () => {
+    const { navigateTo, setDraftMessage } = useUIStore.getState()
+
+    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
+
+    setDraftMessage('task', '1', 'draft text')
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
+  })
+
+  it('clears hasDraft flag when draft is cleared', () => {
+    const { navigateTo, setDraftMessage, clearDraftMessage } = useUIStore.getState()
+
+    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    setDraftMessage('task', '1', 'draft text')
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
+
+    clearDraftMessage('task', '1')
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
+  })
+
+  it('clears hasDraft flag when setting empty text', () => {
+    const { navigateTo, setDraftMessage } = useUIStore.getState()
+
+    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    setDraftMessage('task', '1', 'draft text')
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
+
+    setDraftMessage('task', '1', '')
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
+  })
+
+  it('restores draft when navigating back to evicted entity', () => {
+    const { navigateTo, setDraftMessage, getDraftMessage, evictView } = useUIStore.getState()
+
+    // Create view and set draft
+    const viewId = navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    setDraftMessage('task', '1', 'my draft')
+
+    // Evict the view
+    evictView(viewId)
+    expect(useUIStore.getState().cachedViews).toHaveLength(0)
+
+    // Draft should still be in draftMessages store
+    expect(getDraftMessage('task', '1')).toBe('my draft')
+
+    // Navigate back — new view should pick up the draft
+    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
   })
 })

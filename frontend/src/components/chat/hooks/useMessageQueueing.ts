@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { PendingApprovalWithContext } from '../../../stores/approvalsStore'
 import { useConversationStreamStore } from '../../../stores/conversationStreamStore'
+import { useUIStore, type ViewType } from '../../../stores/uiStore'
 import { useStreamCompleteHandler } from '../../../hooks/useConversationEventHandlers'
 
 export function useMessageQueueing(
@@ -11,8 +12,17 @@ export function useMessageQueueing(
   isQueued: boolean,
   setQueued: (id: number, queued: boolean) => void,
   sendMessageViaHook: (text: string, id?: string) => Promise<void>,
+  viewType: ViewType,
+  entityId: string,
 ) {
-  const [inputMessage, setInputMessage] = useState('')
+  const [inputMessage, setInputMessageRaw] = useState(
+    () => useUIStore.getState().getDraftMessage(viewType, entityId)
+  )
+
+  const setInputMessage = useCallback((text: string) => {
+    setInputMessageRaw(text)
+    useUIStore.getState().setDraftMessage(viewType, entityId, text)
+  }, [viewType, entityId])
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputMessage.trim()
@@ -23,13 +33,17 @@ export function useMessageQueueing(
       return
     }
 
-    setInputMessage('')
+    setInputMessageRaw('')
+    useUIStore.getState().clearDraftMessage(viewType, entityId)
     await sendMessageViaHook(messageText)
-  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook])
+  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook, viewType, entityId])
 
-  // Clear queue state when input is cleared while queued
+  // Unqueue when user edits the input text
+  const lastInputRef = useRef(inputMessage)
   useEffect(() => {
-    if (isQueued && !inputMessage.trim()) {
+    const prevInput = lastInputRef.current
+    lastInputRef.current = inputMessage
+    if (isQueued && inputMessage !== prevInput) {
       setQueued(conversationId, false)
     }
   }, [inputMessage, isQueued, conversationId, setQueued])
@@ -46,11 +60,12 @@ export function useMessageQueueing(
       (!currentStreamState.pendingToolRequests || currentStreamState.pendingToolRequests.length === 0)
     ) {
       const messageToSend = inputMessage.trim()
-      setInputMessage('')
+      setInputMessageRaw('')
+      useUIStore.getState().clearDraftMessage(viewType, entityId)
       setQueued(conversationId, false)
       sendMessageViaHook(messageToSend)
     }
-  }, [conversationId, inputMessage, setQueued, sendMessageViaHook]))
+  }, [conversationId, inputMessage, setQueued, sendMessageViaHook, viewType, entityId]))
 
   return { inputMessage, setInputMessage, handleSendMessage }
 }

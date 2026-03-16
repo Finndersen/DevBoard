@@ -5,15 +5,15 @@ import type { OpenPRsResponse } from '../../../lib/api'
 
 // Mock the hooks and API client
 const mockRefetch = vi.fn()
-const mockOpenTab = vi.fn()
+const mockNavigateTo = vi.fn()
 
 vi.mock('../../../hooks/useGitHubPRs', () => ({
   useOpenPRs: vi.fn()
 }))
 
 vi.mock('../../../stores/uiStore', () => ({
-  useUIStore: vi.fn((selector: (state: { openTab: typeof mockOpenTab }) => unknown) =>
-    selector({ openTab: mockOpenTab })
+  useUIStore: vi.fn((selector: (state: { navigateTo: typeof mockNavigateTo }) => unknown) =>
+    selector({ navigateTo: mockNavigateTo })
   )
 }))
 
@@ -160,7 +160,7 @@ describe('GitHubPRDropdown', () => {
     windowOpen.mockRestore()
   })
 
-  it('open task button calls openTab for PR with task association', () => {
+  it('open task button calls navigateTo for PR with task association', () => {
     render(<GitHubPRDropdown />)
 
     openDropdown()
@@ -170,7 +170,7 @@ describe('GitHubPRDropdown', () => {
     expect(taskButtons).toHaveLength(1)
 
     fireEvent.click(taskButtons[0])
-    expect(mockOpenTab).toHaveBeenCalledWith({
+    expect(mockNavigateTo).toHaveBeenCalledWith({
       type: 'task',
       entityId: '42',
       title: 'Auth fix task',

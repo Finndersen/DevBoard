@@ -8,7 +8,7 @@ import { useUIStore } from '../stores/uiStore'
  */
 export function useKeyboardShortcuts() {
   const navigate = useNavigate()
-  const { tabs, activeTabId, switchTab, closeTab, toggleNavigationCompactMode, openTab } = useUIStore()
+  const { toggleNavigationCompactMode, navigateTo } = useUIStore()
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -35,35 +35,15 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Cmd/Ctrl + W: Close active tab
-      if (modifierKey && event.key === 'w') {
-        event.preventDefault()
-        if (activeTabId) {
-          closeTab(activeTabId)
-        }
-        return
-      }
-
-      // Cmd/Ctrl + T: New tab (opens home)
+      // Cmd/Ctrl + T: Navigate to home
       if (modifierKey && event.key === 't') {
         event.preventDefault()
-        openTab({
+        navigateTo({
           type: 'home',
           entityId: 'main',
           title: 'Home'
         })
         navigate('/')
-        return
-      }
-
-      // Cmd/Ctrl + 1-9: Switch to tab N
-      if (modifierKey && event.key >= '1' && event.key <= '9') {
-        event.preventDefault()
-        const tabIndex = parseInt(event.key, 10) - 1
-        if (tabIndex < tabs.length) {
-          const tab = tabs[tabIndex]
-          switchTab(tab.id)
-        }
         return
       }
 
@@ -83,5 +63,5 @@ export function useKeyboardShortcuts() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [tabs, activeTabId, switchTab, closeTab, toggleNavigationCompactMode, openTab, navigate])
+  }, [toggleNavigationCompactMode, navigateTo, navigate])
 }

@@ -10,6 +10,10 @@ import { DarkModeProvider } from '../../contexts/DarkModeContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import ProjectDetail from '../ProjectDetail'
 
+vi.mock('../../contexts/ViewContext', () => ({
+  useViewContext: () => ({ viewId: 'test-view', viewType: 'project', entityId: '1' })
+}))
+
 // Helper function to render ProjectDetail with proper routing
 const renderProjectDetail = (projectId: string = '1') => {
   return rtlRender(

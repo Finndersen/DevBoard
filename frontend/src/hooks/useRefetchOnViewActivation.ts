@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { useTabContext } from '../contexts/TabContext'
+import { useViewContext } from '../contexts/ViewContext'
 import { useUIStore } from '../stores/uiStore'
 
-export function useRefetchOnTabActivation(refetchFns: Array<() => Promise<void> | void>) {
-  const { tabId } = useTabContext()
-  const activeTabId = useUIStore((state) => state.activeTabId)
-  const isActive = activeTabId === tabId
+export function useRefetchOnViewActivation(refetchFns: Array<() => Promise<void> | void>) {
+  const { viewId } = useViewContext()
+  const activeViewId = useUIStore((state) => state.activeViewId)
+  const isActive = activeViewId === viewId
 
   const prevIsActiveRef = useRef(isActive)
   const hasBeenActivatedRef = useRef(false)

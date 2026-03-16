@@ -4,7 +4,7 @@ import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracket
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
-import { useTabTitle } from '../hooks/useTabTitle'
+import { useViewTitle } from '../hooks/useViewTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
@@ -86,7 +86,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const { mutate: updateDocument } = useUpdateDocument()
 
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
-  const { closeTab, findTabByEntity, invalidateConversations } = useUIStore()
+  const { findViewByEntity, evictView, invalidateConversations } = useUIStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
 
@@ -223,7 +223,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [task, setTask, refetchProject])
 
   // Update tab title when task data is loaded
-  useTabTitle('task', id)
+  useViewTitle('task', id)
 
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'comments' | 'summary'>('specification')
   const [streamingMessage, setStreamingMessage] = useState<string>('')
@@ -294,10 +294,10 @@ function TaskDetail({ id }: TaskDetailProps) {
       await deleteTaskFromStore(String(task.id))
       await fetchProjectTasks(String(task.project_id))
 
-      // Close the task's tab and refresh conversation list
-      const tab = findTabByEntity('task', String(task.id))
-      if (tab) {
-        closeTab(tab.id)
+      // Evict the task's view from cache and refresh conversation list
+      const view = findViewByEntity('task', String(task.id))
+      if (view) {
+        evictView(view.id)
       }
       invalidateConversations()
 
@@ -319,7 +319,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       console.error('Failed to delete task:', error)
       // Error will be shown via deleteError state
     }
-  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findTabByEntity, closeTab, invalidateConversations, addNotification, navigate])
+  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findViewByEntity, evictView, invalidateConversations, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
