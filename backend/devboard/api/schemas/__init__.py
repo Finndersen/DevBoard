@@ -16,6 +16,11 @@ from .common import DeleteResponse
 from .conversation import ConversationResponse
 from .custom_field import CustomFieldCreate, CustomFieldResponse, CustomFieldUpdate
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
+from .implementation_plan import (
+    ImplementationPlanResponse,
+    ImplementationStepResponse,
+    ImplementationStepUpdate,
+)
 from .integration import (
     AgentConfigurationResponse,
     AgentEngineInfo,
@@ -144,6 +149,10 @@ __all__ = [
     "CheckoutToMainResponse",
     "CommitMetadata",
     "DocumentEdit",
+    # Implementation Plan
+    "ImplementationPlanResponse",
+    "ImplementationStepResponse",
+    "ImplementationStepUpdate",
     "FileDiff",
     "GitHubPRStatusResponse",
     "MergeBranchRequest",

@@ -8,6 +8,7 @@ interface UseTaskEventHandlersParams {
   refetch: () => Promise<void>
   refetchSpecification: () => Promise<void>
   refetchImplementationPlan: () => Promise<void>
+  refetchStructuredPlan: () => Promise<void>
   refreshGitStatus: () => Promise<void>
   handleDiffRefresh: (view: string) => Promise<void>
   setActiveTab: (tab: 'specification' | 'plan' | 'changes' | 'summary') => void
@@ -19,6 +20,7 @@ export function useTaskEventHandlers({
   refetch,
   refetchSpecification,
   refetchImplementationPlan,
+  refetchStructuredPlan,
   refreshGitStatus,
   handleDiffRefresh,
   setActiveTab,
@@ -53,6 +55,27 @@ export function useTaskEventHandlers({
   }, [refetchImplementationPlan, setActiveTab])
 
   useToolResultHandler(implementationPlanHandler)
+
+  const structuredPlanHandler = useCallback(async (toolName: string, _result: unknown) => {
+    if (
+      toolName.includes('set_implementation_plan_steps') ||
+      toolName.includes('add_implementation_step') ||
+      toolName.includes('edit_implementation_step') ||
+      toolName.includes('remove_implementation_step') ||
+      toolName.includes('edit_implementation_plan_overview') ||
+      toolName.includes('execute_implementation_step')
+    ) {
+      try {
+        await refetchStructuredPlan()
+        await refetch()
+        setActiveTab('plan')
+      } catch (error) {
+        console.error('Failed to refetch structured implementation plan:', error)
+      }
+    }
+  }, [refetchStructuredPlan, refetch, setActiveTab])
+
+  useToolResultHandler(structuredPlanHandler)
 
   const fileModificationHandler = useCallback((toolName: string, _result: unknown) => {
     const isFileModification = toolName === 'Edit' || toolName === 'Write'

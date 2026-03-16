@@ -58,12 +58,13 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
             task.status == TaskStatus.PLANNING
             and task.specification is not None
             and bool(task.specification.content.strip())
+            and not task.implementation_plan_structured
             and task.implementation_plan is None
         )
 
     async def run(self) -> str | None:
-        self.task_service.create_implementation_plan(self.task)
-        self.conversation_repo.commit()
+        # No pre-creation needed — the planning agent creates the ImplementationPlan
+        # via the set_implementation_plan_steps tool directly
         return self.PROMPT
 
 
@@ -79,7 +80,13 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        return task.status == TaskStatus.PLANNING and task.implementation_plan_id is not None
+        if task.status != TaskStatus.PLANNING:
+            return False
+        # Structured plan: must exist with pending status
+        if task.implementation_plan_structured:
+            return task.implementation_plan_structured.status == "pending"
+        # Legacy Document plan
+        return task.implementation_plan_id is not None
 
     async def run(self) -> str | None:
         self.task_service.transition_to_implementing(self.task)

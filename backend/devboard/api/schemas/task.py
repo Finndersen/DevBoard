@@ -81,6 +81,9 @@ class TaskResponse(TaskBase):
     implementation_plan_document_id: int | None = None
     change_summary_document_id: int | None = None
 
+    # Structured implementation plan ID (new model)
+    implementation_plan_id: int | None = None
+
     # Custom field values
     custom_fields: dict[str, Any] | None = None
 

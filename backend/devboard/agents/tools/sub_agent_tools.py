@@ -13,6 +13,7 @@ from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import ConversationRepository
+from devboard.integrations.types import StructuredDiff
 from devboard.services.task_git.service import TaskGitService
 
 _active_sub_agent_conversations: set[int] = set()
@@ -310,31 +311,8 @@ def create_code_review_tool(
         if not diff.files:
             return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})
 
-        full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
-
         role = CodeReviewAgentRole(task=task)
-
-        prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
-
-## Diff Summary
-
-```
-{diff.format_summary()}
-```
-
-## Full Unified Diff
-
-```diff
-{full_diff_content}
-```
-"""
-
-        if context is not None:
-            prompt += f"""
-## Additional Context from Implementation Agent
-
-{context}
-"""
+        prompt = build_code_review_prompt(diff, context)
 
         sub_agent_result = await run_sub_agent(
             role=role,
@@ -349,3 +327,40 @@ def create_code_review_tool(
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 
     return Tool(function=review_code_changes, name="review_code_changes")
+
+
+def build_code_review_prompt(diff: StructuredDiff, additional_context: str | None = None) -> str:
+    """Build the prompt for a code review sub-agent.
+
+    Context (project spec, task spec, implementation plan) is provided by CodeReviewAgentRole
+    via build_task_context(), so the prompt only contains the diff and optional context.
+
+    Args:
+        diff: The structured diff to review
+        additional_context: Optional additional context or instructions for the reviewer
+    """
+    full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
+
+    prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
+
+## Diff Summary
+
+```
+{diff.format_summary()}
+```
+
+## Full Unified Diff
+
+```diff
+{full_diff_content}
+```
+"""
+
+    if additional_context is not None:
+        prompt += f"""
+## Additional Context
+
+{additional_context}
+"""
+
+    return prompt

@@ -15,6 +15,7 @@ from devboard.db.repositories import (
     MCPServerRepository,
     OAuthRepository,
     ProjectRepository,
+    TaskImplementationPlanRepository,
     TaskRepository,
     WorktreeSlotRepository,
 )
@@ -82,3 +83,8 @@ def get_custom_field_repository(db: Session = Depends(get_db)) -> CustomFieldRep
 def get_agent_role_config_repository(db: Session = Depends(get_db)) -> AgentRoleConfigRepository:
     """Get AgentRoleConfigRepository instance."""
     return AgentRoleConfigRepository(db)
+
+
+def get_task_implementation_plan_repository(db: Session = Depends(get_db)) -> TaskImplementationPlanRepository:
+    """Get TaskImplementationPlanRepository instance."""
+    return TaskImplementationPlanRepository(db)

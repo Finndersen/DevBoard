@@ -19,3 +19,4 @@ class AgentRoleType(StrEnum):
     TASK_PR_REVIEW = "task_pr_review"
     INVESTIGATION = "investigation"
     CODE_REVIEW = "code_review"
+    STEP_EXECUTION = "step_execution"

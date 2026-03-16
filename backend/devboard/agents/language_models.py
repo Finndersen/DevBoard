@@ -142,6 +142,7 @@ RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentRoleType.TASK_PR_REVIEW: ModelType.STANDARD,
     AgentRoleType.CODE_REVIEW: ModelType.STANDARD,
     AgentRoleType.INVESTIGATION: ModelType.FAST,
+    AgentRoleType.STEP_EXECUTION: ModelType.STANDARD,
 }
 # Global default LLM registry instance
 llm_registry = LLMRegistry(ALL_MODELS)

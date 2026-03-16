@@ -12,6 +12,7 @@ from devboard.agents.tools import (
     create_rebase_task_branch_tool,
     create_set_document_content_tool,
 )
+from devboard.agents.tools.implementation_plan_tools import create_execute_implementation_step_tool
 from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
@@ -20,6 +21,7 @@ from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_git_service import TaskGitService
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
 IMPLEMENTATION_SYSTEM_PROMPT = """
@@ -58,10 +60,10 @@ Then execute in order:
    - If a `docs/` directory is present, investigate and update appropriate documentation sections,
      adding or updating any missing or incorrect documentation
 
-2. CODE REVIEW
-   - For non-trivial changes, call `review_code_changes()` to perform a self-review before finalisation. You can optionally provide a `context` message to give the reviewer additional information — e.g. explaining why changes diverge from the specification or implementation plan, known limitations, or areas to focus on.
-   - Thoughtfully consider the review feedback — use it in combination with your own judgement rather than blindly applying every suggestion
-   - Address findings where you agree they are valid and worth doing
+2. CODE REVIEW (if a `code_review` step is in the plan)
+   - After executing the `code_review` step, read its findings from the step outcome
+   - Use your own judgement on which issues to address — not every suggestion needs to be acted on
+   - Make any agreed fixes directly using your own tools, then continue
 
 3. TEST & VERIFY
    - Run relevant tests to validate the changes
@@ -92,6 +94,7 @@ class TaskImplementationAgentRole(AgentRole):
         github_integration: GitHubIntegration,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
+        plan_service: TaskImplementationPlanService | None = None,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -101,51 +104,72 @@ class TaskImplementationAgentRole(AgentRole):
         self.github_integration = github_integration
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
+        self.plan_service = plan_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
         return IMPLEMENTATION_SYSTEM_PROMPT
 
     def get_tools(self) -> list[Tool]:
-        """Get tools for task implementation role.
+        """Get tools for task implementation role."""
+        has_structured_plan = self.task.implementation_plan_structured is not None
+        has_document_plan = self.task.implementation_plan is not None
 
-        Returns:
-            List of document editing tools for specification and implementation plan.
-            Note: Codebase editing tools (Edit/Write) are provided directly by the
-            underlying agent (ClaudeCode), not through this role.
-        """
-        if not self.task.implementation_plan:
+        if not has_structured_plan and not has_document_plan:
             raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
         codebase_integration = CodebaseIntegration(self.task.get_current_workspace_dir())
 
-        tools = [
+        tools: list[Tool] = [
             # Tools for task specification document (uses default approval behavior)
             create_set_document_content_tool(self.task.specification, self.document_repository),
             create_document_edit_tool(self.task.specification, self.document_repository),
-            # Tools for implementation plan document (never require approval)
-            create_set_document_content_tool(
-                self.task.implementation_plan, self.document_repository, requires_approval=False
-            ),
-            create_document_edit_tool(self.task.implementation_plan, self.document_repository, requires_approval=False),
-            create_code_structure_search_tool(codebase_integration),
-            create_directory_tree_tool(codebase_integration),
-            create_task_codebase_investigation_tool(
-                self.task,
-                self.agent_config_service,
-                conversation_repo=self.conversation_repo,
-                parent_conversation_id=self.conversation_id,
-            ),
-            create_code_review_tool(
-                self.task,
-                self.agent_config_service,
-                self.task_git_service,
-                conversation_repo=self.conversation_repo,
-                parent_conversation_id=self.conversation_id,
-            ),
-            # Rebase tool for updating branch with latest base branch changes
-            create_rebase_task_branch_tool(self.task, self.task_git_service),
         ]
+
+        # Implementation plan tools: structured plan or Document-based
+        if has_structured_plan and self.plan_service:
+            tools.append(
+                create_execute_implementation_step_tool(
+                    self.task,
+                    self.plan_service,
+                    self.agent_config_service,
+                    self.conversation_repo,
+                    self.conversation_id,
+                    self.task_git_service,
+                )
+            )
+        elif has_document_plan and self.task.implementation_plan is not None:
+            tools.extend(
+                [
+                    create_set_document_content_tool(
+                        self.task.implementation_plan, self.document_repository, requires_approval=False
+                    ),
+                    create_document_edit_tool(
+                        self.task.implementation_plan, self.document_repository, requires_approval=False
+                    ),
+                ]
+            )
+
+        tools.extend(
+            [
+                create_code_structure_search_tool(codebase_integration),
+                create_directory_tree_tool(codebase_integration),
+                create_task_codebase_investigation_tool(
+                    self.task,
+                    self.agent_config_service,
+                    conversation_repo=self.conversation_repo,
+                    parent_conversation_id=self.conversation_id,
+                ),
+                create_code_review_tool(
+                    self.task,
+                    self.agent_config_service,
+                    self.task_git_service,
+                    conversation_repo=self.conversation_repo,
+                    parent_conversation_id=self.conversation_id,
+                ),
+                create_rebase_task_branch_tool(self.task, self.task_git_service),
+            ]
+        )
 
         # Add task completion tools based on codebase branch handling
         branch_handling = self.task.codebase.branch_handling

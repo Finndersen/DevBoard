@@ -31,9 +31,38 @@ export interface Task {
   created_at: string
   specification_document_id: number
   implementation_plan_document_id: number | null
+  implementation_plan_id: number | null
   change_summary_document_id: number | null
   custom_fields: Record<string, unknown> | null
   available_workflow_actions: WorkflowActionInfo[]
+}
+
+export type ImplementationStepType = 'code_change' | 'documentation' | 'validation' | 'code_review'
+export type ImplementationStepStatus = 'pending' | 'running' | 'complete' | 'failed' | 'skipped'
+export interface ImplementationStepResponse {
+  id: number
+  step_number: number
+  title: string
+  type: ImplementationStepType
+  dependencies: number[]
+  status: ImplementationStepStatus
+  details: string
+  outcome: string | null
+}
+
+export interface ImplementationPlanResponse {
+  id: number
+  task_id: number
+  overview: string | null
+  status: string
+  steps: ImplementationStepResponse[]
+}
+
+export interface ImplementationStepUpdate {
+  title?: string
+  type?: ImplementationStepType
+  dependencies?: number[]
+  details?: string
 }
 
 export interface TaskListItem {
@@ -1279,6 +1308,25 @@ export class ApiClient {
 
   async getPRDetail(codebaseId: number, prNumber: number): Promise<PRDetailResponse> {
     return this.request<PRDetailResponse>(`/api/github/prs/${codebaseId}/${prNumber}/detail`)
+  }
+
+  // Implementation Plans
+  async getImplementationPlan(taskId: number | string): Promise<ImplementationPlanResponse> {
+    return this.request<ImplementationPlanResponse>(`/api/tasks/${taskId}/implementation-plan`)
+  }
+
+  async updateImplementationStep(
+    taskId: number | string,
+    stepNumber: number,
+    data: ImplementationStepUpdate,
+  ): Promise<ImplementationStepResponse> {
+    return this.request<ImplementationStepResponse>(
+      `/api/tasks/${taskId}/implementation-plan/steps/${stepNumber}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    )
   }
 
   // Active Executions

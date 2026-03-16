@@ -20,6 +20,7 @@ from devboard.api.dependencies.services import (
     get_integration_service,
     get_resource_service,
     get_task_git_service,
+    get_task_implementation_plan_service,
     get_task_service,
     get_workspace_allocation_service,
 )
@@ -29,6 +30,9 @@ from devboard.api.schemas import (
     DeleteResponse,
     FileDiff,
     GitHubPRStatusResponse,
+    ImplementationPlanResponse,
+    ImplementationStepResponse,
+    ImplementationStepUpdate,
     MergeBranchRequest,
     MergeBranchResponse,
     PRFeedbackCommentResponse,
@@ -62,6 +66,7 @@ from devboard.services.resource_service import (
 )
 from devboard.services.task_git import TaskGitStatus
 from devboard.services.task_git_service import TaskGitService
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace_allocation_service import WorkspaceAllocationService
@@ -128,6 +133,9 @@ async def get_task(
         specification_document_id=task.specification.id,
         implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
         change_summary_document_id=task.change_summary.id if task.change_summary else None,
+        implementation_plan_id=(
+            task.implementation_plan_structured.id if task.implementation_plan_structured else None
+        ),
         custom_fields=task.custom_fields,
         available_workflow_actions=available_actions,
     )
@@ -185,6 +193,9 @@ async def update_task(
             updated_task.implementation_plan.id if updated_task.implementation_plan else None
         ),
         change_summary_document_id=(updated_task.change_summary.id if updated_task.change_summary else None),
+        implementation_plan_id=(
+            updated_task.implementation_plan_structured.id if updated_task.implementation_plan_structured else None
+        ),
         custom_fields=updated_task.custom_fields,
         available_workflow_actions=available_actions,
     )
@@ -707,4 +718,76 @@ async def get_task_pr_feedback(
             for review in feedback.reviews
         ],
         standalone_threads=[_map_thread(t) for t in feedback.standalone_threads],
+    )
+
+
+# Implementation Plan endpoints
+
+
+@router.get("/{task_id}/implementation-plan", response_model=ImplementationPlanResponse)
+async def get_implementation_plan(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+) -> ImplementationPlanResponse:
+    """Get the structured implementation plan for a task."""
+    plan = plan_service.get_plan_by_task_id(task_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="No implementation plan found for this task")
+
+    return ImplementationPlanResponse(
+        id=plan.id,
+        task_id=plan.task_id,
+        overview=plan.overview,
+        status=plan.status,
+        steps=[
+            ImplementationStepResponse(
+                id=step.id,
+                step_number=step.step_number,
+                title=step.title,
+                type=step.type,
+                dependencies=step.dependencies or [],
+                status=step.status,
+                details=step.details,
+                outcome=step.outcome,
+            )
+            for step in plan.steps
+        ],
+    )
+
+
+@router.patch(
+    "/{task_id}/implementation-plan/steps/{step_number}",
+    response_model=ImplementationStepResponse,
+)
+async def update_implementation_step(
+    task_id: int,
+    step_number: int,
+    step_update: ImplementationStepUpdate,
+    task: Task = Depends(get_verified_task),
+    plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+) -> ImplementationStepResponse:
+    """Update a specific implementation step by step number."""
+    plan = plan_service.get_plan_by_task_id(task_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="No implementation plan found for this task")
+
+    update_fields = step_update.model_dump(exclude_unset=True)
+    try:
+        step = plan_service.update_step(plan, step_number, **update_fields)
+    except ValueError as e:
+        # Return 404 for missing step, 400 for other validation errors
+        status_code = 404 if "not found" in str(e) else 400
+        raise HTTPException(status_code=status_code, detail=str(e)) from e
+    plan_service.commit()
+
+    return ImplementationStepResponse(
+        id=step.id,
+        step_number=step.step_number,
+        title=step.title,
+        type=step.type,
+        dependencies=step.dependencies or [],
+        status=step.status,
+        details=step.details,
+        outcome=step.outcome,
     )

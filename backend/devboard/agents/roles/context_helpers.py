@@ -4,6 +4,8 @@ Provides a standardized build_task_context() function that task-related
 agent roles use to build their context content consistently.
 """
 
+import logfire
+
 from devboard.db.models import Task
 
 
@@ -58,6 +60,74 @@ def _format_implementation_plan(task: Task) -> str:
     return _format_document_section("IMPLEMENTATION PLAN", content)
 
 
+def _format_implementation_plan_structured(task: Task, current_step_number: int | None = None) -> str:
+    """Format structured implementation plan with steps summary.
+
+    When current_step_number is provided (step execution context), shows full outcomes
+    and marks the current step. Otherwise truncates outcomes to 200 chars.
+    """
+    plan = task.implementation_plan_structured
+    if not plan:
+        return "IMPLEMENTATION PLAN:\n<No structured plan>"
+
+    lines = ["IMPLEMENTATION PLAN:"]
+
+    if plan.overview:
+        lines.append(f"\nOverview: {plan.overview}")
+
+    lines.append("\nSteps:")
+    for step in plan.steps:
+        deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
+        current_marker = " <<< CURRENT STEP" if step.step_number == current_step_number else ""
+        lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}{current_marker}")
+        if step.outcome:
+            if current_step_number is not None:
+                lines.append(f"     Outcome: {step.outcome}")
+            else:
+                outcome_preview = step.outcome[:200] + "..." if len(step.outcome) > 200 else step.outcome
+                lines.append(f"     Outcome: {outcome_preview}")
+
+    return "\n".join(lines)
+
+
+def build_execution_graph_context(task: Task) -> str:
+    """Build execution graph context showing step ordering and parallelism."""
+    plan = task.implementation_plan_structured
+    if not plan or not plan.steps:
+        return ""
+
+    lines = ["EXECUTION GRAPH:"]
+
+    # Compute topological layers for parallel execution groups
+    steps_by_number = {s.step_number: s for s in plan.steps}
+    remaining = set(steps_by_number.keys())
+    completed = {s.step_number for s in plan.steps if s.status in ("complete", "skipped")}
+    layers: list[list[int]] = []
+
+    while remaining:
+        resolved = completed.union({n for layer in layers for n in layer})
+        ready = [n for n in remaining if all(d in resolved for d in (steps_by_number[n].dependencies or []))]
+        if not ready:
+            logfire.warn(
+                "Execution graph has unresolvable dependencies, falling back to sorted order", remaining=remaining
+            )
+            ready = sorted(remaining)
+        layers.append(sorted(ready))
+        remaining -= set(ready)
+
+    for i, layer in enumerate(layers, start=1):
+        step_summaries: list[str] = []
+        for n in layer:
+            step = steps_by_number[n]
+            step_summaries.append(f"Step {n}: {step.title} [{step.status}]")
+        parallel_note = " (can run in parallel)" if len(layer) > 1 else ""
+        lines.append(f"  Layer {i}{parallel_note}:")
+        for summary in step_summaries:
+            lines.append(f"    - {summary}")
+
+    return "\n".join(lines)
+
+
 def _format_custom_fields(task: Task) -> str:
     """Format task custom fields as key-value pairs."""
     if not task.custom_fields:
@@ -80,6 +150,7 @@ def build_task_context(
     *,
     include_project_specification: bool = True,
     pr_status_content: str = "",
+    current_step_number: int | None = None,
 ) -> str:
     """Build standardized task context for agent roles.
 
@@ -87,6 +158,7 @@ def build_task_context(
         task: Task instance with eager-loaded relationships
         include_project_specification: Whether to include the full project specification document
         pr_status_content: Formatted PR status string (for PR review role)
+        current_step_number: If provided, marks this step as current in the plan and shows full outcomes (for step execution sub-agents)
 
     Returns:
         Formatted context string with consistent structure.
@@ -103,7 +175,13 @@ def build_task_context(
 
     sections.append(_format_task_specification(task))
 
-    if task.implementation_plan:
+    # Prefer structured plan, fall back to Document plan
+    if task.implementation_plan_structured:
+        sections.append(_format_implementation_plan_structured(task, current_step_number=current_step_number))
+        execution_graph = build_execution_graph_context(task)
+        if execution_graph:
+            sections.append(execution_graph)
+    elif task.implementation_plan:
         sections.append(_format_implementation_plan(task))
 
     if task.custom_fields:

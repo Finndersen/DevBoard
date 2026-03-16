@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
-import type { Task, Codebase, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
-import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument } from '../hooks'
+import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
+import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
@@ -80,6 +80,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Fetch documents separately - only when task is loaded with valid document IDs
   const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
   const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
+  const { data: implementationPlan, refetch: refetchImplementationPlan2 } = useImplementationPlan(task?.implementation_plan_id ?? null)
   const { data: changeSummaryDoc } = useDocument(task?.change_summary_document_id ?? null)
 
   // Document update mutation
@@ -356,6 +357,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     refetch,
     refetchSpecification,
     refetchImplementationPlan,
+    refetchStructuredPlan: refetchImplementationPlan2,
     refreshGitStatus,
     handleDiffRefresh,
     setActiveTab,
@@ -582,7 +584,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 <nav className="flex space-x-6">
                   {[
                     { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
-                    ...(task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
+                    ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
                     ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
                     ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
                     ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
@@ -631,6 +633,9 @@ function TaskDetail({ id }: TaskDetailProps) {
 
             {activeTab === 'plan' && (
               <PlanTab
+                taskId={task.id}
+                implementationPlan={implementationPlan}
+                onPlanUpdated={refetchImplementationPlan2}
                 implementationPlanDoc={implementationPlanDoc}
                 planField={planField}
               />

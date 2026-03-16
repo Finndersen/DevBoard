@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .codebase import Codebase
     from .configuration import ContextProviderResource
     from .document import Document
+    from .implementation_plan import ImplementationPlan
     from .project import Project
     from .worktree_slot import WorktreeSlot
 
@@ -73,6 +74,9 @@ class Task(Base):
     change_summary: Mapped["Document | None"] = relationship(
         foreign_keys=[change_summary_id],
     )
+    implementation_plan_structured: Mapped["ImplementationPlan | None"] = relationship(
+        back_populates="task",
+    )
 
     @property
     def current_worktree_slot(self) -> "WorktreeSlot | None":
@@ -125,7 +129,18 @@ class Task(Base):
 
         # Check prerequisites for target status
         if target_status == TaskStatus.IMPLEMENTING:
-            if not self.implementation_plan or not self.implementation_plan.content.strip():
+            # Check structured plan first, then fall back to Document-based plan
+            if self.implementation_plan_structured:
+                plan = self.implementation_plan_structured
+                if not plan.steps:
+                    raise InvalidStatusTransitionError(
+                        "Cannot transition to IMPLEMENTING: structured plan has no steps"
+                    )
+                if plan.status != "pending":
+                    raise InvalidStatusTransitionError(
+                        "Cannot transition to IMPLEMENTING: structured plan status must be 'pending'"
+                    )
+            elif not self.implementation_plan or not self.implementation_plan.content.strip():
                 raise InvalidStatusTransitionError("Cannot transition to IMPLEMENTING without implementation plan")
 
 

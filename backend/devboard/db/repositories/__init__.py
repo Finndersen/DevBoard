@@ -8,6 +8,7 @@ from .context_provider_resource import ContextProviderResourceRepository
 from .conversation import ConversationRepository
 from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
+from .implementation_plan import TaskImplementationPlanRepository
 from .mcp_server import MCPServerRepository
 from .oauth import OAuthRepository
 from .project import ProjectRepository
@@ -23,6 +24,7 @@ __all__ = [
     "ContextProviderResourceRepository",
     "ConversationRepository",
     "DocumentRepository",
+    "TaskImplementationPlanRepository",
     "MCPServerRepository",
     "OAuthRepository",
     "ProjectRepository",

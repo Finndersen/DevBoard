@@ -72,9 +72,34 @@
 
 **Package Structure**:
 - Project: spec, linked resources, codebase summaries, tasks
-- Task: spec, plan, parent project, task resources
+- Task: spec, implementation plan, parent project, task resources
 - Query: conversation history, state, tools
 - On-Demand: Available resource list
+
+## Task Context Assembly
+
+**Location**: `backend/devboard/agents/roles/context_helpers.py`
+
+**`build_task_context()`** assembles standardized context for all task-related agent roles:
+
+1. Task metadata (ID, name, status, PR number)
+2. Project metadata (name, description)
+3. Project specification (optional, controlled by `include_project_specification` flag)
+4. PR status (optional, for PR review role)
+5. Task specification
+6. Implementation plan (structured or legacy Document format)
+7. Custom fields (if present)
+8. Codebase info (name, repo URL, worktree directory, description)
+
+### Implementation Plan Context
+
+The context helper supports two plan formats:
+
+**Structured plan** (`ImplementationPlan` model): Preferred format. Renders plan overview, step list with statuses/types/dependencies, and outcome previews for completed steps. Additionally includes an **execution graph** (`build_execution_graph_context()`) showing topological layers of steps that can run in parallel, with current status of each step.
+
+**Legacy Document plan**: Falls back to rendering the Document content as markdown if no structured plan exists.
+
+The structured plan format is automatically selected when `task.implementation_plan_structured` is present.
 
 ## Caching
 

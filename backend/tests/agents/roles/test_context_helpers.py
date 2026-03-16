@@ -24,6 +24,7 @@ def mock_task() -> MagicMock:
     task.project.specification.content = "# Project Spec\n\nProject content."
     task.specification.content = "# Task Spec\n\nTask content."
     task.implementation_plan.content = "# Implementation\n\n1. Step one"
+    task.implementation_plan_structured = None
 
     return task
 
@@ -35,8 +36,8 @@ class TestBuildTaskContext:
         """Test that all sections are included with default parameters."""
         result = build_task_context(mock_task)
 
-        assert "TASK NAME: Test Task Title" in result
-        assert "TASK STATUS: planning" in result
+        assert "NAME: Test Task Title" in result
+        assert "STATUS: planning" in result
         assert "PROJECT SPECIFICATION:" in result
         assert "Project content." in result
         assert "TASK SPECIFICATION:" in result
@@ -140,15 +141,15 @@ class TestBuildTaskContext:
         result = build_task_context(mock_task, pr_status_content="PR info")
 
         # Find positions of each section
-        task_name_pos = result.find("TASK NAME:")
+        task_name_pos = result.find("## TASK DETAILS")
         pr_status_pos = result.find("PR STATUS:")
         project_spec_pos = result.find("PROJECT SPECIFICATION:")
         task_spec_pos = result.find("TASK SPECIFICATION:")
         impl_plan_pos = result.find("IMPLEMENTATION PLAN:")
         codebase_pos = result.find("RELEVANT CODEBASE:")
 
-        # Verify order: metadata -> pr_status -> project_spec -> task_spec -> impl_plan -> codebase
-        assert task_name_pos < pr_status_pos < project_spec_pos < task_spec_pos < impl_plan_pos < codebase_pos
+        # Verify order: metadata -> project_spec -> pr_status -> task_spec -> impl_plan -> codebase
+        assert task_name_pos < project_spec_pos < pr_status_pos < task_spec_pos < impl_plan_pos < codebase_pos
 
     def test_specification_role_configuration(self, mock_task: MagicMock):
         """Test configuration matching TaskSpecificationAgentRole (no impl plan yet)."""

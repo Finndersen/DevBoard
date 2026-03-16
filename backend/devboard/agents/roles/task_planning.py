@@ -7,10 +7,18 @@ from devboard.agents.tools import (
     create_document_edit_tool,
     create_set_document_content_tool,
 )
+from devboard.agents.tools.implementation_plan_tools import (
+    create_add_implementation_step_tool,
+    create_edit_implementation_plan_overview_tool,
+    create_edit_implementation_step_tool,
+    create_remove_implementation_step_tool,
+    create_set_implementation_plan_steps_tool,
+)
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
 PLANNING_ROLE_PROMPT = """
@@ -45,23 +53,44 @@ Use these capabilities proactively:
 
 ## IMPLEMENTATION PLAN
 
-A technical roadmap for the implementation agent. Captures the critical design decisions and approach — not a step-by-step how-to. Reference the Task Specification instead of duplicating content. **Be concise — only include what is non-obvious or critical to get right upfront.**
+A structured plan consisting of discrete steps, each executable by a sub-agent. Use the `set_implementation_plan_steps` tool to create the plan.
 
 **Before Drafting:**
 Use `investigate_codebase` to research codebase patterns, conventions, and frameworks relevant to the implementation approach. This should cover things like: how similar features are structured, existing utilities or helpers that can be reused, naming conventions, testing patterns, and relevant framework usage. Use multiple parallel calls if investigating several areas.
 
-**Include:**
-- Implementation Steps: Concise steps with specific files/components to modify. Indicate parallel execution where applicable.
-- Critical Design Details: Only where non-obvious — e.g. key field names/types for schema changes, endpoint signatures and request/response shapes for new APIs, important interfaces crossing component boundaries (frontend/backend, service/repository)
-- Key Design Decisions: Architectural choices or tradeoffs that aren't apparent from the codebase
-- Testing Strategy: Tests to add or update
-- Documentation Updates: Changes to `docs/` if relevant
+**Step Structure:**
+Each step should be self-contained with enough detail for a sub-agent to execute independently. Steps have:
+- **title**: Short summary (e.g. "Add database models")
+- **type**: One of:
+  - `code_change` — implement the described changes **and write corresponding tests** for any new functionality introduced. Tests belong in the same step as the code they cover — do not split them out.
+  - `documentation` — update or add documentation only
+  - `validation` — run linting, type-checking, formatting, and the full test suite; fix any failures found. Not for writing new tests.
+  - `code_review` — optional: review the git diff for correctness, quality, and alignment with the spec; produces findings for the coordination agent to act on (does not make changes directly). Include for non-trivial changes.
+- **dependencies**: List of step numbers (1-indexed) that must complete first
+- **details**: Detailed markdown instructions — include specific files, components, field names, and any non-obvious design decisions
 
-**Exclude:**
+**Designing Effective Steps:**
+- Each step should represent a logical, independently deployable unit of work
+- Break along natural seams: separate backend model changes from API layer changes, API from frontend, etc.
+- Avoid steps that are too fine-grained (e.g. a single function) or too coarse (e.g. "implement everything")
+- A step that another step depends on should be completable without knowledge of its dependents
+- For `code_change` steps: specify which test files/patterns to follow so tests are written correctly alongside the code
+
+**Recommended Step Ordering:**
+1. Code change steps (with tests included) — ordered by logical dependency (e.g. data models before API before frontend)
+2. One `validation` step depending on all code steps — runs the full quality gate and fixes any failures
+3. (Optional) One `code_review` step depending on testing — for non-trivial changes; reviews the overall diff and fixes any issues
+
+**Step Details Should Include:**
+- Specific files/components to modify or create
+- Relevant test file paths or patterns to follow
+- Critical design details where non-obvious (field names/types, endpoint signatures, interfaces)
+- Key design decisions or tradeoffs
+
+**Step Details Should Exclude:**
 - Content already in the Task Specification
-- Full code snippets or verbatim implementation details
-- Design details that are obvious from existing patterns or context
-- Time estimates
+- Full code snippets or verbatim implementation
+- Design details obvious from existing patterns
 
 ## OPERATING PRINCIPLES
 
@@ -86,7 +115,7 @@ Use `investigate_codebase` to research codebase patterns, conventions, and frame
 2. **Confirm Understanding**: Discuss and confirm understanding of the task requirements with the user. DO NOT proceed before receiving explicit user approval.
 3. **Create Task Specification**: Use `set_task_specification()` tool to write and display the task specification to the user for review.
 4. **Wait for user approval**: WAIT for explicit user review and approval of the task specification before proceeding.
-5. **Create Implementation Plan**: Once user has approved the task specification, use the `set_task_implementation_plan()` tool to write and display the implementation plan to the user for review.
+5. **Create Implementation Plan**: Once user has approved the task specification, use the `set_implementation_plan_steps` tool to create a structured implementation plan with discrete steps for the user to review.
 
 """
 
@@ -102,6 +131,7 @@ class TaskPlanningAgentRole(AgentRole):
         task_service: TaskService,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
+        plan_service: TaskImplementationPlanService | None = None,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -109,6 +139,7 @@ class TaskPlanningAgentRole(AgentRole):
         self.task_service = task_service
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
+        self.plan_service = plan_service
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
@@ -134,19 +165,33 @@ class TaskPlanningAgentRole(AgentRole):
                 create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
             )
 
-        # Tools for implementation plan document (never require approval)
-        if self.task.implementation_plan:
-            tools.append(
-                create_set_document_content_tool(
-                    self.task.implementation_plan, self.document_repository, requires_approval=False
+        # Structured implementation plan tools
+        if self.plan_service:
+            tools.append(create_set_implementation_plan_steps_tool(self.task, self.plan_service))
+            # Additional editing tools only if plan already exists
+            if self.task.implementation_plan_structured:
+                tools.extend(
+                    [
+                        create_add_implementation_step_tool(self.task, self.plan_service),
+                        create_edit_implementation_step_tool(self.task, self.plan_service),
+                        create_remove_implementation_step_tool(self.task, self.plan_service),
+                        create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
+                    ]
                 )
-            )
-            if self.task.implementation_plan.content:
+        else:
+            # Fallback to Document-based implementation plan tools (backwards compat)
+            if self.task.implementation_plan:
                 tools.append(
-                    create_document_edit_tool(
+                    create_set_document_content_tool(
                         self.task.implementation_plan, self.document_repository, requires_approval=False
                     )
                 )
+                if self.task.implementation_plan.content:
+                    tools.append(
+                        create_document_edit_tool(
+                            self.task.implementation_plan, self.document_repository, requires_approval=False
+                        )
+                    )
 
         # Add codebase investigation tool
         tools.append(

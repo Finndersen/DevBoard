@@ -412,6 +412,7 @@ def create_mock_task(
     # Mock additional attributes accessed by context builders
     task.github_pr_number = None
     task.custom_fields = None
+    task.implementation_plan_structured = None
 
     # Mock workspace directory method
     task.get_current_workspace_dir = Mock(return_value=codebase_path)

@@ -16,9 +16,17 @@
 
 **set_task_specification_content**: Full replacement. Approval required. Params: `content`. Used by: TaskSpecificationRole
 
-**edit_implementation_plan**: Find-and-replace in plan. Approval required. Params: `old_string`, `new_string`. Used by: TaskPlanningRole
+### Implementation Plan Editing
 
-**set_implementation_plan_content**: Full replacement. Approval required. Params: `content`. Used by: TaskPlanningRole
+**set_implementation_plan_steps**: Bulk creation/replacement of structured implementation plan steps. No approval. Params: `overview` (optional str), `steps` (ordered list of `{title, type, dependencies, details}`). Step numbers auto-assigned from array position (1-indexed). Validates dependency graph (no cycles, valid references). Replaces existing plan if called again. Used by: TaskPlanningRole
+
+**add_implementation_step**: Add a single step to existing plan (step_number = max + 1). No approval. Params: `title`, `type`, `dependencies`, `details`. Used by: TaskPlanningRole
+
+**edit_implementation_step**: Edit a single step's fields by step_number. No approval. Params: `step_number`, optional `title`, `type`, `dependencies`, `details`. Used by: TaskPlanningRole
+
+**remove_implementation_step**: Remove a step by step_number. Validates no other steps depend on it. No approval. Params: `step_number`. Used by: TaskPlanningRole
+
+**edit_implementation_plan_overview**: Edit the plan overview text. No approval. Params: `overview`. Used by: TaskPlanningRole
 
 **edit_project_specification**: Find-and-replace in project spec. Approval required. Params: `old_string`, `new_string`. Used by: ProjectQARole
 
@@ -47,6 +55,8 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 **investigate_codebase**: Delegates codebase investigation queries to a specialised `CodebaseInvestigationAgentRole` sub-agent. No approval (read-only). Params: `codebase_name` (Literal of available codebases), `query` (specific question), `session_id` (optional, for session resumption). Used by: TaskImplementationRole. Returns JSON `{"result": ..., "session_id": ...}`.
 
 **review_code_changes**: Performs a comprehensive code review of all task changes via a `CodeReviewAgentRole` sub-agent. No approval. No params (context assembled from captured task). Used by: TaskImplementationRole. Evaluates plan alignment, code quality, architecture, test coverage, edge cases, and cross-component impact. Returns JSON `{"result": ..., "session_id": null}`.
+
+**execute_implementation_step**: Delegates execution of a single implementation plan step to a `StepExecutionAgentRole` sub-agent. No approval. Params: `step_number` (int). Validates step is `pending` and all dependency steps are `complete`. Sets step status to `running`, invokes sub-agent with step details and dependency outcomes as context, then updates status to `complete`/`failed` with outcome. Used by: TaskImplementationRole.
 
 ### Shell Commands
 
@@ -115,9 +125,11 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 
-**TaskPlanningRole**: edit_implementation_plan, set_implementation_plan_content, create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskPlanningRole**: set_implementation_plan_steps, add_implementation_step, edit_implementation_step, remove_implementation_step, edit_implementation_plan_overview, create_task, search_codebase, read_codebase_files, execute_shell_command
 
-**TaskImplementationRole**: create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskImplementationRole**: execute_implementation_step, create_task, search_codebase, read_codebase_files, execute_shell_command
+
+**StepExecutionRole**: search_codebase, read_codebase_files (plus Claude Code engine builtins: Read, Edit, Write, Bash, Grep, Glob, etc.)
 
 **TaskPRReviewRole**: create_task, get_pr_feedback, merge_pr_and_complete_task
 

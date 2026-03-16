@@ -8,6 +8,12 @@ from .conversation import Conversation
 from .custom_field import CustomFieldDefinition, CustomFieldType
 from .document import Document, DocumentType
 from .enums import EntityType, ParentEntityType
+from .implementation_plan import (
+    ImplementationPlan,
+    ImplementationStep,
+    ImplementationStepStatus,
+    ImplementationStepType,
+)
 from .mcp_server import (
     HttpMCPConfig,
     MCPServerConfig,
@@ -52,6 +58,10 @@ __all__ = [
     "OAuthProviderType",
     "OAuthToken",
     "EntityType",
+    "ImplementationPlan",
+    "ImplementationStep",
+    "ImplementationStepStatus",
+    "ImplementationStepType",
     "ParentEntityType",
     "PendingOAuthAuthorization",
     "Project",

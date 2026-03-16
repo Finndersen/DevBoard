@@ -22,6 +22,7 @@ from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
 
@@ -39,7 +40,10 @@ async def create_agent_role_for_conversation(
     Non-dependency helper that can be called directly from any context.
     """
     parent_entity = conversation.get_parent_entity()
-    conversation_id = conversation.id
+    parent_conversation_id = conversation.id
+    from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
+
+    plan_service = TaskImplementationPlanService(TaskImplementationPlanRepository(conversation_repo.db))
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
         if conversation.agent_role == AgentRoleType.TASK_PLANNING:
@@ -49,7 +53,8 @@ async def create_agent_role_for_conversation(
                 agent_config_service=agent_config_service,
                 task_service=task_service,
                 conversation_repo=conversation_repo,
-                conversation_id=conversation_id,
+                conversation_id=parent_conversation_id,
+                plan_service=plan_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -62,7 +67,8 @@ async def create_agent_role_for_conversation(
                 task_git_service=task_git_service,
                 github_integration=github_integration,
                 conversation_repo=conversation_repo,
-                conversation_id=conversation_id,
+                conversation_id=parent_conversation_id,
+                plan_service=plan_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -89,7 +95,7 @@ async def create_agent_role_for_conversation(
                 agent_config_service=agent_config_service,
                 task_service=task_service,
                 conversation_repo=conversation_repo,
-                conversation_id=conversation_id,
+                conversation_id=parent_conversation_id,
             )
         else:
             raise HTTPException(

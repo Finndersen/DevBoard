@@ -38,11 +38,36 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 **Relationships**:
 - `project`: Many-to-one with Project
 - `specification`: One-to-one with Document
-- `implementation_plan`: One-to-one with Document
+- `implementation_plan`: One-to-one with Document (legacy, deprecated)
+- `implementation_plan_structured`: One-to-one with ImplementationPlan (structured plan with discrete steps)
 - `context_resources`: Many-to-many with ContextProviderResource
 - `conversation`: One-to-one with Conversation (polymorphic)
 
 **Cascade**: Deleting task deletes specification, plan, and conversation
+
+### ImplementationPlan Model
+
+**Purpose**: Structured implementation plan containing discrete execution steps with dependency tracking
+
+**Key Fields**: `id`, `task_id` (unique FK), `overview` (nullable text), `created_at`, `updated_at`
+
+**Computed Status** (derived from step statuses): `pending`, `executing`, `complete`, `failed`
+
+**Relationships**:
+- `task`: One-to-one with Task (back-reference via `task_id`)
+- `steps`: One-to-many with ImplementationStep (cascade delete, ordered by `step_number`)
+
+### ImplementationStep Model
+
+**Purpose**: A discrete step within an implementation plan, executable by a sub-agent
+
+**Key Fields**: `id`, `implementation_plan_id` (FK), `step_number` (int), `title`, `type` (Enum), `dependencies` (JSON list of step numbers), `status` (Enum), `details` (text), `outcome` (nullable text), `created_at`, `updated_at`
+
+**Type Enum**: `code_change`, `documentation`, `validation`, `code_review`
+
+**Status Enum**: `pending`, `running`, `complete`, `failed`, `skipped`
+
+**Cascade**: Deleted when parent ImplementationPlan is deleted
 
 ### Codebase Model
 

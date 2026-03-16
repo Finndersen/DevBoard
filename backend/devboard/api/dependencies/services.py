@@ -17,6 +17,7 @@ from devboard.api.dependencies.repositories import (
     get_mcp_server_repository,
     get_oauth_repository,
     get_project_repository,
+    get_task_implementation_plan_repository,
     get_task_repository,
     get_worktree_slot_repository,
 )
@@ -35,6 +36,7 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
+from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
 from devboard.services.context_assembly import ContextAssemblyService
@@ -45,6 +47,7 @@ from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
 from devboard.services.resource_service import ResourceService
 from devboard.services.task_git_service import TaskGitService
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
@@ -160,6 +163,13 @@ def get_task_service(
         task_repo=task_repo,
         custom_field_repo=custom_field_repo,
     )
+
+
+def get_task_implementation_plan_service(
+    plan_repo: TaskImplementationPlanRepository = Depends(get_task_implementation_plan_repository),
+) -> TaskImplementationPlanService:
+    """Get TaskImplementationPlanService instance."""
+    return TaskImplementationPlanService(plan_repo=plan_repo)
 
 
 def get_project_service(
