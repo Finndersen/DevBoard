@@ -78,4 +78,24 @@ describe('Markdown', () => {
     )
     expect(container.firstChild).toHaveClass('custom-class')
   })
+
+  describe('heading IDs', () => {
+    it('adds id attributes to rendered headings', () => {
+      const { container } = renderWithProvider(
+        <Markdown>## Hello World</Markdown>
+      )
+      const h2 = container.querySelector('h2')
+      expect(h2).toHaveAttribute('id', 'hello-world')
+    })
+
+    it('adds suffixed ids for duplicate headings', () => {
+      const { container } = renderWithProvider(
+        <Markdown>{'## Section\n\n## Section'}</Markdown>
+      )
+      const headings = container.querySelectorAll('h2')
+      expect(headings).toHaveLength(2)
+      expect(headings[0]).toHaveAttribute('id', 'section')
+      expect(headings[1]).toHaveAttribute('id', 'section-1')
+    })
+  })
 })

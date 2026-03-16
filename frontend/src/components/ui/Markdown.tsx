@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
+import type { ReactNode } from 'react'
 import CodeBlock from './CodeBlock'
 import HtmlPreview from './HtmlPreview'
 import MermaidDiagram from './MermaidDiagram'
 import MermaidDiagramModal from './MermaidDiagramModal'
+import { generateSlug } from '../../utils/markdown'
 
 interface MarkdownProps {
   children: string
@@ -19,6 +21,31 @@ export default function Markdown({
   className = ''
 }: MarkdownProps) {
   const [modalCode, setModalCode] = useState<string | null>(null)
+
+  // Ref holds a fresh Set that is recreated before each render cycle.
+  // The heading renderers (captured in the memoized `components`) read from
+  // this ref, so they always use a clean Set even across re-renders.
+  const slugTrackerRef = useRef(new Set<string>())
+  slugTrackerRef.current = new Set<string>()
+
+  function extractText(node: ReactNode): string {
+    if (typeof node === 'string') return node
+    if (typeof node === 'number') return String(node)
+    if (Array.isArray(node)) return node.map(extractText).join('')
+    if (node && typeof node === 'object' && 'props' in node) {
+      return extractText((node as React.ReactElement).props.children)
+    }
+    return ''
+  }
+
+  function makeHeadingRenderer(level: number) {
+    const Tag = `h${level}` as const
+    return function HeadingWithId(props: React.HTMLAttributes<HTMLHeadingElement>) {
+      const text = extractText(props.children as ReactNode)
+      const slug = generateSlug(text, slugTrackerRef.current)
+      return <Tag {...props} id={slug} />
+    }
+  }
 
   const getCompactProseClasses = () => {
     const baseClasses = 'prose prose-sm max-w-none'
@@ -93,7 +120,13 @@ export default function Markdown({
     pre({ children }) {
       // Return children directly since CodeBlock/MermaidDiagram handle their own wrapping
       return <>{children}</>
-    }
+    },
+    h1: makeHeadingRenderer(1),
+    h2: makeHeadingRenderer(2),
+    h3: makeHeadingRenderer(3),
+    h4: makeHeadingRenderer(4),
+    h5: makeHeadingRenderer(5),
+    h6: makeHeadingRenderer(6),
   }), [forceWhiteText])
 
   return (
