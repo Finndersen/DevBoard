@@ -5,7 +5,7 @@ Ensures proper agent configuration and conversation state throughout the task li
 """
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 
 import logfire
 
@@ -21,6 +21,8 @@ from devboard.db.repositories.task import TaskRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.conversation_service import ConversationService
 from devboard.services.task_git_service import MergeOutcome, MergeResult, TaskGitService
+
+RECENT_COMPLETED_TASKS_LIMIT = 5
 
 
 class TaskTransitionError(Exception):
@@ -41,6 +43,9 @@ class TaskService:
         self.document_repo = document_repo
         self.task_repo = task_repo
         self.custom_field_repo = custom_field_repo
+
+    def _touch_updated_at(self, task: Task) -> None:
+        task.updated_at = datetime.now(UTC)
 
     def _generate_branch_name(self, title: str) -> str:
         """Generate a branch name from a task title.
@@ -126,6 +131,7 @@ class TaskService:
 
         # Update task status
         task.status = TaskStatus.IMPLEMENTING
+        self._touch_updated_at(task)
         return self.task_repo.update(task)
 
     async def delete_task(self, task: Task, delete_branch: bool = False) -> None:
@@ -194,6 +200,7 @@ class TaskService:
         # Update task status and PR number
         task.github_pr_number = pr_number
         task.status = TaskStatus.PR_OPEN
+        self._touch_updated_at(task)
         self.task_repo.update(task)
 
         # Create new conversation with TASK_PR_REVIEW role for PR feedback handling
@@ -227,6 +234,7 @@ class TaskService:
 
         # Update task status
         task.status = TaskStatus.COMPLETE
+        self._touch_updated_at(task)
         self.task_repo.update(task)
         return task
 
@@ -342,6 +350,7 @@ class TaskService:
                     merged[key] = value
             task.custom_fields = merged
 
+        self._touch_updated_at(task)
         return self.task_repo.update(task)
 
     # Query methods (delegating to repository)
@@ -393,3 +402,27 @@ class TaskService:
     def get_mandatory_custom_fields(self) -> list[CustomFieldDefinition]:
         """Get all mandatory custom field definitions."""
         return self.custom_field_repo.get_mandatory_fields(entity_type=EntityType.TASK)
+
+    def get_project_task_summaries(
+        self,
+        project_id: int,
+        recent_completed_limit: int = RECENT_COMPLETED_TASKS_LIMIT,
+    ) -> tuple[list[Task], list[Task]]:
+        """Get active and recently completed tasks for project context.
+
+        Returns:
+            Tuple of (active_tasks, recent_completed_tasks), both sorted by updated_at descending.
+        """
+        all_tasks = self.task_repo.get_list(project_id=project_id)
+        active_statuses = {TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN}
+        active = sorted(
+            [t for t in all_tasks if t.status in active_statuses],
+            key=lambda t: t.updated_at,
+            reverse=True,
+        )
+        completed = sorted(
+            [t for t in all_tasks if t.status == TaskStatus.COMPLETE],
+            key=lambda t: t.updated_at,
+            reverse=True,
+        )[:recent_completed_limit]
+        return active, completed

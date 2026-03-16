@@ -61,6 +61,17 @@ class TestTaskRepository:
         assert created.title == "Test Task"
         assert created.status.value == "planning"  # Default status
 
+    def test_create_task_sets_updated_at_equal_to_created_at(
+        self, repo: TaskRepository, sample_task_data: dict, db_session
+    ):
+        """Test that a newly created task has updated_at set approximately equal to created_at."""
+        created = repo.create(**sample_task_data)
+        db_session.commit()
+        assert created.updated_at is not None
+        # updated_at should be within 1 second of created_at
+        delta = abs((created.updated_at - created.created_at).total_seconds())
+        assert delta < 1
+
     def test_get_by_id(self, repo: TaskRepository, sample_task_data: dict, db_session):
         """Test getting a task by ID."""
         created = repo.create(**sample_task_data)

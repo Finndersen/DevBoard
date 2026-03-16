@@ -54,6 +54,7 @@ class Task(Base):
     change_summary_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
+    updated_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
     codebase: Mapped["Codebase"] = relationship(back_populates="tasks")

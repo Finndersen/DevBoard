@@ -1,5 +1,6 @@
 """Tests for TaskService state transition methods."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -163,6 +164,58 @@ class TestTransitionToImplementing:
 
         with pytest.raises(InvalidStatusTransitionError):
             task_service.transition_to_implementing(task_in_implementing)
+
+    def test_transition_updates_updated_at(self, task_service, task_in_planning, mock_task_repo):
+        """Test that transition_to_implementing updates updated_at."""
+        old_time = datetime.now(UTC) - timedelta(hours=1)
+        task_in_planning.created_at = old_time
+        task_in_planning.updated_at = old_time
+
+        task_service.transition_to_implementing(task_in_planning)
+
+        assert task_in_planning.updated_at > old_time
+
+
+class TestTransitionToPrOpen:
+    """Tests for TaskService.transition_to_pr_open()."""
+
+    @pytest.fixture
+    def task_in_implementing_for_pr(self):
+        task = MagicMock(spec=Task)
+        task.id = 7
+        task.status = TaskStatus.IMPLEMENTING
+        task.verify_status_transition.return_value = None
+        return task
+
+    def test_transition_updates_updated_at(self, task_service, task_in_implementing_for_pr, mock_task_repo):
+        """Test that transition_to_pr_open updates updated_at."""
+        old_time = datetime.now(UTC) - timedelta(hours=1)
+        task_in_implementing_for_pr.updated_at = old_time
+
+        task_service.transition_to_pr_open(task_in_implementing_for_pr, pr_number=42)
+
+        assert task_in_implementing_for_pr.updated_at > old_time
+
+
+class TestTransitionToComplete:
+    """Tests for TaskService.transition_to_complete()."""
+
+    @pytest.fixture
+    def task_in_pr_open(self):
+        task = MagicMock(spec=Task)
+        task.id = 8
+        task.status = TaskStatus.PR_OPEN
+        task.verify_status_transition.return_value = None
+        return task
+
+    def test_transition_updates_updated_at(self, task_service, task_in_pr_open, mock_task_repo):
+        """Test that transition_to_complete updates updated_at."""
+        old_time = datetime.now(UTC) - timedelta(hours=1)
+        task_in_pr_open.updated_at = old_time
+
+        task_service.transition_to_complete(task_in_pr_open)
+
+        assert task_in_pr_open.updated_at > old_time
 
 
 class TestTransitionValidation:
@@ -345,3 +398,12 @@ class TestUpdateTask:
         assert task.title == "Original Title"
         assert task.custom_fields == {"a": 1}
         mock_task_repo.update.assert_called_once_with(task)
+
+    def test_update_task_refreshes_updated_at(self, task_service, task, mock_task_repo):
+        """update_task sets updated_at to a time later than the original."""
+        old_time = datetime.now(UTC) - timedelta(hours=1)
+        task.updated_at = old_time
+
+        task_service.update_task(task, title="New Title")
+
+        assert task.updated_at > old_time

@@ -16,7 +16,7 @@ from devboard.agents.tools.task_tools import (
     create_list_tasks_tool,
     create_view_task_details_tool,
 )
-from devboard.db.models import Project
+from devboard.db.models import Project, Task
 from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
@@ -68,16 +68,28 @@ Focus on connecting information across different sources to provide comprehensiv
 """
 
 
-def build_project_qa_context(project: Project) -> str:
+def _format_task_summary_line(task: Task) -> str:
+    created = task.created_at.strftime("%Y-%m-%d")
+    updated = task.updated_at.strftime("%Y-%m-%d")
+    return f'- #{task.id} [{task.status.value}] "{task.title}" | Created: {created} | Last updated: {updated}'
+
+
+def build_project_qa_context(
+    project: Project,
+    active_tasks: list[Task],
+    recent_completed_tasks: list[Task],
+) -> str:
     """Build context for project Q&A agent.
 
-    Includes project metadata and specification document.
+    Includes project metadata, specification document, and task summaries.
 
     Note: Requires project to be loaded within an active SQLAlchemy session,
     as it will lazy-load relationships if needed.
 
     Args:
         project: Project instance with eager-loaded documents
+        active_tasks: Tasks with planning/implementing/pr_open status
+        recent_completed_tasks: Recently completed tasks
 
     Returns:
         Formatted context string
@@ -90,6 +102,14 @@ PROJECT SPECIFICATION DOCUMENT:
 {project.specification.content or "<EMPTY>"}
 </document>
 """
+    if active_tasks:
+        lines = "\n".join(_format_task_summary_line(t) for t in active_tasks)
+        context += f"\nACTIVE TASKS:\n{lines}\n"
+
+    if recent_completed_tasks:
+        lines = "\n".join(_format_task_summary_line(t) for t in recent_completed_tasks)
+        context += f"\nRECENTLY COMPLETED TASKS:\n{lines}\n"
+
     return context
 
 
@@ -156,9 +176,10 @@ class ProjectQAAgentRole(AgentRole):
         """Get context content for project Q&A role.
 
         Returns:
-            Formatted context containing project details and specification
+            Formatted context containing project details, specification, and task summaries
         """
-        return build_project_qa_context(self.project)
+        active_tasks, recent_completed = self.task_service.get_project_task_summaries(self.project.id)
+        return build_project_qa_context(self.project, active_tasks, recent_completed)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
