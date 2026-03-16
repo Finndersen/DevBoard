@@ -95,11 +95,25 @@
 
 The context helper supports two plan formats:
 
-**Structured plan** (`ImplementationPlan` model): Preferred format. Renders plan overview, step list with statuses/types/dependencies, and outcome previews for completed steps. Additionally includes an **execution graph** (`build_execution_graph_context()`) showing topological layers of steps that can run in parallel, with current status of each step.
+**Structured plan** (`ImplementationPlan` model): Preferred format. Renders plan overview and step list with statuses/types/dependencies. Step outcomes are controlled by the `include_step_outcomes` flag — omitted by default, included in full for roles that need execution history (StepExecution, CodeReview, TaskPRReview). Additionally includes an **execution graph** (`build_execution_graph_context()`) showing topological layers of steps that can run in parallel, with current status of each step.
 
 **Legacy Document plan**: Falls back to rendering the Document content as markdown if no structured plan exists.
 
 The structured plan format is automatically selected when `task.implementation_plan_structured` is present.
+
+### Context Breakdown by Agent Role
+
+`build_task_context()` is used by all task-related agent roles with per-role flag customization:
+
+**Default context** (all roles): task metadata, project metadata, project specification, task specification, implementation plan summary (steps with status/type/dependencies), execution graph, custom fields, codebase info.
+
+| Agent Role | `include_step_outcomes` | `include_project_specification` | `pr_status_content` | Notes |
+|---|---|---|---|---|
+| TaskPlanningRole | `False` | `True` | — | Steps haven't been executed yet; use `read_implementation_step_details` tool for step details on demand |
+| TaskImplementationRole | `False` | `True` | — | Gets outcomes from `execute_implementation_step` return values; use `read_implementation_step_details` for step details on demand |
+| StepExecutionRole | `True` | `True` | — | Needs prior step outcomes for context continuity |
+| CodeReviewRole | `True` | `True` | — | Understanding step results helps assess implementation intent |
+| TaskPRReviewRole | `True` | `True` | PR status string | Understanding step results helps respond to PR feedback |
 
 ## Caching
 

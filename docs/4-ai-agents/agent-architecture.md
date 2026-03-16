@@ -102,7 +102,7 @@ Roles define agent behavior independently of the execution engine, encapsulating
 **TaskPlanningRole**:
 - Purpose: Create structured implementation plans during PLANNING phase
 - Context: Task specification, project specification, codebase info
-- Tools: `set_implementation_plan_steps` (bulk creation), `add_implementation_step`, `edit_implementation_step`, `remove_implementation_step`, `edit_implementation_plan_overview`, `create_task`, `search_code_structure`, `show_directory_tree`, `investigate_codebase`
+- Tools: `set_implementation_plan_steps` (bulk creation), `add_implementation_step`, `edit_implementation_step`, `remove_implementation_step`, `edit_implementation_plan_overview`, `read_implementation_step_details`, `create_task`, `search_code_structure`, `show_directory_tree`, `investigate_codebase`
 - Creates structured `ImplementationPlan` with discrete `ImplementationStep` records
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_planning.py`
@@ -110,13 +110,13 @@ Roles define agent behavior independently of the execution engine, encapsulating
 **TaskImplementationRole** (Coordination Agent):
 - Purpose: Coordinate implementation by executing plan steps via sub-agents during IMPLEMENTATION phase
 - Context: Task specification, structured implementation plan with execution graph, codebase structure
-- Tools: `execute_implementation_step` (delegates to StepExecution sub-agent), `review_code_changes`, `create_task`, `investigate_codebase`, `search_code_structure`, plus code editing tools
+- Tools: `execute_implementation_step` (delegates to StepExecution sub-agent), `read_implementation_step_details`, `review_code_changes`, `create_task`, `investigate_codebase`, `search_code_structure`, plus code editing tools
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_implementation.py`
 
 **StepExecutionRole** (sub-agent only):
 - Purpose: Execute a single implementation step as delegated by the coordination agent
-- Context: Step details, task context, completed dependency step outcomes
+- Context: Task context with full step outcomes; step title and details provided via prompt
 - Type-specific system prompt preambles for `code_change`, `documentation`, `validation`, and `code_review` steps
 - Engine Support: CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/step_execution.py`

@@ -58,12 +58,11 @@ Create technical execution plans through agent conversation:
 
 - **Planning Agent**: TaskPlanningRole creates implementation strategies
 - **Technical Focus**: Architecture decisions, component changes, testing approach
-- **Structured Plan**: Implementation plan follows template
-  - Summary: High-level approach and strategy
-  - Technical Analysis: Architecture impact and dependencies
-  - Implementation Steps: Phased approach with specific actions
-  - Testing Strategy: Quality assurance requirements
-  - Definition of Done: Completion criteria and deliverables
+- **Structured Plan**: Implementation plan consists of discrete steps, each executable by a sub-agent
+  - Overview: High-level approach and strategy
+  - Steps: Ordered list with types (`code_change`, `documentation`, `validation`, `code_review`), dependencies, and detailed instructions
+  - Status tracking: Each step progresses through `pending` → `running` → `complete`/`failed`/`skipped`
+  - Dependency graph: Steps declare dependencies to control execution order and enable parallelism
 - **Code Analysis**: Agent has access to codebase for informed planning
 - **Context-Aware**: Agent understands task specification and project context
 

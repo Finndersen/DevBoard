@@ -28,6 +28,8 @@
 
 **edit_implementation_plan_overview**: Edit the plan overview text. No approval. Params: `overview`. Used by: TaskPlanningRole
 
+**read_implementation_step_details**: Read the full details/instructions of a specific implementation plan step. No approval (read-only). Params: `step_number` (int). Used by: TaskPlanningRole, TaskImplementationRole
+
 **edit_project_specification**: Find-and-replace in project spec. Approval required. Params: `old_string`, `new_string`. Used by: ProjectQARole
 
 ### Visualization
@@ -56,7 +58,7 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **review_code_changes**: Performs a comprehensive code review of all task changes via a `CodeReviewAgentRole` sub-agent. No approval. No params (context assembled from captured task). Used by: TaskImplementationRole. Evaluates plan alignment, code quality, architecture, test coverage, edge cases, and cross-component impact. Returns JSON `{"result": ..., "session_id": null}`.
 
-**execute_implementation_step**: Delegates execution of a single implementation plan step to a `StepExecutionAgentRole` sub-agent. No approval. Params: `step_number` (int). Validates step is `pending` and all dependency steps are `complete`. Sets step status to `running`, invokes sub-agent with step details and dependency outcomes as context, then updates status to `complete`/`failed` with outcome. Used by: TaskImplementationRole.
+**execute_implementation_step**: Delegates execution of a single implementation plan step to a `StepExecutionAgentRole` sub-agent. No approval. Params: `step_number` (int), `force_run` (bool, optional), `notes` (str, optional). Validates step is `pending` or `failed` and all dependency steps are `complete`. Failed steps can be retried. Sets step status to `running`, invokes sub-agent with step details and dependency outcomes as context, then updates status to `complete`/`failed` with outcome. Use `force_run=True` to bypass status and dependency validation for recovery scenarios. Used by: TaskImplementationRole.
 
 ### Shell Commands
 
@@ -125,9 +127,9 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 
-**TaskPlanningRole**: set_implementation_plan_steps, add_implementation_step, edit_implementation_step, remove_implementation_step, edit_implementation_plan_overview, create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskPlanningRole**: set_implementation_plan_steps, add_implementation_step, edit_implementation_step, remove_implementation_step, edit_implementation_plan_overview, read_implementation_step_details, create_task, search_codebase, read_codebase_files, execute_shell_command
 
-**TaskImplementationRole**: execute_implementation_step, create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskImplementationRole**: execute_implementation_step, read_implementation_step_details, create_task, search_codebase, read_codebase_files, execute_shell_command
 
 **StepExecutionRole**: search_codebase, read_codebase_files (plus Claude Code engine builtins: Read, Edit, Write, Bash, Grep, Glob, etc.)
 
