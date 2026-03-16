@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ChevronLeftIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ClaudeCodeProject, ClaudeCodeSession, SessionSearchResult } from '../../lib/api'
@@ -83,6 +83,35 @@ export default function SessionsTab() {
     ? filteredSessions.filter(s => matchingSessionIds.has(s.session_id))
     : filteredSessions
 
+  const selectedProject = projects.find(p => p.encoded_path === selectedProjectPath) ?? null
+
+  // Save/restore selection state when search activates/deactivates
+  const preSearchSelectionRef = useRef<{ project: string | null; session: string | null } | undefined>(undefined)
+  const prevIsSearchActiveRef = useRef(isSearchActive)
+  const skipRestoreRef = useRef(false)
+
+  useEffect(() => {
+    if (isSearchActive && !prevIsSearchActiveRef.current) {
+      // Search just activated — save current selection and clear it to show project list
+      preSearchSelectionRef.current = {
+        project: selectedProjectPath,
+        session: selectedSessionId,
+      }
+      setSelectedProjectPath(null)
+      setSelectedSessionId(null)
+    } else if (!isSearchActive && prevIsSearchActiveRef.current) {
+      // Search just deactivated — restore previous selection (unless GoToSession already set one)
+      if (preSearchSelectionRef.current && !skipRestoreRef.current) {
+        setSelectedProjectPath(preSearchSelectionRef.current.project)
+        setSelectedSessionId(preSearchSelectionRef.current.session)
+      }
+      preSearchSelectionRef.current = undefined
+      skipRestoreRef.current = false
+    }
+    prevIsSearchActiveRef.current = isSearchActive
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally capturing selection state at search activation time
+  }, [isSearchActive])
+
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
     setProjectsError(null)
@@ -140,6 +169,9 @@ export default function SessionsTab() {
   }, [loadProjects, loadSessions, selectedProjectPath])
 
   const handleGoToSession = (sessionId: string, projectEncodedPath: string) => {
+    if (isSearchActive) {
+      skipRestoreRef.current = true
+    }
     setSearchResults([])
     setSearchQuery('')
     setSelectedProjectPath(projectEncodedPath)
@@ -173,61 +205,76 @@ export default function SessionsTab() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-      {/* Left panel: Projects */}
-      <div className="w-72 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
-          <h2 className={`text-sm font-semibold ${textColors.primary}`}>Projects</h2>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {projectsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+      {/* List panel — drill-down: shows either projects or sessions */}
+      <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+        {!selectedProjectPath ? (
+          /* State A: Project list */
+          <>
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <h2 className={`text-sm font-semibold ${textColors.primary}`}>Projects</h2>
             </div>
-          ) : projectsError ? (
-            <div className="px-4 py-4">
-              <p className="text-sm text-red-600 dark:text-red-400">{projectsError}</p>
-              <button onClick={loadProjects} className={`mt-1 text-xs ${textColors.accent} hover:underline`}>
-                Retry
+            <div className="flex-1 overflow-y-auto">
+              {projectsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+                </div>
+              ) : projectsError ? (
+                <div className="px-4 py-4">
+                  <p className="text-sm text-red-600 dark:text-red-400">{projectsError}</p>
+                  <button onClick={loadProjects} className={`mt-1 text-xs ${textColors.accent} hover:underline`}>
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <ProjectListPanel
+                  projects={displayedProjects}
+                  selectedEncodedPath={selectedProjectPath}
+                  onSelect={handleProjectSelect}
+                  matchCounts={isSearchActive ? projectMatchCounts : undefined}
+                />
+              )}
+            </div>
+          </>
+        ) : (
+          /* State B: Session list for selected project */
+          <>
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <button
+                onClick={() => { setSelectedProjectPath(null); setSelectedSessionId(null) }}
+                className={`flex items-center gap-1 text-xs ${textColors.accent} hover:underline mb-1`}
+              >
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
+                Projects
               </button>
+              <h2
+                className={`text-sm font-semibold ${textColors.primary} truncate`}
+                title={selectedProject?.project_path ?? selectedProjectPath}
+              >
+                {selectedProject?.project_path.split('/').filter(Boolean).pop() ?? selectedProjectPath}
+              </h2>
+              <div className="flex items-center gap-3 mt-2">
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
+                  Hide empty
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" checked={excludeSubAgents} onChange={e => setExcludeSubAgents(e.target.checked)} />
+                  Hide sub-agents
+                </label>
+              </div>
             </div>
-          ) : (
-            <ProjectListPanel
-              projects={displayedProjects}
-              selectedEncodedPath={selectedProjectPath}
-              onSelect={handleProjectSelect}
-              matchCounts={isSearchActive ? projectMatchCounts : undefined}
-            />
-          )}
-        </div>
+            <div className="flex-1 overflow-y-auto">
+              <SessionListPanel
+                sessions={displayedSessions}
+                selectedSessionId={selectedSessionId}
+                loading={sessionsLoading}
+                onSelect={handleSessionSelect}
+                matchCounts={isSearchActive ? sessionMatchCounts : undefined}
+              />
+            </div>
+          </>
+        )}
       </div>
-
-      {/* Middle panel: Sessions */}
-      {selectedProjectPath && (
-        <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center justify-between">
-            <h2 className={`text-sm font-semibold ${textColors.primary}`}>Sessions</h2>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
-                <input type="checkbox" checked={excludeEmpty} onChange={e => setExcludeEmpty(e.target.checked)} />
-                Hide empty
-              </label>
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
-                <input type="checkbox" checked={excludeSubAgents} onChange={e => setExcludeSubAgents(e.target.checked)} />
-                Hide sub-agents
-              </label>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <SessionListPanel
-              sessions={displayedSessions}
-              selectedSessionId={selectedSessionId}
-              loading={sessionsLoading}
-              onSelect={handleSessionSelect}
-              matchCounts={isSearchActive ? sessionMatchCounts : undefined}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Right panel: Conversation viewer */}
       {selectedSessionId ? (
@@ -300,13 +347,11 @@ export default function SessionsTab() {
             />
           </div>
         </div>
-      ) : selectedProjectPath ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className={`text-sm ${textColors.secondary}`}>Select a session to view its conversation</p>
-        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
-          <p className={`text-sm ${textColors.secondary}`}>Select a project to browse its sessions</p>
+          <p className={`text-sm ${textColors.secondary}`}>
+            {selectedProjectPath ? 'Select a session to view its conversation' : 'Select a project to browse its sessions'}
+          </p>
         </div>
       )}
       </div>
