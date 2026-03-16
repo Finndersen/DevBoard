@@ -103,7 +103,7 @@ export async function processConversationStream(
       // Invoke event handlers for tool results and system events
       // Error handling ensures handler failures don't crash the stream
       // Uses lazy getter so handlers registered after stream start are still found
-      if (getEventHandlerRegistry && (event.event_type === 'tool_result' || event.event_type === 'system')) {
+      if (getEventHandlerRegistry && (event.event_type === 'tool_call' || event.event_type === 'tool_result' || event.event_type === 'system')) {
         const registry = getEventHandlerRegistry()
         if (registry) {
           try {

@@ -18,7 +18,7 @@ import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
-import { useIsBelow2xl } from '../hooks/useMediaQuery'
+import { useIsNarrowContainer } from '../hooks/useMediaQuery'
 import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
@@ -47,8 +47,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const { mutate: linkCodebase, loading: linkingCodebase } = useLinkCodebaseToProject()
   const { mutate: unlinkCodebase, loading: unlinkingCodebase } = useUnlinkCodebaseFromProject()
 
-  // Active conversation management
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
+  // Active conversation management — initialize from URL param if present
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const conversationParam = params.get('conversation')
+    return conversationParam ? parseInt(conversationParam, 10) : null
+  })
 
   // State for codebase linking UI
   const [selectedCodebaseToLink, setSelectedCodebaseToLink] = useState<string>('')
@@ -107,6 +111,25 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     setActiveTab(urlTab === 'settings' ? 'settings' : 'editor')
   }, [getTabFromUrl])
 
+  const updateConversationUrl = useCallback((conversationId: number | null) => {
+    const params = new URLSearchParams(location.search)
+    if (conversationId !== null) {
+      params.set('conversation', String(conversationId))
+    } else {
+      params.delete('conversation')
+    }
+    navigate(`/projects/${id}?${params.toString()}`, { replace: true })
+  }, [location.search, navigate, id])
+
+  // Sync URL conversation param -> state (handles clicking a conversation in the panel while already on this project)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const urlConversationId = params.get('conversation')
+    if (urlConversationId) {
+      setActiveConversationId(parseInt(urlConversationId, 10))
+    }
+  }, [location.search])
+
   // Store project in DataStore when loaded
   useEffect(() => {
     if (project) {
@@ -114,12 +137,17 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [project, setStoreProject])
 
-  // Initialize active conversation from project data
+  // Initialize active conversation from project data (fallback when no URL param)
   useEffect(() => {
-    if (project?.default_conversation_id && activeConversationId === null) {
-      setActiveConversationId(project.default_conversation_id)
+    const urlHasConversation = new URLSearchParams(location.search).has('conversation')
+    if (project?.default_conversation_id && activeConversationId === null && !urlHasConversation) {
+      const defaultId = project.default_conversation_id
+      setActiveConversationId(defaultId)
+      const params = new URLSearchParams(location.search)
+      params.set('conversation', String(defaultId))
+      navigate(`/projects/${id}?${params.toString()}`, { replace: true })
     }
-  }, [project?.default_conversation_id, activeConversationId])
+  }, [project?.default_conversation_id, activeConversationId, location.search, navigate, id])
 
   // Custom fields state
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
@@ -156,8 +184,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
 
-  // Panel toggle state
-  const isBelow2xl = useIsBelow2xl()
+  // Panel toggle state — based on container width, not viewport
+  const [isNarrow, containerRef] = useIsNarrowContainer()
   const expandedPanel = useUIStore(s => s.expandedPanel)
   const setExpandedPanel = useUIStore(s => s.setExpandedPanel)
 
@@ -171,11 +199,11 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const prevStreamingRef = useRef(isStreaming)
 
   useEffect(() => {
-    if (prevStreamingRef.current && !isStreaming && isBelow2xl && expandedPanel === 'details') {
+    if (prevStreamingRef.current && !isStreaming && isNarrow && expandedPanel === 'details') {
       setChatNeedsAttention(true)
     }
     prevStreamingRef.current = isStreaming
-  }, [isStreaming, isBelow2xl, expandedPanel])
+  }, [isStreaming, isNarrow, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'chat') {
@@ -190,12 +218,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   useEffect(() => {
     const dataFingerprint = specificationDoc?.content ?? ''
     if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
-      if (isBelow2xl && expandedPanel === 'chat') {
+      if (isNarrow && expandedPanel === 'chat') {
         setDetailsNeedsAttention(true)
       }
     }
     prevDetailsDataRef.current = dataFingerprint
-  }, [specificationDoc?.content, isBelow2xl, expandedPanel])
+  }, [specificationDoc?.content, isNarrow, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'details') {
@@ -209,16 +237,18 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     try {
       const result = await apiClient.createProjectConversation(project.id)
       setActiveConversationId(result.id)
+      updateConversationUrl(result.id)
     } catch (error) {
       console.error('Failed to create conversation:', error)
       addNotification({ type: 'error', message: 'Failed to create new conversation' })
     }
-  }, [project, addNotification])
+  }, [project, addNotification, updateConversationUrl])
 
   // Handle switching conversations
   const handleSelectConversation = useCallback((conversationId: number) => {
     setActiveConversationId(conversationId)
-  }, [])
+    updateConversationUrl(conversationId)
+  }, [updateConversationUrl])
 
   // Handle deleting a conversation
   const handleDeleteConversation = useCallback(async (conversationId: number) => {
@@ -230,12 +260,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         const updatedProject = await apiClient.getProject(id!)
         setProject(updatedProject)
         setActiveConversationId(updatedProject.default_conversation_id)
+        updateConversationUrl(updatedProject.default_conversation_id)
       }
     } catch (error) {
       console.error('Failed to delete conversation:', error)
       addNotification({ type: 'error', message: 'Failed to delete conversation' })
     }
-  }, [activeConversationId, id, addNotification, setProject])
+  }, [activeConversationId, id, addNotification, setProject, updateConversationUrl])
 
   // Handle renaming a conversation
   const handleRenameConversation = useCallback(async (conversationId: number, title: string) => {
@@ -310,7 +341,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div ref={containerRef} className="h-full flex flex-col">
       {/* Navigation Tabs with Project Name and Actions */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-4 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -428,63 +459,77 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
       {/* Tab Content */}
       {activeTab === 'editor' && (
-        isBelow2xl ? (
+        isNarrow ? (
           <div className="flex gap-2 flex-1 min-h-0 overflow-hidden">
-            {expandedPanel === 'chat' ? (
-              <>
-                <AgentChat
-                  conversationId={activeConversationId}
-                  placeholder="Ask a question about this project..."
-                  emptyStateMessage="Ask me anything about this project!"
-                  className="flex-1 min-w-0 h-full flex flex-col overflow-hidden"
-                  conversationSelector={
-                    activeConversationId ? (
-                      <ProjectConversationSelector
-                        projectId={project.id}
-                        activeConversationId={activeConversationId}
-                        onSelect={handleSelectConversation}
-                        onNew={handleNewConversation}
-                        onDelete={handleDeleteConversation}
-                        onRename={handleRenameConversation}
-                      />
-                    ) : undefined
-                  }
-                  onNewConversation={handleNewConversation}
-                />
-                <CollapsedPanelStrip
-                  variant="details"
-                  icon="📄"
-                  label="Details"
-                  needsAttention={detailsNeedsAttention}
-                  onClick={() => setExpandedPanel('details')}
-                />
-              </>
-            ) : (
-              <>
-                <CollapsedPanelStrip
-                  variant="chat"
-                  icon="💬"
-                  label="Chat"
-                  isStreaming={isStreaming}
-                  needsAttention={chatNeedsAttention}
-                  onClick={() => setExpandedPanel('chat')}
-                />
-                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-                  <Card padding="xs" className="h-full flex flex-col overflow-hidden">
-                    <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
-                    <div className="flex-1 overflow-hidden flex flex-col">
-                      <MarkdownDocumentEditor
-                        content={specificationDoc?.content}
-                        field={specificationField}
-                        placeholder="Enter project specification in Markdown format..."
-                        emptyText="No project context provided."
-                        textareaClassName="w-full font-mono text-sm"
-                      />
-                    </div>
-                  </Card>
+            {/* Chat panel */}
+            <div
+              className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
+              style={{ flex: expandedPanel === 'chat' ? '1 1 0%' : '0 0 2.5rem' }}
+            >
+              <AgentChat
+                conversationId={activeConversationId}
+                placeholder="Ask a question about this project..."
+                emptyStateMessage="Ask me anything about this project!"
+                className={`h-full min-w-0 flex flex-col overflow-hidden ${expandedPanel !== 'chat' ? 'invisible' : ''}`}
+                conversationSelector={
+                  activeConversationId ? (
+                    <ProjectConversationSelector
+                      projectId={project.id}
+                      activeConversationId={activeConversationId}
+                      onSelect={handleSelectConversation}
+                      onNew={handleNewConversation}
+                      onDelete={handleDeleteConversation}
+                      onRename={handleRenameConversation}
+                    />
+                  ) : undefined
+                }
+                onNewConversation={handleNewConversation}
+              />
+              {expandedPanel !== 'chat' && (
+                <div className="absolute inset-0">
+                  <CollapsedPanelStrip
+                    variant="chat"
+                    icon="💬"
+                    label="Chat"
+                    isStreaming={isStreaming}
+                    needsAttention={chatNeedsAttention}
+                    onClick={() => setExpandedPanel('chat')}
+                    className="h-full"
+                  />
                 </div>
-              </>
-            )}
+              )}
+            </div>
+
+            {/* Details panel */}
+            <div
+              className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
+              style={{ flex: expandedPanel === 'details' ? '1 1 0%' : '0 0 2.5rem' }}
+            >
+              <Card padding="xs" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
+                <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  <MarkdownDocumentEditor
+                    content={specificationDoc?.content}
+                    field={specificationField}
+                    placeholder="Enter project specification in Markdown format..."
+                    emptyText="No project context provided."
+                    textareaClassName="w-full font-mono text-sm"
+                  />
+                </div>
+              </Card>
+              {expandedPanel !== 'details' && (
+                <div className="absolute inset-0">
+                  <CollapsedPanelStrip
+                    variant="details"
+                    icon="📄"
+                    label="Details"
+                    needsAttention={detailsNeedsAttention}
+                    onClick={() => setExpandedPanel('details')}
+                    className="h-full"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">

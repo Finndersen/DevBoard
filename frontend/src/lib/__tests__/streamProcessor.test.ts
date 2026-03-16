@@ -269,7 +269,7 @@ describe('processConversationStream', () => {
     expect(toolResults[0].is_error).toBe(false)
   })
 
-  it('should call getEventHandlerRegistry getter per-event for tool results and system events', async () => {
+  it('should call getEventHandlerRegistry getter per-event for tool calls, tool results and system events', async () => {
     const mockedInvokeEventHandlers = vi.mocked(invokeEventHandlers)
     mockedInvokeEventHandlers.mockReset()
 
@@ -280,6 +280,7 @@ describe('processConversationStream', () => {
     ]
 
     const mockRegistry: EventHandlerRegistry = {
+      toolCallHandlers: new Set(),
       toolResultHandlers: new Set(),
       systemEventHandlers: new Set(),
       streamCompleteHandlers: new Set(),
@@ -294,11 +295,16 @@ describe('processConversationStream', () => {
       getEventHandlerRegistry,
     })
 
-    // Getter called once per tool_result + once per system event = 2 times
-    expect(getEventHandlerRegistry).toHaveBeenCalledTimes(2)
+    // Getter called once per tool_call + once per tool_result + once per system event = 3 times
+    expect(getEventHandlerRegistry).toHaveBeenCalledTimes(3)
 
     // invokeEventHandlers called with the registry for each qualifying event
-    expect(mockedInvokeEventHandlers).toHaveBeenCalledTimes(2)
+    expect(mockedInvokeEventHandlers).toHaveBeenCalledTimes(3)
+    expect(mockedInvokeEventHandlers).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'tool_call', tool_call_id: 'tc1' }),
+      mockRegistry,
+      expect.any(Map),
+    )
     expect(mockedInvokeEventHandlers).toHaveBeenCalledWith(
       expect.objectContaining({ event_type: 'tool_result', tool_call_id: 'tc1' }),
       mockRegistry,
@@ -323,14 +329,17 @@ describe('processConversationStream', () => {
     ]
 
     const mockRegistry: EventHandlerRegistry = {
+      toolCallHandlers: new Set(),
       toolResultHandlers: new Set(),
       systemEventHandlers: new Set(),
       streamCompleteHandlers: new Set(),
     }
 
     const getEventHandlerRegistry = vi.fn()
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(mockRegistry)
+      .mockReturnValueOnce(undefined) // tc1 tool_call
+      .mockReturnValueOnce(undefined) // tc1 tool_result
+      .mockReturnValueOnce(mockRegistry) // tc2 tool_call
+      .mockReturnValueOnce(mockRegistry) // tc2 tool_result
 
     const onEvent = vi.fn()
 
@@ -340,11 +349,16 @@ describe('processConversationStream', () => {
       getEventHandlerRegistry,
     })
 
-    // Getter called for both tool_result events
-    expect(getEventHandlerRegistry).toHaveBeenCalledTimes(2)
+    // Getter called for both tool_call + tool_result events = 4 times
+    expect(getEventHandlerRegistry).toHaveBeenCalledTimes(4)
 
-    // invokeEventHandlers only called once (second event), since first returned undefined
-    expect(mockedInvokeEventHandlers).toHaveBeenCalledTimes(1)
+    // invokeEventHandlers called twice (tc2 tool_call and tc2 tool_result), since first two returned undefined
+    expect(mockedInvokeEventHandlers).toHaveBeenCalledTimes(2)
+    expect(mockedInvokeEventHandlers).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'tool_call', tool_call_id: 'tc2' }),
+      mockRegistry,
+      expect.any(Map),
+    )
     expect(mockedInvokeEventHandlers).toHaveBeenCalledWith(
       expect.objectContaining({ event_type: 'tool_result', tool_call_id: 'tc2' }),
       mockRegistry,

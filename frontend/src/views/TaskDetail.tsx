@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
@@ -8,7 +8,7 @@ import { useViewTitle } from '../hooks/useViewTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
-import { useIsBelow2xl } from '../hooks/useMediaQuery'
+import { useIsNarrowContainer } from '../hooks/useMediaQuery'
 import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, ErrorMessage } from '../components/ui'
@@ -82,14 +82,14 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Fetch documents separately - only when task is loaded with valid document IDs
   const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
   const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
-  const { data: implementationPlan, refetch: refetchImplementationPlan2 } = useImplementationPlan(task?.implementation_plan_id ? task.id : null)
+  const { data: implementationPlan, refetch: refetchImplementationPlan2, setData: setImplementationPlan } = useImplementationPlan(task?.implementation_plan_id ? task.id : null)
   const { data: changeSummaryDoc } = useDocument(task?.change_summary_document_id ?? null)
 
   // Document update mutation
   const { mutate: updateDocument } = useUpdateDocument()
 
   const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
-  const { findViewByEntity, evictView, invalidateConversations } = useUIStore()
+  const { cachedViews, findViewByEntity, evictView, switchTab, invalidateConversations, invalidateTasks } = useUIStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()
 
@@ -111,7 +111,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Fetch PR status when task has a PR (pr_open or complete)
   // Fetch PR feedback only for pr_open (active review)
   useEffect(() => {
-    if (task?.id && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
+    if (task?.id && task.github_pr_number && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
       setPrStatusLoading(true)
       apiClient.getTaskPRStatus(task.id)
         .then(setPrStatus)
@@ -294,15 +294,26 @@ function TaskDetail({ id }: TaskDetailProps) {
     try {
       await deleteTask(task.id, deleteBranch)
 
-      // Update cache
+      // Update data store cache
       await deleteTaskFromStore(String(task.id))
-      await fetchProjectTasks(String(task.project_id))
 
-      // Evict the task's view from cache and refresh conversation list
-      const view = findViewByEntity('task', String(task.id))
-      if (view) {
-        evictView(view.id)
+      // Determine best target view: tasks-list > project > fallback navigate
+      const tasksListView = cachedViews.find(v => v.type === 'tasks-list')
+      const projectView = findViewByEntity('project', String(task.project_id))
+      const targetView = tasksListView ?? projectView
+
+      // Switch to target view first so evictView doesn't clobber activeViewId
+      if (targetView) {
+        switchTab(targetView.id)
       }
+
+      // Now safe to evict — task view is no longer active
+      const taskView = findViewByEntity('task', String(task.id))
+      if (taskView) {
+        evictView(taskView.id)
+      }
+
+      invalidateTasks()
       invalidateConversations()
 
       // Show success notification
@@ -317,13 +328,14 @@ function TaskDetail({ id }: TaskDetailProps) {
         actions: []
       })
 
-      // Navigate to parent project
-      navigate(`/projects/${task.project_id}`)
+      if (!targetView) {
+        navigate(`/projects/${task.project_id}`)
+      }
     } catch (error) {
       console.error('Failed to delete task:', error)
       // Error will be shown via deleteError state
     }
-  }, [task, project, deleteTask, deleteTaskFromStore, fetchProjectTasks, findViewByEntity, evictView, invalidateConversations, addNotification, navigate])
+  }, [task, project, cachedViews, deleteTask, deleteTaskFromStore, findViewByEntity, switchTab, evictView, invalidateTasks, invalidateConversations, addNotification, navigate])
 
   // Handle codebase selection
   const handleCodebaseSelect = useCallback((codebaseId: number | null) => {
@@ -355,6 +367,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     activeTab,
   })
 
+  const markStepRunning = useCallback((stepNumber: number) => {
+    if (!implementationPlan) return
+    setImplementationPlan({
+      ...implementationPlan,
+      steps: implementationPlan.steps.map(s =>
+        s.step_number === stepNumber ? { ...s, status: 'running' as const } : s
+      )
+    })
+  }, [implementationPlan, setImplementationPlan])
+
   useTaskEventHandlers({
     task,
     refetch,
@@ -365,6 +387,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     handleDiffRefresh,
     setActiveTab,
     diffRefreshTimeoutRef,
+    markStepRunning,
   })
 
   // Handle conversation reset from AgentChat (when user clears chat history)
@@ -393,8 +416,8 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const { status: codeReviewStatus } = useCodeReviewStatus(task?.conversation_id ?? null)
 
-  // Panel toggle state
-  const isBelow2xl = useIsBelow2xl()
+  // Panel toggle state — based on container width, not viewport
+  const [isNarrow, containerRef] = useIsNarrowContainer()
   const expandedPanel = useUIStore(s => s.expandedPanel)
   const setExpandedPanel = useUIStore(s => s.setExpandedPanel)
 
@@ -403,11 +426,11 @@ function TaskDetail({ id }: TaskDetailProps) {
   const prevStreamingRef = useRef(isConversationStreaming)
 
   useEffect(() => {
-    if (prevStreamingRef.current && !isConversationStreaming && isBelow2xl && expandedPanel === 'details') {
+    if (prevStreamingRef.current && !isConversationStreaming && isNarrow && expandedPanel === 'details') {
       setChatNeedsAttention(true)
     }
     prevStreamingRef.current = isConversationStreaming
-  }, [isConversationStreaming, isBelow2xl, expandedPanel])
+  }, [isConversationStreaming, isNarrow, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'chat') {
@@ -427,12 +450,12 @@ function TaskDetail({ id }: TaskDetailProps) {
       diff: diffData,
     })
     if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
-      if (isBelow2xl && expandedPanel === 'chat') {
+      if (isNarrow && expandedPanel === 'chat') {
         setDetailsNeedsAttention(true)
       }
     }
     prevDetailsDataRef.current = dataFingerprint
-  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan, diffData, isBelow2xl, expandedPanel])
+  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan, diffData, isNarrow, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'details') {
@@ -580,7 +603,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
       {/* Error Display */}
       {updateError && (
         <ErrorMessage error={updateError} className="mb-6" />
@@ -612,141 +635,157 @@ function TaskDetail({ id }: TaskDetailProps) {
       />
 
       {/* Main Content Layout */}
-      {isBelow2xl ? (
+      {isNarrow ? (
         <div className="flex gap-2 flex-1 min-h-0 overflow-hidden">
-          {expandedPanel === 'chat' ? (
-            <>
-              <div className="flex-1 min-w-0 h-full overflow-hidden">
-                <AgentChat
-                  ref={agentChatRef}
-                  conversationId={task.conversation_id}
-                  placeholder="Ask me to help with task specification or implementation planning..."
-                  emptyStateMessage="Welcome to the Task Agent!"
-                  className="h-full flex flex-col overflow-hidden"
-                  padding="xs"
-                  isRunningAction={isConversationStreaming}
-                  actionMessage={streamingMessage}
-                  initialMessage={pendingInitialMessage}
-                  onInitialMessageSent={() => setPendingInitialMessage(null)}
-                  codebaseLocalPath={selectedCodebase?.local_path}
-                  isDisabled={task.status === TaskStatus.COMPLETE}
-                  onConversationReset={handleConversationReset}
+          {/* Chat panel */}
+          <div
+            className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
+            style={{ flex: expandedPanel === 'chat' ? '1 1 0%' : '0 0 2.5rem' }}
+          >
+            <div className={`h-full min-w-0 ${expandedPanel !== 'chat' ? 'invisible' : ''}`}>
+              <AgentChat
+                ref={agentChatRef}
+                conversationId={task.conversation_id}
+                placeholder="Ask me to help with task specification or implementation planning..."
+                emptyStateMessage="Welcome to the Task Agent!"
+                className="h-full flex flex-col overflow-hidden"
+                padding="xs"
+                isRunningAction={isConversationStreaming}
+                actionMessage={streamingMessage}
+                initialMessage={pendingInitialMessage}
+                onInitialMessageSent={() => setPendingInitialMessage(null)}
+                codebaseLocalPath={selectedCodebase?.local_path}
+                isDisabled={task.status === TaskStatus.COMPLETE}
+                onConversationReset={handleConversationReset}
+              />
+            </div>
+            {expandedPanel !== 'chat' && (
+              <div className="absolute inset-0">
+                <CollapsedPanelStrip
+                  variant="chat"
+                  icon="💬"
+                  label="Chat"
+                  isStreaming={isConversationStreaming}
+                  needsAttention={chatNeedsAttention}
+                  onClick={() => setExpandedPanel('chat')}
+                  className="h-full"
                 />
               </div>
-              <CollapsedPanelStrip
-                variant="details"
-                icon="📄"
-                label="Details"
-                needsAttention={detailsNeedsAttention}
-                onClick={() => setExpandedPanel('details')}
-              />
-            </>
-          ) : (
-            <>
-              <CollapsedPanelStrip
-                variant="chat"
-                icon="💬"
-                label="Chat"
-                isStreaming={isConversationStreaming}
-                needsAttention={chatNeedsAttention}
-                onClick={() => setExpandedPanel('chat')}
-              />
-              <Card padding="none" className="flex-1 min-w-0 h-full flex flex-col overflow-hidden">
-                {/* Card Header with Tabs */}
-                <div className="border-b border-gray-200 dark:border-gray-700">
-                  <div className="px-6 py-3">
-                    <div className="flex items-center justify-between">
-                      <nav className="flex space-x-6">
-                        {[
-                          { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
-                          ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
-                          ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
-                          ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
-                          ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                              activeTab === tab.id
-                                ? 'text-blue-600 dark:text-blue-400'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                            }`}
-                          >
-                            <tab.icon className="w-4 h-4" />
-                            <span>{tab.name}</span>
-                            {tab.badge != null && tab.badge > 0 && (
-                              <span className="text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-1.5">
-                                {tab.badge}
-                              </span>
-                            )}
-                            {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
-                              <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                            )}
-                          </button>
-                        ))}
-                      </nav>
+            )}
+          </div>
 
-                      <CustomFieldsPopover
-                        customFields={task.custom_fields}
-                        fieldDefinitions={customFieldDefinitions}
-                        onFieldChange={handleCustomFieldChange}
-                        saving={updateTaskLoading}
-                      />
-                    </div>
+          {/* Details panel */}
+          <div
+            className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
+            style={{ flex: expandedPanel === 'details' ? '1 1 0%' : '0 0 2.5rem' }}
+          >
+            <Card padding="none" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
+              {/* Card Header with Tabs */}
+              <div className="border-b border-gray-200 dark:border-gray-700">
+                <div className="px-6 py-3">
+                  <div className="flex items-center justify-between">
+                    <nav className="flex space-x-6">
+                      {[
+                        { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
+                        ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
+                        ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
+                        ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
+                        ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${
+                            activeTab === tab.id
+                              ? 'text-blue-600 dark:text-blue-400'
+                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                          }`}
+                        >
+                          <tab.icon className="w-4 h-4" />
+                          <span>{tab.name}</span>
+                          {tab.badge != null && tab.badge > 0 && (
+                            <span className="text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-1.5">
+                              {tab.badge}
+                            </span>
+                          )}
+                          {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
+                            <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                          )}
+                        </button>
+                      ))}
+                    </nav>
+
+                    <CustomFieldsPopover
+                      customFields={task.custom_fields}
+                      fieldDefinitions={customFieldDefinitions}
+                      onFieldChange={handleCustomFieldChange}
+                      saving={updateTaskLoading}
+                    />
                   </div>
                 </div>
+              </div>
 
-                {/* Tab Content */}
-                <div className="flex-1 p-6 overflow-hidden">
-                  {activeTab === 'specification' && (
-                    <SpecificationTab
-                      specificationDoc={specificationDoc}
-                      specificationField={specificationField}
-                    />
-                  )}
+              {/* Tab Content */}
+              <div className="flex-1 p-6 overflow-hidden">
+                {activeTab === 'specification' && (
+                  <SpecificationTab
+                    specificationDoc={specificationDoc}
+                    specificationField={specificationField}
+                  />
+                )}
 
-                  {activeTab === 'plan' && (
-                    <PlanTab
-                      taskId={task.id}
-                      implementationPlan={implementationPlan}
-                      onPlanUpdated={refetchImplementationPlan2}
-                      implementationPlanDoc={implementationPlanDoc}
-                      planField={planField}
-                    />
-                  )}
+                {activeTab === 'plan' && (
+                  <PlanTab
+                    taskId={task.id}
+                    implementationPlan={implementationPlan}
+                    onPlanUpdated={refetchImplementationPlan2}
+                    implementationPlanDoc={implementationPlanDoc}
+                    planField={planField}
+                  />
+                )}
 
-                  {activeTab === 'changes' && (
-                    <ChangesTab
-                      branchInfo={branchInfo}
-                      diffData={diffData}
-                      diffLoading={diffLoading}
-                      branchInfoLoading={branchInfoLoading}
-                      lastDiffUpdate={lastDiffUpdate}
-                      onRefresh={handleDiffRefresh}
-                      onSubmitComments={handleSubmitReviewComments}
-                      isStreaming={isConversationStreaming}
-                      {...(task?.status === TaskStatus.IMPLEMENTING && {
-                        codeReviewStatus,
-                        onAutoReview: handleAutoReview,
-                      })}
-                    />
-                  )}
+                {activeTab === 'changes' && (
+                  <ChangesTab
+                    branchInfo={branchInfo}
+                    diffData={diffData}
+                    diffLoading={diffLoading}
+                    branchInfoLoading={branchInfoLoading}
+                    lastDiffUpdate={lastDiffUpdate}
+                    onRefresh={handleDiffRefresh}
+                    onSubmitComments={handleSubmitReviewComments}
+                    isStreaming={isConversationStreaming}
+                    {...(task?.status === TaskStatus.IMPLEMENTING && {
+                      codeReviewStatus,
+                      onAutoReview: handleAutoReview,
+                    })}
+                  />
+                )}
 
-                  {activeTab === 'comments' && prFeedback && (
-                    <CommentsTab
-                      prFeedback={prFeedback}
-                      onSubmitComments={handleSubmitReviewComments}
-                    />
-                  )}
+                {activeTab === 'comments' && prFeedback && (
+                  <CommentsTab
+                    prFeedback={prFeedback}
+                    onSubmitComments={handleSubmitReviewComments}
+                  />
+                )}
 
-                  {activeTab === 'summary' && (
-                    <SummaryTab changeSummaryDoc={changeSummaryDoc} />
-                  )}
-                </div>
-              </Card>
-            </>
-          )}
+                {activeTab === 'summary' && (
+                  <SummaryTab changeSummaryDoc={changeSummaryDoc} />
+                )}
+              </div>
+            </Card>
+            {expandedPanel !== 'details' && (
+              <div className="absolute inset-0">
+                <CollapsedPanelStrip
+                  variant="details"
+                  icon="📄"
+                  label="Details"
+                  needsAttention={detailsNeedsAttention}
+                  onClick={() => setExpandedPanel('details')}
+                  className="h-full"
+                />
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">

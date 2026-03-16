@@ -147,17 +147,19 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             {conversationId && <RunningIndicator conversationId={conversationId} />}
           </div>
           {(conversationSelector || onNewConversation) && (
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-2">
-              {conversationSelector}
-              {onNewConversation && (
-                <button
-                  onClick={onNewConversation}
-                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                  title="New Conversation"
-                >
-                  <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                </button>
-              )}
+            <div className="absolute inset-x-0 flex justify-center items-center pointer-events-none">
+              <div className="flex items-center space-x-2 pointer-events-auto">
+                {conversationSelector}
+                {onNewConversation && (
+                  <button
+                    onClick={onNewConversation}
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    title="New Conversation"
+                  >
+                    <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
           <div className="flex items-center space-x-3">

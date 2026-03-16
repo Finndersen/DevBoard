@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   ClipboardDocumentListIcon,
   FolderIcon,
   CodeBracketIcon,
   ChatBubbleLeftRightIcon,
-  ChevronLeftIcon,
   ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
@@ -77,12 +77,13 @@ function getEntityIcon(entityType: string) {
 }
 
 export default function ConversationsPanel() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const { data: conversations, loading, error } = useConversations()
   const navigateTo = useUIStore(s => s.navigateTo)
   const activeViewId = useUIStore(s => s.activeViewId)
   const cachedViews = useUIStore(s => s.cachedViews)
   const conversationsPanelCollapsed = useUIStore(s => s.conversationsPanelCollapsed)
-  const toggleConversationsPanel = useUIStore(s => s.toggleConversationsPanel)
   const clearUnreadConversations = useUIStore(s => s.clearUnreadConversations)
   const removeUnreadConversation = useUIStore(s => s.removeUnreadConversation)
   // Subscribe only to which entities have drafts (not content) to avoid re-renders on every keystroke
@@ -187,6 +188,12 @@ export default function ConversationsPanel() {
 
   const activeView = cachedViews.find(v => v.id === activeViewId)
 
+  const activeConversationIdFromUrl = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const id = params.get('conversation')
+    return id ? parseInt(id, 10) : null
+  }, [location.search])
+
   const handleClick = (item: ConversationResponse) => {
     const viewType = item.parent_entity_type.toLowerCase() as ViewType
     navigateTo({
@@ -194,6 +201,9 @@ export default function ConversationsPanel() {
       entityId: String(item.parent_entity_id),
       title: item.parent_entity_name,
     })
+    if (viewType === 'project') {
+      navigate(`/projects/${item.parent_entity_id}?conversation=${item.id}`)
+    }
     setNeedsAttentionIds(prev => {
       const next = new Set(prev)
       next.delete(item.id)
@@ -203,20 +213,7 @@ export default function ConversationsPanel() {
   }
 
   return (
-    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-gray-700'} flex flex-col overflow-hidden transition-all duration-200`}>
-      {/* Header */}
-      <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 w-80">
-        <ChatBubbleLeftRightIcon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400" />
-        <h2 className={`text-sm font-semibold ${textColors.primary} ml-2 flex-1`}>Conversations</h2>
-        <button
-          onClick={toggleConversationsPanel}
-          className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-          aria-label="Collapse conversations"
-        >
-          <ChevronLeftIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        </button>
-      </div>
-
+    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-gray-700'} flex flex-col overflow-hidden transition-all duration-300`}>
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
         {loading && !conversations && (
@@ -252,9 +249,13 @@ export default function ConversationsPanel() {
               const isSelected = !!(
                 activeView &&
                 item.parent_entity_type.toLowerCase() === activeView.type &&
-                String(item.parent_entity_id) === activeView.entityId
+                String(item.parent_entity_id) === activeView.entityId &&
+                (item.parent_entity_type.toUpperCase() !== 'PROJECT' || item.id === activeConversationIdFromUrl)
               )
               const hasDraft = draftKeys.has(`${item.parent_entity_type.toLowerCase()}:${item.parent_entity_id}`)
+              const isTaskConversation = item.parent_entity_type.toUpperCase() === 'TASK'
+              const primaryLabel = !isTaskConversation && item.title ? item.title : item.parent_entity_name
+              const secondaryLabel = isTaskConversation ? item.project_name : item.parent_entity_name
 
               let borderStyle: string
               if (needsAttention) {
@@ -275,7 +276,7 @@ export default function ConversationsPanel() {
                   <div className="flex items-center gap-2 min-w-0">
                     <EntityIcon className={`w-4 h-4 shrink-0 ${textColors.secondary}`} />
                     <span className={`text-sm truncate flex-1 ${textColors.primary}`}>
-                      {item.parent_entity_name}
+                      {primaryLabel}
                     </span>
                     {hasDraft && (
                       <span className="shrink-0 text-xs" title="Has draft">✏️</span>
@@ -292,10 +293,10 @@ export default function ConversationsPanel() {
                     <span className={roleColor}>{roleLabel}</span>
                     <span className={textColors.muted}> · {formatRelativeTime(timestamp)}</span>
                   </div>
-                  {/* Row 3: Project name (task conversations only) */}
-                  {item.project_name && (
+                  {/* Row 3: Project name (tasks) or entity name (project/codebase conversations) */}
+                  {secondaryLabel && (
                     <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
-                      {item.project_name}
+                      {secondaryLabel}
                     </div>
                   )}
                 </button>

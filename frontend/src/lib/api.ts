@@ -34,6 +34,7 @@ export interface Task {
   implementation_plan_id: number | null
   change_summary_document_id: number | null
   custom_fields: Record<string, unknown> | null
+  github_pr_number: number | null
   available_workflow_actions: WorkflowActionInfo[]
 }
 
@@ -680,9 +681,6 @@ export interface ClaudeCodeProject {
   path: string
   encoded_path: string
   last_activity: string | null
-  last_cost: number | null
-  last_lines_added: number | null
-  last_lines_removed: number | null
   session_count: number
 }
 

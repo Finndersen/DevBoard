@@ -1,9 +1,22 @@
+import { useEffect, useRef } from 'react'
 import { apiClient } from '../lib/api'
 import type { Task, TaskCreate, TaskListItem } from '../lib/api'
 import { useApi, useMutation } from './useApi'
+import { useUIStore } from '../stores/uiStore'
 
 export function useAllTasks(projectId?: number) {
-  return useApi<TaskListItem[]>(() => apiClient.getAllTasks(projectId))
+  const tasksVersion = useUIStore(s => s.tasksVersion)
+  const result = useApi<TaskListItem[]>(() => apiClient.getAllTasks(projectId))
+  const refetchRef = useRef(result.refetch)
+  refetchRef.current = result.refetch
+
+  useEffect(() => {
+    if (tasksVersion > 0) {
+      refetchRef.current()
+    }
+  }, [tasksVersion])
+
+  return result
 }
 
 export function useProjectTasks(projectId: number | string) {

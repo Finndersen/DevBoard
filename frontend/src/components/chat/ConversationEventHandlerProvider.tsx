@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { EventHandlerProvider } from '../../hooks/useConversationEventHandlers'
 import type {
+  ToolCallHandler,
   ToolResultHandler,
   SystemEventHandler,
   StreamCompleteHandler
@@ -12,7 +13,7 @@ interface ConversationEventHandlerProviderProps {
 
 /**
  * Provider component for conversation event handlers.
- * Must wrap conversation components that use useToolResultHandler, useSystemEventHandler, or useStreamCompleteHandler.
+ * Must wrap conversation components that use useToolCallHandler, useToolResultHandler, useSystemEventHandler, or useStreamCompleteHandler.
  *
  * @example
  * <ConversationEventHandlerProvider>
@@ -21,6 +22,7 @@ interface ConversationEventHandlerProviderProps {
  */
 export default function ConversationEventHandlerProvider({ children }: ConversationEventHandlerProviderProps) {
   const registry = useMemo(() => ({
+    toolCallHandlers: new Set<ToolCallHandler>(),
     toolResultHandlers: new Set<ToolResultHandler>(),
     systemEventHandlers: new Set<SystemEventHandler>(),
     streamCompleteHandlers: new Set<StreamCompleteHandler>()

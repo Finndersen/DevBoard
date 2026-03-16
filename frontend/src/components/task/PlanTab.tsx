@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import type { ComponentType } from 'react'
+import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
@@ -7,26 +8,19 @@ import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
 
-const STEP_STATUS_CONFIG: Record<ImplementationStepStatus, { icon: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' }> = {
-  pending: { icon: '\u23f3', variant: 'default' },
-  running: { icon: '\ud83d\udd04', variant: 'info' },
-  complete: { icon: '\u2705', variant: 'success' },
-  failed: { icon: '\u274c', variant: 'error' },
-  skipped: { icon: '\u23ed\ufe0f', variant: 'warning' },
+const STEP_STATUS_CONFIG: Record<ImplementationStepStatus, { icon: ComponentType<{ className?: string }>; iconClass: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' }> = {
+  pending: { icon: ClockIcon, iconClass: 'text-gray-400', variant: 'default' },
+  running: { icon: ArrowPathIcon, iconClass: 'text-blue-500 animate-spin', variant: 'info' },
+  complete: { icon: CheckCircleIcon, iconClass: 'text-green-500', variant: 'success' },
+  failed: { icon: XCircleIcon, iconClass: 'text-red-500', variant: 'error' },
+  skipped: { icon: MinusCircleIcon, iconClass: 'text-gray-400', variant: 'warning' },
 }
 
-const STEP_TYPE_LABELS: Record<ImplementationStepType, string> = {
-  code_change: 'Code Change',
-  documentation: 'Documentation',
-  validation: 'Validation',
-  code_review: 'Code Review',
-}
-
-const STEP_TYPE_VARIANT: Record<ImplementationStepType, 'default' | 'info' | 'warning' | 'success'> = {
-  code_change: 'info',
-  documentation: 'default',
-  validation: 'warning',
-  code_review: 'success',
+const STEP_TYPE_CONFIG: Record<ImplementationStepType, { label: string; icon: ComponentType<{ className?: string }>; variant: 'default' | 'info' | 'warning' | 'success' }> = {
+  code_change: { label: 'Code Change', icon: CodeBracketIcon, variant: 'info' },
+  documentation: { label: 'Documentation', icon: DocumentTextIcon, variant: 'default' },
+  validation: { label: 'Validation', icon: ClipboardDocumentCheckIcon, variant: 'warning' },
+  code_review: { label: 'Code Review', icon: EyeIcon, variant: 'success' },
 }
 
 interface StepCardProps {
@@ -42,6 +36,7 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
   const [saving, setSaving] = useState(false)
 
   const statusConfig = STEP_STATUS_CONFIG[step.status]
+  const typeConfig = STEP_TYPE_CONFIG[step.type]
 
   const handleSaveDetails = useCallback(async () => {
     setSaving(true)
@@ -75,22 +70,17 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
           <ChevronRightIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
         )}
 
-        <span className="text-base flex-shrink-0" title={step.status}>
-          {statusConfig.icon}
-        </span>
+        <statusConfig.icon className={`w-4 h-4 flex-shrink-0 ${statusConfig.iconClass}`} title={step.status} />
 
         <span className={`font-medium text-sm ${textColors.primary}`}>
           {step.step_number}. {step.title}
         </span>
 
         <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-          <StatusBadge variant={STEP_TYPE_VARIANT[step.type]} size="sm">
-            {STEP_TYPE_LABELS[step.type]}
+          <StatusBadge variant={typeConfig.variant} size="sm">
+            <typeConfig.icon className="w-3 h-3 mr-1" />
+            {typeConfig.label}
           </StatusBadge>
-
-          {step.status === 'running' && (
-            <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          )}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { TaskStatus } from '../../lib/api'
-import type { Task } from '../../lib/api'
-import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
+import type { Task, ToolCall } from '../../lib/api'
+import { useToolCallHandler, useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 
 interface UseTaskEventHandlersParams {
   task: Task | null
@@ -13,6 +13,7 @@ interface UseTaskEventHandlersParams {
   handleDiffRefresh: (view: string) => Promise<void>
   setActiveTab: (tab: 'specification' | 'plan' | 'changes' | 'summary') => void
   diffRefreshTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
+  markStepRunning: (stepNumber: number) => void
 }
 
 export function useTaskEventHandlers({
@@ -25,6 +26,7 @@ export function useTaskEventHandlers({
   handleDiffRefresh,
   setActiveTab,
   diffRefreshTimeoutRef,
+  markStepRunning,
 }: UseTaskEventHandlersParams) {
 
   const specificationHandler = useCallback(async (toolName: string, _result: unknown) => {
@@ -73,9 +75,29 @@ export function useTaskEventHandlers({
         console.error('Failed to refetch structured implementation plan:', error)
       }
     }
-  }, [refetchStructuredPlan, refetch, setActiveTab])
+
+    if (toolName.includes('execute_implementation_step') && task?.codebase_id) {
+      if (diffRefreshTimeoutRef.current) {
+        clearTimeout(diffRefreshTimeoutRef.current)
+      }
+      diffRefreshTimeoutRef.current = setTimeout(() => {
+        handleDiffRefresh('all')
+      }, 1000)
+    }
+  }, [refetchStructuredPlan, refetch, setActiveTab, task?.codebase_id, handleDiffRefresh, diffRefreshTimeoutRef])
 
   useToolResultHandler(structuredPlanHandler)
+
+  const stepStartHandler = useCallback((_toolName: string, toolCall: ToolCall) => {
+    if (toolCall.tool_name.includes('execute_implementation_step')) {
+      const stepNumber = toolCall.tool_args?.step_number
+      if (typeof stepNumber === 'number') {
+        markStepRunning(stepNumber)
+      }
+    }
+  }, [markStepRunning])
+
+  useToolCallHandler(stepStartHandler)
 
   const fileModificationHandler = useCallback((toolName: string, _result: unknown) => {
     const isFileModification = toolName === 'Edit' || toolName === 'Write'

@@ -27,6 +27,7 @@ interface UIState {
   activeViewId: string | null
   navigationCompactMode: boolean
   conversationsVersion: number
+  tasksVersion: number
   draftMessages: Record<string, string>
   shouldPushHistory: boolean
   createTaskModalOpen: boolean
@@ -48,6 +49,9 @@ interface UIActions {
 
   // Conversations
   invalidateConversations: () => void
+
+  // Tasks
+  invalidateTasks: () => void
 
   // Create task modal
   openCreateTaskModal: () => void
@@ -95,6 +99,7 @@ export const useUIStore = create<UIStore>()(
       activeViewId: null,
       navigationCompactMode: false,
       conversationsVersion: 0,
+      tasksVersion: 0,
       draftMessages: {},
       shouldPushHistory: false,
       createTaskModalOpen: false,
@@ -222,6 +227,12 @@ export const useUIStore = create<UIStore>()(
       invalidateConversations: () => {
         set((draft) => {
           draft.conversationsVersion += 1
+        })
+      },
+
+      invalidateTasks: () => {
+        set((draft) => {
+          draft.tasksVersion += 1
         })
       },
 

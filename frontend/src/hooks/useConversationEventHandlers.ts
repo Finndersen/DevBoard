@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
-import type { ConversationEvent, ToolResult, SystemEvent, SystemEventType } from '../lib/api'
+import type { ConversationEvent, ToolCall, ToolResult, SystemEvent, SystemEventType } from '../lib/api'
+
+/**
+ * Handler function for tool calls.
+ * Called when a tool is invoked by the agent.
+ * Receives both toolName and the full ToolCall event so handler can decide internally whether to act.
+ */
+export type ToolCallHandler = (toolName: string, toolCall: ToolCall) => void | Promise<void>
 
 /**
  * Handler function for tool results.
@@ -22,6 +29,7 @@ export type SystemEventHandler = (event: SystemEvent) => void | Promise<void>
 export type StreamCompleteHandler = () => void | Promise<void>
 
 export interface EventHandlerRegistry {
+  toolCallHandlers: Set<ToolCallHandler>
   toolResultHandlers: Set<ToolResultHandler>
   systemEventHandlers: Set<SystemEventHandler>
   streamCompleteHandlers: Set<StreamCompleteHandler>
@@ -58,6 +66,39 @@ function useEventHandlerRegistry(): EventHandlerRegistry {
 export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undefined {
   // Return undefined if not within provider (optional usage)
   return useContext(EventHandlerContext) || undefined
+}
+
+/**
+ * Register a handler for tool calls.
+ * The handler receives both toolName and the full ToolCall event, and can decide internally whether to act.
+ *
+ * @param handler - Function to call for each tool call
+ *
+ * @example
+ * useToolCallHandler((toolName, toolCall) => {
+ *   if (toolName.includes('execute_implementation_step')) {
+ *     const stepNumber = toolCall.tool_args?.step_number
+ *     if (typeof stepNumber === 'number') {
+ *       markStepRunning(stepNumber)
+ *     }
+ *   }
+ * })
+ */
+export function useToolCallHandler(handler: ToolCallHandler): void {
+  const registry = useEventHandlerRegistry()
+  const handlerRef = useRef(handler)
+
+  useEffect(() => {
+    handlerRef.current = handler
+  }, [handler])
+
+  useEffect(() => {
+    const wrappedHandler: ToolCallHandler = (...args) => handlerRef.current(...args)
+    registry.toolCallHandlers.add(wrappedHandler)
+    return () => {
+      registry.toolCallHandlers.delete(wrappedHandler)
+    }
+  }, [registry])
 }
 
 /**
@@ -242,6 +283,17 @@ export async function invokeEventHandlers(
   registry: EventHandlerRegistry,
   toolCallMap: Map<string, string>
 ): Promise<void> {
+  // Handle tool calls
+  if (event.event_type === 'tool_call') {
+    const handlers = Array.from(registry.toolCallHandlers)
+    const results = await Promise.allSettled(handlers.map(handler => handler(event.tool_name, event)))
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Tool call handler ${index} failed for tool "${event.tool_name}":`, result.reason)
+      }
+    })
+  }
+
   // Handle tool results
   if (event.event_type === 'tool_result') {
     const toolName = toolCallMap.get(event.tool_call_id)

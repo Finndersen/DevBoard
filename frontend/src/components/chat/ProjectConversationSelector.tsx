@@ -117,7 +117,7 @@ export default function ProjectConversationSelector({
           />
 
           {/* Menu */}
-          <div className="absolute right-0 mt-1 w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden">
+          <div className="absolute right-0 mt-1 w-96 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden">
             {/* Cap warning */}
             {atCap && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-900/50 text-yellow-400 text-xs">

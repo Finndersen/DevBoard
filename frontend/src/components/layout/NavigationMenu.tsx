@@ -7,7 +7,6 @@ import {
   ListBulletIcon,
   CodeBracketIcon,
   CommandLineIcon,
-  ChatBubbleLeftRightIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
@@ -36,9 +35,6 @@ export default function NavigationMenu() {
     navigationCompactMode,
     toggleNavigationCompactMode,
     openCreateTaskModal,
-    conversationsPanelCollapsed,
-    toggleConversationsPanel,
-    unreadConversationIds,
   } = useUIStore()
 
   const isCompact = navigationCompactMode
@@ -100,30 +96,8 @@ export default function NavigationMenu() {
         })}
       </nav>
 
-      {/* Footer: conversations toggle + collapse toggle */}
+      {/* Footer: collapse toggle */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-2">
-        {conversationsPanelCollapsed && (
-          <>
-            <button
-              onClick={toggleConversationsPanel}
-              className={`w-full flex items-center ${isCompact ? 'justify-center' : 'gap-3'} px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md`}
-              title={isCompact ? 'Show conversations' : undefined}
-            >
-              <div className="relative shrink-0">
-                <ChatBubbleLeftRightIcon className="w-5 h-5" />
-                {unreadConversationIds.length > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                    {unreadConversationIds.length}
-                  </span>
-                )}
-              </div>
-              {!isCompact && (
-                <span className="font-medium text-sm">Conversations</span>
-              )}
-            </button>
-            <div className="my-1 mx-3 border-t border-gray-200 dark:border-gray-700" />
-          </>
-        )}
         <button
           onClick={toggleNavigationCompactMode}
           className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
