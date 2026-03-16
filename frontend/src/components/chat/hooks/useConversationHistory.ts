@@ -14,17 +14,16 @@ export function useConversationHistory(
   const lastFetchedConversationIdRef = useRef<number | null>(null)
 
   useEffect(() => {
+    // Already have messages in store — no fetch needed
     if (messages.length > 0) {
       lastFetchedConversationIdRef.current = conversationId
       return
     }
 
-    if (lastFetchedConversationIdRef.current === conversationId) {
-      return
-    }
-
-    // Mark as fetched BEFORE starting async operation to prevent duplicate fetches
-    // (React StrictMode in dev mode renders twice, causing race conditions)
+    // Always re-fetch when messages are empty. The Zustand store may have been cleared
+    // by HMR while React Fast Refresh preserved the ref — without this, the conversation
+    // would stay empty until a full page refresh. A duplicate fetch in React StrictMode
+    // dev mode (effect runs twice) is a known dev-only limitation and harmless.
     lastFetchedConversationIdRef.current = conversationId
 
     const fetchHistory = async () => {

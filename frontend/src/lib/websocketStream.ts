@@ -1,6 +1,18 @@
 import type { ConversationEvent } from './api'
 import { webSocketManager } from '../services/WebSocketManager'
 
+/**
+ * Thrown when the WebSocket connection closes unexpectedly
+ * (server closed without sending execution_completed).
+ * Signals to the consumer that reconnection should be attempted.
+ */
+export class WebSocketDisconnectedError extends Error {
+  constructor(code: number, reason: string) {
+    super(`WebSocket disconnected unexpectedly (code=${code}, reason=${reason})`)
+    this.name = 'WebSocketDisconnectedError'
+  }
+}
+
 interface ExecutionLifecycleEvent {
   event_type: 'execution_lifecycle'
   event: 'execution_started' | 'execution_completed'
@@ -59,11 +71,16 @@ export async function* createWebSocketEventStream(
     resolveWait = null
   }
 
-  const handleClose = (_code: number, _reason: string) => {
+  let closeCode = 0
+  let closeReason = ''
+
+  const handleClose = (code: number, reason: string) => {
     // Server-initiated close is expected after execution_completed.
     // If we haven't received execution_completed yet, treat as unexpected close.
     if (!done) {
       serverClosed = true
+      closeCode = code
+      closeReason = reason
       resolveWait?.()
       resolveWait = null
     }
@@ -81,8 +98,7 @@ export async function* createWebSocketEventStream(
       }
 
       if (serverClosed) {
-        // Server closed before sending execution_completed — abnormal
-        break
+        throw new WebSocketDisconnectedError(closeCode, closeReason)
       }
 
       if (buffer.length > 0) {

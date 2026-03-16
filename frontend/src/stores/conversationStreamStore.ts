@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { ConversationEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, SystemEvent } from '../lib/api'
 import { apiClient } from '../lib/api'
 import { processConversationStream } from '../lib/streamProcessor'
-import { createWebSocketEventStream } from '../lib/websocketStream'
+import { createWebSocketEventStream, WebSocketDisconnectedError } from '../lib/websocketStream'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 import { invokeStreamCompleteHandlers } from '../hooks/useConversationEventHandlers'
 import { useNotificationStore } from './notificationStore'
@@ -44,6 +44,13 @@ const eventHandlerRegistries = new Map<number, EventHandlerRegistry>()
 const conversationIdRefs = new Map<number, { current: number }>()
 
 /**
+ * Tracks conversations currently in a reconnect attempt (including retries).
+ * Prevents concurrent reconnect calls from creating duplicate WebSocket connections.
+ * Exported for use by useStreamHealthCheck to skip conversations mid-reconnect.
+ */
+export const reconnectingConversations = new Set<number>()
+
+/**
  * Stream lifecycle callbacks (not in Zustand state).
  * Fired on 'active' (stream started/reconnected) and 'complete' (stream finished) events.
  * Used by ConversationsPanel to refetch the conversation list at the right moments.
@@ -61,6 +68,9 @@ function notifyStreamLifecycle(conversationId: number, event: StreamLifecycleEve
     }
   }
 }
+
+const MAX_RECONNECT_RETRIES = 3
+const RECONNECT_BASE_DELAY_MS = 1000 // 1s, 2s, 4s exponential backoff
 
 /**
  * Store state containing streaming state and conversation messages.
@@ -337,6 +347,19 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         // Stream completed successfully
         get().completeStream(conversationIdRef.current)
       } catch (error) {
+        if (error instanceof WebSocketDisconnectedError) {
+          console.warn('[StreamStore] Stream disconnected, attempting reconnect for', conversationIdRef.current)
+          // Mark as not streaming so reconnectStream's guard passes
+          set((draft) => {
+            const streamState = draft.activeStreams.get(conversationIdRef.current)
+            if (streamState) {
+              streamState.isStreaming = false
+            }
+          })
+          // Fire-and-forget — reconnect manages its own lifecycle and error state
+          get().reconnectStream(conversationIdRef.current)
+          return
+        }
         if (error instanceof Error) {
           console.error('Stream error:', error)
           get().setError(conversationIdRef.current, error)
@@ -675,21 +698,24 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     },
 
     reconnectStream: async (conversationId) => {
-      // Don't reconnect if already streaming
+      // Don't reconnect if already streaming or a reconnect is in progress
       if (get().isConversationStreaming(conversationId)) return
+      if (reconnectingConversations.has(conversationId)) return
+      reconnectingConversations.add(conversationId)
 
       console.log('[StreamStore] reconnectStream:', { conversationId })
 
       const conversationIdRef = { current: conversationId }
       conversationIdRefs.set(conversationId, conversationIdRef)
 
+      const existingIsQueued = get().activeStreams.get(conversationId)?.isQueued ?? false
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
           error: null,
           startedAt: Date.now(),
           pendingToolRequests: [],
-          isQueued: false,
+          isQueued: existingIsQueued,
         })
       })
 
@@ -697,32 +723,54 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // where last_activity_at is already current
       notifyStreamLifecycle(conversationId, 'active')
 
+      let attempt = 0
       try {
-        const stream = createWebSocketEventStream(conversationId)
+        while (attempt <= MAX_RECONNECT_RETRIES) {
+          try {
+            const stream = createWebSocketEventStream(conversationId)
 
-        const { toolRequests } = await processConversationStream({
-          stream,
-          onEvent: (event) => {
-            get().addEvent(conversationIdRef.current, event)
-          },
-          getEventHandlerRegistry: () => eventHandlerRegistries.get(conversationIdRef.current),
-        })
+            const { toolRequests } = await processConversationStream({
+              stream,
+              onEvent: (event) => {
+                get().addEvent(conversationIdRef.current, event)
+              },
+              getEventHandlerRegistry: () => eventHandlerRegistries.get(conversationIdRef.current),
+            })
 
-        if (toolRequests.length > 0) {
-          set((draft) => {
-            const streamState = draft.activeStreams.get(conversationIdRef.current)
-            if (streamState) {
-              streamState.pendingToolRequests = toolRequests
+            if (toolRequests.length > 0) {
+              set((draft) => {
+                const streamState = draft.activeStreams.get(conversationIdRef.current)
+                if (streamState) {
+                  streamState.pendingToolRequests = toolRequests
+                }
+              })
             }
-          })
-        }
 
-        get().completeStream(conversationIdRef.current)
-      } catch (error) {
-        if (error instanceof Error) {
-          console.error('Reconnect stream error:', error)
-          get().setError(conversationIdRef.current, error)
+            get().completeStream(conversationIdRef.current)
+            return
+          } catch (error) {
+            attempt++
+            if (error instanceof WebSocketDisconnectedError && attempt <= MAX_RECONNECT_RETRIES) {
+              const stillActive = await apiClient.hasActiveExecution(conversationId).catch(() => false)
+              if (!stillActive) {
+                console.log('[StreamStore] Execution no longer active, stopping reconnect')
+                get().completeStream(conversationIdRef.current)
+                return
+              }
+              const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+              console.warn(`[StreamStore] WebSocket disconnected, retrying in ${delay}ms (attempt ${attempt}/${MAX_RECONNECT_RETRIES})`)
+              await new Promise(resolve => setTimeout(resolve, delay))
+              continue
+            }
+            if (error instanceof Error) {
+              console.error('Reconnect stream error:', error)
+              get().setError(conversationIdRef.current, error)
+            }
+            return
+          }
         }
+      } finally {
+        reconnectingConversations.delete(conversationId)
       }
     },
   }))

@@ -3,7 +3,7 @@
 import asyncio
 import datetime
 from contextlib import contextmanager
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
@@ -14,6 +14,7 @@ from devboard.agents.execution_manager import (
     ExecutionLifecycleEventType,
     ExecutionStatus,
 )
+from devboard.api.routers.websocket import _stream_single_execution
 from devboard.db.models import ParentEntityType
 from devboard.db.repositories import ConversationRepository
 
@@ -211,3 +212,67 @@ class TestWebSocketEventStreaming:
                         ws.receive_json()  # triggers server close
 
                 assert exc_info.value.code == 1000
+
+
+class TestWebSocketDisconnectRequeue:
+    """Tests for re-queuing events when WebSocket disconnects mid-stream."""
+
+    @pytest.mark.asyncio
+    async def test_requeues_event_on_websocket_disconnect_during_send(self):
+        """When send_text raises WebSocketDisconnect, the event should be put back on the queue."""
+        execution = _make_execution(conversation_id=1)
+
+        text_event = TextMessage(
+            event_type="message",
+            role=MessageRole.AGENT,
+            text_content="Hello from agent",
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+        execution.event_queue.put_nowait(text_event)
+
+        mock_websocket = AsyncMock()
+        # First send_text succeeds (execution_started), second raises disconnect (the event send)
+        mock_websocket.send_text.side_effect = [None, WebSocketDisconnect()]
+
+        with patch("devboard.api.routers.websocket._wait_for_execution", return_value=execution):
+            with pytest.raises(WebSocketDisconnect):
+                await _stream_single_execution(mock_websocket, conversation_id=1)
+
+        # The event should have been re-queued
+        assert not execution.event_queue.empty()
+        requeued = execution.event_queue.get_nowait()
+        assert requeued.text_content == "Hello from agent"
+
+    @pytest.mark.asyncio
+    async def test_remaining_events_preserved_on_disconnect(self):
+        """Events not yet consumed from the queue should remain after a disconnect."""
+        execution = _make_execution(conversation_id=1)
+
+        events = [
+            TextMessage(
+                event_type="message",
+                role=MessageRole.AGENT,
+                text_content=f"Message {i}",
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            for i in range(3)
+        ]
+        for event in events:
+            execution.event_queue.put_nowait(event)
+
+        mock_websocket = AsyncMock()
+        # execution_started succeeds, first event succeeds, second event disconnects
+        mock_websocket.send_text.side_effect = [None, None, WebSocketDisconnect()]
+
+        with patch("devboard.api.routers.websocket._wait_for_execution", return_value=execution):
+            with pytest.raises(WebSocketDisconnect):
+                await _stream_single_execution(mock_websocket, conversation_id=1)
+
+        # The failed event (Message 1) should be re-queued at the back,
+        # and Message 2 remains unconsumed at the front
+        remaining = []
+        while not execution.event_queue.empty():
+            remaining.append(execution.event_queue.get_nowait())
+        assert len(remaining) == 2
+        assert remaining[0].text_content == "Message 2"
+        assert remaining[1].text_content == "Message 1"

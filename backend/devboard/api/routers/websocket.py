@@ -95,7 +95,13 @@ async def _stream_single_execution(websocket: WebSocket, conversation_id: int) -
         if event is None:
             break
 
-        await websocket.send_text(event.model_dump_json())
+        try:
+            await websocket.send_text(event.model_dump_json())
+        except WebSocketDisconnect:
+            # Re-queue the event so a reconnecting WebSocket can pick it up.
+            # It goes to the back of the queue, which is acceptable for a single event.
+            await execution.event_queue.put(event)
+            raise
 
     # Send completion lifecycle event
     await websocket.send_text(

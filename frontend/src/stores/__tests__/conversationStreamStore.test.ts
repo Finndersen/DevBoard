@@ -1,9 +1,31 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { enableMapSet } from 'immer'
-import { useConversationStreamStore } from '../conversationStreamStore'
+import { useConversationStreamStore, reconnectingConversations } from '../conversationStreamStore'
 import type { ConversationEvent } from '../../lib/api'
+import { apiClient } from '../../lib/api'
 import type { EventHandlerRegistry } from '../../hooks/useConversationEventHandlers'
+import { createWebSocketEventStream, WebSocketDisconnectedError } from '../../lib/websocketStream'
+
+vi.mock('../../lib/websocketStream', () => {
+  class WebSocketDisconnectedError extends Error {
+    constructor(code: number, reason: string) {
+      super(`WebSocket disconnected unexpectedly (code=${code}, reason=${reason})`)
+      this.name = 'WebSocketDisconnectedError'
+    }
+  }
+  return {
+    WebSocketDisconnectedError,
+    createWebSocketEventStream: vi.fn(),
+  }
+})
+
+vi.mock('../../lib/api', () => ({
+  apiClient: {
+    interruptConversation: vi.fn().mockResolvedValue(undefined),
+    hasActiveExecution: vi.fn(),
+  },
+}))
 
 // Enable Immer MapSet plugin for handling Map/Set in the store
 enableMapSet()
@@ -389,5 +411,114 @@ describe('conversationStreamStore - stream cancellation', () => {
 
     // Clean up registry
     store.updateEventHandlerRegistry(conversationId, undefined)
+  })
+})
+
+describe('conversationStreamStore - reconnect on disconnect', () => {
+  const mockCreateWebSocketEventStream = vi.mocked(createWebSocketEventStream)
+  const mockHasActiveExecution = vi.mocked(apiClient.hasActiveExecution)
+
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+    reconnectingConversations.clear()
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('retries on WebSocketDisconnectedError and completes on success', async () => {
+    const conversationId = 200
+    const store = useConversationStreamStore.getState()
+
+    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
+    const successEvent: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Hello',
+      timestamp: '2024-01-01T00:00:00Z',
+    }
+
+    async function* failStream() {
+      throw disconnectError
+      yield undefined as unknown as ConversationEvent
+    }
+    async function* successStream() {
+      yield successEvent
+    }
+
+    mockCreateWebSocketEventStream
+      .mockReturnValueOnce(failStream())
+      .mockReturnValueOnce(successStream())
+    mockHasActiveExecution.mockResolvedValue(true)
+
+    const reconnectPromise = store.reconnectStream(conversationId)
+
+    // Advance past the 1s retry delay (attempt 1)
+    await vi.advanceTimersByTimeAsync(1000)
+    await reconnectPromise
+
+    expect(store.isConversationStreaming(conversationId)).toBe(false)
+    expect(store.getStreamState(conversationId)?.error).toBeNull()
+    expect(getMessages(conversationId)).toEqual([successEvent])
+    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('gives up and sets error state after MAX_RECONNECT_RETRIES disconnects', async () => {
+    const conversationId = 201
+    const store = useConversationStreamStore.getState()
+
+    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
+
+    async function* failStream() {
+      throw disconnectError
+      yield undefined as unknown as ConversationEvent
+    }
+
+    mockCreateWebSocketEventStream.mockImplementation(failStream)
+    mockHasActiveExecution.mockResolvedValue(true)
+
+    const reconnectPromise = store.reconnectStream(conversationId)
+
+    // Advance through all 3 retry delays: 1s, 2s, 4s
+    await vi.advanceTimersByTimeAsync(1000) // attempt 1
+    await vi.advanceTimersByTimeAsync(2000) // attempt 2
+    await vi.advanceTimersByTimeAsync(4000) // attempt 3
+    await reconnectPromise
+
+    // After exhausting retries, error state is set
+    expect(store.isConversationStreaming(conversationId)).toBe(false)
+    expect(store.getStreamState(conversationId)?.error).toBeInstanceOf(Error)
+    // Tried initial attempt + 3 retries = 4 total calls
+    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(4)
+  })
+
+  it('stops retrying and completes stream when execution is no longer active', async () => {
+    const conversationId = 202
+    const store = useConversationStreamStore.getState()
+
+    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
+
+    async function* failStream() {
+      throw disconnectError
+      yield undefined as unknown as ConversationEvent
+    }
+
+    mockCreateWebSocketEventStream.mockImplementation(failStream)
+    mockHasActiveExecution.mockResolvedValue(false)
+
+    const reconnectPromise = store.reconnectStream(conversationId)
+
+    // Only need to run microtasks — no timer delay since we bail out immediately
+    await vi.runAllTimersAsync()
+    await reconnectPromise
+
+    // Stream completed (not errored) because execution was no longer active
+    expect(store.isConversationStreaming(conversationId)).toBe(false)
+    expect(store.getStreamState(conversationId)?.error).toBeUndefined()
+    // Only one connection attempt was made before giving up
+    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(1)
   })
 })

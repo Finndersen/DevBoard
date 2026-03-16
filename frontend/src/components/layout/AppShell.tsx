@@ -7,6 +7,7 @@ import ConversationsPanel from '../conversations/ConversationsPanel'
 import CreateTaskModal from '../modals/CreateTaskModal'
 import { useUIStore } from '../../stores/uiStore'
 import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
+import { useStreamHealthCheck } from '../../hooks/useStreamHealthCheck'
 import { useURLSync } from '../../hooks/useURLSync'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 
@@ -21,6 +22,9 @@ export default function AppShell() {
 
   // Bootstrap active streams on app startup
   useStreamBootstrap()
+
+  // Periodic health check to reconnect orphaned streams
+  useStreamHealthCheck()
 
   // Synchronize URL with view state
   useURLSync()
