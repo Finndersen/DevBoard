@@ -382,7 +382,7 @@ async def execute_workflow_action(
     except ConversationBusyError as err:
         raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 
-    return {"conversation_id": cid}
+    return {"conversation_id": cid, "prompt": prompt}
 
 
 # Git endpoints

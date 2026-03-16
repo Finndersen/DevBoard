@@ -931,8 +931,8 @@ export class ApiClient {
   async executeWorkflowAction(
     taskId: number | string,
     request: PromptActionRequest,
-  ): Promise<{ conversation_id?: number; status?: string }> {
-    return this.request<{ conversation_id?: number; status?: string }>(
+  ): Promise<{ conversation_id?: number; status?: string; prompt?: string }> {
+    return this.request<{ conversation_id?: number; status?: string; prompt?: string }>(
       `/api/tasks/${taskId}/workflow-action`,
       {
         method: 'POST',

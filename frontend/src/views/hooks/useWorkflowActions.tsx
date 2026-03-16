@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { Task, GitHubPRStatusResponse, TaskGitStatus } from '../../lib/api'
+import type { Task, GitHubPRStatusResponse, TaskGitStatus, ConversationEvent } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { Button } from '../../components/ui'
@@ -52,6 +52,7 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
   const [streamingMessage, setStreamingMessage] = useState('')
 
   const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
+  const addEvent = useConversationStreamStore(state => state.addEvent)
   const isConversationStreaming = useConversationStreamStore(
     state => task?.conversation_id ? state.isConversationStreaming(task.conversation_id) : false
   )
@@ -67,6 +68,16 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
       await refetch()
 
       if (result.conversation_id) {
+        // Add the workflow action prompt as a user message so it's visible immediately
+        if (result.prompt) {
+          const userMessage: ConversationEvent = {
+            event_type: 'message',
+            role: 'user',
+            text_content: result.prompt,
+            timestamp: new Date().toISOString(),
+          }
+          addEvent(result.conversation_id, userMessage)
+        }
         // Explicitly open WebSocket — needed when action reuses the same conversation,
         // as useStreamSubscription's reconnectAttempted guard won't re-trigger.
         reconnectStream(result.conversation_id)
@@ -78,7 +89,7 @@ export function useWorkflowActions({ task, prStatus, specificationContent, refet
       setStreamingMessage('')
       await refetch()
     }
-  }, [task?.id, refetch, reconnectStream])
+  }, [task?.id, refetch, reconnectStream, addEvent])
 
   const getButtonConfigForAction = (actionKey: string) => {
     const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean }> = {
