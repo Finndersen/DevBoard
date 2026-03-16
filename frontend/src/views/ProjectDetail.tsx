@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
+import ProjectConversationSelector from '../components/chat/ProjectConversationSelector'
 import CreateTaskModal from '../components/modals/CreateTaskModal'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { Button, Card, Input } from '../components/ui'
@@ -14,7 +15,6 @@ import { useCodebases } from '../hooks/useCodebases'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
-import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
@@ -26,7 +26,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()
-  const migrateStream = useConversationStreamStore(state => state.migrateStream)
   const { addNotification } = useNotificationStore()
 
   // Update tab title when project data is loaded
@@ -43,6 +42,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const { data: allCodebases, refetch: refetchAllCodebases } = useCodebases()
   const { mutate: linkCodebase, loading: linkingCodebase } = useLinkCodebaseToProject()
   const { mutate: unlinkCodebase, loading: unlinkingCodebase } = useUnlinkCodebaseFromProject()
+
+  // Active conversation management
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
 
   // State for codebase linking UI
   const [selectedCodebaseToLink, setSelectedCodebaseToLink] = useState<string>('')
@@ -108,6 +110,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [project, setStoreProject])
 
+  // Initialize active conversation from project data
+  useEffect(() => {
+    if (project?.default_conversation_id && activeConversationId === null) {
+      setActiveConversationId(project.default_conversation_id)
+    }
+  }, [project?.default_conversation_id, activeConversationId])
+
   // Custom fields state
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
   const [customFieldSaving, setCustomFieldSaving] = useState(false)
@@ -143,14 +152,49 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
 
-  // Handle conversation reset from AgentChat (when user clears chat history)
-  const handleConversationReset = useCallback((newConversationId: number) => {
-    const oldConversationId = project?.default_conversation_id
-    if (oldConversationId && oldConversationId !== newConversationId) {
-      migrateStream(oldConversationId, newConversationId)
+  // Handle creating a new project conversation
+  const handleNewConversation = useCallback(async () => {
+    if (!project) return
+    try {
+      const result = await apiClient.createProjectConversation(project.id)
+      setActiveConversationId(result.id)
+    } catch (error) {
+      console.error('Failed to create conversation:', error)
+      addNotification({ type: 'error', message: 'Failed to create new conversation' })
     }
-    refetchProject()
-  }, [project?.default_conversation_id, migrateStream, refetchProject])
+  }, [project, addNotification])
+
+  // Handle switching conversations
+  const handleSelectConversation = useCallback((conversationId: number) => {
+    setActiveConversationId(conversationId)
+  }, [])
+
+  // Handle deleting a conversation
+  const handleDeleteConversation = useCallback(async (conversationId: number) => {
+    try {
+      await apiClient.deleteConversation(conversationId)
+      // If we deleted the active conversation, switch to most recent
+      if (conversationId === activeConversationId) {
+        // Refetch project to get the new default
+        const updatedProject = await apiClient.getProject(id!)
+        setProject(updatedProject)
+        setActiveConversationId(updatedProject.default_conversation_id)
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error)
+      addNotification({ type: 'error', message: 'Failed to delete conversation' })
+    }
+  }, [activeConversationId, id, addNotification, setProject])
+
+  // Handle renaming a conversation
+  const handleRenameConversation = useCallback(async (conversationId: number, title: string) => {
+    try {
+      await apiClient.updateConversationTitle(conversationId, title)
+    } catch (error) {
+      console.error('Failed to rename conversation:', error)
+      addNotification({ type: 'error', message: 'Failed to rename conversation' })
+    }
+  }, [addNotification])
 
   // Compute unlinked codebases for dropdown
   const unlinkedCodebases = useMemo(() => {
@@ -336,11 +380,23 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
           {/* Left Side - Chat */}
           <AgentChat
-            conversationId={project.default_conversation_id}
+            conversationId={activeConversationId}
             placeholder="Ask a question about this project..."
             emptyStateMessage="Ask me anything about this project!"
             className="h-full flex flex-col overflow-hidden"
-            onConversationReset={handleConversationReset}
+            conversationSelector={
+              activeConversationId ? (
+                <ProjectConversationSelector
+                  projectId={project.id}
+                  activeConversationId={activeConversationId}
+                  onSelect={handleSelectConversation}
+                  onNew={handleNewConversation}
+                  onDelete={handleDeleteConversation}
+                  onRename={handleRenameConversation}
+                />
+              ) : undefined
+            }
+            onNewConversation={handleNewConversation}
           />
 
           {/* Right Side - Project Specification */}

@@ -3,7 +3,7 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Index, select
+from sqlalchemy import Enum, ForeignKey, Index, String, select
 from sqlalchemy.orm import Mapped, joinedload, mapped_column, object_session, relationship
 
 from devboard.agents.engines import AgentEngine
@@ -87,6 +87,7 @@ class Conversation(Base):
 
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
     last_activity_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Relationships
     messages: Mapped[list["ConversationMessage"]] = relationship(

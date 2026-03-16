@@ -10,7 +10,7 @@ import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useUIStore } from '../../stores/uiStore'
 import type { ViewType } from '../../stores/uiStore'
-import type { ConversationListItem } from '../../lib/api'
+import type { ConversationResponse } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
 
@@ -165,7 +165,7 @@ export default function ConversationsPanel() {
 
   const activeView = cachedViews.find(v => v.id === activeViewId)
 
-  const handleClick = (item: ConversationListItem) => {
+  const handleClick = (item: ConversationResponse) => {
     const viewType = item.parent_entity_type.toLowerCase() as ViewType
     navigateTo({
       type: viewType,

@@ -165,6 +165,92 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation.archived_at = datetime.datetime.now(datetime.UTC)
             self.db.flush()
 
+    def get_active_conversations_for_entity(
+        self,
+        entity_type: ParentEntityType,
+        entity_id: int,
+    ) -> list[Conversation]:
+        """Get all active non-archived conversations for an entity, ordered by last_activity_at DESC."""
+        stmt = (
+            select(Conversation)
+            .where(
+                Conversation.parent_entity_type == entity_type,
+                Conversation.parent_entity_id == entity_id,
+                Conversation.is_active == True,  # noqa: E712
+                Conversation.parent_conversation_id.is_(None),
+                Conversation.archived_at.is_(None),
+            )
+            .order_by(Conversation.last_activity_at.desc().nullslast())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_most_recent_conversation_for_entity(
+        self,
+        entity_type: ParentEntityType,
+        entity_id: int,
+    ) -> Conversation | None:
+        """Get the most recent active conversation for an entity, or None."""
+        stmt = (
+            select(Conversation)
+            .where(
+                Conversation.parent_entity_type == entity_type,
+                Conversation.parent_entity_id == entity_id,
+                Conversation.is_active == True,  # noqa: E712
+                Conversation.parent_conversation_id.is_(None),
+                Conversation.archived_at.is_(None),
+            )
+            .order_by(Conversation.last_activity_at.desc().nullslast())
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def count_active_for_entity(
+        self,
+        entity_type: ParentEntityType,
+        entity_id: int,
+    ) -> int:
+        """Count active non-archived conversations for an entity."""
+        from sqlalchemy import func
+
+        stmt = (
+            select(func.count())
+            .select_from(Conversation)
+            .where(
+                Conversation.parent_entity_type == entity_type,
+                Conversation.parent_entity_id == entity_id,
+                Conversation.is_active == True,  # noqa: E712
+                Conversation.parent_conversation_id.is_(None),
+                Conversation.archived_at.is_(None),
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
+
+    def get_oldest_active_for_entity(
+        self,
+        entity_type: ParentEntityType,
+        entity_id: int,
+    ) -> Conversation | None:
+        """Get the oldest active conversation for an entity by last_activity_at."""
+        stmt = (
+            select(Conversation)
+            .where(
+                Conversation.parent_entity_type == entity_type,
+                Conversation.parent_entity_id == entity_id,
+                Conversation.is_active == True,  # noqa: E712
+                Conversation.parent_conversation_id.is_(None),
+                Conversation.archived_at.is_(None),
+            )
+            .order_by(Conversation.last_activity_at.asc().nullsfirst())
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def update_title(self, conversation: Conversation, title: str) -> Conversation:
+        """Set the title on a conversation."""
+        conversation.title = title
+        self.db.flush()
+        return conversation
+
     def get_task_info_by_session_ids(self, session_ids: set[str]) -> dict[str, SessionTaskInfo]:
         """Get task association info for a set of session IDs.
 

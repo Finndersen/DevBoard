@@ -13,6 +13,7 @@ from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Codebase, Task
+from devboard.services.project_directory import ensure_project_directory
 
 
 class ClaudeCodeAgentExecutionService(AgentExecutionService):
@@ -105,7 +106,8 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         elif isinstance(conversation_parent, Codebase):
             working_dir = conversation_parent.local_path
         else:
-            working_dir = None
+            # Project conversations: use dedicated project directory
+            working_dir = str(ensure_project_directory(conversation_parent))
 
         return ClaudeCodeAgent(
             role=self.role,

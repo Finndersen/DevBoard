@@ -16,6 +16,7 @@ from devboard.api.dependencies.repositories import (
 )
 from devboard.api.dependencies.services import (
     get_context_assembly_service,
+    get_conversation_service,
     get_project_service,
     get_resource_service,
     get_task_git_service,
@@ -32,6 +33,7 @@ from devboard.api.schemas import (
     TaskCreateNested,
     TaskResponse,
 )
+from devboard.api.schemas.conversation import ConversationResponse, CreateConversationResponse
 from devboard.context_providers import ContextProviderUnavailable
 from devboard.db.models import ParentEntityType
 from devboard.db.models.enums import EntityType
@@ -49,6 +51,7 @@ from devboard.services.context_assembly import (
     ContextAssemblyService,
     NoProviderFound,
 )
+from devboard.services.conversation_service import ConversationService
 from devboard.services.project_service import ProjectService
 from devboard.services.resource_service import (
     ResourceService,
@@ -101,8 +104,10 @@ async def create_project(
     project_repo.db.commit()
     project_repo.db.refresh(created_project)
 
-    # Get the active conversation that was just created
-    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.PROJECT, created_project.id)
+    # Get the conversation that was just created
+    conversation = conversation_repo.get_most_recent_conversation_for_entity(
+        ParentEntityType.PROJECT, created_project.id
+    )
 
     return ProjectResponse(
         id=created_project.id,
@@ -110,7 +115,7 @@ async def create_project(
         description=created_project.description,
         created_at=created_project.created_at,
         specification_document_id=created_project.specification.id,
-        default_conversation_id=conversation.id,
+        default_conversation_id=conversation.id if conversation else None,
         custom_fields=created_project.custom_fields,
     )
 
@@ -122,9 +127,7 @@ async def get_project(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> ProjectResponse:
     """Get a specific project with active conversation_id."""
-    # Get active conversation (should always exist since created at project creation)
-    # Will raise NoActiveConversationError if not found
-    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.PROJECT, project_id)
+    conversation = conversation_repo.get_most_recent_conversation_for_entity(ParentEntityType.PROJECT, project_id)
 
     return ProjectResponse(
         id=project.id,
@@ -132,7 +135,7 @@ async def get_project(
         description=project.description,
         created_at=project.created_at,
         specification_document_id=project.specification.id,
-        default_conversation_id=conversation.id,
+        default_conversation_id=conversation.id if conversation else None,
         custom_fields=project.custom_fields,
     )
 
@@ -183,6 +186,58 @@ async def delete_project(
 
     project_repo.db.commit()
     return {"message": "Project deleted successfully", "success": True}
+
+
+# Project Conversation Endpoints
+@router.get("/{project_id}/conversations", response_model=list[ConversationResponse])
+async def list_project_conversations(
+    project_id: int,
+    project: Project = Depends(get_verified_project),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> list[ConversationResponse]:
+    """List all active conversations for a project."""
+    conversations = conversation_repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, project_id)
+    return [
+        ConversationResponse(
+            id=conv.id,
+            parent_entity_type=conv.parent_entity_type,
+            parent_entity_id=conv.parent_entity_id,
+            agent_role=conv.agent_role,
+            engine=conv.engine,
+            model_id=conv.model_id,
+            is_active=conv.is_active,
+            external_session_id=conv.external_session_id,
+            title=conv.title,
+            last_activity_at=conv.last_activity_at,
+            created_at=conv.created_at,
+            parent_entity_name=project.name,
+        )
+        for conv in conversations
+    ]
+
+
+@router.post("/{project_id}/conversations", response_model=CreateConversationResponse)
+async def create_project_conversation(
+    project_id: int,
+    project: Project = Depends(get_verified_project),
+    conversation_service: ConversationService = Depends(get_conversation_service),
+) -> CreateConversationResponse:
+    """Create a new conversation for a project."""
+    result = conversation_service.create_project_conversation(project_id)
+    conv = result.conversation
+    return CreateConversationResponse(
+        id=conv.id,
+        parent_entity_type=conv.parent_entity_type,
+        parent_entity_id=conv.parent_entity_id,
+        agent_role=conv.agent_role,
+        engine=conv.engine,
+        model_id=conv.model_id,
+        is_active=conv.is_active,
+        external_session_id=conv.external_session_id,
+        title=conv.title,
+        created_at=conv.created_at,
+        at_cap=result.at_cap,
+    )
 
 
 # Project Task Endpoints

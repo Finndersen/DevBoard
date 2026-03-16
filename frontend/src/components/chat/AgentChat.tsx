@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react'
-import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon, PlusIcon } from '@heroicons/react/24/outline'
 import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
 import ConversationModelSelector from './ConversationModelSelector'
 import RunningIndicator from './RunningIndicator'
@@ -31,6 +31,8 @@ interface AgentChatProps {
   codebaseLocalPath?: string
   isDisabled?: boolean
   onConversationReset?: (newConversationId: number) => void
+  conversationSelector?: React.ReactNode
+  onNewConversation?: () => void
 }
 
 /** Handle exposed by AgentChat ref - same as ConversationChatHandle */
@@ -48,7 +50,9 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   onInitialMessageSent,
   codebaseLocalPath,
   isDisabled = false,
-  onConversationReset
+  onConversationReset,
+  conversationSelector,
+  onNewConversation,
 }, ref) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const conversationChatRef = useRef<ConversationChatHandle>(null)
@@ -140,6 +144,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 title
               )}
             </h3>
+            {conversationSelector}
             {conversationId && <RunningIndicator conversationId={conversationId} />}
           </div>
           <div className="flex items-center space-x-3">
@@ -152,6 +157,15 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 <InformationCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             )}
+            {onNewConversation && (
+              <button
+                onClick={onNewConversation}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                title="New Conversation"
+              >
+                <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            )}
             {conversationId && !loadingConversation && (
               <ConversationModelSelector
                 conversationId={conversationId}
@@ -160,7 +174,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 }}
               />
             )}
-            {conversationId && (
+            {conversationId && !conversationSelector && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -199,12 +213,14 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
       </Card>
 
       {/* Clear Chat History Confirmation Modal */}
-      <ClearChatHistoryModal
-        isOpen={clearChatModal.isOpen}
-        onClose={clearChatModal.close}
-        onConfirm={clearChatOperation.execute}
-        loading={clearChatOperation.loading}
-      />
+      {!conversationSelector && (
+        <ClearChatHistoryModal
+          isOpen={clearChatModal.isOpen}
+          onClose={clearChatModal.close}
+          onConfirm={clearChatOperation.execute}
+          loading={clearChatOperation.loading}
+        />
+      )}
 
       {/* Session ID Modal */}
       {conversation?.external_session_id && (

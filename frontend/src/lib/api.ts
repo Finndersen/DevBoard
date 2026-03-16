@@ -624,18 +624,15 @@ export interface ConversationResponse {
   model_id: string | null
   is_active: boolean
   external_session_id: string | null
-  created_at: string
-}
-
-export interface ConversationListItem {
-  id: number
-  parent_entity_type: string
-  parent_entity_id: number
-  agent_role: string
+  title: string | null
   last_activity_at: string | null
   created_at: string
-  parent_entity_name: string
+  parent_entity_name: string | null
   project_name: string | null
+}
+
+export interface CreateConversationResponse extends ConversationResponse {
+  at_cap: boolean
 }
 
 // Todo list types for Claude Code conversations
@@ -878,8 +875,8 @@ export class ApiClient {
   }
 
   // Unified Conversation API
-  async getConversations(): Promise<ConversationListItem[]> {
-    return this.request<ConversationListItem[]>('/api/conversations')
+  async getConversations(): Promise<ConversationResponse[]> {
+    return this.request<ConversationResponse[]>('/api/conversations')
   }
 
   async getConversation(conversationId: number | string): Promise<ConversationResponse> {
@@ -921,6 +918,29 @@ export class ApiClient {
   async resetConversation(conversationId: number | string): Promise<{ new_conversation_id: number; message: string }> {
     return this.request<{ new_conversation_id: number; message: string }>(`/api/conversations/${conversationId}/reset`, {
       method: 'POST',
+    })
+  }
+
+  async getProjectConversations(projectId: number | string): Promise<ConversationResponse[]> {
+    return this.request<ConversationResponse[]>(`/api/projects/${projectId}/conversations`)
+  }
+
+  async createProjectConversation(projectId: number | string): Promise<CreateConversationResponse> {
+    return this.request<CreateConversationResponse>(`/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+    })
+  }
+
+  async updateConversationTitle(conversationId: number | string, title: string): Promise<ConversationResponse> {
+    return this.request<ConversationResponse>(`/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    })
+  }
+
+  async deleteConversation(conversationId: number | string): Promise<void> {
+    return this.request<void>(`/api/conversations/${conversationId}`, {
+      method: 'DELETE',
     })
   }
 

@@ -1,9 +1,21 @@
 """Service for managing conversation lifecycle and transitions."""
 
+import dataclasses
+
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import Codebase, Conversation, ParentEntityType, Project, Task
 from devboard.db.repositories import ConversationRepository
+
+MAX_PROJECT_CONVERSATIONS = 20
+
+
+@dataclasses.dataclass
+class CreateConversationResult:
+    """Result of creating a project conversation."""
+
+    conversation: Conversation
+    at_cap: bool
 
 
 class ConversationService:
@@ -143,3 +155,34 @@ class ConversationService:
             parent_type = ParentEntityType.CODEBASE
 
         return self.conversation_repo.delete_by_parent(parent_type, parent.id)
+
+    def create_project_conversation(self, project_id: int) -> CreateConversationResult:
+        """Create a new conversation for a project, enforcing the cap.
+
+        If the cap (20) is reached, deletes the oldest conversation before creating.
+        """
+        count = self.conversation_repo.count_active_for_entity(ParentEntityType.PROJECT, project_id)
+
+        if count >= MAX_PROJECT_CONVERSATIONS:
+            oldest = self.conversation_repo.get_oldest_active_for_entity(ParentEntityType.PROJECT, project_id)
+            if oldest:
+                self.conversation_repo.delete_by_id(oldest.id)
+                count -= 1
+
+        conversation = self.create_initial_conversation_for_parent_entity(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project_id,
+            agent_role=AgentRoleType.PROJECT,
+        )
+
+        return CreateConversationResult(
+            conversation=conversation,
+            at_cap=(count + 1) >= MAX_PROJECT_CONVERSATIONS,
+        )
+
+    def set_conversation_title_from_message(self, conversation: Conversation, message: str) -> None:
+        """Auto-set conversation title from first user message if not already set."""
+        if conversation.title is None:
+            title = message[:80].strip()
+            if title:
+                self.conversation_repo.update_title(conversation, title)

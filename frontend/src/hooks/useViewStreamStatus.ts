@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import type { ConversationListItem } from '../lib/api'
+import type { ConversationResponse } from '../lib/api'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useUIStore } from '../stores/uiStore'
 import type { ViewType } from '../stores/uiStore'
@@ -8,7 +8,7 @@ import type { ViewType } from '../stores/uiStore'
  * Synchronises view activity status from conversationStreamStore.
  * Maps views → conversations via the conversation list, then checks streaming state.
  */
-export function useViewStreamStatus(conversations: ConversationListItem[] | null) {
+export function useViewStreamStatus(conversations: ConversationResponse[] | null) {
   // Subscribe only to view identity changes (not activityStatus mutations), to avoid
   // an infinite loop where setViewActivityStatus → cachedViews change → effect re-runs → repeat.
   const viewIds = useUIStore(s => s.cachedViews.map(v => v.id).join(','))

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient } from '../lib/api'
-import type { ConversationListItem } from '../lib/api'
+import type { ConversationResponse } from '../lib/api'
 import { useUIStore } from '../stores/uiStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 
 export function useConversations() {
-  const [data, setData] = useState<ConversationListItem[] | null>(null)
+  const [data, setData] = useState<ConversationResponse[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const inFlightRef = useRef(false)

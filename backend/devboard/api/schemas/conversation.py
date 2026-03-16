@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class ConversationResponse(BaseModel):
-    """Response schema for conversation details."""
+    """Unified response schema for conversation details and list items."""
 
     id: int
     parent_entity_type: str
@@ -16,19 +16,22 @@ class ConversationResponse(BaseModel):
     model_id: str | None
     is_active: bool
     external_session_id: str | None
+    title: str | None = None
+    last_activity_at: datetime.datetime | None = None
     created_at: datetime.datetime
+    parent_entity_name: str | None = None
+    project_name: str | None = None
 
     model_config = {"from_attributes": True}
 
 
-class ConversationListResponse(BaseModel):
-    """Response schema for conversation list items."""
+class ConversationUpdate(BaseModel):
+    """Request schema for updating a conversation."""
 
-    id: int
-    parent_entity_type: str
-    parent_entity_id: int
-    agent_role: str
-    last_activity_at: datetime.datetime | None
-    created_at: datetime.datetime
-    parent_entity_name: str
-    project_name: str | None = None
+    title: str
+
+
+class CreateConversationResponse(ConversationResponse):
+    """Response schema for creating a project conversation."""
+
+    at_cap: bool

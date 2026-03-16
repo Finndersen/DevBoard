@@ -612,3 +612,315 @@ class TestGetAllTopLevel:
         idx1 = result_ids.index(conv1.id)
         idx2 = result_ids.index(conv2.id)
         assert idx2 < idx1
+
+
+class TestGetActiveConversationsForEntity:
+    """Tests for get_active_conversations_for_entity."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_returns_active_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Returns all active, non-archived, top-level conversations for an entity."""
+        conv1 = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv2 = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, project.id)
+
+        result_ids = [c.id for c in result]
+        assert conv1.id in result_ids
+        assert conv2.id in result_ids
+
+    def test_ordered_by_last_activity_desc(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Results are ordered by last_activity_at descending."""
+        conv_old = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_old.last_activity_at = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        conv_new = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_new.last_activity_at = datetime.datetime(2026, 3, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        result = repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, project.id)
+        result_ids = [c.id for c in result]
+        assert result_ids.index(conv_new.id) < result_ids.index(conv_old.id)
+
+    def test_excludes_archived_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Archived conversations are excluded."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        repo.archive_conversation(conv.id)
+        db_session.flush()
+
+        result = repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, project.id)
+        assert all(c.id != conv.id for c in result)
+
+    def test_excludes_sub_conversations(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Sub-conversations are excluded."""
+        parent = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        sub = Conversation(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+            parent_conversation_id=parent.id,
+            last_activity_at=datetime.datetime.now(datetime.UTC),
+        )
+        db_session.add(sub)
+        db_session.flush()
+
+        result = repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, project.id)
+        result_ids = [c.id for c in result]
+        assert parent.id in result_ids
+        assert sub.id not in result_ids
+
+    def test_returns_empty_for_no_conversations(self, repo: ConversationRepository):
+        """Returns empty list when no conversations exist for the entity."""
+        result = repo.get_active_conversations_for_entity(ParentEntityType.PROJECT, 99999)
+        assert result == []
+
+
+class TestGetMostRecentConversationForEntity:
+    """Tests for get_most_recent_conversation_for_entity."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_returns_most_recent(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Returns the conversation with the most recent last_activity_at."""
+        conv_old = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_old.last_activity_at = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        conv_new = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_new.last_activity_at = datetime.datetime(2026, 3, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        result = repo.get_most_recent_conversation_for_entity(ParentEntityType.PROJECT, project.id)
+        assert result is not None
+        assert result.id == conv_new.id
+
+    def test_returns_none_when_no_conversations(self, repo: ConversationRepository):
+        """Returns None when no conversations exist."""
+        result = repo.get_most_recent_conversation_for_entity(ParentEntityType.PROJECT, 99999)
+        assert result is None
+
+
+class TestCountActiveForEntity:
+    """Tests for count_active_for_entity."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_returns_correct_count(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Returns the count of active, non-archived, top-level conversations."""
+        for _ in range(3):
+            repo.create(
+                parent_entity_type=ParentEntityType.PROJECT,
+                parent_entity_id=project.id,
+                agent_role=AgentRoleType.PROJECT,
+                engine=AgentEngine.INTERNAL,
+                model_id=None,
+            )
+        db_session.flush()
+
+        count = repo.count_active_for_entity(ParentEntityType.PROJECT, project.id)
+        assert count == 3
+
+    def test_excludes_archived(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Archived conversations are not counted."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        repo.archive_conversation(conv.id)
+        db_session.flush()
+
+        count = repo.count_active_for_entity(ParentEntityType.PROJECT, project.id)
+        assert count == 0
+
+    def test_returns_zero_for_no_conversations(self, repo: ConversationRepository):
+        """Returns 0 when no conversations exist."""
+        count = repo.count_active_for_entity(ParentEntityType.PROJECT, 99999)
+        assert count == 0
+
+
+class TestGetOldestActiveForEntity:
+    """Tests for get_oldest_active_for_entity."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_returns_oldest(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Returns the conversation with the oldest last_activity_at."""
+        conv_old = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_old.last_activity_at = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        conv_new = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        conv_new.last_activity_at = datetime.datetime(2026, 3, 1, tzinfo=datetime.UTC)
+        db_session.flush()
+
+        result = repo.get_oldest_active_for_entity(ParentEntityType.PROJECT, project.id)
+        assert result is not None
+        assert result.id == conv_old.id
+
+    def test_returns_none_when_no_conversations(self, repo: ConversationRepository):
+        """Returns None when no conversations exist."""
+        result = repo.get_oldest_active_for_entity(ParentEntityType.PROJECT, 99999)
+        assert result is None
+
+
+class TestUpdateTitle:
+    """Tests for update_title."""
+
+    @pytest.fixture
+    def repo(self, db_session: Session) -> ConversationRepository:
+        return ConversationRepository(db_session)
+
+    @pytest.fixture
+    def project(self, db_session: Session, document_repository: DocumentRepository) -> Project:
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repository.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(name="Test Project", description="", specification=spec_doc)
+        db_session.flush()
+        return project
+
+    def test_sets_title(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Sets the title on a conversation."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+        assert conv.title is None
+
+        updated = repo.update_title(conv, "My Conversation Title")
+        db_session.flush()
+
+        assert updated.title == "My Conversation Title"
+        refreshed = repo.get_by_id(conv.id)
+        assert refreshed.title == "My Conversation Title"
+
+    def test_overwrites_existing_title(self, repo: ConversationRepository, project: Project, db_session: Session):
+        """Overwrites an existing title."""
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=project.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        repo.update_title(conv, "First Title")
+        db_session.flush()
+
+        repo.update_title(conv, "Second Title")
+        db_session.flush()
+
+        refreshed = repo.get_by_id(conv.id)
+        assert refreshed.title == "Second Title"

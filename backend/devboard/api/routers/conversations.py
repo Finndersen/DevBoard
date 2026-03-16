@@ -24,8 +24,8 @@ from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
 from devboard.api.schemas.claude_code_todo import TodoItem
-from devboard.api.schemas.common import ResetConversationResponse
-from devboard.api.schemas.conversation import ConversationListResponse, ConversationResponse
+from devboard.api.schemas.common import DeleteResponse, ResetConversationResponse
+from devboard.api.schemas.conversation import ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
@@ -34,18 +34,23 @@ from devboard.services.conversation_service import ConversationService
 router = APIRouter()
 
 
-@router.get("/", response_model=list[ConversationListResponse])
+@router.get("/", response_model=list[ConversationResponse])
 async def list_conversations(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-) -> list[ConversationListResponse]:
+) -> list[ConversationResponse]:
     """List all top-level, non-archived conversations ordered by recent activity."""
     rows = conversation_repo.get_all_top_level()
     return [
-        ConversationListResponse(
+        ConversationResponse(
             id=row["conversation"].id,
             parent_entity_type=row["conversation"].parent_entity_type,
             parent_entity_id=row["conversation"].parent_entity_id,
             agent_role=row["conversation"].agent_role,
+            engine=row["conversation"].engine,
+            model_id=row["conversation"].model_id,
+            is_active=row["conversation"].is_active,
+            external_session_id=row["conversation"].external_session_id,
+            title=row["conversation"].title,
             last_activity_at=row["conversation"].last_activity_at,
             created_at=row["conversation"].created_at,
             parent_entity_name=row["parent_entity_name"],
@@ -72,6 +77,7 @@ async def get_conversation(
         model_id=conversation.model_id,
         is_active=conversation.is_active,
         external_session_id=conversation.external_session_id,
+        title=conversation.title,
         created_at=conversation.created_at,
     )
 
@@ -132,18 +138,11 @@ async def send_conversation_message(
     request: ChatRequest,
     conversation: Conversation = Depends(get_verified_conversation),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ) -> dict[str, int]:
-    """Send a message and start a background agent execution.
-
-    Starts a background task for agent execution and returns immediately.
-    Connect to GET /api/conversations/{conversation_id}/ws to receive events.
-
-    Returns:
-        {"conversation_id": <id>}
-
-    Raises:
-        HTTPException 409: If an execution is already active
-    """
+    """Send a message and start a background agent execution."""
+    # Auto-set title from first user message
+    conversation_service.set_conversation_title_from_message(conversation, request.message)
     return _start_agent_execution(conversation, request.message, conversation_repo)
 
 
@@ -193,33 +192,41 @@ async def reset_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
     conversation_service: ConversationService = Depends(get_conversation_service),
 ) -> ResetConversationResponse:
-    """Reset a conversation by deleting it and creating a new one.
-
-    This endpoint:
-    1. Deletes the existing conversation (messages cascade delete)
-    2. Creates a new conversation for the same parent entity
-    3. Re-evaluates agent configuration, allowing updated settings to take effect
-
-    Returns the new conversation ID so the frontend can update its state.
-    """
-    # Get parent entity and entity type before resetting
+    """Reset a conversation by deleting it and creating a new one."""
     parent_entity = conversation.get_parent_entity()
     parent_entity_type = conversation.parent_entity_type
 
     new_conversation = conversation_service.reset_conversation(conversation)
 
-    # Update the parent entity's conversation reference
+    # Update the parent entity's conversation reference (tasks only)
     if parent_entity_type == ParentEntityType.TASK:
         parent_entity.conversation_id = new_conversation.id  # type: ignore[union-attr]
-    elif parent_entity_type == ParentEntityType.PROJECT:
-        parent_entity.default_conversation_id = new_conversation.id  # type: ignore[union-attr]
-    elif parent_entity_type == ParentEntityType.CODEBASE:
-        parent_entity.default_conversation_id = new_conversation.id  # type: ignore[union-attr]
 
     return ResetConversationResponse(
         new_conversation_id=new_conversation.id,
         message="Conversation reset successfully.",
     )
+
+
+@router.patch("/{conversation_id}", response_model=ConversationResponse)
+async def update_conversation(
+    request: ConversationUpdate,
+    conversation: Conversation = Depends(get_verified_conversation),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> ConversationResponse:
+    """Update conversation properties (e.g., title)."""
+    conversation_repo.update_title(conversation, request.title)
+    return ConversationResponse.model_validate(conversation)
+
+
+@router.delete("/{conversation_id}", response_model=DeleteResponse)
+async def delete_conversation(
+    conversation: Conversation = Depends(get_verified_conversation),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+) -> DeleteResponse:
+    """Delete a specific conversation."""
+    conversation_repo.delete_by_id(conversation.id)
+    return DeleteResponse(message="Conversation deleted successfully")
 
 
 @router.get("/{conversation_id}/todos", response_model=list[TodoItem])

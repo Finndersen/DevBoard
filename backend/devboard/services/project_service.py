@@ -13,6 +13,7 @@ from devboard.db.models.project import Project
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.project_directory import ensure_project_directory
 
 
 class ProjectService:
@@ -64,6 +65,9 @@ class ProjectService:
             specification=specification_doc,
             custom_fields=custom_fields,
         )
+
+        # Create project working directory eagerly
+        ensure_project_directory(project)
 
         # Create initial conversation
         self.conversation_service.create_initial_conversation_for_parent_entity(
