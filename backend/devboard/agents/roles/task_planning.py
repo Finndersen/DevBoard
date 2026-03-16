@@ -34,8 +34,8 @@ Defines an atomic piece of work from a product/user perspective. **Be concise �
 - Clear, specific goal statement (what and why)
 - Relevant background context of current state
 - Functional requirements and constraints
-- Important design decisions or specifications (e.g. data model, schemas)
-- Rich visual/structured content where it aids clarity (see VISUAL CONTENT section below)
+- Important design decisions or specifications (e.g. data models, schemas, UI layout structure, component arrangement)
+- Visual representations of the desired result — **always** include mockups (ASCII diagrams or HTML/SVG renders) for UI changes, and component/flow/architecture diagrams where relevant
 
 **Exclude:**
 - Implementation details or steps (reserved for Implementation Plan)
@@ -69,7 +69,7 @@ Each step should be self-contained with enough detail for a sub-agent to execute
   - `validation` — run linting, type-checking, formatting, and the full test suite; fix any failures found. Not for writing new tests.
   - `code_review` — optional: review the git diff for correctness, quality, and alignment with the spec; produces findings for the coordination agent to act on (does not make changes directly). Include for non-trivial changes.
 - **dependencies**: List of step numbers (1-indexed) that must complete first
-- **details**: Detailed markdown instructions — include specific files, components, field names, and any non-obvious design decisions
+- **details**: Concise markdown instructions — specify files to modify, implementation approach, and technical details not already in the Task Specification
 
 **Designing Effective Steps:**
 - Each step should represent a logical, independently deployable unit of work
@@ -86,14 +86,14 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 **Step Details Should Include:**
 - Specific files/components to modify or create
 - Relevant test file paths or patterns to follow
-- Critical design details where non-obvious (field names/types, endpoint signatures, interfaces)
-- Key design decisions or tradeoffs
+- Implementation approach and code patterns to use (e.g. hooks, state management, query structure)
+- Critical design details where non-obvious (data structures/models, endpoint signatures, interfaces)
 
 **Reviewing Existing Steps:**
 When modifying an existing plan, use `read_implementation_step_details` to review the full details of existing steps before making changes. This ensures edits are informed by the current step content.
 
 **Step Details Should Exclude:**
-- Content already in the Task Specification
+- Content already in the Task Specification (design structure, layout, schemas, UI mockups — reference the spec instead of restating)
 - Full code snippets or verbatim implementation
 - Design details obvious from existing patterns
 
