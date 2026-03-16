@@ -922,8 +922,8 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
 
         # is_rebase_in_progress is sync, must be a regular Mock
         mock_git.is_rebase_in_progress = Mock(return_value=False)
-        # Has uncommitted changes
-        mock_git.has_uncommitted_changes.return_value = True
+        # stash_push returns a ref (changes were stashed)
+        mock_git.stash_push.return_value = "abc1234"
         mock_git.rebase_branch.return_value = "newhead456"
         # find_stash_by_message returns stash ref after stash_push, then None after drop
         mock_git.find_stash_by_message.side_effect = ["stash@{0}", None]
@@ -938,8 +938,8 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         assert result.slot_path == sample_slot.path
         assert result.has_pending_stash is False
 
-        # Verify stash flow
-        mock_git.has_uncommitted_changes.assert_called_once()
+        # Verify stash flow: stash_push always called, has_uncommitted_changes never called
+        mock_git.has_uncommitted_changes.assert_not_called()
         mock_git.stash_push.assert_called_once()
         mock_git.fetch.assert_called_once()
         mock_git.rebase_branch.assert_called_once_with(
@@ -951,7 +951,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
 
 @pytest.mark.asyncio
 async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
-    """Test rebase_task_branch without uncommitted changes skips stash operations."""
+    """Test rebase_task_branch with nothing to stash skips stash apply/drop."""
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
     worktree_slot_repo, _, _ = mock_repos
@@ -963,8 +963,8 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
 
         # is_rebase_in_progress is sync, must be a regular Mock
         mock_git.is_rebase_in_progress = Mock(return_value=False)
-        # No uncommitted changes
-        mock_git.has_uncommitted_changes.return_value = False
+        # stash_push returns None (nothing was stashed)
+        mock_git.stash_push.return_value = None
         mock_git.rebase_branch.return_value = "newhead789"
         # No stash exists
         mock_git.find_stash_by_message.return_value = None
@@ -978,8 +978,9 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
         assert result.new_head == "newhead789"
         assert result.has_pending_stash is False
 
-        # Verify no stash operations when nothing to stash
-        mock_git.stash_push.assert_not_called()
+        # stash_push always called; no apply/drop since nothing was stashed
+        mock_git.has_uncommitted_changes.assert_not_called()
+        mock_git.stash_push.assert_called_once()
         mock_git.stash_apply.assert_not_called()
 
 
@@ -1000,8 +1001,8 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
 
         # is_rebase_in_progress is sync, must be a regular Mock
         mock_git.is_rebase_in_progress = Mock(return_value=False)
-        # Has uncommitted changes
-        mock_git.has_uncommitted_changes.return_value = True
+        # stash_push returns a ref (changes were stashed)
+        mock_git.stash_push.return_value = "abc1234"
         mock_git.rebase_branch.side_effect = RebaseConflictError("Rebase conflict on file.txt")
         mock_git.get_conflicted_files.return_value = ["file.txt"]
         mock_git.find_stash_by_message.return_value = "stash@{0}"
@@ -1034,8 +1035,8 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
 
         # is_rebase_in_progress is sync, must be a regular Mock
         mock_git.is_rebase_in_progress = Mock(return_value=False)
-        # Has uncommitted changes
-        mock_git.has_uncommitted_changes.return_value = True
+        # stash_push returns a ref (changes were stashed)
+        mock_git.stash_push.return_value = "abc1234"
         mock_git.rebase_branch.return_value = "newhead456"
         mock_git.find_stash_by_message.return_value = "stash@{0}"
         # Stash apply fails with conflict

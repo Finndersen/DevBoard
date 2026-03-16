@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.agents.engines.claude_code.session.manager import ClaudeSessionManager
 from devboard.agents.events import ConversationEvent
-from devboard.api.dependencies.repositories import get_conversation_repository
+from devboard.api.dependencies.repositories import get_claude_project_cache_repository, get_conversation_repository
 from devboard.api.schemas.claude_code import (
     ClaudeCodeProjectResponse,
     ClaudeCodeSessionResponse,
@@ -13,19 +13,23 @@ from devboard.api.schemas.claude_code import (
     SessionTaskInfoResponse,
     SubAgentInfoResponse,
 )
+from devboard.db.repositories.claude_project import ClaudeProjectCacheRepository
 from devboard.db.repositories.conversation import ConversationRepository
 
 router = APIRouter()
 
 
-def _get_manager() -> ClaudeSessionManager:
-    return ClaudeSessionManager()
+def _get_manager(
+    cache_repo: ClaudeProjectCacheRepository = Depends(get_claude_project_cache_repository),
+) -> ClaudeSessionManager:
+    return ClaudeSessionManager(project_cache=cache_repo)
 
 
 @router.get("/projects", response_model=list[ClaudeCodeProjectResponse])
-async def list_projects() -> list[ClaudeCodeProjectResponse]:
+async def list_projects(
+    manager: ClaudeSessionManager = Depends(_get_manager),
+) -> list[ClaudeCodeProjectResponse]:
     """List all Claude Code projects with metadata, ordered by last activity."""
-    manager = _get_manager()
     projects = manager.list_projects()
     return [ClaudeCodeProjectResponse.model_validate(p.__dict__) for p in projects]
 
@@ -33,10 +37,10 @@ async def list_projects() -> list[ClaudeCodeProjectResponse]:
 @router.get("/projects/{encoded_project_path}/sessions", response_model=list[ClaudeCodeSessionResponse])
 async def list_sessions(
     encoded_project_path: str,
+    manager: ClaudeSessionManager = Depends(_get_manager),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
 ) -> list[ClaudeCodeSessionResponse]:
     """List sessions for a Claude Code project, ordered by last activity."""
-    manager = _get_manager()
     try:
         sessions = await manager.list_sessions(encoded_project_path)
     except FileNotFoundError as e:
@@ -73,9 +77,11 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}/locate", response_model=SessionLocateResponse)
-async def locate_session(session_id: str) -> SessionLocateResponse:
+async def locate_session(
+    session_id: str,
+    manager: ClaudeSessionManager = Depends(_get_manager),
+) -> SessionLocateResponse:
     """Locate a session's project by session ID."""
-    manager = _get_manager()
     try:
         project_encoded_path = manager.locate_session(session_id)
         return SessionLocateResponse(project_encoded_path=project_encoded_path)
@@ -84,9 +90,11 @@ async def locate_session(session_id: str) -> SessionLocateResponse:
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ConversationEvent])
-async def get_session_messages(session_id: str) -> list[ConversationEvent]:
+async def get_session_messages(
+    session_id: str,
+    manager: ClaudeSessionManager = Depends(_get_manager),
+) -> list[ConversationEvent]:
     """Get full conversation event history for a session."""
-    manager = _get_manager()
     try:
         return await manager.get_session_messages(session_id)
     except FileNotFoundError as e:
@@ -94,9 +102,12 @@ async def get_session_messages(session_id: str) -> list[ConversationEvent]:
 
 
 @router.get("/sessions/{session_id}/subagents/{agent_id}/messages", response_model=list[ConversationEvent])
-async def get_sub_agent_messages(session_id: str, agent_id: str) -> list[ConversationEvent]:
+async def get_sub_agent_messages(
+    session_id: str,
+    agent_id: str,
+    manager: ClaudeSessionManager = Depends(_get_manager),
+) -> list[ConversationEvent]:
     """Get full conversation event history for a sub-agent of a session."""
-    manager = _get_manager()
     try:
         return await manager.get_sub_agent_messages(session_id, agent_id)
     except ValueError as e:
@@ -109,8 +120,8 @@ async def get_sub_agent_messages(session_id: str, agent_id: str) -> list[Convers
 async def search_sessions(
     query: str = Query(..., description="Search pattern"),
     project_path: str | None = Query(None, description="Optional project filesystem path to scope search"),
+    manager: ClaudeSessionManager = Depends(_get_manager),
 ) -> list[SessionSearchResultResponse]:
     """Search session JSONL files using ripgrep."""
-    manager = _get_manager()
     results = await manager.search_sessions(query, project_path)
     return [SessionSearchResultResponse.model_validate(r.__dict__) for r in results]

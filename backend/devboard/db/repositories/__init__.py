@@ -2,6 +2,7 @@
 
 from .agent_role_config import AgentRoleConfigRepository
 from .base import BaseRepository
+from .claude_project import ClaudeProjectCacheRepository
 from .codebase import CodebaseRepository
 from .configuration import ConfigurationRepository
 from .context_provider_resource import ContextProviderResourceRepository
@@ -18,6 +19,7 @@ from .worktree_slot import WorktreeSlotRepository
 __all__ = [
     "AgentRoleConfigRepository",
     "BaseRepository",
+    "ClaudeProjectCacheRepository",
     "CodebaseRepository",
     "ConfigurationRepository",
     "CustomFieldRepository",

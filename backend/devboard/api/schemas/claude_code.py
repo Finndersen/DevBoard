@@ -9,9 +9,6 @@ class ClaudeCodeProjectResponse(BaseModel):
     path: str
     encoded_path: str
     last_activity: datetime | None
-    last_cost: float | None
-    last_lines_added: int | None
-    last_lines_removed: int | None
     session_count: int
 
 

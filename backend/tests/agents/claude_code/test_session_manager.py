@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from devboard.agents.engines.claude_code.config_parser import ClaudeConfigProject
 from devboard.agents.engines.claude_code.session.manager import (
     ClaudeSessionManager,
     SessionSearchResult,
@@ -25,6 +24,7 @@ def _make_user_entry(content: str, is_meta: bool = False, session_id: str = "ses
         "timestamp": "2025-01-01T00:00:00.000Z",
         "isSidechain": False,
         "sessionId": session_id,
+        "cwd": "/Users/foo/myproject",
         "message": {"role": "user", "content": content},
         **({"isMeta": True} if is_meta else {}),
     }
@@ -42,116 +42,118 @@ def claude_projects_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def manager(claude_projects_dir: Path) -> ClaudeSessionManager:
+def mock_cache() -> MagicMock:
+    cache = MagicMock(spec=["get_all", "set_path", "delete_encoded_paths"])
+    cache.get_all.return_value = {}
+    return cache
+
+
+@pytest.fixture
+def manager(claude_projects_dir: Path, mock_cache: MagicMock) -> ClaudeSessionManager:
     m = ClaudeSessionManager.__new__(ClaudeSessionManager)
-    m._config_parser = MagicMock()
+    m._project_cache = mock_cache
     m._session_service = MagicMock()
     m.claude_projects_dir = claude_projects_dir
     return m
 
 
 class TestListProjects:
-    def test_returns_projects_with_sessions(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:
+    def test_returns_all_projects_from_filesystem(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-myproject"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "sess-1.jsonl", [_make_user_entry("Hello")])
+        mock_cache.get_all.return_value = {}
+
+        projects = manager.list_projects()
+
+        assert len(projects) == 1
+        assert projects[0].encoded_path == "-Users-foo-myproject"
+        assert projects[0].session_count == 1
+
+    def test_uses_cached_path_without_reading_jsonl(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
         project_dir = claude_projects_dir / "-Users-foo-myproject"
         project_dir.mkdir()
         (project_dir / "sess-1.jsonl").write_text("{}\n")
-
-        manager._config_parser.load_projects.return_value = [
-            ClaudeConfigProject(
-                path="/Users/foo/myproject",
-                last_cost=0.01,
-                last_duration=None,
-                last_lines_added=5,
-                last_lines_removed=2,
-            )
-        ]
-        manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
-        )
+        mock_cache.get_all.return_value = {"-Users-foo-myproject": "/Users/foo/myproject"}
 
         projects = manager.list_projects()
 
         assert len(projects) == 1
         assert projects[0].path == "/Users/foo/myproject"
-        assert projects[0].encoded_path == "-Users-foo-myproject"
-        assert projects[0].session_count == 1
-        assert projects[0].last_cost == 0.01
-        assert projects[0].last_lines_added == 5
-        assert projects[0].last_lines_removed == 2
+        mock_cache.set_path.assert_not_called()
 
-    def test_skips_projects_with_no_sessions(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:
+    def test_populates_cache_from_cwd_on_first_encounter(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-myproject"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "sess-1.jsonl", [{"cwd": "/Users/foo/myproject", "type": "user"}])
+        mock_cache.get_all.return_value = {}
+
+        projects = manager.list_projects()
+
+        assert projects[0].path == "/Users/foo/myproject"
+        mock_cache.set_path.assert_called_once_with("-Users-foo-myproject", "/Users/foo/myproject")
+
+    def test_falls_back_to_encoded_path_when_no_cwd(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
+        project_dir = claude_projects_dir / "-Users-foo-myproject"
+        project_dir.mkdir()
+        _write_jsonl(project_dir / "sess-1.jsonl", [{"type": "user", "message": {"content": "hi"}}])
+        mock_cache.get_all.return_value = {}
+
+        projects = manager.list_projects()
+
+        assert projects[0].path == "-Users-foo-myproject"
+        mock_cache.set_path.assert_called_once_with("-Users-foo-myproject", "-Users-foo-myproject")
+
+    def test_evicts_stale_cache_entries(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
+        # Cached entry for a dir that no longer exists on filesystem
+        mock_cache.get_all.return_value = {"-Users-foo-gone": "/Users/foo/gone"}
+
+        manager.list_projects()
+
+        mock_cache.delete_encoded_paths.assert_called_once_with({"-Users-foo-gone"})
+
+    def test_skips_projects_with_no_sessions(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
         project_dir = claude_projects_dir / "-Users-foo-empty"
         project_dir.mkdir()
         # No .jsonl files
-
-        manager._config_parser.load_projects.return_value = [
-            ClaudeConfigProject(
-                path="/Users/foo/empty",
-                last_cost=None,
-                last_duration=None,
-                last_lines_added=None,
-                last_lines_removed=None,
-            )
-        ]
-        manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
-        )
+        mock_cache.get_all.return_value = {}
 
         projects = manager.list_projects()
         assert projects == []
 
-    def test_skips_projects_with_no_directory(self, manager: ClaudeSessionManager) -> None:
-        manager._config_parser.load_projects.return_value = [
-            ClaudeConfigProject(
-                path="/Users/foo/nonexistent",
-                last_cost=None,
-                last_duration=None,
-                last_lines_added=None,
-                last_lines_removed=None,
-            )
-        ]
-        manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
-        )
-
-        projects = manager.list_projects()
-        assert projects == []
-
-    def test_orders_by_last_activity_descending(self, manager: ClaudeSessionManager, claude_projects_dir: Path) -> None:
+    def test_orders_by_last_activity_descending(
+        self, manager: ClaudeSessionManager, claude_projects_dir: Path, mock_cache: MagicMock
+    ) -> None:
         import os
         import time
 
         for name in ["-Users-foo-old", "-Users-foo-new"]:
             d = claude_projects_dir / name
             d.mkdir()
-            (d / "sess.jsonl").write_text("{}\n")
+            (d / "sess.jsonl").write_text('{"cwd":"/Users/foo/' + name.split("-")[-1] + '"}\n')
 
         old_dir = claude_projects_dir / "-Users-foo-old"
         new_dir = claude_projects_dir / "-Users-foo-new"
 
-        # Set different modification times on the project directories
         os.utime(old_dir, (time.time() - 3600, time.time() - 3600))
         os.utime(new_dir, (time.time(), time.time()))
 
-        manager._config_parser.load_projects.return_value = [
-            ClaudeConfigProject(
-                path="/Users/foo/old",
-                last_cost=None,
-                last_duration=None,
-                last_lines_added=None,
-                last_lines_removed=None,
-            ),
-            ClaudeConfigProject(
-                path="/Users/foo/new",
-                last_cost=None,
-                last_duration=None,
-                last_lines_added=None,
-                last_lines_removed=None,
-            ),
-        ]
-        manager._session_service.encode_path_for_claude_projects = lambda p: (
-            "-" + p.lstrip("/").replace("/", "-").replace(".", "-").replace("_", "-")
-        )
+        mock_cache.get_all.return_value = {
+            "-Users-foo-old": "/Users/foo/old",
+            "-Users-foo-new": "/Users/foo/new",
+        }
 
         projects = manager.list_projects()
 

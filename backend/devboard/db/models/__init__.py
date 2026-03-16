@@ -2,6 +2,7 @@
 
 from .agent_role_config import AgentRoleConfig
 from .base import Base
+from .claude_project import ClaudeProjectPathCache
 from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
 from .configuration import Configuration, ContextProviderResource
 from .conversation import Conversation
@@ -36,6 +37,7 @@ from .worktree_slot import WorktreeSlot
 __all__ = [
     "AgentRoleConfig",
     "Base",
+    "ClaudeProjectPathCache",
     "BranchHandling",
     "Codebase",
     "CustomFieldDefinition",

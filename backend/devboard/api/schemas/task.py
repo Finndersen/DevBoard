@@ -87,6 +87,9 @@ class TaskResponse(TaskBase):
     # Custom field values
     custom_fields: dict[str, Any] | None = None
 
+    # GitHub PR number (set when a PR is created for this task)
+    github_pr_number: int | None = None
+
     # Available workflow actions based on current state
     available_workflow_actions: list[WorkflowActionInfo] = []
 

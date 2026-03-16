@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from devboard.db.database import get_db
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
+    ClaudeProjectCacheRepository,
     CodebaseRepository,
     ConfigurationRepository,
     ContextProviderResourceRepository,
@@ -88,3 +89,8 @@ def get_agent_role_config_repository(db: Session = Depends(get_db)) -> AgentRole
 def get_task_implementation_plan_repository(db: Session = Depends(get_db)) -> TaskImplementationPlanRepository:
     """Get TaskImplementationPlanRepository instance."""
     return TaskImplementationPlanRepository(db)
+
+
+def get_claude_project_cache_repository(db: Session = Depends(get_db)) -> ClaudeProjectCacheRepository:
+    """Get ClaudeProjectCacheRepository instance."""
+    return ClaudeProjectCacheRepository(db)

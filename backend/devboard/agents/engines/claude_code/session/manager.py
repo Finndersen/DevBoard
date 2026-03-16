@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from devboard.agents.engines.claude_code.config_parser import ClaudeConfigParser
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
 from devboard.agents.engines.claude_code.session.service import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
+from devboard.db.repositories.claude_project import ClaudeProjectCacheRepository
 from devboard.integrations.shell import execute_shell_command
 
 # Maximum number of lines to scan when extracting first user message label
@@ -33,9 +33,6 @@ class ClaudeCodeProjectInfo:
     path: str
     encoded_path: str
     last_activity: datetime | None
-    last_cost: float | None
-    last_lines_added: int | None
-    last_lines_removed: int | None
     session_count: int
 
 
@@ -68,46 +65,61 @@ class SessionSearchResult:
 class ClaudeSessionManager:
     """Orchestrates project and session listing for the Claude Code session viewer."""
 
-    def __init__(self) -> None:
-        self._config_parser = ClaudeConfigParser()
+    def __init__(self, project_cache: ClaudeProjectCacheRepository) -> None:
+        self._project_cache = project_cache
         self._session_service = ClaudeCodeSessionService()
         self.claude_projects_dir = Path.home() / ".claude" / "projects"
 
     def list_projects(self) -> list[ClaudeCodeProjectInfo]:
         """List all Claude Code projects ordered by last activity descending."""
-        config_projects = self._config_parser.load_projects()
         dir_mtimes = self._scan_project_dir_mtimes()
+        cached_paths = self._project_cache.get_all()
+
+        # Evict stale cache entries for directories that no longer exist
+        stale = set(cached_paths) - set(dir_mtimes)
+        if stale:
+            self._project_cache.delete_encoded_paths(stale)
 
         results: list[ClaudeCodeProjectInfo] = []
-        seen_paths: set[str] = set()
-        for config_project in config_projects:
-            encoded_path = ClaudeCodeSessionMigrator.encode_path_for_claude_projects(config_project.path)
-
-            if encoded_path not in dir_mtimes or encoded_path in seen_paths:
-                continue
-
+        for encoded_path, mtime in dir_mtimes.items():
             project_dir = self.claude_projects_dir / encoded_path
             jsonl_files = list(project_dir.glob("*.jsonl"))
-            session_count = len(jsonl_files)
-            if session_count == 0:
+            if not jsonl_files:
                 continue
 
-            seen_paths.add(encoded_path)
+            path = cached_paths.get(encoded_path)
+            if path is None:
+                path = self._extract_cwd_from_project_dir(jsonl_files) or encoded_path
+                self._project_cache.set_path(encoded_path, path)
+
             results.append(
                 ClaudeCodeProjectInfo(
-                    path=config_project.path,
+                    path=path,
                     encoded_path=encoded_path,
-                    last_activity=dir_mtimes[encoded_path],
-                    last_cost=config_project.last_cost,
-                    last_lines_added=config_project.last_lines_added,
-                    last_lines_removed=config_project.last_lines_removed,
-                    session_count=session_count,
+                    last_activity=mtime,
+                    session_count=len(jsonl_files),
                 )
             )
 
-        # Sort by last_activity descending, None values last
         results.sort(key=lambda p: p.last_activity or datetime.min, reverse=True)
         return results
+
+    def _extract_cwd_from_project_dir(self, jsonl_files: list[Path]) -> str | None:
+        """Read JSONL files to extract the cwd field from the first entry that has it."""
+        for jsonl_file in jsonl_files:
+            try:
+                with jsonl_file.open("r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        entry = json.loads(line)
+                        cwd = entry.get("cwd")
+                        if cwd:
+                            return cwd
+            except (OSError, json.JSONDecodeError):
+                continue
+        return None
 
     def _scan_project_dir_mtimes(self) -> dict[str, datetime]:
         """Scan ~/.claude/projects/ and return a map of directory name to mtime."""
