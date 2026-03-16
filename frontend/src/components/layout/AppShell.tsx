@@ -39,7 +39,7 @@ export default function AppShell() {
         </div>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <main className="flex-1 min-w-0 py-4 px-3 sm:px-4 lg:px-5 overflow-hidden">
           <ViewContainer />
         </main>
       </div>

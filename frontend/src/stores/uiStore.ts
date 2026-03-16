@@ -30,6 +30,9 @@ interface UIState {
   draftMessages: Record<string, string>
   shouldPushHistory: boolean
   createTaskModalOpen: boolean
+  conversationsPanelCollapsed: boolean
+  expandedPanel: 'chat' | 'details'
+  unreadConversationIds: number[]
 }
 
 interface UIActions {
@@ -49,6 +52,17 @@ interface UIActions {
   // Create task modal
   openCreateTaskModal: () => void
   closeCreateTaskModal: () => void
+
+  // Conversations panel
+  toggleConversationsPanel: () => void
+
+  // Panel toggle (chat ↔ details)
+  setExpandedPanel: (panel: 'chat' | 'details') => void
+
+  // Unread conversations
+  addUnreadConversation: (id: number) => void
+  removeUnreadConversation: (id: number) => void
+  clearUnreadConversations: () => void
 
   // Activity status updates
   setViewActivityStatus: (viewId: string, status: ActivityStatus) => void
@@ -84,6 +98,9 @@ export const useUIStore = create<UIStore>()(
       draftMessages: {},
       shouldPushHistory: false,
       createTaskModalOpen: false,
+      conversationsPanelCollapsed: false,
+      expandedPanel: 'chat' as const,
+      unreadConversationIds: [],
 
       // View cache management actions
       navigateTo: (viewData, options = {}) => {
@@ -220,6 +237,41 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
+      toggleConversationsPanel: () => {
+        set((draft) => {
+          draft.conversationsPanelCollapsed = !draft.conversationsPanelCollapsed
+        })
+      },
+
+      setExpandedPanel: (panel) => {
+        set((draft) => {
+          draft.expandedPanel = panel
+        })
+      },
+
+      addUnreadConversation: (id) => {
+        set((draft) => {
+          if (!draft.unreadConversationIds.includes(id)) {
+            draft.unreadConversationIds.push(id)
+          }
+        })
+      },
+
+      removeUnreadConversation: (id) => {
+        set((draft) => {
+          const idx = draft.unreadConversationIds.indexOf(id)
+          if (idx !== -1) {
+            draft.unreadConversationIds.splice(idx, 1)
+          }
+        })
+      },
+
+      clearUnreadConversations: () => {
+        set((draft) => {
+          draft.unreadConversationIds = []
+        })
+      },
+
       // Activity status
       setViewActivityStatus: (viewId, status) => {
         set((draft) => {
@@ -291,6 +343,8 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         navigationCompactMode: state.navigationCompactMode,
         draftMessages: state.draftMessages,
+        conversationsPanelCollapsed: state.conversationsPanelCollapsed,
+        expandedPanel: state.expandedPanel,
       }),
     }
   )

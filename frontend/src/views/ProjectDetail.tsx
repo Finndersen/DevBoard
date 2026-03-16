@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
@@ -15,7 +15,11 @@ import { useCodebases } from '../hooks/useCodebases'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
+import { useUIStore } from '../stores/uiStore'
+import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useIsBelow2xl } from '../hooks/useMediaQuery'
+import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
 interface ProjectDetailProps {
@@ -151,6 +155,53 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }, [refetchSpecification])
 
   useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
+
+  // Panel toggle state
+  const isBelow2xl = useIsBelow2xl()
+  const expandedPanel = useUIStore(s => s.expandedPanel)
+  const setExpandedPanel = useUIStore(s => s.setExpandedPanel)
+
+  // Chat streaming state
+  const isStreaming = useConversationStreamStore(
+    s => activeConversationId ? s.isConversationStreaming(activeConversationId) : false
+  )
+
+  // Chat activity indicator
+  const [chatNeedsAttention, setChatNeedsAttention] = useState(false)
+  const prevStreamingRef = useRef(isStreaming)
+
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming && isBelow2xl && expandedPanel === 'details') {
+      setChatNeedsAttention(true)
+    }
+    prevStreamingRef.current = isStreaming
+  }, [isStreaming, isBelow2xl, expandedPanel])
+
+  useEffect(() => {
+    if (expandedPanel === 'chat') {
+      setChatNeedsAttention(false)
+    }
+  }, [expandedPanel])
+
+  // Details content change detection
+  const [detailsNeedsAttention, setDetailsNeedsAttention] = useState(false)
+  const prevDetailsDataRef = useRef<string>('')
+
+  useEffect(() => {
+    const dataFingerprint = specificationDoc?.content ?? ''
+    if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
+      if (isBelow2xl && expandedPanel === 'chat') {
+        setDetailsNeedsAttention(true)
+      }
+    }
+    prevDetailsDataRef.current = dataFingerprint
+  }, [specificationDoc?.content, isBelow2xl, expandedPanel])
+
+  useEffect(() => {
+    if (expandedPanel === 'details') {
+      setDetailsNeedsAttention(false)
+    }
+  }, [expandedPanel])
 
   // Handle creating a new project conversation
   const handleNewConversation = useCallback(async () => {
@@ -377,44 +428,102 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
       {/* Tab Content */}
       {activeTab === 'editor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
-          {/* Left Side - Chat */}
-          <AgentChat
-            conversationId={activeConversationId}
-            placeholder="Ask a question about this project..."
-            emptyStateMessage="Ask me anything about this project!"
-            className="h-full flex flex-col overflow-hidden"
-            conversationSelector={
-              activeConversationId ? (
-                <ProjectConversationSelector
-                  projectId={project.id}
-                  activeConversationId={activeConversationId}
-                  onSelect={handleSelectConversation}
-                  onNew={handleNewConversation}
-                  onDelete={handleDeleteConversation}
-                  onRename={handleRenameConversation}
+        isBelow2xl ? (
+          <div className="flex gap-2 flex-1 min-h-0 overflow-hidden">
+            {expandedPanel === 'chat' ? (
+              <>
+                <AgentChat
+                  conversationId={activeConversationId}
+                  placeholder="Ask a question about this project..."
+                  emptyStateMessage="Ask me anything about this project!"
+                  className="flex-1 min-w-0 h-full flex flex-col overflow-hidden"
+                  conversationSelector={
+                    activeConversationId ? (
+                      <ProjectConversationSelector
+                        projectId={project.id}
+                        activeConversationId={activeConversationId}
+                        onSelect={handleSelectConversation}
+                        onNew={handleNewConversation}
+                        onDelete={handleDeleteConversation}
+                        onRename={handleRenameConversation}
+                      />
+                    ) : undefined
+                  }
+                  onNewConversation={handleNewConversation}
                 />
-              ) : undefined
-            }
-            onNewConversation={handleNewConversation}
-          />
-
-          {/* Right Side - Project Specification */}
-          <div className="flex flex-col overflow-hidden">
-            <Card padding="xs" className="h-full flex flex-col overflow-hidden">
-              <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <MarkdownDocumentEditor
-                  content={specificationDoc?.content}
-                  field={specificationField}
-                  placeholder="Enter project specification in Markdown format..."
-                  emptyText="No project context provided."
-                  textareaClassName="w-full font-mono text-sm"
+                <CollapsedPanelStrip
+                  variant="details"
+                  icon="📄"
+                  label="Details"
+                  needsAttention={detailsNeedsAttention}
+                  onClick={() => setExpandedPanel('details')}
                 />
-              </div>
-            </Card>
+              </>
+            ) : (
+              <>
+                <CollapsedPanelStrip
+                  variant="chat"
+                  icon="💬"
+                  label="Chat"
+                  isStreaming={isStreaming}
+                  needsAttention={chatNeedsAttention}
+                  onClick={() => setExpandedPanel('chat')}
+                />
+                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                  <Card padding="xs" className="h-full flex flex-col overflow-hidden">
+                    <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                      <MarkdownDocumentEditor
+                        content={specificationDoc?.content}
+                        field={specificationField}
+                        placeholder="Enter project specification in Markdown format..."
+                        emptyText="No project context provided."
+                        textareaClassName="w-full font-mono text-sm"
+                      />
+                    </div>
+                  </Card>
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
+            <AgentChat
+              conversationId={activeConversationId}
+              placeholder="Ask a question about this project..."
+              emptyStateMessage="Ask me anything about this project!"
+              className="h-full flex flex-col overflow-hidden"
+              conversationSelector={
+                activeConversationId ? (
+                  <ProjectConversationSelector
+                    projectId={project.id}
+                    activeConversationId={activeConversationId}
+                    onSelect={handleSelectConversation}
+                    onNew={handleNewConversation}
+                    onDelete={handleDeleteConversation}
+                    onRename={handleRenameConversation}
+                  />
+                ) : undefined
+              }
+              onNewConversation={handleNewConversation}
+            />
+
+            <div className="flex flex-col overflow-hidden">
+              <Card padding="xs" className="h-full flex flex-col overflow-hidden">
+                <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  <MarkdownDocumentEditor
+                    content={specificationDoc?.content}
+                    field={specificationField}
+                    placeholder="Enter project specification in Markdown format..."
+                    emptyText="No project context provided."
+                    textareaClassName="w-full font-mono text-sm"
+                  />
+                </div>
+              </Card>
+            </div>
+          </div>
+        )
       )}
 
       {activeTab === 'settings' && (

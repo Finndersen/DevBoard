@@ -4,6 +4,7 @@ import {
   FolderIcon,
   CodeBracketIcon,
   ChatBubbleLeftRightIcon,
+  ChevronLeftIcon,
   ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
@@ -80,6 +81,10 @@ export default function ConversationsPanel() {
   const navigateTo = useUIStore(s => s.navigateTo)
   const activeViewId = useUIStore(s => s.activeViewId)
   const cachedViews = useUIStore(s => s.cachedViews)
+  const conversationsPanelCollapsed = useUIStore(s => s.conversationsPanelCollapsed)
+  const toggleConversationsPanel = useUIStore(s => s.toggleConversationsPanel)
+  const clearUnreadConversations = useUIStore(s => s.clearUnreadConversations)
+  const removeUnreadConversation = useUIStore(s => s.removeUnreadConversation)
   // Subscribe only to which entities have drafts (not content) to avoid re-renders on every keystroke
   const draftKeysStr = useUIStore(
     useCallback((s) => Object.keys(s.draftMessages).sort().join(','), [])
@@ -155,10 +160,27 @@ export default function ConversationsPanel() {
           return next
         })
       }, 2000)
+
+      // Track unread conversations when panel is collapsed
+      const { conversationsPanelCollapsed, addUnreadConversation } = useUIStore.getState()
+      if (conversationsPanelCollapsed) {
+        for (const id of newlyCompleted) {
+          addUnreadConversation(id)
+        }
+      }
     }
 
     prevStreamingIdsRef.current = new Set(streamingConversationIds)
   }, [streamingConversationIds])
+
+  // Clear all unreads when panel transitions from collapsed to expanded
+  const prevCollapsedRef = useRef(conversationsPanelCollapsed)
+  useEffect(() => {
+    if (prevCollapsedRef.current && !conversationsPanelCollapsed) {
+      clearUnreadConversations()
+    }
+    prevCollapsedRef.current = conversationsPanelCollapsed
+  }, [conversationsPanelCollapsed, clearUnreadConversations])
 
   // Sync view activity status from stream store
   useViewStreamStatus(conversations)
@@ -177,13 +199,22 @@ export default function ConversationsPanel() {
       next.delete(item.id)
       return next
     })
+    removeUnreadConversation(item.id)
   }
 
   return (
-    <div className="w-80 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200">
+    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-gray-700'} flex flex-col overflow-hidden transition-all duration-200`}>
       {/* Header */}
-      <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <h2 className={`text-sm font-semibold ${textColors.primary}`}>Conversations</h2>
+      <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 w-80">
+        <ChatBubbleLeftRightIcon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400" />
+        <h2 className={`text-sm font-semibold ${textColors.primary} ml-2 flex-1`}>Conversations</h2>
+        <button
+          onClick={toggleConversationsPanel}
+          className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+          aria-label="Collapse conversations"
+        >
+          <ChevronLeftIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        </button>
       </div>
 
       {/* Conversation list */}
