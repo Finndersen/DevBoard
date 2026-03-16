@@ -1,15 +1,16 @@
 """Tests for CodeReviewAgentRole."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from devboard.agents.roles.code_review import CODE_REVIEW_ROLE_PROMPT, CodeReviewAgentRole
+from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 
 
 @pytest.fixture
-def temp_codebase(tmp_path):
+def temp_codebase_path(tmp_path):
     """Create a temporary codebase directory."""
     codebase_path = tmp_path / "test_codebase"
     codebase_path.mkdir()
@@ -19,21 +20,25 @@ def temp_codebase(tmp_path):
 
 
 @pytest.fixture
-def mock_codebase(temp_codebase):
-    """Create a mock Codebase model."""
+def mock_task(temp_codebase_path):
+    """Create a mock Task with a codebase."""
     codebase = Mock(spec=Codebase)
     codebase.name = "TestCodebase"
     codebase.description = "A test codebase for review"
-    codebase.local_path = str(temp_codebase)
-    return codebase
+    codebase.local_path = str(temp_codebase_path)
+
+    task = Mock(spec=Task)
+    task.codebase = codebase
+    task.get_current_workspace_dir.return_value = str(temp_codebase_path)
+    return task
 
 
 class TestCodeReviewAgentRole:
     """Tests for CodeReviewAgentRole."""
 
-    def test_get_system_prompt(self, mock_codebase):
+    def test_get_system_prompt(self, mock_task):
         """Test role returns the code review system prompt."""
-        role = CodeReviewAgentRole(codebase=mock_codebase)
+        role = CodeReviewAgentRole(task=mock_task)
 
         prompt = role.get_system_prompt()
 
@@ -43,9 +48,9 @@ class TestCodeReviewAgentRole:
         assert "Summary" in prompt
         assert "Critical" in prompt
 
-    def test_get_tools_returns_five_readonly_tools(self, mock_codebase):
+    def test_get_tools_returns_five_readonly_tools(self, mock_task):
         """Test role provides 5 read-only codebase tools."""
-        role = CodeReviewAgentRole(codebase=mock_codebase)
+        role = CodeReviewAgentRole(task=mock_task)
 
         tools = role.get_tools()
 
@@ -57,36 +62,29 @@ class TestCodeReviewAgentRole:
         assert "show_directory_tree" in tool_names
         assert "read_file" in tool_names
 
-    def test_allowed_builtin_tools(self, mock_codebase):
+    def test_allowed_builtin_tools(self, mock_task):
         """Test allowed builtin tools is Bash only."""
-        role = CodeReviewAgentRole(codebase=mock_codebase)
+        role = CodeReviewAgentRole(task=mock_task)
 
         assert role.allowed_builtin_tools == ["Bash"]
 
-    def test_uses_worktree_dir_when_provided(self, mock_codebase, tmp_path):
-        """Test that worktree_dir overrides codebase.local_path."""
+    def test_uses_task_workspace_dir(self, mock_task, tmp_path):
+        """Test that the task's current workspace dir is used for codebase integration."""
         worktree = tmp_path / "worktree"
         worktree.mkdir()
-        (worktree / ".git").mkdir()
+        mock_task.get_current_workspace_dir.return_value = str(worktree)
 
-        role = CodeReviewAgentRole(codebase=mock_codebase, worktree_dir=str(worktree))
+        CodeReviewAgentRole(task=mock_task)
 
-        assert role._working_dir == str(worktree)
-
-    def test_uses_codebase_local_path_when_no_worktree(self, mock_codebase):
-        """Test that codebase.local_path is used when worktree_dir is not provided."""
-        role = CodeReviewAgentRole(codebase=mock_codebase)
-
-        assert role._working_dir == mock_codebase.local_path
+        mock_task.get_current_workspace_dir.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_context_content_includes_codebase_info(self, mock_codebase):
-        """Test context content includes codebase metadata and directory tree."""
-        role = CodeReviewAgentRole(codebase=mock_codebase)
+    async def test_context_content_uses_build_task_context(self, mock_task):
+        """Test context content delegates to build_task_context."""
+        role = CodeReviewAgentRole(task=mock_task)
 
-        content = await role.get_context_content()
+        with patch("devboard.agents.roles.code_review.build_task_context", return_value="mocked context") as mock_build:
+            content = await role.get_context_content()
 
-        assert "CODEBASE INFORMATION" in content
-        assert "TestCodebase" in content
-        assert "A test codebase for review" in content
-        assert "DIRECTORY STRUCTURE" in content
+        mock_build.assert_called_once_with(mock_task)
+        assert content == "mocked context"

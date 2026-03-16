@@ -3,6 +3,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.roles.base import AgentRole
+from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.tools.codebase_tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
@@ -10,7 +11,7 @@ from devboard.agents.tools.codebase_tools import (
     create_file_search_tool,
     create_text_search_tool,
 )
-from devboard.db.models.codebase import Codebase
+from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
 
 CODE_REVIEW_ROLE_PROMPT = """
@@ -98,16 +99,11 @@ If there are no findings in a tier, omit that tier entirely.
 
 
 class CodeReviewAgentRole(AgentRole):
-    """Role for reviewing code changes made during task implementation.
+    """Role for reviewing code changes made during task implementation."""
 
-    This role is stateless — task context (spec, plan, diff) is provided via
-    the prompt at run() time rather than stored on the role.
-    """
-
-    def __init__(self, codebase: Codebase, worktree_dir: str | None = None):
-        self._codebase = codebase
-        self._working_dir = worktree_dir or codebase.local_path
-        self._codebase_integration = CodebaseIntegration(self._working_dir)
+    def __init__(self, task: Task):
+        self._task = task
+        self._codebase_integration = CodebaseIntegration(task.get_current_workspace_dir())
 
     def get_system_prompt(self) -> str:
         return CODE_REVIEW_ROLE_PROMPT
@@ -126,16 +122,4 @@ class CodeReviewAgentRole(AgentRole):
         return ["Bash"]
 
     async def get_context_content(self) -> str:
-        directory_tree = await self._codebase_integration.get_directory_tree(max_depth=3)
-
-        return f"""
-CODEBASE INFORMATION:
-- Name: {self._codebase.name}
-- Path: {self._working_dir}
-- Description: {self._codebase.description}
-
-DIRECTORY STRUCTURE (depth=3):
-```
-{directory_tree}
-```
-"""
+        return build_task_context(self._task)

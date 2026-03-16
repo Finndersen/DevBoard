@@ -305,7 +305,6 @@ def create_code_review_tool(
             - `result`: Structured review with Summary and Findings (Critical/Important/Suggestions)
             - `conversation_id`: The conversation identifier for the review session.
         """
-        working_dir = task.get_current_workspace_dir()
         diff = await task_git_service.get_task_all_changes(task)
 
         if not diff.files:
@@ -313,35 +312,9 @@ def create_code_review_tool(
 
         full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
 
-        role = CodeReviewAgentRole(codebase=task.codebase, worktree_dir=working_dir)
-
-        assert task.implementation_plan is not None, "Task must have an implementation plan for code review"
+        role = CodeReviewAgentRole(task=task)
 
         prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
-
-Here is relevant context required for the code review:
-
-## Project
-
-**{task.project.name}**: {task.project.description}
-
-### Project Specification
-
-<document>
-{task.project.specification.content or "<EMPTY>"}
-</document>
-
-## Task Specification
-
-<document>
-{task.specification.content}
-</document>
-
-## Implementation Plan
-
-<document>
-{task.implementation_plan.content}
-</document>
 
 ## Diff Summary
 
