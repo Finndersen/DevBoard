@@ -36,10 +36,6 @@ class ExecutionLifecycleEvent(BaseModel):
     error: str | None = None
 
 
-# Grace period (seconds) to allow WebSocket reconnection after execution completes.
-# After this window, the execution record is removed; all data is available via message history.
-EXECUTION_CLEANUP_GRACE_PERIOD_SECONDS = 60
-
 # Type alias for a coroutine factory that accepts (event_queue, interrupt_event)
 ExecutionCoroutineFactory = Callable[
     [asyncio.Queue[ConversationEvent | None], asyncio.Event],
@@ -59,7 +55,6 @@ class ConversationExecution:
     started_at: datetime.datetime
     completed_at: datetime.datetime | None = None
     error: str | None = None
-    cleanup_task: asyncio.Task[None] | None = None
 
 
 class ConversationExecutionManager:
@@ -93,10 +88,6 @@ class ConversationExecutionManager:
         existing = self._executions.get(conversation_id)
         if existing and existing.status == ExecutionStatus.RUNNING:
             raise ConversationBusyError(conversation_id)
-        # Cancel any pending cleanup from a previous execution so it cannot
-        # delete the new execution after the grace period expires.
-        if existing and existing.cleanup_task and not existing.cleanup_task.done():
-            existing.cleanup_task.cancel()
 
         event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
         interrupt_event = asyncio.Event()
@@ -147,25 +138,9 @@ class ConversationExecutionManager:
                     execution.completed_at = datetime.datetime.now(datetime.UTC)
                     # Push sentinel to signal completion to WebSocket consumers
                     await event_queue.put(None)
-                    # Schedule cleanup after grace period, keyed by started_at to avoid
-                    # deleting a newer execution if one is started before this cleanup runs.
-                    execution.cleanup_task = asyncio.create_task(
-                        self._schedule_cleanup(conversation_id, execution.started_at)
-                    )
+                    self._executions.pop(conversation_id, None)
         finally:
             otel_context.detach(token)
-
-    async def _schedule_cleanup(self, conversation_id: int, started_at: datetime.datetime) -> None:
-        """Remove execution record after a grace period for reconnection.
-
-        Only removes the execution if it still matches started_at, preventing accidental
-        deletion of a newer execution started after this one completed.
-        """
-        await asyncio.sleep(EXECUTION_CLEANUP_GRACE_PERIOD_SECONDS)
-        execution = self._executions.get(conversation_id)
-        if execution and execution.started_at == started_at:
-            self._executions.pop(conversation_id, None)
-            logfire.debug(f"Cleaned up execution record for conversation {conversation_id}")
 
     def get_execution(self, conversation_id: int) -> ConversationExecution | None:
         return self._executions.get(conversation_id)
