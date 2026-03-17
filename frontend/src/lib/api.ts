@@ -665,6 +665,24 @@ export interface CreateConversationResponse extends ConversationResponse {
   at_cap: boolean
 }
 
+export interface ToolInfo {
+  name: string
+  description: string | null
+  input_schema: Record<string, unknown> | null
+  source: 'role' | 'mcp' | 'builtin'
+  server_name: string | null
+}
+
+export interface AgentConfigResponse {
+  agent_role: string
+  behaviour_guidelines: string
+  context_content: string
+  custom_instructions: string | null
+  role_tools: ToolInfo[]
+  mcp_tools: ToolInfo[]
+  builtin_tools: ToolInfo[]
+}
+
 // Todo list types for Claude Code conversations
 export type TodoStatus = 'pending' | 'in_progress' | 'completed'
 
@@ -973,6 +991,10 @@ export class ApiClient {
 
   async getConversationTodos(conversationId: number | string): Promise<TodoItem[]> {
     return this.request<TodoItem[]>(`/api/conversations/${conversationId}/todos`)
+  }
+
+  async getConversationAgentConfig(conversationId: number | string): Promise<AgentConfigResponse> {
+    return this.request<AgentConfigResponse>(`/api/conversations/${conversationId}/agent-config`)
   }
 
   async executeWorkflowAction(
