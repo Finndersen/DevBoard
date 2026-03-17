@@ -21,6 +21,8 @@ from pydantic_ai import Tool
 
 from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, load_env_from_settings
 
+INTERRUPT_FORCE_KILL_TIMEOUT_SECONDS = 5
+
 # All Claude Code builtin tools
 CLAUDE_BUILTIN_TOOLS: set[str] = {
     # File Operations
@@ -357,10 +359,20 @@ class ClaudeClient:
 
                             async def _monitor_interrupt() -> None:
                                 await _interrupt_event.wait()
-                                try:
-                                    await client.interrupt()
-                                except Exception as e:
-                                    logfire.error(f"Failed to interrupt Claude Code session: {e}")
+                                # Fire soft interrupt without blocking. client.interrupt() awaits CLI
+                                # acknowledgment (up to 60s), which would delay the force-kill path.
+                                asyncio.create_task(_try_soft_interrupt(client))
+
+                                # Wait briefly for the process to stop cleanly, then force-kill.
+                                process = _get_subprocess(client)
+                                if process and process.returncode is None:
+                                    try:
+                                        await asyncio.wait_for(
+                                            process.wait(), timeout=INTERRUPT_FORCE_KILL_TIMEOUT_SECONDS
+                                        )
+                                    except TimeoutError:
+                                        logfire.info("Force-killing Claude Code process after interrupt timeout")
+                                        process.kill()
 
                             monitor_task = asyncio.create_task(_monitor_interrupt())
 
@@ -456,7 +468,7 @@ class ClaudeClient:
                     await asyncio.sleep(0.1)
 
             await transport.end_input()
-            process = getattr(transport, "_process", None)
+            process = _get_subprocess(client)
             if process and process.returncode is None:
                 wait_task = asyncio.ensure_future(process.wait())
                 try:
@@ -475,3 +487,16 @@ class ClaudeClient:
             # so ClaudeSDKClient.__aexit__ can disconnect cleanly without hitting a second
             # CancelledError and producing a cascading exception chain.
             pass
+
+
+def _get_subprocess(client: ClaudeSDKClient) -> asyncio.subprocess.Process | None:
+    """Access the underlying subprocess via SDK internals."""
+    query = getattr(client, "_query", None)
+    transport = getattr(query, "transport", None) if query else None
+    return getattr(transport, "_process", None) if transport else None
+
+
+async def _try_soft_interrupt(client: ClaudeSDKClient) -> None:
+    """Send soft interrupt to CLI; errors silently suppressed."""
+    with contextlib.suppress(Exception):
+        await client.interrupt()
