@@ -12,6 +12,13 @@ from devboard.api.schemas.agent_conversation import ToolApprovals
 
 CUSTOM_INSTRUCTIONS_SEPARATOR = "\n\n## Additional Instructions\n\n"
 
+SHARED_PROMPT_SUFFIX = (
+    "\n\n## Error Handling\n\n"
+    'If an MCP tool call fails with a "Stream closed" or "Tool execution was interrupted." error, '
+    "stop immediately and report the error to the user — do not retry or continue. "
+    "The user will need to resolve the issue and retry."
+)
+
 
 class BaseAgent(ABC):
     """Abstract base class for all agent implementations.
@@ -53,7 +60,7 @@ class BaseAgent(ABC):
         Returns:
             Complete system prompt string
         """
-        base_prompt = self.role.get_system_prompt()
+        base_prompt = self.role.get_system_prompt() + SHARED_PROMPT_SUFFIX
         if self.custom_instructions:
             return base_prompt + CUSTOM_INSTRUCTIONS_SEPARATOR + self.custom_instructions
         return base_prompt

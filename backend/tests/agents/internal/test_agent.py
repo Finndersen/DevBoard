@@ -4,6 +4,7 @@ import pytest
 from pydantic_ai import Agent, Tool
 from pydantic_ai.tools import ToolFuncEither
 
+from devboard.agents.base_agent import SHARED_PROMPT_SUFFIX
 from devboard.agents.engines.internal import InternalAgent
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
@@ -60,8 +61,8 @@ class TestInternalAgent:
         # Should have system prompt and context message
         assert len(request.parts) == 2
 
-        # First part should be system prompt
-        assert request.parts[0].content == mock_role.get_system_prompt()
+        # First part should be system prompt (including shared suffix)
+        assert request.parts[0].content == mock_role.get_system_prompt() + SHARED_PROMPT_SUFFIX
 
         # Second part should be context
         context_content = await mock_role.get_context_content()

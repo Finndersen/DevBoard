@@ -50,7 +50,7 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
 
     KEY = "task.create_implementation_plan"
 
-    PROMPT = "Proceed with creating a detailed technical implementation plan for the task, following your behaviour guidelines"
+    PROMPT = "The user has approved the task specification. Create the implementation plan now."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -75,7 +75,7 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     KEY = "task.begin_implementation"
 
-    PROMPT_TEMPLATE = "The implementation plan has been approved. Your goal is to execute the implementation plan, launching sub-agents to implement each step."
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Review the plan and begin execution — use `execute_implementation_step` to run each step, consulting the execution graph in task context to identify steps that can run in parallel."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:

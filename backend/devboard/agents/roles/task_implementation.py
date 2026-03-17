@@ -48,7 +48,6 @@ AVAILABLE CAPABILITIES:
 WORKFLOW:
 - Review the implementation plan and understand requirements
 - Ask for clarification when encountering ambiguity
-- Create an internal to-do list of tasks to complete to track progress, based on implementation plan
 
 Then execute in order:
 
@@ -83,7 +82,6 @@ _STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
    - Execute independent steps concurrently by calling `execute_implementation_step` for each in a
      single message (multiple tool calls); wait for dependencies to complete before proceeding
    - If a step fails or gets stuck, you can retry it by calling `execute_implementation_step` again
-   - Update the internal to-do list as each step completes
    - If a `docs/` directory is present, investigate and update appropriate documentation sections\
 """
 
@@ -99,7 +97,6 @@ _DOCUMENT_PLAN_IMPLEMENT_SECTION = """\
      warrant delegation — i.e. multi-file edits across different areas of the codebase, or parallel
      independent steps (e.g. implementing a feature and writing its tests simultaneously)
    - Do NOT break a single implementation step into sub-steps for sub-agents — delegate the whole step or do it directly
-   - Update the internal to-do list as each step completes
    - If a `docs/` directory is present, investigate and update appropriate documentation sections,
      adding or updating any missing or incorrect documentation\
 """
