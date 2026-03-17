@@ -137,6 +137,7 @@ class TaskImplementationAgentRole(AgentRole):
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
         plan_service: TaskImplementationPlanService,
+        working_dir: str,
     ):
         self.task = task
         self.document_repository = document_repository
@@ -147,6 +148,7 @@ class TaskImplementationAgentRole(AgentRole):
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
         self.plan_service = plan_service
+        self._working_dir = working_dir
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -160,7 +162,7 @@ class TaskImplementationAgentRole(AgentRole):
         if not has_structured_plan and not has_document_plan:
             raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
-        codebase_integration = CodebaseIntegration(self.task.get_current_workspace_dir())
+        codebase_integration = CodebaseIntegration(self._working_dir)
 
         tools: list[Tool] = [
             # Tools for task specification document (uses default approval behavior)

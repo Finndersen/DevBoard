@@ -315,6 +315,7 @@ async def get_agent_config(
         task_service=exec_services.task_service,
         task_git_service=exec_services.task_git_service,
         conversation_repo=exec_services.conversation_repo,
+        execution_mode=False,
     )
 
     agent_config = exec_services.agent_config_service.get_agent_configuration(conversation.agent_role)

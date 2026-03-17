@@ -74,6 +74,7 @@ class TaskPRReviewAgentRole(AgentRole):
         task: Task,
         task_service: TaskService,
         github_integration: GitHubIntegration,
+        working_dir: str,
     ):
         if not task.github_pr_number:
             raise ValueError("Task does not have a github_pr_number set")
@@ -83,6 +84,7 @@ class TaskPRReviewAgentRole(AgentRole):
         self.task = task
         self._task_service = task_service
         self._github_integration = github_integration
+        self._working_dir = working_dir
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for PR review role."""
@@ -97,7 +99,7 @@ class TaskPRReviewAgentRole(AgentRole):
             Note: Codebase editing tools (Edit/Write) are provided directly by the
             underlying agent (ClaudeCode), not through this role.
         """
-        codebase_integration = CodebaseIntegration(self.task.get_current_workspace_dir())
+        codebase_integration = CodebaseIntegration(self._working_dir)
 
         return [
             create_get_pr_feedback_tool(self.task, self._github_integration),

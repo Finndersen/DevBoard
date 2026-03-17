@@ -26,6 +26,12 @@ from devboard.services.task_implementation_plan import TaskImplementationPlanSer
 from devboard.services.task_service import TaskService
 
 
+def _resolve_workspace_dir(task: Task, execution_mode: bool) -> str:
+    if execution_mode:
+        return task.get_current_workspace_dir()
+    return task.codebase.local_path
+
+
 async def create_agent_role_for_conversation(
     conversation: Conversation,
     document_repo: DocumentRepository,
@@ -34,6 +40,7 @@ async def create_agent_role_for_conversation(
     task_service: TaskService,
     task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
+    execution_mode: bool = True,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
@@ -69,6 +76,7 @@ async def create_agent_role_for_conversation(
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,
                 plan_service=plan_service,
+                working_dir=_resolve_workspace_dir(parent_entity, execution_mode),
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -78,6 +86,7 @@ async def create_agent_role_for_conversation(
                     task=parent_entity,
                     task_service=task_service,
                     github_integration=github_integration,
+                    working_dir=_resolve_workspace_dir(parent_entity, execution_mode),
                 )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e

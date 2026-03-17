@@ -342,7 +342,7 @@ def create_execute_implementation_step_tool(
                         }
                     )
 
-                role = CodeReviewAgentRole(task=task)
+                role = CodeReviewAgentRole(task=task, working_dir=task.get_current_workspace_dir())
                 additional_context = "\n\n".join(filter(None, [step.details or None, notes]))
                 prompt = build_code_review_prompt(diff=diff, additional_context=additional_context or None)
                 role_type = AgentRoleType.CODE_REVIEW

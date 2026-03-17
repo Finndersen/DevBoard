@@ -101,9 +101,9 @@ If there are no findings in a tier, omit that tier entirely.
 class CodeReviewAgentRole(AgentRole):
     """Role for reviewing code changes made during task implementation."""
 
-    def __init__(self, task: Task):
+    def __init__(self, task: Task, working_dir: str):
         self._task = task
-        self._codebase_integration = CodebaseIntegration(task.get_current_workspace_dir())
+        self._codebase_integration = CodebaseIntegration(working_dir)
 
     def get_system_prompt(self) -> str:
         return CODE_REVIEW_ROLE_PROMPT

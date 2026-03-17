@@ -312,7 +312,7 @@ def create_code_review_tool(
         if not diff.files:
             return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})
 
-        role = CodeReviewAgentRole(task=task)
+        role = CodeReviewAgentRole(task=task, working_dir=task.get_current_workspace_dir())
         prompt = build_code_review_prompt(diff, context)
 
         sub_agent_result = await run_sub_agent(
