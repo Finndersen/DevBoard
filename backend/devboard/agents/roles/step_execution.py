@@ -22,7 +22,7 @@ STEP_TYPE_PREAMBLES = {
     ),
 }
 
-STEP_EXECUTION_BASE_PROMPT = """You are a focused implementation sub-agent executing a specific step of an implementation plan.
+STEP_EXECUTION_BASE_PROMPT = """You are a focused implementation sub-agent executing a specific step of the current task's implementation plan.
 
 {type_preamble}
 

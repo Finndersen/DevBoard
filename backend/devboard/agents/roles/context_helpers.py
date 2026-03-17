@@ -11,30 +11,30 @@ from devboard.db.models import Task
 
 def _format_project_metadata(task: Task) -> str:
     """Format project name and description."""
-    return f"PROJECT: {task.project.name}\nDESCRIPTION: {task.project.description}"
+    return f"# Project\nName: {task.project.name}\nDescription: {task.project.description}"
 
 
 def _format_project_specification(task: Task) -> str:
     """Format project specification document section."""
-    return _format_document_section("PROJECT SPECIFICATION", task.project.specification.content)
+    return _format_document_section("## Project Specification", task.project.specification.content)
 
 
 def _format_task_metadata(task: Task) -> str:
     """Format task name and status metadata."""
     lines = [
-        "## TASK DETAILS",
+        "# Task",
         f"ID: {task.id}",
-        f"NAME: {task.title}",
-        f"STATUS: {task.status.value}",
+        f"Name: {task.title}",
+        f"Status: {task.status.value}",
     ]
     if task.github_pr_number:
-        lines.append(f"ASSOCIATED PULL REQUEST: #{task.github_pr_number}")
+        lines.append(f"PR: #{task.github_pr_number}")
     return "\n".join(lines)
 
 
 def _format_codebase_info(task: Task) -> str:
     """Format codebase information block."""
-    return f"""RELEVANT CODEBASE:
+    return f"""# Codebase
 - Name: {task.codebase.name}
 - Repository URL: {task.codebase.repository_url or "N/A"}
 - Worktree directory: {task.get_current_workspace_dir()}
@@ -43,7 +43,7 @@ def _format_codebase_info(task: Task) -> str:
 
 def _format_document_section(title: str, content: str | None) -> str:
     """Format a document section with XML-style document tags."""
-    return f"""{title}:
+    return f"""{title}
 <document>
 {content or "<EMPTY>"}
 </document>"""
@@ -51,13 +51,13 @@ def _format_document_section(title: str, content: str | None) -> str:
 
 def _format_task_specification(task: Task) -> str:
     """Format task specification document section."""
-    return _format_document_section("TASK SPECIFICATION", task.specification.content)
+    return _format_document_section("## Task Specification", task.specification.content)
 
 
 def _format_implementation_plan(task: Task) -> str:
     """Format implementation plan document section."""
     content = task.implementation_plan.content if task.implementation_plan else None
-    return _format_document_section("IMPLEMENTATION PLAN", content)
+    return _format_document_section("## Implementation Plan", content)
 
 
 def _format_implementation_plan_structured(
@@ -74,9 +74,9 @@ def _format_implementation_plan_structured(
     """
     plan = task.implementation_plan_structured
     if not plan:
-        return "IMPLEMENTATION PLAN:\n<No structured plan>"
+        return "## Implementation Plan\n<No structured plan>"
 
-    lines = ["IMPLEMENTATION PLAN:"]
+    lines = ["## Implementation Plan"]
 
     if plan.overview:
         lines.append(f"\nOverview: {plan.overview}")
@@ -102,11 +102,10 @@ def build_execution_graph_context(task: Task) -> str:
     # Compute topological layers for parallel execution groups
     steps_by_number = {s.step_number: s for s in plan.steps}
     remaining = set(steps_by_number.keys())
-    completed = {s.step_number for s in plan.steps if s.status in ("complete", "skipped")}
     layers: list[list[int]] = []
 
     while remaining:
-        resolved = completed.union({n for layer in layers for n in layer})
+        resolved = {n for layer in layers for n in layer}
         ready = [n for n in remaining if all(d in resolved for d in (steps_by_number[n].dependencies or []))]
         if not ready:
             logfire.warn(
@@ -134,7 +133,7 @@ def _format_custom_fields(task: Task) -> str:
     if not task.custom_fields:
         return ""
 
-    lines = ["TASK CUSTOM FIELDS:"]
+    lines = ["## Custom Fields"]
     for field_name, value in task.custom_fields.items():
         # Format boolean values as Yes/No for readability
         if isinstance(value, bool):
@@ -165,29 +164,25 @@ def build_task_context(
         Formatted context string with consistent structure.
         PR number and implementation plan are automatically included if present.
     """
-    sections = [_format_task_metadata(task)]
-    sections.append(_format_project_metadata(task))
+    sections = [_format_project_metadata(task)]
 
     if include_project_specification:
         sections.append(_format_project_specification(task))
 
-    if pr_status_content:
-        sections.append(f"PR STATUS:\n{pr_status_content}")
-
+    sections.append(_format_codebase_info(task))
+    sections.append(_format_task_metadata(task))
     sections.append(_format_task_specification(task))
 
     # Prefer structured plan, fall back to Document plan
     if task.implementation_plan_structured:
         sections.append(_format_implementation_plan_structured(task, include_step_outcomes=include_step_outcomes))
-        execution_graph = build_execution_graph_context(task)
-        if execution_graph:
-            sections.append(execution_graph)
     elif task.implementation_plan:
         sections.append(_format_implementation_plan(task))
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
 
-    sections.append(_format_codebase_info(task))
+    if pr_status_content:
+        sections.append(f"## PR Status\n{pr_status_content}")
 
     return "\n\n".join(sections)

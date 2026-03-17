@@ -80,7 +80,7 @@ class TestGetAgentConfigEndpoint:
 
         mock_role = Mock()
         mock_role.get_system_prompt.return_value = "You are a task planning assistant."
-        mock_role.get_context_content = AsyncMock(return_value="## TASK DETAILS\nID: 1")
+        mock_role.get_context_content = AsyncMock(return_value="# Task\nID: 1")
         mock_role.get_tools.return_value = [
             make_mock_tool(
                 "set_task_specification_content",
@@ -108,7 +108,7 @@ class TestGetAgentConfigEndpoint:
 
         assert data["agent_role"] == AgentRoleType.TASK_PLANNING.value
         assert data["behaviour_guidelines"] == "You are a task planning assistant."
-        assert data["context_content"] == "## TASK DETAILS\nID: 1"
+        assert data["context_content"] == "# Task\nID: 1"
         assert data["custom_instructions"] == "Always prefer TypeScript strict mode."
 
         assert data["role_tools"] == [

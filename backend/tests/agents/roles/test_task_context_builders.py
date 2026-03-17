@@ -141,19 +141,19 @@ class TestBuildTaskPlanningContext:
 
         # Check task metadata
         assert f"ID: {task_with_documents.id}" in context
-        assert "NAME: Test Task" in context
-        assert "STATUS: planning" in context
+        assert "Name: Test Task" in context
+        assert "Status: planning" in context
 
         # Check project specification is included
-        assert "PROJECT SPECIFICATION:" in context
+        assert "## Project Specification" in context
         assert "This is a test project specification." in context
 
         # Check task specification is included
-        assert "TASK SPECIFICATION:" in context
+        assert "## Task Specification" in context
         assert "Implement feature X" in context
 
         # Check implementation plan is included
-        assert "IMPLEMENTATION PLAN:" in context
+        assert "## Implementation Plan" in context
         assert "Implementation Steps" in context
 
     def test_builds_context_without_implementation_plan(self, task_without_implementation_plan: Task):
@@ -162,19 +162,19 @@ class TestBuildTaskPlanningContext:
 
         # Check task metadata
         assert f"ID: {task_without_implementation_plan.id}" in context
-        assert "NAME: Test Task" in context
-        assert "STATUS: planning" in context
+        assert "Name: Test Task" in context
+        assert "Status: planning" in context
 
         # Check project specification is included
-        assert "PROJECT SPECIFICATION:" in context
+        assert "## Project Specification" in context
         assert "This is a test project specification." in context
 
         # Check task specification is included
-        assert "TASK SPECIFICATION:" in context
+        assert "## Task Specification" in context
         assert "Implement feature X" in context
 
         # Implementation plan should NOT be included
-        assert "IMPLEMENTATION PLAN:" not in context
+        assert "## Implementation Plan" not in context
 
     def test_handles_empty_documents(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
         """Test that empty documents show <EMPTY>."""
@@ -260,7 +260,7 @@ class TestBuildTaskPlanningContext:
 
         assert "<EMPTY>" in context
         # Implementation plan section should not be present (no plan exists)
-        assert "IMPLEMENTATION PLAN:" not in context
+        assert "## Implementation Plan" not in context
 
     def test_handles_empty_project_specification(self, db_session, sample_codebase: Codebase):
         """Test that empty project specification shows <EMPTY>."""
@@ -313,7 +313,7 @@ class TestBuildTaskPlanningContext:
         context = build_task_planning_context(task)
 
         # Should show <EMPTY> for project spec
-        assert "PROJECT SPECIFICATION:" in context
+        assert "## Project Specification" in context
         assert context.count("<EMPTY>") == 1
 
     def test_lazy_loads_project_relationship(self, db_session, project_with_spec: Project, sample_codebase: Codebase):

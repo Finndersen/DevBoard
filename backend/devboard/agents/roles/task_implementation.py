@@ -2,7 +2,7 @@ from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
-from devboard.agents.roles.context_helpers import build_task_context
+from devboard.agents.roles.context_helpers import build_execution_graph_context, build_task_context
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_complete_task_with_local_merge_tool,
@@ -16,7 +16,7 @@ from devboard.agents.tools.implementation_plan_tools import (
     create_execute_implementation_step_tool,
     create_read_implementation_step_details_tool,
 )
-from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
+from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
@@ -28,7 +28,7 @@ from devboard.services.task_implementation_plan import TaskImplementationPlanSer
 from devboard.services.task_service import TaskService
 
 _PROMPT_BASE = """
-You are a Task Implementation Assistant for DevBoard, helping developers implement planned tasks.
+You are a Task Implementation Assistant for DevBoard, helping a developer implement the current task.
 
 Your role is to:
 - Execute the implementation plan by making code changes to the codebase
@@ -205,6 +205,13 @@ class TaskImplementationAgentRole(AgentRole):
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
                 ),
+                create_code_review_tool(
+                    self.task,
+                    self.agent_config_service,
+                    self.task_git_service,
+                    conversation_repo=self.conversation_repo,
+                    parent_conversation_id=self.conversation_id,
+                ),
                 create_rebase_task_branch_tool(self.task, self.task_git_service),
             ]
         )
@@ -230,7 +237,11 @@ class TaskImplementationAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, specification, and implementation plan
         """
-        return build_task_context(self.task)
+        context = build_task_context(self.task)
+        execution_graph = build_execution_graph_context(self.task)
+        if execution_graph:
+            context += "\n\n" + execution_graph
+        return context
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

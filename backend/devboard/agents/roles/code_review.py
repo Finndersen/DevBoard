@@ -15,7 +15,7 @@ from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
 
 CODE_REVIEW_ROLE_PROMPT = """
-You are a senior code reviewer performing a self-review of implementation changes before finalisation.
+You are a senior code reviewer performing a self-review of the current task's implementation changes before finalisation.
 
 You receive:
 - The task specification and implementation plan as context

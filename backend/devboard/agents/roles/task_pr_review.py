@@ -18,7 +18,7 @@ from devboard.integrations.github import GitHubIntegration, PRStatus
 from devboard.services.task_service import TaskService
 
 PR_REVIEW_ROLE_PROMPT = """
-You are a Task Management Assistant for DevBoard, helping developers manage a task that has an open Pull Request.
+You are a Task Management Assistant for DevBoard, helping a developer manage the current task which has an open Pull Request.
 
 Your role is to:
 - Respond to PR review feedback and make requested code changes

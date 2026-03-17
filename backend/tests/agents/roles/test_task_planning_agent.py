@@ -97,7 +97,7 @@ class TestTaskPlanningRoleWithSpec:
         """Test context content includes specification but not plan when plan doesn't exist."""
         content = await role.get_context_content()
 
-        assert "TASK SPECIFICATION:" in content
+        assert "## Task Specification" in content
         assert mock_task.specification.content in content
         # Should NOT include implementation plan section when it doesn't exist
         assert "IMPLEMENTATION PLAN" not in content
@@ -180,9 +180,9 @@ class TestTaskPlanningRoleWithPlan:
         """Test context content includes both documents."""
         content = await role.get_context_content()
 
-        assert "TASK SPECIFICATION:" in content
+        assert "## Task Specification" in content
         assert mock_task.specification.content in content
-        assert "IMPLEMENTATION PLAN:" in content
+        assert "## Implementation Plan" in content
         assert mock_task.implementation_plan.content in content
 
 
