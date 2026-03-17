@@ -264,7 +264,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Memoize save functions to prevent infinite re-creation of useEditableField hooks
   const saveTitleField = useCallback((value: string) =>
-    updateTask({ id: id!, task: { title: value }}), [updateTask, id]
+    updateTask({ id: id!, task: { title: value } }), [updateTask, id]
   )
 
   const saveSpecificationField = useCallback(async (value: string) => {
@@ -371,6 +371,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     if (!implementationPlan) return
     setImplementationPlan({
       ...implementationPlan,
+      status: 'executing',
       steps: implementationPlan.steps.map(s =>
         s.step_number === stepNumber ? { ...s, status: 'running' as const } : s
       )
@@ -407,7 +408,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [])
 
   const handleAutoReview = useCallback(() => {
-    agentChatRef.current?.sendMessage('Run review_code_changes tool to review your code changes')
+    agentChatRef.current?.sendMessage('Run `review_code_changes tool` to review your code changes')
   }, [])
 
   const handleResolveConflicts = useCallback(() => {
@@ -695,11 +696,10 @@ function TaskDetail({ id }: TaskDetailProps) {
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id)}
-                          className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                            activeTab === tab.id
+                          className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${activeTab === tab.id
                               ? 'text-blue-600 dark:text-blue-400'
                               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                          }`}
+                            }`}
                         >
                           <tab.icon className="w-4 h-4" />
                           <span>{tab.name}</span>
@@ -825,11 +825,10 @@ function TaskDetail({ id }: TaskDetailProps) {
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                          activeTab === tab.id
+                        className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${activeTab === tab.id
                             ? 'text-blue-600 dark:text-blue-400'
                             : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                        }`}
+                          }`}
                       >
                         <tab.icon className="w-4 h-4" />
                         <span>{tab.name}</span>
