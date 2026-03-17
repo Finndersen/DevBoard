@@ -36,6 +36,7 @@ const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
   investigate_codebase: SubAgentResultRenderer,
   execute_implementation_step: SubAgentResultRenderer,
+  review_code_changes: SubAgentResultRenderer,
 }
 
 /**

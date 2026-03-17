@@ -7,12 +7,14 @@ from pydantic_ai import ModelRetry, Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
+from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import ConversationRepository
 from devboard.integrations.types import StructuredDiff
+from devboard.services.task_git.service import TaskGitService
 
 _active_sub_agent_conversations: set[int] = set()
 # Backwards-compatibility alias used by existing tests
@@ -261,6 +263,71 @@ def create_task_codebase_investigation_tool(
         parent_entity_type=ParentEntityType.TASK,
         parent_entity_id=task.id,
     )
+
+
+def create_code_review_tool(
+    task: Task,
+    agent_config_service: AgentConfigService,
+    task_git_service: TaskGitService,
+    conversation_repo: ConversationRepository,
+    parent_conversation_id: int | None,
+) -> Tool:
+    """Create a code review tool that performs a self-review of all task changes.
+
+    Args:
+        task: The task being reviewed
+        agent_config_service: AgentConfigService for getting configured LLM
+        task_git_service: Service for retrieving the full task diff
+        conversation_repo: Repository for creating conversation records
+        parent_conversation_id: ID of the invoking agent's conversation
+    """
+
+    async def review_code_changes(context: str | None = None) -> str:
+        """Perform a comprehensive code review of all changes made so far in this task.
+
+        ONLY use this tool when explicitly asked to perform a code review. Do NOT use it proactively
+        or as part of standard implementation workflow — code review plan steps are handled
+        automatically via `execute_implementation_step`.
+
+        The review agent will evaluate:
+        - Alignment with the task specification and implementation plan
+        - Code quality, patterns, and conventions
+        - Architecture and design decisions
+        - Test coverage adequacy
+        - Potential issues, edge cases, and risks
+        - Cross-component impact
+
+        Args:
+            context: Optional additional context for the reviewer. Use this to explain why changes
+                diverge from the specification or implementation plan, describe known limitations,
+                or highlight specific areas you want the reviewer to focus on.
+
+        Returns:
+            A JSON string with:
+            - `result`: Structured review with Summary and Findings (Critical/Important/Suggestions)
+            - `conversation_id`: The conversation identifier for the review session.
+        """
+        diff = await task_git_service.get_task_all_changes(task)
+
+        if not diff.files:
+            return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})
+
+        role = CodeReviewAgentRole(task=task)
+        prompt = build_code_review_prompt(diff, context)
+
+        sub_agent_result = await run_sub_agent(
+            role=role,
+            role_type=AgentRoleType.CODE_REVIEW,
+            prompt=prompt,
+            agent_config_service=agent_config_service,
+            conversation_repo=conversation_repo,
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            parent_conversation_id=parent_conversation_id,
+        )
+        return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
+
+    return Tool(function=review_code_changes, name="review_code_changes")
 
 
 def build_code_review_prompt(diff: StructuredDiff, additional_context: str | None = None) -> str:
