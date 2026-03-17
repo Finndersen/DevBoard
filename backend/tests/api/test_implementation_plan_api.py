@@ -45,6 +45,8 @@ class TestImplementationPlanAPI:
         assert step1["status"] == "pending"
         assert step1["details"] == "Create the DB models"
         assert step1["outcome"] is None
+        assert step1["started_at"] is None
+        assert step1["completed_at"] is None
 
         step2 = data["steps"][1]
         assert step2["step_number"] == 2

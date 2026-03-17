@@ -1,5 +1,7 @@
 """Implementation plan API schemas."""
 
+import datetime
+
 from pydantic import BaseModel
 
 
@@ -12,6 +14,8 @@ class ImplementationStepResponse(BaseModel):
     status: str
     details: str
     outcome: str | None
+    started_at: datetime.datetime | None
+    completed_at: datetime.datetime | None
 
     model_config = {"from_attributes": True}
 

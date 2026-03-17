@@ -1,5 +1,6 @@
 """Service for managing structured implementation plans."""
 
+import datetime
 from collections import defaultdict
 from typing import Any
 
@@ -127,6 +128,14 @@ class TaskImplementationPlanService:
         step.status = status
         if outcome is not None:
             step.outcome = outcome
+        if status == ImplementationStepStatus.RUNNING:
+            step.started_at = datetime.datetime.now(datetime.UTC)
+        elif status in (
+            ImplementationStepStatus.COMPLETE,
+            ImplementationStepStatus.FAILED,
+            ImplementationStepStatus.SKIPPED,
+        ):
+            step.completed_at = datetime.datetime.now(datetime.UTC)
         self.plan_repo.update_step(step)
         self.plan_repo.commit()
         return step

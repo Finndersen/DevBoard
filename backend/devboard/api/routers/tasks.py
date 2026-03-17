@@ -750,6 +750,8 @@ async def get_implementation_plan(
                 status=step.status,
                 details=step.details,
                 outcome=step.outcome,
+                started_at=step.started_at,
+                completed_at=step.completed_at,
             )
             for step in plan.steps
         ],
@@ -790,4 +792,6 @@ async def update_implementation_step(
         status=step.status,
         details=step.details,
         outcome=step.outcome,
+        started_at=step.started_at,
+        completed_at=step.completed_at,
     )

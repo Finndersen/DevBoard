@@ -80,6 +80,8 @@ class ImplementationStep(Base):
     )
     details: Mapped[str] = mapped_column(Text)
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, default=None)
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC),

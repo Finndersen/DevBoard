@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { ComponentType } from 'react'
 import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useEditableField } from '../../hooks/useEditableField'
@@ -7,6 +7,54 @@ import { Button, Markdown, StatusBadge, Textarea } from '../ui'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`
+  } else if (seconds < 3600) {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}m ${s}s`
+  } else {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+}
+
+interface StepDurationProps {
+  step: ImplementationStepResponse
+}
+
+function StepDuration({ step }: StepDurationProps) {
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
+    if (step.status === 'running' && step.started_at) {
+      return Math.floor((Date.now() - new Date(step.started_at).getTime()) / 1000)
+    }
+    return 0
+  })
+
+  useEffect(() => {
+    if (step.status !== 'running' || !step.started_at) return
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - new Date(step.started_at!).getTime()) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [step.status])
+
+  if (step.status === 'running' && step.started_at) {
+    return <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">{formatDuration(elapsedSeconds)}</span>
+  }
+
+  if ((step.status === 'complete' || step.status === 'failed') && step.started_at && step.completed_at) {
+    const durationSeconds = Math.floor(
+      (new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()) / 1000
+    )
+    return <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">{formatDuration(durationSeconds)}</span>
+  }
+
+  return null
+}
 
 const STEP_STATUS_CONFIG: Record<ImplementationStepStatus, { icon: ComponentType<{ className?: string }>; iconClass: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' }> = {
   pending: { icon: ClockIcon, iconClass: 'text-gray-400', variant: 'default' },
@@ -81,6 +129,8 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
             <typeConfig.icon className="w-3 h-3 mr-1" />
             {typeConfig.label}
           </StatusBadge>
+
+          <StepDuration step={step} />
         </div>
       </div>
 

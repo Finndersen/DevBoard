@@ -49,6 +49,8 @@ export interface ImplementationStepResponse {
   status: ImplementationStepStatus
   details: string
   outcome: string | null
+  started_at: string | null
+  completed_at: string | null
 }
 
 export interface ImplementationPlanResponse {
