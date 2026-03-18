@@ -46,6 +46,12 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_name`, `specification_content`, `base_branch`, `branch_name`, `custom_fields`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
 
+### GitHub PR Tools
+
+**get_pr_status**: Fetch current PR status in a single GraphQL call. No approval (read-only). No params (PR number and repo URL come from task context). Returns PR state, mergeable status, CI rollup, review decision, and comment count hint. Used by: TaskPRReviewRole
+
+**get_pr_feedback**: Fetch all PR reviews and code comments. No approval (read-only). No params. Returns comprehensive feedback including reviews with their associated code comment threads and standalone comments. Used by: TaskPRReviewRole
+
 ### Codebase Analysis
 
 **search_codebase**: Semantic search via embeddings. No approval (read-only). Params: `query`, `codebase_id`. Used by: All roles

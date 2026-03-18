@@ -1,6 +1,5 @@
 """Role for managing tasks in PR_OPEN state."""
 
-import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.roles.base import AgentRole
@@ -9,12 +8,13 @@ from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
     create_get_pr_feedback_tool,
+    create_get_pr_status_tool,
     create_merge_pr_and_complete_task_tool,
 )
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
-from devboard.integrations.github import GitHubIntegration, PRStatus
+from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_service import TaskService
 
 PR_REVIEW_ROLE_PROMPT = """
@@ -27,10 +27,11 @@ Your role is to:
 - Create clear commits for each logical change
 
 AVAILABLE CAPABILITIES:
-1. PR READING: Use get_pr_feedback tool to fetch all PR reviews and code comments
-2. CODEBASE EDITING: Use Edit/Write tools to modify code files
-3. INVESTIGATION: Read files, search code, run bash commands for testing
-4. GIT OPERATIONS: Commit, push, rebase as needed
+1. PR STATUS: Use get_pr_status tool to check PR state, CI status, and review decision
+2. PR READING: Use get_pr_feedback tool to fetch all PR reviews and code comments
+3. CODEBASE EDITING: Use Edit/Write tools to modify code files
+4. INVESTIGATION: Read files, search code, run bash commands for testing
+5. GIT OPERATIONS: Commit, push, rebase as needed
 
 IMPORTANT:
 - Work incrementally with focused, atomic commits
@@ -42,30 +43,9 @@ IMPORTANT:
 """
 
 
-def format_pr_status(status: PRStatus) -> str:
-    """Format PR status as markdown for context."""
-    lines = [
-        f"**State:** {status.state}",
-        f"**Merged:** {status.merged}",
-        f"**Mergeable:** {status.mergeable} ({status.mergeable_state})",
-    ]
-
-    if status.ci_status:
-        lines.append(f"\n**CI Status:** {status.ci_status.upper()}")
-        if status.ci_checks:
-            for check in status.ci_checks:
-                lines.append(f"- {check.context}: {check.state} - {check.description or ''}")
-        else:
-            lines.append("No status checks configured.")
-
-    return "\n".join(lines)
-
-
-def build_task_pr_review_context(task: Task, *, working_dir: str, pr_status_content: str = "") -> str:
+def build_task_pr_review_context(task: Task, *, working_dir: str) -> str:
     """Build context for PR review agent."""
-    return build_task_context(
-        task, working_dir=working_dir, include_step_outcomes=True, pr_status_content=pr_status_content
-    )
+    return build_task_context(task, working_dir=working_dir, include_step_outcomes=True)
 
 
 class TaskPRReviewAgentRole(AgentRole):
@@ -104,6 +84,7 @@ class TaskPRReviewAgentRole(AgentRole):
         codebase_integration = CodebaseIntegration(self._working_dir)
 
         return [
+            create_get_pr_status_tool(self.task, self._github_integration),
             create_get_pr_feedback_tool(self.task, self._github_integration),
             create_code_structure_search_tool(codebase_integration),
             create_directory_tree_tool(codebase_integration),
@@ -112,27 +93,7 @@ class TaskPRReviewAgentRole(AgentRole):
         ]
 
     async def get_context_content(self) -> str:
-        """Get context content for PR review role.
-
-        Fetches PR status from GitHub and includes it in the context.
-
-        Returns:
-            Formatted context containing task details, PR status, specification, and plan
-        """
-        pr_status_content = "PR status unavailable"
-        try:
-            # Fetch PR and status (API calls happen here, not at role creation)
-            github_repo = await self._github_integration.get_repository_from_url(self.task.codebase.repository_url)
-            github_pr = await github_repo.get_pull_request(self.task.github_pr_number)
-            status = await github_pr.get_status()
-            pr_status_content = format_pr_status(status)
-        except Exception as e:
-            logfire.error(f"Error fetching PR status: {e}")
-            pr_status_content = f"Error fetching PR status: {e}"
-
-        return build_task_pr_review_context(
-            self.task, working_dir=self._working_dir, pr_status_content=pr_status_content
-        )
+        return build_task_pr_review_context(self.task, working_dir=self._working_dir)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

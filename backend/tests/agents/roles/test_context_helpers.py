@@ -74,21 +74,6 @@ class TestBuildTaskContext:
 
         assert "PR:" not in result
 
-    def test_includes_pr_status_when_provided(self, mock_task: MagicMock):
-        """Test that PR status is included when provided."""
-        pr_status = "**State:** open\n**Merged:** False"
-        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content=pr_status)
-
-        assert "## PR Status" in result
-        assert "**State:** open" in result
-        assert "**Merged:** False" in result
-
-    def test_excludes_pr_status_when_empty(self, mock_task: MagicMock):
-        """Test that PR status section is omitted when empty."""
-        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content="")
-
-        assert "## PR Status" not in result
-
     def test_handles_empty_project_specification(self, mock_task: MagicMock):
         """Test that empty project specification shows <EMPTY>."""
         mock_task.project.specification.content = None
@@ -136,7 +121,7 @@ class TestBuildTaskContext:
 
     def test_section_order_is_consistent(self, mock_task: MagicMock):
         """Test that sections appear in consistent order."""
-        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content="PR info")
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         # Find positions of each section
         project_pos = result.find("# Project")
@@ -145,10 +130,9 @@ class TestBuildTaskContext:
         task_pos = result.find("# Task")
         task_spec_pos = result.find("## Task Specification")
         impl_plan_pos = result.find("## Implementation Plan")
-        pr_status_pos = result.find("## PR Status")
 
-        # Verify order: project -> project_spec -> codebase -> task -> task_spec -> impl_plan -> pr_status
-        assert project_pos < project_spec_pos < codebase_pos < task_pos < task_spec_pos < impl_plan_pos < pr_status_pos
+        # Verify order: project -> project_spec -> codebase -> task -> task_spec -> impl_plan
+        assert project_pos < project_spec_pos < codebase_pos < task_pos < task_spec_pos < impl_plan_pos
 
     def test_specification_role_configuration(self, mock_task: MagicMock):
         """Test configuration matching TaskSpecificationAgentRole (no impl plan yet)."""
@@ -176,11 +160,9 @@ class TestBuildTaskContext:
             mock_task,
             working_dir="/tmp/worktree/test",
             include_project_specification=False,
-            pr_status_content="**State:** open",
         )
 
         assert "PR: #42" in result
-        assert "## PR Status" in result
         assert "## Project Specification" not in result
         assert "## Task Specification" in result
         assert "## Implementation Plan" in result

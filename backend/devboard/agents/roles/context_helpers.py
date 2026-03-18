@@ -151,7 +151,6 @@ def build_task_context(
     working_dir: str,
     include_project_specification: bool = True,
     include_step_outcomes: bool = False,
-    pr_status_content: str = "",
 ) -> str:
     """Build standardized task context for agent roles.
 
@@ -160,7 +159,6 @@ def build_task_context(
         working_dir: Working directory path for the task's codebase
         include_project_specification: Whether to include the full project specification document
         include_step_outcomes: Whether to include full step outcomes in the structured plan
-        pr_status_content: Formatted PR status string (for PR review role)
 
     Returns:
         Formatted context string with consistent structure.
@@ -183,8 +181,5 @@ def build_task_context(
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
-
-    if pr_status_content:
-        sections.append(f"## PR Status\n{pr_status_content}")
 
     return "\n\n".join(sections)

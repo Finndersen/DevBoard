@@ -6,7 +6,7 @@ from .codebase_tools import (
     create_text_search_tool,
 )
 from .document_editing import create_document_edit_tool, create_set_document_content_tool
-from .github_tools import create_get_pr_feedback_tool, create_github_pr_tool
+from .github_tools import create_get_pr_feedback_tool, create_get_pr_status_tool, create_github_pr_tool
 from .rebase_tools import create_rebase_task_branch_tool
 from .render_html import create_render_html_tool
 from .sub_agent_tools import (
@@ -29,6 +29,7 @@ __all__ = [
     "create_create_task_tool",
     "create_edit_task_tool",
     "create_get_pr_feedback_tool",
+    "create_get_pr_status_tool",
     "create_list_tasks_tool",
     "create_merge_pr_and_complete_task_tool",
     "create_github_pr_tool",
