@@ -18,18 +18,13 @@ from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
 from devboard.db.models import Conversation, Project, Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
-
-
-def _resolve_workspace_dir(task: Task, execution_mode: bool) -> str:
-    if execution_mode:
-        return task.get_current_workspace_dir()
-    return task.codebase.local_path
 
 
 async def create_agent_role_for_conversation(
@@ -40,7 +35,7 @@ async def create_agent_role_for_conversation(
     task_service: TaskService,
     task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
-    execution_mode: bool = True,
+    working_dir: str,
 ) -> AgentRole:
     """Create the appropriate role based on conversation type and parent entity.
 
@@ -48,8 +43,6 @@ async def create_agent_role_for_conversation(
     """
     parent_entity = conversation.get_parent_entity()
     parent_conversation_id = conversation.id
-    from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
-
     plan_service = TaskImplementationPlanService(TaskImplementationPlanRepository(conversation_repo.db))
     if isinstance(parent_entity, Task):
         # Create role based on agent_role type for tasks
@@ -61,6 +54,7 @@ async def create_agent_role_for_conversation(
                 task_service=task_service,
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,
+                working_dir=working_dir,
                 plan_service=plan_service,
             )
         elif conversation.agent_role == AgentRoleType.TASK_IMPLEMENTATION:
@@ -76,7 +70,7 @@ async def create_agent_role_for_conversation(
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,
                 plan_service=plan_service,
-                working_dir=_resolve_workspace_dir(parent_entity, execution_mode),
+                working_dir=working_dir,
             )
         elif conversation.agent_role == AgentRoleType.TASK_PR_REVIEW:
             # Create GitHub integration (no API calls - just object instantiation)
@@ -86,7 +80,7 @@ async def create_agent_role_for_conversation(
                     task=parent_entity,
                     task_service=task_service,
                     github_integration=github_integration,
-                    working_dir=_resolve_workspace_dir(parent_entity, execution_mode),
+                    working_dir=working_dir,
                 )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
@@ -158,6 +152,7 @@ def create_agent_execution_service(
     role: AgentRole,
     conversation_repo: ConversationRepository,
     agent_config_service: AgentConfigService,
+    working_dir: str,
     additional_tools: list[Tool] | None = None,
     oauth_service: OAuthService | None = None,
     interrupt_event: asyncio.Event | None = None,
@@ -192,6 +187,7 @@ def create_agent_execution_service(
             conversation_repository=conversation_repo,
             history_service=history_service,
             agent_config_service=agent_config_service,
+            working_dir=working_dir,
             additional_tools=additional_tools,
             oauth_service=oauth_service,
             interrupt_event=interrupt_event,
@@ -203,6 +199,7 @@ def create_agent_execution_service(
             conversation_repository=conversation_repo,
             history_service=history_service,
             agent_config_service=agent_config_service,
+            working_dir=working_dir,
             additional_tools=additional_tools,
             oauth_service=oauth_service,
             interrupt_event=interrupt_event,

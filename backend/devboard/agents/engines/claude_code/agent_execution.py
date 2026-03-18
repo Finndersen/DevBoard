@@ -12,8 +12,6 @@ from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventTy
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
-from devboard.db.models import Codebase, Task
-from devboard.services.project_directory import ensure_project_directory
 
 
 class ClaudeCodeAgentExecutionService(AgentExecutionService):
@@ -100,20 +98,11 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         """Create agent with session_id and optional extra tools."""
         model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
 
-        conversation_parent = self.conversation.get_parent_entity()
-        if isinstance(conversation_parent, Task):
-            working_dir = conversation_parent.get_current_workspace_dir()
-        elif isinstance(conversation_parent, Codebase):
-            working_dir = conversation_parent.local_path
-        else:
-            # Project conversations: use dedicated project directory
-            working_dir = str(ensure_project_directory(conversation_parent))
-
         return ClaudeCodeAgent(
             role=self.role,
             model=model,
             session_id=self.conversation.external_session_id,
-            working_dir=working_dir,
+            working_dir=self.working_dir,
             additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),
         )

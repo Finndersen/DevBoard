@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from devboard.agents.execution_manager import conversation_execution_manager
 from devboard.api.routers import (
     agents,
     claude_code,
@@ -66,6 +68,9 @@ class SingleSessionMCP:
 ss_mcp = SingleSessionMCP(mcp)
 
 
+_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
+
+
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
@@ -74,7 +79,30 @@ async def combined_lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await _shutdown_active_executions()
         await ss_mcp.stop_session()
+
+
+async def _shutdown_active_executions() -> None:
+    """Wait for active agent executions to finish before shutdown.
+
+    This prevents subprocess orphaning when uvicorn hot-reloads or restarts.
+    Executions are not interrupted — they are allowed to complete naturally,
+    consistent with how uvicorn handles in-flight HTTP requests.
+    """
+    active = conversation_execution_manager.list_active_executions()
+    if not active:
+        return
+
+    logfire.info(f"Shutdown: waiting for {len(active)} active execution(s) to complete")
+    tasks = [e.asyncio_task for e in active]
+    done, pending = await asyncio.wait(tasks, timeout=_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS)
+
+    if pending:
+        logfire.warning(f"Shutdown: {len(pending)} execution(s) did not finish within timeout, cancelling")
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def cleanup_stale_locks_on_startup():

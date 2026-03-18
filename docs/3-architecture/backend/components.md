@@ -59,18 +59,16 @@ Multi-source configuration resolution (environment > database > defaults). Pydan
 
 **Key Operations**: Get configuration with source tracking, update database configs, validate schemas, resolve LLM provider configs
 
-### Workspace Allocation Service
+### Workspace Service
 
-**File**: `workspace_allocation_service.py`
+**File**: `workspace_service.py`
 
-Manages worktree slot allocation for task implementation. Handles intelligent slot assignment with stickiness optimization.
+Manages worktree slot allocation, workspace preparation, and lifecycle for task implementation. Handles intelligent slot assignment with stickiness optimization.
 
 **Key Operations**:
-- `allocate_for_task(task)`: Find and lock an appropriate worktree slot
-- `run_task_agent_in_workspace(task, agent_stream)`: Execute agent in allocated workspace
+- `allocate_workspace(task)`: Allocate and lock a worktree slot (context manager)
+- `prepare_workspace(task, slot)`: Prepare workspace (create worktree, checkout branch, run setup)
 - `checkout_task_to_main_repo(task)`: Move task's work from worktree to main repository
-- `create_and_lock_slot(task)`: Create new worktree when all slots are locked
-- `release_slot(slot)`: Unlock slot after agent execution
 
 **Allocation Strategy**:
 1. **Stickiness**: Prefer last-used slot for task (avoids unnecessary checkouts)

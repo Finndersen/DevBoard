@@ -128,7 +128,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       setPrStatus(null)
       setPrFeedback(null)
     }
-  }, [task?.id, task?.status])
+  }, [task?.id, task?.status, task?.github_pr_number])
 
   const handleRefreshPrStatus = useCallback(() => {
     if (!task?.id) return

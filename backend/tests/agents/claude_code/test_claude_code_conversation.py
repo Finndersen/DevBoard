@@ -84,6 +84,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
             conversation_repository=conversation_repo,
             history_service=history_service,
             agent_config_service=mock_agent_config_service,
+            working_dir="/test/working_dir",
         )
 
     @pytest.mark.asyncio

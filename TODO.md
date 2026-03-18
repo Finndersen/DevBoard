@@ -10,22 +10,14 @@
 - custom slash commands for project agent for custom workflows (e.g. use Datadog to translate transaction ID to trip ID) 
 - General purpose AI-Powered "Rubber Ducking" & Debugging Partner
 - To-Do list (project or global level)
-- Show unified diff view by default when showing code changes
 - allow configuring which patterns to exclude from directory tree view
 - Integrate memory (maybe with https://github.com/mem0ai/mem0)
 - Change implementation of Project Specification to a more complex Documentation system which is filesystem git-based, for automatic version control, and can be pushed to remote repo for collaboration/sharing. Can be linked to standalone doucmentation repo, or within a codebase repo
 - Handle CladueCOde error responses like: API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4.5"},"request_id":"req_011CU9vQ1DSP73cZHsQ62QNL"} OR API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXoMiXVKGx7uZ488mMbm3"}
 - CLAUDE.md prompt management and continuous feedback (https://www.reddit.com/r/ClaudeAI/comments/1laby6h/i_discovered_a_powerful_way_to_continuously/)
-- Handle ClaudeCode compaction
 - Track important events (e.g. user document edits) and include as system messages to agent
 - Add tool for getting code skeleton/structure of a module
-- refresh documents when edited through non-approval tools
-- Create "Documentation Maintenance" and "Codebase analysis" sub-agents which can be called by other agents
-- Handle CC AWS Bedrock SSO login? message: "API Error: The SSO session associated with this profile has expired. To refresh this SSO session run aws sso login with the corresponding profile."
 - Add Post-Implementation agent role that has Github/Jira tools etc and can still make code changes.  These integrations are not required during normal implementation phase before approval.
-- For tool approvals, send both a ToolCallRequest and ToolCall events so that hte tool call result can eb matched, or just udpate frontend to handle ToolCallRequest by creating a ToolCall event/message
-- Make implementation plan more structured, i.e. list of steps with descriptions, further context and status
-- issue: File changes tab not automatically displayed when beginning implementation phase
 - Advanced tool use capabilities like tool search & programmatic execution: https://www.anthropic.com/engineering/advanced-tool-use
 - Change layout to task list on sidebar like https://www.terragonlabs.com/
 - conditionally provide change summary and merge & finalise tools depending on implementation plan status
@@ -36,6 +28,8 @@
 - make task.branch_name mandatory
 - add tool to allow agent to update task custom field values
 - Custom macros/prompts for Project Agent for creating task from Jira ticket etc
+- Refactor run_sub_agent() into "new" and "resume" variants
+- Move Github PR status info to a tool instead of automatically in context
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

@@ -18,10 +18,6 @@ router = APIRouter()
 
 # How long to wait (in seconds) for new events before checking execution status
 _QUEUE_GET_TIMEOUT = 1.0
-# How long to wait (in seconds) between polls for a new execution to start
-_EXECUTION_POLL_INTERVAL = 0.5
-# How long to wait (in seconds) for an execution to start before closing the WebSocket
-_EXECUTION_START_TIMEOUT = 30.0
 
 
 def _log_pool_status(label: str, conversation_id: int) -> None:
@@ -71,11 +67,10 @@ async def conversation_websocket(
 
 
 async def _stream_single_execution(websocket: WebSocket, conversation_id: int) -> None:
-    """Wait for an execution, stream its events, then close the WebSocket."""
-    # Wait for an execution to appear (may already be running or start soon)
-    execution = await _wait_for_execution(conversation_id)
+    """Stream events for the current execution, then close the WebSocket."""
+    execution = conversation_execution_manager.get_execution(conversation_id)
     if execution is None:
-        await websocket.close(code=4408, reason="No execution started within timeout")
+        await websocket.close(code=4404, reason="No active execution")
         return
 
     # Notify client that we're streaming an execution
@@ -114,19 +109,3 @@ async def _stream_single_execution(websocket: WebSocket, conversation_id: int) -
 
     # Server closes the connection — this execution is done
     await websocket.close(code=1000, reason="Execution completed")
-
-
-async def _wait_for_execution(conversation_id: int):
-    """Poll for an execution, returning it or None on timeout.
-
-    Accepts executions in any status — a recently completed execution may still
-    have events in its queue that a reconnecting WebSocket should drain.
-    """
-    elapsed = 0.0
-    while elapsed < _EXECUTION_START_TIMEOUT:
-        execution = conversation_execution_manager.get_execution(conversation_id)
-        if execution is not None:
-            return execution
-        await asyncio.sleep(_EXECUTION_POLL_INTERVAL)
-        elapsed += _EXECUTION_POLL_INTERVAL
-    return None

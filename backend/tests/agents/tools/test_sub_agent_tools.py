@@ -362,7 +362,6 @@ class TestCreateTaskCodebaseInvestigationTool:
         task.codebase = task_codebase
         task.codebase_id = task_codebase.id
         task.project = project
-        task.get_current_workspace_dir.return_value = "/worktree/task-1"
 
         return task
 
@@ -380,7 +379,6 @@ class TestCreateTaskCodebaseInvestigationTool:
         task.codebase = task_codebase
         task.codebase_id = task_codebase.id
         task.project = project
-        task.get_current_workspace_dir.return_value = "/worktree/task-1"
 
         return task
 
@@ -393,6 +391,7 @@ class TestCreateTaskCodebaseInvestigationTool:
             mock_agent_config_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
+            working_dir="/worktree/task-1",
         )
 
         assert isinstance(tool, Tool)
@@ -410,6 +409,7 @@ class TestCreateTaskCodebaseInvestigationTool:
             mock_agent_config_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
+            working_dir="/worktree/task-1",
         )
 
         assert isinstance(tool, Tool)
@@ -418,19 +418,22 @@ class TestCreateTaskCodebaseInvestigationTool:
         codebase_name_type = tool.function.__annotations__["codebase_name"]
         assert set(codebase_name_type.__args__) == {"backend", "frontend"}
 
-    def test_task_codebase_uses_worktree_directory(
+    def test_task_codebase_uses_provided_working_dir(
         self, task_with_multiple_project_codebases, mock_agent_config_service, mock_conv_repo
     ):
-        """Test that task's codebase uses worktree directory, not local_path."""
+        """Test that tool is created using the provided working_dir (not task.get_current_workspace_dir())."""
         task = task_with_multiple_project_codebases
 
-        create_task_codebase_investigation_tool(
+        tool = create_task_codebase_investigation_tool(
             task,
             mock_agent_config_service,
             conversation_repo=mock_conv_repo,
             parent_conversation_id=None,
+            working_dir="/worktree/task-1",
         )
-        task.get_current_workspace_dir.assert_called_once()
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "investigate_codebase"
 
 
 class TestRunSubAgent:
@@ -481,6 +484,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
             )
 
         assert result == SubAgentResult(result="Review result", conversation_id=42)
@@ -516,6 +520,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=5,
+                working_dir="/test/working/dir",
                 parent_conversation_id=123,
             )
 
@@ -549,6 +554,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
                 parent_conversation_id=123,
                 conversation_id=99,
             )
@@ -576,6 +582,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
                 parent_conversation_id=123,  # Doesn't match conversation.parent_conversation_id=999
                 conversation_id=99,
             )
@@ -596,6 +603,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
                 conversation_id=9999,
             )
 
@@ -615,6 +623,7 @@ class TestRunSubAgent:
                     conversation_repo=mock_conv_repo,
                     parent_entity_type=ParentEntityType.TASK,
                     parent_entity_id=1,
+                    working_dir="/test/working/dir",
                     conversation_id=777,
                 )
         finally:
@@ -644,6 +653,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
                 conversation_id=555,
             )
 
@@ -673,6 +683,7 @@ class TestRunSubAgent:
                     conversation_repo=mock_conv_repo,
                     parent_entity_type=ParentEntityType.TASK,
                     parent_entity_id=1,
+                    working_dir="/test/working/dir",
                     conversation_id=666,
                 )
 
@@ -707,6 +718,7 @@ class TestRunSubAgent:
                 conversation_repo=mock_conv_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=1,
+                working_dir="/test/working/dir",
                 conversation_id=None,
             )
 

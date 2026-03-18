@@ -332,6 +332,11 @@ class ClaudeCodeAgent(BaseAgent):
                 else:
                     # Max retries exceeded
                     raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}") from e
+            except BaseException:
+                # Ensure subprocess is terminated when the generator is abandoned for any other
+                # reason (GeneratorExit when the consumer closes this generator, unexpected exceptions, etc.)
+                await stream_generator.aclose()
+                raise
 
     async def _process_tool_approvals(
         self,

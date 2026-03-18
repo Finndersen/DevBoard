@@ -50,8 +50,8 @@ from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
+from devboard.services.workspace import WorkspaceService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 
 
 def get_context_assembly_service(
@@ -135,15 +135,15 @@ def get_pool_manager(
     return WorktreePoolManager(worktree_slot_repo=worktree_slot_repo, worktree_location_mode=worktree_location_mode)
 
 
-def get_workspace_allocation_service(
+def get_workspace_service(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     config_service: ConfigService = Depends(get_config_service),
-) -> WorkspaceAllocationService:
-    """Get WorkspaceAllocationService instance."""
+) -> WorkspaceService:
+    """Get WorkspaceService instance."""
     config = config_service.get_config(DevBoardConfig)
     worktree_location_mode = config.worktree_location_mode if config else WorktreeLocationMode.CENTRAL
-    return WorkspaceAllocationService(
+    return WorkspaceService(
         worktree_slot_repo=worktree_slot_repo,
         conversation_repo=conversation_repo,
         worktree_location_mode=worktree_location_mode,
@@ -210,7 +210,7 @@ class ExecutionServices:
     agent_config_service: AgentConfigService
     task_service: TaskService
     task_git_service: TaskGitService
-    workspace_allocation_service: WorkspaceAllocationService
+    workspace_service: WorkspaceService
     integration_service: IntegrationService
 
 
@@ -221,7 +221,7 @@ def get_execution_services(
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     task_service: TaskService = Depends(get_task_service),
     task_git_service: TaskGitService = Depends(get_task_git_service),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> ExecutionServices:
     """Get all services needed for background agent execution.
@@ -236,6 +236,6 @@ def get_execution_services(
         agent_config_service=agent_config_service,
         task_service=task_service,
         task_git_service=task_git_service,
-        workspace_allocation_service=workspace_allocation_service,
+        workspace_service=workspace_service,
         integration_service=integration_service,
     )

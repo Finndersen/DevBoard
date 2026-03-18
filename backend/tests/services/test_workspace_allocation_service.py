@@ -1,4 +1,4 @@
-"""Tests for WorkspaceAllocationService."""
+"""Tests for WorkspaceService."""
 
 import datetime
 from datetime import timedelta
@@ -9,10 +9,10 @@ import pytest
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
-from devboard.services.workspace_allocation_service import (
+from devboard.services.workspace import (
     AllSlotsLockedException,
     BranchInUseException,
-    WorkspaceAllocationService,
+    WorkspaceService,
 )
 
 
@@ -30,7 +30,7 @@ def mock_repos():
 def service(mock_repos):
     """Create service instance with mocked repos."""
     worktree_slot_repo, _, conversation_repo = mock_repos
-    service = WorkspaceAllocationService(
+    service = WorkspaceService(
         worktree_slot_repo=worktree_slot_repo,
         conversation_repo=conversation_repo,
     )
@@ -447,120 +447,9 @@ def test_release_slot(service, mock_repos):
 
 
 @pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_yields_system_events_existing_slot(
-    service, mock_repos, sample_task, sample_slot
-):
-    """Test that run_task_agent_in_workspace yields appropriate SystemEvents when allocating existing slot."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Setup: Available slot
-    sample_slot.locked = False
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-
-    # Mock git operations and worktree validation
-    with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
-        patch.object(service, "_check_worktree_valid", return_value=True),
-    ):
-        _mock_git_as.return_value = mock_git.return_value
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-        mock_git.return_value.checkout_branch = AsyncMock()
-        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
-
-        # Mock agent stream that yields one message
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        # Execute and collect events
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: Should have yielded WORKSPACE_ALLOCATE and WORKSPACE_BRANCH_CHECKOUT SystemEvents
-    system_events = [e for e in events if isinstance(e, SystemEvent)]
-    assert len(system_events) == 2
-
-    # Verify first event: WORKSPACE_ALLOCATE
-    assert system_events[0].type == SystemEventType.WORKSPACE_ALLOCATE
-    assert system_events[0].data["task_id"] == sample_task.id
-    assert system_events[0].data["slot_id"] == sample_slot.id
-
-    # Verify second event: WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[1].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[1].data["task_id"] == sample_task.id
-    assert system_events[1].data["branch"] == sample_task.branch_name
-
-    # Verify slot was released
-    worktree_slot_repo.unlock_slot.assert_called_once_with(sample_slot)
-
-
-@pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_no_allocate_event_for_sticky_slot(
-    service, mock_repos, sample_task, sample_slot
-):
-    """Test that WORKSPACE_ALLOCATE is NOT emitted when task reuses its sticky slot."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Setup: Slot is task's sticky slot (last_used_by_task_id matches task.id)
-    sample_slot.locked = False
-    sample_slot.last_used_by_task_id = sample_task.id
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-    # Mock that this task previously used this slot
-    sample_task.last_used_worktree_slot = sample_slot
-
-    # Mock git operations and worktree validation
-    with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch.object(service, "_check_worktree_valid", return_value=True),
-        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
-    ):
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-        mock_checkout.return_value = True  # Checkout was performed
-
-        # Mock agent stream that yields one message
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        # Execute and collect events
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: Should NOT have yielded WORKSPACE_ALLOCATE (sticky slot reuse)
-    # Only WORKSPACE_BRANCH_CHECKOUT should be emitted
-    system_events = [e for e in events if isinstance(e, SystemEvent)]
-    assert len(system_events) == 1
-
-    # Verify only event: WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[0].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[0].data["task_id"] == sample_task.id
-    assert system_events[0].data["branch"] == sample_task.branch_name
-
-
-@pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_migration_called_for_sticky_slot(
-    service, mock_repos, sample_task, sample_slot
-):
-    """Test that session migration is always attempted, even when reusing a sticky slot."""
-    worktree_slot_repo, _, conversation_repo = mock_repos
-
-    # Setup: Slot is task's sticky slot (same slot as before)
-    sample_slot.locked = False
-    sample_slot.last_used_by_task_id = sample_task.id
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-    sample_task.last_used_worktree_slot = sample_slot
+async def test_prepare_workspace_migration_always_called(service, mock_repos, sample_task, sample_slot):
+    """Test that session migration is always attempted during workspace preparation."""
+    _, _, conversation_repo = mock_repos
 
     # Setup: Active Claude Code conversation with session
     mock_conversation = MagicMock()
@@ -568,110 +457,23 @@ async def test_run_task_agent_in_workspace_migration_called_for_sticky_slot(
     mock_conversation.external_session_id = "test-session-id"
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
-    async def mock_agent_stream():
-        yield MagicMock(event_type="message")
-
     with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
         patch.object(service, "_check_worktree_valid", return_value=True),
-        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
-        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_migrator_class,
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
+        patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_migrator_class,
     ):
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_checkout.return_value = False
         mock_migrator = AsyncMock()
         mock_migrator.migrate_session_to_directory = AsyncMock(return_value=None)
         mock_migrator_class.return_value = mock_migrator
 
         events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
             events.append(event)
 
-    # Verify: Migration was called even though the slot didn't change
     mock_migrator.migrate_session_to_directory.assert_called_once_with(
         session_id="test-session-id",
         new_working_dir=sample_slot.path,
     )
-
-
-@pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_yields_workspace_create_event(
-    service, mock_repos, sample_task, sample_codebase
-):
-    """Test that run_task_agent_in_workspace yields WORKSPACE_CREATE when creating new worktree."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Setup: All slots locked (force creation of new slot)
-    locked_slot = MagicMock(spec=WorktreeSlot)
-    locked_slot.locked = True
-    worktree_slot_repo.get_by_codebase.return_value = [locked_slot]
-
-    # Mock slot creation
-    new_slot = MagicMock(spec=WorktreeSlot)
-    new_slot.id = 2
-    new_slot.path = "/projects/test-repo.worktree-1"
-    new_slot.is_main_repo = False
-    new_slot.locked = False
-    worktree_slot_repo.create.return_value = new_slot
-    worktree_slot_repo.lock_slot.return_value = new_slot
-
-    # Mock main repo slot bootstrap
-    main_slot = MagicMock(spec=WorktreeSlot)
-    main_slot.id = 0
-    main_slot.path = sample_codebase.local_path
-    main_slot.is_main_repo = True
-    worktree_slot_repo.get_by_path.return_value = main_slot
-
-    # Mock git operations
-    with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
-    ):
-        _mock_git_as.return_value = mock_git.return_value
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.create_worktree = AsyncMock()
-        mock_git.return_value.checkout_branch = AsyncMock()
-        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
-
-        # Mock agent stream that yields one message
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        # Execute and collect events
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: Should have yielded WORKSPACE_CREATE (twice) and WORKSPACE_BRANCH_CHECKOUT
-    # Note: WORKSPACE_ALLOCATE is not emitted after WORKSPACE_CREATE (creation implies allocation)
-    system_events = [e for e in events if isinstance(e, SystemEvent)]
-    assert len(system_events) == 3
-
-    # Verify first event: WORKSPACE_CREATE (before creating slot)
-    assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
-    assert system_events[0].data["task_id"] == sample_task.id
-
-    # Verify second event: WORKSPACE_CREATE (worktree validation failed, recreating)
-    assert system_events[1].type == SystemEventType.WORKSPACE_CREATE
-    assert system_events[1].data["task_id"] == sample_task.id
-    assert system_events[1].data["slot_id"] == new_slot.id
-
-    # Verify third event: WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[2].type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT
-    assert system_events[2].data["task_id"] == sample_task.id
-    assert system_events[2].data["branch"] == sample_task.branch_name
-
-    # Verify worktree was created twice (once during slot creation, once during validation/recreation)
-    assert mock_git.return_value.create_worktree.call_count == 2
-
-    # Verify slot was released
-    worktree_slot_repo.unlock_slot.assert_called_once_with(new_slot)
 
 
 @pytest.mark.asyncio
@@ -722,98 +524,6 @@ async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
     assert result.id == main_slot.id
 
 
-@pytest.mark.asyncio
-async def test_run_task_agent_yields_stream_error_when_all_slots_locked(
-    service, mock_repos, sample_task, sample_codebase
-):
-    """Test that run_task_agent_in_workspace yields STREAM_ERROR when max slots reached."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Setup: max_worktrees=0 (main repo only mode)
-    sample_codebase.max_worktrees = 0
-    sample_task.codebase = sample_codebase
-
-    # Setup: Main repo slot exists but is locked
-    main_slot = MagicMock(spec=WorktreeSlot)
-    main_slot.id = 1
-    main_slot.path = sample_codebase.local_path
-    main_slot.is_main_repo = True
-    main_slot.locked = True  # Already locked by another task
-    main_slot.last_used_by_task_id = 999  # Different task
-    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
-    worktree_slot_repo.get_by_path.return_value = main_slot  # bootstrap finds existing
-
-    # Mock git operations
-    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-
-        # Mock agent stream (should never be reached)
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        # Execute and collect events
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: Should have yielded STREAM_ERROR event
-    assert len(events) == 1
-    error_event = events[0]
-    assert isinstance(error_event, SystemEvent)
-    assert error_event.type == SystemEventType.STREAM_ERROR
-    assert error_event.data["error_code"] == "SLOTS_EXHAUSTED"
-    assert "workspace slots available" in error_event.data["message"]
-
-    # Verify: Slot was NOT released (never allocated)
-    worktree_slot_repo.unlock_slot.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_run_task_agent_yields_stream_error_when_branch_in_use(
-    service, mock_repos, sample_task, sample_codebase, sample_slot
-):
-    """Test that run_task_agent_in_workspace yields STREAM_ERROR when branch is checked out in locked slot."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Setup: Slot with branch is locked by another task
-    sample_slot.locked = True
-    sample_slot.last_used_by_task_id = 999  # Different task
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-
-    # Mock git operations
-    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
-        # Branch is checked out in the locked slot
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
-
-        # Mock agent stream (should never be reached)
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        # Execute and collect events
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: Should have yielded STREAM_ERROR event with BRANCH_IN_USE error code
-    assert len(events) == 1
-    error_event = events[0]
-    assert isinstance(error_event, SystemEvent)
-    assert error_event.type == SystemEventType.STREAM_ERROR
-    assert error_event.data["error_code"] == "BRANCH_IN_USE"
-    assert sample_task.branch_name in error_event.data["message"]
-    assert "999" in error_event.data["message"]
-
-    # Verify: Slot was NOT released (never allocated)
-    worktree_slot_repo.unlock_slot.assert_not_called()
-
-
 # --- TaskGitService tests ---
 
 
@@ -823,6 +533,207 @@ def task_git_service(mock_repos):
     from devboard.services.task_git_service import TaskGitService
 
     return TaskGitService()
+
+
+# =============================================================================
+# allocate_workspace context manager tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_allocate_workspace_yields_slot_and_releases(service, mock_repos, sample_task, sample_slot):
+    """Test that allocate_workspace yields a locked slot and releases it on exit."""
+    worktree_slot_repo, _, _ = mock_repos
+
+    sample_slot.locked = False
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+    worktree_slot_repo.lock_slot.return_value = sample_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        async with service.allocate_workspace(sample_task) as slot:
+            assert slot == sample_slot
+
+    worktree_slot_repo.unlock_slot.assert_called_once_with(sample_slot)
+
+
+@pytest.mark.asyncio
+async def test_allocate_workspace_raises_branch_in_use(service, mock_repos, sample_task, sample_slot):
+    """Test that allocate_workspace raises BranchInUseException."""
+    worktree_slot_repo, _, _ = mock_repos
+
+    sample_slot.locked = True
+    sample_slot.last_used_by_task_id = 999
+    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_slot.path)
+
+        with pytest.raises(BranchInUseException):
+            async with service.allocate_workspace(sample_task):
+                pass
+
+    worktree_slot_repo.unlock_slot.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_allocate_workspace_raises_all_slots_locked(service, mock_repos, sample_task, sample_codebase):
+    """Test that allocate_workspace raises AllSlotsLockedException when max slots reached."""
+    worktree_slot_repo, _, _ = mock_repos
+
+    sample_codebase.max_worktrees = 0
+    sample_task.codebase = sample_codebase
+
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.locked = True
+    main_slot.last_used_by_task_id = 999
+    main_slot.is_main_repo = True
+    main_slot.path = sample_codebase.local_path
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
+    worktree_slot_repo.get_by_path.return_value = main_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
+
+        with pytest.raises(AllSlotsLockedException):
+            async with service.allocate_workspace(sample_task):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_allocate_workspace_creates_new_slot_when_all_locked(service, mock_repos, sample_task, sample_codebase):
+    """Test that allocate_workspace creates a new slot when all existing slots are locked."""
+    worktree_slot_repo, _, _ = mock_repos
+
+    sample_codebase.max_worktrees = None  # Unlimited
+    sample_task.codebase = sample_codebase
+
+    locked_slot = MagicMock(spec=WorktreeSlot)
+    locked_slot.locked = True
+    locked_slot.is_main_repo = False
+    worktree_slot_repo.get_by_codebase.return_value = [locked_slot]
+
+    new_slot = MagicMock(spec=WorktreeSlot)
+    new_slot.id = 2
+    new_slot.path = "/projects/test-repo.worktree-1"
+    new_slot.is_main_repo = False
+    worktree_slot_repo.create.return_value = new_slot
+    worktree_slot_repo.lock_slot.return_value = new_slot
+    worktree_slot_repo.get_by_path.return_value = MagicMock()
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
+
+        async with service.allocate_workspace(sample_task) as slot:
+            assert slot == new_slot
+
+    worktree_slot_repo.unlock_slot.assert_called_once_with(new_slot)
+
+
+# =============================================================================
+# prepare_workspace tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_prepare_workspace_creates_worktree_if_invalid(service, sample_task, sample_slot):
+    """Test that prepare_workspace creates worktree when slot is invalid."""
+    with (
+        patch.object(service, "_check_worktree_valid", return_value=False),
+        patch.object(service._pool_manager, "create_worktree_for_slot", new_callable=AsyncMock) as mock_create,
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
+    ):
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
+            events.append(event)
+
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    assert len(system_events) == 1
+    assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
+    mock_create.assert_called_once_with(sample_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_prepare_workspace_skips_worktree_creation_if_valid(service, sample_task, sample_slot):
+    """Test that prepare_workspace skips worktree creation when slot is valid."""
+    with (
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service._pool_manager, "create_worktree_for_slot", new_callable=AsyncMock) as mock_create,
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
+    ):
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
+            events.append(event)
+
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    assert len(system_events) == 0
+    mock_create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prepare_workspace_runs_setup_after_checkout(service, sample_task, sample_slot):
+    """Test that setup command runs when checkout is performed and setup_command is configured."""
+    sample_task.codebase.setup_command = "npm install"
+
+    with (
+        patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=True),
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
+    ):
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
+            events.append(event)
+
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    event_types = [e.type for e in system_events]
+    assert SystemEventType.WORKSPACE_BRANCH_CHECKOUT in event_types
+    assert SystemEventType.WORKSPACE_SETUP in event_types
+    mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_prepare_workspace_runs_setup_after_worktree_creation(service, sample_task, sample_slot):
+    """Test that setup command runs after fresh worktree creation even without branch checkout."""
+    sample_task.codebase.setup_command = "npm install"
+
+    with (
+        patch.object(service, "_check_worktree_valid", return_value=False),
+        patch.object(service._pool_manager, "create_worktree_for_slot", new_callable=AsyncMock),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
+        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
+    ):
+
+        async def mock_agent_stream():
+            yield MagicMock(event_type="message")
+
+        events = []
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
+            events.append(event)
+
+    system_events = [e for e in events if isinstance(e, SystemEvent)]
+    event_types = [e.type for e in system_events]
+    assert SystemEventType.WORKSPACE_CREATE in event_types
+    assert SystemEventType.WORKSPACE_SETUP in event_types
+    mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
 
 
 @pytest.mark.asyncio
@@ -835,7 +746,7 @@ async def test_checkout_task_to_main_repo_stashes_uncommitted_changes(service, m
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
 
@@ -877,7 +788,7 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(service, mock
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
 
@@ -1126,7 +1037,7 @@ async def test_checkout_task_to_main_repo_rolls_back_on_checkout_failure(service
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         worktree_git = AsyncMock()
 
@@ -1178,7 +1089,7 @@ async def test_checkout_task_to_main_repo_rolls_back_on_stash_apply_failure(
     main_slot.is_main_repo = True
     worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
 
-    with patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class:
+    with patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class:
         main_git = AsyncMock()
         worktree_git = AsyncMock()
 
@@ -1280,8 +1191,8 @@ async def test_checkout_task_to_main_repo_migrates_claude_session(service, mock_
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
+        patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1330,8 +1241,8 @@ async def test_checkout_task_to_main_repo_skips_migration_for_internal_engine(
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
+        patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1367,8 +1278,8 @@ async def test_checkout_task_to_main_repo_handles_no_session_file(service, mock_
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
     with (
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as mock_git_class,
-        patch("devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
+        patch("devboard.services.workspace.workspace_service.GitRepoIntegration") as mock_git_class,
+        patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class,
     ):
         main_git = AsyncMock()
         mock_git_class.return_value = main_git
@@ -1402,9 +1313,7 @@ async def test_migrate_claude_session_if_needed_skips_when_no_external_session_i
     mock_conversation.external_session_id = None  # No session ID
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
-    with patch(
-        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
-    ) as mock_session_service_class:
+    with patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class:
         # Execute
         await service._migrate_claude_session_if_needed(
             task=sample_task,
@@ -1423,9 +1332,7 @@ async def test_migrate_claude_session_if_needed_skips_when_no_active_conversatio
     # Setup: No active conversation
     conversation_repo.get_active_conversation_for_entity.return_value = None
 
-    with patch(
-        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
-    ) as mock_session_service_class:
+    with patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class:
         # Execute
         await service._migrate_claude_session_if_needed(
             task=sample_task,
@@ -1447,9 +1354,7 @@ async def test_migrate_claude_session_if_needed_handles_file_not_found(service, 
     mock_conversation.external_session_id = "test-session-123"
     conversation_repo.get_active_conversation_for_entity.return_value = mock_conversation
 
-    with patch(
-        "devboard.services.workspace.allocation_service.ClaudeCodeSessionMigrator"
-    ) as mock_session_service_class:
+    with patch("devboard.services.workspace.workspace_service.ClaudeCodeSessionMigrator") as mock_session_service_class:
         mock_session_service = AsyncMock()
         mock_session_service.migrate_session_to_directory.side_effect = FileNotFoundError("Session not found")
         mock_session_service_class.return_value = mock_session_service
@@ -1475,7 +1380,7 @@ async def test_run_setup_command_success(service, mock_repos, sample_task, sampl
     sample_codebase.setup_command = "npm install"
 
     with patch(
-        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.workspace_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         from devboard.integrations.shell import ShellCommandResult
 
@@ -1495,12 +1400,12 @@ async def test_run_setup_command_success(service, mock_repos, sample_task, sampl
 @pytest.mark.asyncio
 async def test_run_setup_command_failure(service, mock_repos, sample_task, sample_slot, sample_codebase):
     """Test _run_setup_command raises SetupCommandError on failure."""
-    from devboard.services.workspace_allocation_service import SetupCommandError
+    from devboard.services.workspace import SetupCommandError
 
     sample_codebase.setup_command = "npm install"
 
     with patch(
-        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.workspace_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         from devboard.integrations.shell import ShellCommandResult
 
@@ -1520,7 +1425,7 @@ async def test_run_setup_command_no_command_configured(service, mock_repos, samp
     sample_codebase.setup_command = None
 
     with patch(
-        "devboard.services.workspace.allocation_service.execute_shell_command", new_callable=AsyncMock
+        "devboard.services.workspace.workspace_service.execute_shell_command", new_callable=AsyncMock
     ) as mock_exec:
         # Should not raise
         await service._run_setup_command(sample_slot, sample_codebase, sample_task)
@@ -1529,83 +1434,18 @@ async def test_run_setup_command_no_command_configured(service, mock_repos, samp
 
 
 @pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_runs_setup_command(service, mock_repos, sample_task, sample_slot):
-    """Test that run_task_agent_in_workspace runs setup command after branch checkout."""
-    worktree_slot_repo, task_repo, _ = mock_repos
+async def test_prepare_workspace_setup_failure_raises_error(service, sample_task, sample_slot):
+    """Test that prepare_workspace raises SetupCommandError when setup fails."""
+    from devboard.services.workspace import SetupCommandError
 
-    # Configure setup command
     sample_task.codebase.setup_command = "npm install"
 
-    # Setup: Available slot
-    sample_slot.locked = False
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-
     with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=True),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
     ):
-        _mock_git_as.return_value = mock_git.return_value
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-        mock_git.return_value.checkout_branch = AsyncMock()
-        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
-
-        # Setup command succeeds (returns None, no exception)
-        mock_setup.return_value = None
-
-        async def mock_agent_stream():
-            yield MagicMock(event_type="message")
-
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
-
-    # Verify: WORKSPACE_SETUP event was emitted
-    system_events = [e for e in events if isinstance(e, SystemEvent)]
-    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
-    assert len(setup_events) == 1
-    assert setup_events[0].data["task_id"] == sample_task.id
-    assert setup_events[0].data["codebase_id"] == sample_task.codebase.id
-    assert setup_events[0].data["setup_command"] == "npm install"
-
-    # Verify: Setup command was called
-    mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
-
-
-@pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_setup_failure_yields_error(service, mock_repos, sample_task, sample_slot):
-    """Test that run_task_agent_in_workspace yields error when setup fails."""
-    from devboard.services.workspace_allocation_service import SetupCommandError
-
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Configure setup command
-    sample_task.codebase.setup_command = "npm install"
-
-    # Setup: Available slot
-    sample_slot.locked = False
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-
-    with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
-        patch.object(service, "_check_worktree_valid", return_value=True),
-        patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
-    ):
-        _mock_git_as.return_value = mock_git.return_value
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-        mock_git.return_value.checkout_branch = AsyncMock()
-        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
-
-        # Setup command fails by raising exception
         mock_setup.side_effect = SetupCommandError(
             message="npm ERR! missing package.json",
             command="npm install",
@@ -1615,114 +1455,57 @@ async def test_run_task_agent_in_workspace_setup_failure_yields_error(service, m
         async def mock_agent_stream():
             yield MagicMock(event_type="message")
 
-        events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
-            events.append(event)
+        with pytest.raises(SetupCommandError) as exc_info:
+            async for _ in service.prepare_workspace(task=sample_task, slot=sample_slot):
+                pass
 
-    # Verify: STREAM_ERROR event was emitted
-    system_events = [e for e in events if isinstance(e, SystemEvent)]
-    error_events = [e for e in system_events if e.type == SystemEventType.STREAM_ERROR]
-    assert len(error_events) == 1
-    assert error_events[0].data["error_code"] == "SETUP_COMMAND_FAILED"
-    assert "npm ERR! missing package.json" in error_events[0].data["message"]
-
-    # Verify: Agent stream was NOT consumed (no message events)
-    message_events = [e for e in events if not isinstance(e, SystemEvent)]
-    assert len(message_events) == 0
+    assert exc_info.value.message == "npm ERR! missing package.json"
 
 
 @pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_skips_setup_when_no_checkout(service, mock_repos, sample_task, sample_slot):
-    """Test that run_task_agent_in_workspace skips setup when slot already on correct branch."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # Configure setup command
+async def test_prepare_workspace_skips_setup_when_no_checkout_and_no_creation(service, sample_task, sample_slot):
+    """Test that setup is skipped when slot is valid and already on the correct branch."""
     sample_task.codebase.setup_command = "npm install"
 
-    # Setup: Available slot
-    sample_slot.locked = False
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-
     with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
         patch.object(service, "_check_worktree_valid", return_value=True),
-        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock) as mock_checkout,
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
     ):
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-
-        # Slot already on correct branch - checkout returns False
-        mock_checkout.return_value = False
 
         async def mock_agent_stream():
             yield MagicMock(event_type="message")
 
         events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
             events.append(event)
 
-    # Verify: No WORKSPACE_SETUP event was emitted
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
-    assert len(setup_events) == 0
-
-    # Verify: No WORKSPACE_BRANCH_CHECKOUT event (no checkout occurred)
-    checkout_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_BRANCH_CHECKOUT]
-    assert len(checkout_events) == 0
-
-    # Verify: Setup command was NOT called
+    assert len(system_events) == 0
     mock_setup.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_run_task_agent_in_workspace_skips_setup_when_not_configured(
-    service, mock_repos, sample_task, sample_slot
-):
-    """Test that run_task_agent_in_workspace skips setup when no setup command configured."""
-    worktree_slot_repo, task_repo, _ = mock_repos
-
-    # No setup command configured
+async def test_prepare_workspace_skips_setup_when_not_configured(service, sample_task, sample_slot):
+    """Test that setup is skipped when no setup command is configured."""
     sample_task.codebase.setup_command = None
 
-    # Setup: Available slot
-    sample_slot.locked = False
-    worktree_slot_repo.get_by_codebase.return_value = [sample_slot]
-    worktree_slot_repo.lock_slot.return_value = sample_slot
-
     with (
-        patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git,
-        patch("devboard.services.workspace.allocation_service.GitRepoIntegration") as _mock_git_as,
         patch.object(service, "_check_worktree_valid", return_value=True),
+        patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=True),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
+        patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
     ):
-        _mock_git_as.return_value = mock_git.return_value
-        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=None)
-        mock_git.return_value.has_uncommitted_changes = AsyncMock(return_value=False)
-        mock_git.return_value.checkout_branch = AsyncMock()
-        mock_git.return_value.get_current_branch = AsyncMock(return_value="main")
 
         async def mock_agent_stream():
             yield MagicMock(event_type="message")
 
         events = []
-        async for event in service.run_task_agent_in_workspace(
-            task=sample_task,
-            agent_stream=mock_agent_stream(),
-        ):
+        async for event in service.prepare_workspace(task=sample_task, slot=sample_slot):
             events.append(event)
 
-    # Verify: No WORKSPACE_SETUP event was emitted
     system_events = [e for e in events if isinstance(e, SystemEvent)]
     setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
     assert len(setup_events) == 0
-
-    # Verify: Setup command was NOT called
     mock_setup.assert_not_called()

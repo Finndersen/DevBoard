@@ -49,6 +49,7 @@ class AgentExecutionService(ABC):
         conversation_repository: ConversationRepository,
         history_service: ConversationHistoryService,
         agent_config_service: "AgentConfigService",
+        working_dir: str,
         additional_tools: list[Tool] | None = None,
         oauth_service: OAuthService | None = None,
         interrupt_event: asyncio.Event | None = None,
@@ -61,6 +62,7 @@ class AgentExecutionService(ABC):
             conversation_repository: Repository for conversation operations
             history_service: Service for retrieving conversation history
             agent_config_service: Service for loading agent configuration
+            working_dir: Working directory for agent execution
             additional_tools: Optional list of additional tools to provide to the agent,
                 beyond those defined by the role. Used for workflow-action-specific tools.
             oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
@@ -71,6 +73,7 @@ class AgentExecutionService(ABC):
         self.conversation_repo = conversation_repository
         self._history_service = history_service
         self._agent_config_service = agent_config_service
+        self.working_dir = working_dir
         self._additional_tools = additional_tools or []
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event

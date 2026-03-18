@@ -49,6 +49,7 @@ async def run_sub_agent(
     conversation_repo: ConversationRepository,
     parent_entity_type: ParentEntityType,
     parent_entity_id: int,
+    working_dir: str,
     parent_conversation_id: int | None = None,
     conversation_id: int | None = None,
 ) -> SubAgentResult:
@@ -99,6 +100,7 @@ async def run_sub_agent(
             role=role,
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
+            working_dir=working_dir,
         )
 
         events = await execution_service.send_message_or_approval(prompt)
@@ -208,6 +210,7 @@ def create_multi_codebase_investigation_tool(
             conversation_repo=conversation_repo,
             parent_entity_type=parent_entity_type,
             parent_entity_id=parent_entity_id,
+            working_dir=codebase_config.working_dir,
             parent_conversation_id=parent_conversation_id,
             conversation_id=conversation_id,
         )
@@ -228,20 +231,21 @@ def create_task_codebase_investigation_tool(
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
+    working_dir: str,
 ) -> Tool:
     """Create a codebase investigation tool for a task.
 
     Includes all codebases from the task's project:
-    - Task's assigned codebase uses the task's worktree directory
+    - Task's assigned codebase uses the provided working_dir (worktree or project dir)
     - Other project codebases use their main local_path
     """
     codebase_contexts: list[CodebaseInvestigationContext] = []
 
-    # Task's own codebase uses worktree
+    # Task's own codebase uses the provided working_dir
     codebase_contexts.append(
         CodebaseInvestigationContext(
             codebase=task.codebase,
-            working_dir=task.get_current_workspace_dir(),
+            working_dir=working_dir,
         )
     )
 
@@ -271,6 +275,7 @@ def create_code_review_tool(
     task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
+    working_dir: str,
 ) -> Tool:
     """Create a code review tool that performs a self-review of all task changes.
 
@@ -312,7 +317,7 @@ def create_code_review_tool(
         if not diff.files:
             return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})
 
-        role = CodeReviewAgentRole(task=task, working_dir=task.get_current_workspace_dir())
+        role = CodeReviewAgentRole(task=task, working_dir=working_dir)
         prompt = build_code_review_prompt(diff, context)
 
         sub_agent_result = await run_sub_agent(
@@ -323,6 +328,7 @@ def create_code_review_tool(
             conversation_repo=conversation_repo,
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
+            working_dir=working_dir,
             parent_conversation_id=parent_conversation_id,
         )
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})

@@ -234,7 +234,9 @@ class TestWebSocketDisconnectRequeue:
         # First send_text succeeds (execution_started), second raises disconnect (the event send)
         mock_websocket.send_text.side_effect = [None, WebSocketDisconnect()]
 
-        with patch("devboard.api.routers.websocket._wait_for_execution", return_value=execution):
+        with patch(
+            "devboard.api.routers.websocket.conversation_execution_manager.get_execution", return_value=execution
+        ):
             with pytest.raises(WebSocketDisconnect):
                 await _stream_single_execution(mock_websocket, conversation_id=1)
 
@@ -264,7 +266,9 @@ class TestWebSocketDisconnectRequeue:
         # execution_started succeeds, first event succeeds, second event disconnects
         mock_websocket.send_text.side_effect = [None, None, WebSocketDisconnect()]
 
-        with patch("devboard.api.routers.websocket._wait_for_execution", return_value=execution):
+        with patch(
+            "devboard.api.routers.websocket.conversation_execution_manager.get_execution", return_value=execution
+        ):
             with pytest.raises(WebSocketDisconnect):
                 await _stream_single_execution(mock_websocket, conversation_id=1)
 

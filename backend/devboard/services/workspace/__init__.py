@@ -1,7 +1,6 @@
-"""Workspace allocation package."""
+"""Workspace package."""
 
 from devboard.config.integration_configs import WorktreeLocationMode
-from devboard.services.workspace.allocation_service import WorkspaceAllocationService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace.types import (
     AllSlotsLockedException,
@@ -13,9 +12,10 @@ from devboard.services.workspace.types import (
     SetupCommandError,
     SlotInfo,
 )
+from devboard.services.workspace.workspace_service import WorkspaceService
 
 __all__ = [
-    "WorkspaceAllocationService",
+    "WorkspaceService",
     "WorktreeLocationMode",
     "WorktreePoolManager",
     "AllSlotsLockedException",

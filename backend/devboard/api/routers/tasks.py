@@ -22,7 +22,7 @@ from devboard.api.dependencies.services import (
     get_task_git_service,
     get_task_implementation_plan_service,
     get_task_service,
-    get_workspace_allocation_service,
+    get_workspace_service,
 )
 from devboard.api.schemas import (
     CheckoutToMainResponse,
@@ -68,8 +68,8 @@ from devboard.services.task_git import TaskGitStatus
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
+from devboard.services.workspace import WorkspaceService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
-from devboard.services.workspace_allocation_service import WorkspaceAllocationService
 from devboard.workflow_actions.registry import workflow_action_registry
 
 router = APIRouter()
@@ -138,6 +138,7 @@ async def get_task(
         ),
         custom_fields=task.custom_fields,
         available_workflow_actions=available_actions,
+        github_pr_number=task.github_pr_number,
     )
 
 
@@ -568,7 +569,7 @@ async def abort_task_rebase(
 async def checkout_task_to_main(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    workspace_allocation_service: WorkspaceAllocationService = Depends(get_workspace_allocation_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service),
 ) -> CheckoutToMainResponse:
     """Checkout a task's branch to the main repository.
 
@@ -588,7 +589,7 @@ async def checkout_task_to_main(
                        or git operation fails
     """
     try:
-        await workspace_allocation_service.checkout_task_to_main_repo(task)
+        await workspace_service.checkout_task_to_main_repo(task)
         return CheckoutToMainResponse(
             success=True,
             message=f"Successfully checked out {task.branch_name} to main repository",

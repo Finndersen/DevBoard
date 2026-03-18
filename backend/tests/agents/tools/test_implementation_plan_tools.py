@@ -74,6 +74,7 @@ class TestExecuteImplementationStepStatusValidation:
             conversation_repo=Mock(),
             parent_conversation_id=None,
             task_git_service=Mock(),
+            working_dir="/test/working_dir",
         )
 
     def _make_step(self, status: ImplementationStepStatus) -> Mock:

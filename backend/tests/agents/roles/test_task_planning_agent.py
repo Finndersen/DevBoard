@@ -60,6 +60,7 @@ class TestTaskPlanningRoleWithSpec:
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
+            working_dir="/test/working_dir",
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -146,6 +147,7 @@ class TestTaskPlanningRoleWithPlan:
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
+            working_dir="/test/working_dir",
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -248,7 +250,7 @@ class TestDocumentEditTool:
         # Tool function should execute successfully for valid edits
         result = tool.function(edits, "Test edit")
 
-        assert "successfully" in result
+        assert "successfully" in result.lower()
         # Verify repository update was called
         mock_document_repo.update_content.assert_called_once()
         # Check the new content
@@ -332,7 +334,7 @@ class TestSetDocumentContentTool:
         new_content = "# New Document\n\nThis is the initial content."
         result = tool.function(new_content)
 
-        assert "successfully" in result
+        assert "successfully" in result.lower()
         # Verify repository update was called
         mock_document_repo.update_content.assert_called_once()
         # Check the arguments
@@ -349,7 +351,7 @@ class TestSetDocumentContentTool:
 
         # Tool function should execute successfully when called
         result = tool.function("New content replacing existing")
-        assert "successfully" in result
+        assert "successfully" in result.lower()
 
     def test_tool_sets_content_when_approved_for_document_with_content(
         self, mock_document_with_content, mock_document_repo
@@ -363,7 +365,7 @@ class TestSetDocumentContentTool:
         new_content = "# Replaced Document\n\nThis replaces the existing content."
         result = tool.function(new_content)
 
-        assert "successfully" in result
+        assert "successfully" in result.lower()
         # Verify repository update was called
         mock_document_repo.update_content.assert_called_once()
         # Check the arguments
@@ -464,6 +466,7 @@ class TestRoleToolSelection:
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
+            working_dir="/test/working_dir",
         )
 
         tools = role.get_tools()
@@ -491,6 +494,7 @@ class TestRoleToolSelection:
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
+            working_dir="/test/working_dir",
         )
 
         tools = role.get_tools()
@@ -514,6 +518,7 @@ class TestRoleToolSelection:
             task_service=mock_task_service,
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
+            working_dir="/test/working_dir",
         )
 
         tools = role.get_tools()

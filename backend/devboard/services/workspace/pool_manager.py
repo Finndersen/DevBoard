@@ -63,7 +63,7 @@ class WorktreePoolManager:
 
         return str(worktree_path)
 
-    async def _create_worktree_for_slot(self, slot: WorktreeSlot, task: Task) -> None:
+    async def create_worktree_for_slot(self, slot: WorktreeSlot, task: Task) -> None:
         """Create a git worktree for a slot."""
         logfire.warn(f"Creating worktree for slot {slot.id} at {slot.path}")
         git = GitRepoIntegration(task.codebase.local_path)
@@ -205,7 +205,11 @@ class WorktreePoolManager:
         return self.worktree_slot_repo.lock_slot(best_slot, task)
 
     async def create_and_lock_slot(self, task: Task) -> WorktreeSlot:
-        """Create a new worktree slot and lock it for a task."""
+        """Create a new worktree slot record and lock it for a task.
+
+        Only creates the DB record — git worktree creation is deferred to
+        prepare_workspace.
+        """
         self.bootstrap_main_repo_slot(task.codebase)
 
         worktree_path = self._generate_new_worktree_path(task.codebase)
@@ -216,8 +220,7 @@ class WorktreePoolManager:
             is_main_repo=False,
         )
 
-        logfire.info(f"Creating worktree at {worktree_path} for task {task.id}")
-        await self._create_worktree_for_slot(slot, task)
+        logfire.info(f"Created slot record at {worktree_path} for task {task.id}")
 
         return self.worktree_slot_repo.lock_slot(slot, task)
 

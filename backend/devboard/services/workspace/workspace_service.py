@@ -1,7 +1,8 @@
-"""WorkspaceAllocationService: orchestrates workspace lifecycle for task agents."""
+"""WorkspaceService: orchestrates workspace lifecycle for task agents."""
 
 import datetime
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import logfire
@@ -26,8 +27,8 @@ from devboard.services.workspace.types import (
 SETUP_COMMAND_TIMEOUT = 300.0
 
 
-class WorkspaceAllocationService:
-    """Service for workspace allocation and worktree slot management."""
+class WorkspaceService:
+    """Service for workspace allocation, preparation, and worktree slot management."""
 
     def __init__(
         self,
@@ -135,135 +136,85 @@ class WorkspaceAllocationService:
 
         logfire.info(f"Setup command completed successfully for task {task.id}")
 
-    def _release_workspace(self, task: Task, slot: WorktreeSlot | None) -> None:
-        """Release a locked workspace slot."""
-        if slot:
-            self._pool_manager.release_slot(slot)
-            logfire.info(f"Released workspace {slot.path} for task {task.id}")
+    @asynccontextmanager
+    async def allocate_workspace(self, task: Task) -> AsyncIterator[WorktreeSlot]:
+        """Allocate a workspace slot for a task (fast, DB/metadata only).
 
-    async def run_task_agent_in_workspace(
-        self,
-        task: Task,
-        agent_stream: AsyncIterator[ConversationEvent],
-    ) -> AsyncIterator[ConversationEvent]:
-        """Run the task agent in an available workspace slot.
+        Yields the locked slot. Releases it on exit.
 
-        Worktree allocation is controlled by codebase.max_worktrees:
-        - None: Unlimited worktrees, main repo excluded from automatic allocation
-        - 0: No worktrees, main repo only mode (main repo included in allocation)
-        - N (>0): Up to N worktree slots, main repo excluded from automatic allocation
+        Raises:
+            BranchInUseException: If the task's branch is locked by another task.
+            AllSlotsLockedException: If no slots are available and max worktrees reached.
         """
         slot: WorktreeSlot | None = None
         try:
-            # Ensure git branch exists (create if needed)
             await self.task_git_service.ensure_task_branch(task)
 
-            # Track previous slot to determine if allocation changed
-            previous_slot = task.last_used_worktree_slot
-
-            # Try to allocate an existing slot
             try:
                 slot = await self._pool_manager.allocate_for_task(task)
                 self.worktree_slot_repo.commit()
-
-                if previous_slot is None or slot.id != previous_slot.id:
-                    yield SystemEvent(
-                        type=SystemEventType.WORKSPACE_ALLOCATE,
-                        data={"task_id": task.id, "slot_id": slot.id},
-                        timestamp=datetime.datetime.now(datetime.UTC),
-                    )
-
-            except BranchInUseException as e:
-                yield SystemEvent(
-                    type=SystemEventType.STREAM_ERROR,
-                    data={
-                        "error_code": "BRANCH_IN_USE",
-                        "message": str(e),
-                    },
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-                return
-
+            except BranchInUseException:
+                raise
             except AllSlotsLockedException:
                 if not self._check_can_create_worktree(task.codebase):
-                    logfire.warn(
-                        f"Max worktrees ({task.codebase.max_worktrees}) reached for codebase {task.codebase.id}"
-                    )
-                    yield SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "SLOTS_EXHAUSTED",
-                            "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
-                        },
-                        timestamp=datetime.datetime.now(datetime.UTC),
-                    )
-                    return
-
-                logfire.info(f"All slots locked, creating new worktree for task {task.id}")
-
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_CREATE,
-                    data={"task_id": task.id},
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-
+                    raise
+                logfire.info(f"All slots locked, creating new slot for task {task.id}")
                 slot = await self._pool_manager.create_and_lock_slot(task)
                 self.worktree_slot_repo.commit()
 
-            # Verify worktree exists and is valid (recreate if missing)
-            if not self._check_worktree_valid(slot):
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_CREATE,
-                    data={"task_id": task.id, "slot_id": slot.id},
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-                await self._pool_manager._create_worktree_for_slot(slot, task)
-
-            # Checkout task branch in the allocated slot
-            checkout_performed = await self.checkout_branch_in_slot(slot, task.branch_name)
-
-            if checkout_performed:
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
-                    data={"task_id": task.id, "branch": task.branch_name},
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-
-            # Run setup command if configured and checkout was performed
-            if checkout_performed and task.codebase.setup_command:
-                yield SystemEvent(
-                    type=SystemEventType.WORKSPACE_SETUP,
-                    data={
-                        "task_id": task.id,
-                        "codebase_id": task.codebase.id,
-                        "setup_command": task.codebase.setup_command,
-                    },
-                    timestamp=datetime.datetime.now(datetime.UTC),
-                )
-
-                try:
-                    await self._run_setup_command(slot, task.codebase, task)
-                except SetupCommandError as e:
-                    yield SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "SETUP_COMMAND_FAILED",
-                            "message": f"Workspace setup command failed: {e.message}",
-                        },
-                        timestamp=datetime.datetime.now(datetime.UTC),
-                    )
-                    return
-
-            logfire.info(f"Allocated workspace {slot.path} for task {task.id}")
-
-            # Always verify session is in the correct location before streaming (no-op if already correct)
-            await self._migrate_claude_session_if_needed(task=task, new_working_dir=slot.path)
-
-            async for event in agent_stream:
-                yield event
-
+            yield slot
         finally:
-            self._release_workspace(task, slot)
+            if slot:
+                self._pool_manager.release_slot(slot)
+                logfire.info(f"Released workspace {slot.path} for task {task.id}")
+
+    async def prepare_workspace(
+        self,
+        task: Task,
+        slot: WorktreeSlot,
+    ) -> AsyncIterator[ConversationEvent]:
+        """Prepare workspace: create worktree, checkout branch, run setup, migrate session.
+
+        Yields workspace lifecycle events (WORKSPACE_CREATE, WORKSPACE_BRANCH_CHECKOUT, WORKSPACE_SETUP).
+
+        Raises:
+            SetupCommandError: If the codebase setup command fails.
+        """
+        worktree_created = False
+        if not self._check_worktree_valid(slot):
+            yield SystemEvent(
+                type=SystemEventType.WORKSPACE_CREATE,
+                data={"task_id": task.id, "slot_id": slot.id},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            await self._pool_manager.create_worktree_for_slot(slot, task)
+            worktree_created = True
+
+        checkout_performed = await self.checkout_branch_in_slot(slot, task.branch_name)
+
+        if checkout_performed:
+            yield SystemEvent(
+                type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
+                data={"task_id": task.id, "branch": task.branch_name},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        needs_setup = (worktree_created or checkout_performed) and task.codebase.setup_command
+        if needs_setup:
+            yield SystemEvent(
+                type=SystemEventType.WORKSPACE_SETUP,
+                data={
+                    "task_id": task.id,
+                    "codebase_id": task.codebase.id,
+                    "setup_command": task.codebase.setup_command,
+                },
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            await self._run_setup_command(slot, task.codebase, task)
+
+        logfire.info(f"Workspace {slot.path} ready for task {task.id}")
+
+        await self._migrate_claude_session_if_needed(task=task, new_working_dir=slot.path)
 
     async def checkout_task_to_main_repo(self, task: Task) -> None:
         """Checkout a task's branch to the main repository.

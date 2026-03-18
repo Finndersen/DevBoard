@@ -5,7 +5,7 @@ normal request handling.
 
 For conditional resolution within endpoints:
     workspace_service = await resolve_dependency(
-        get_workspace_allocation_service, request=http_request
+        get_workspace_service, request=http_request
     )
 
 For background jobs that need full lifecycle management:
@@ -51,7 +51,7 @@ async def resolve_dependency[T](
     them as standard Depends() parameters on the endpoint function instead.
 
     Args:
-        func: Dependency function to resolve (e.g., get_workspace_allocation_service)
+        func: Dependency function to resolve (e.g., get_workspace_service)
         request: The current HTTP request
         app: FastAPI app for dependency_overrides (optional)
 

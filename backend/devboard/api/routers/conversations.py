@@ -31,9 +31,10 @@ from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import DeleteResponse, ResetConversationResponse
 from devboard.api.schemas.conversation import ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
-from devboard.db.models import Conversation, ParentEntityType, Task, TaskStatus
+from devboard.db.models import Conversation, ParentEntityType, Project, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.project_directory import ensure_project_directory
 
 router = APIRouter()
 
@@ -307,6 +308,15 @@ async def get_agent_config(
     exec_services: ExecutionServices = Depends(get_execution_services),
 ) -> AgentConfigResponse:
     """Get the full assembled agent configuration for a conversation."""
+    parent = conversation.get_parent_entity()
+    # Working dir should not matter or be used since the role is not actually used for execution here
+    if isinstance(parent, Task):
+        working_dir = parent.codebase.local_path
+    elif isinstance(parent, Project):
+        working_dir = str(ensure_project_directory(parent))
+    else:
+        working_dir = parent.local_path
+
     role = await create_agent_role_for_conversation(
         conversation=conversation,
         document_repo=exec_services.document_repo,
@@ -315,7 +325,7 @@ async def get_agent_config(
         task_service=exec_services.task_service,
         task_git_service=exec_services.task_git_service,
         conversation_repo=exec_services.conversation_repo,
-        execution_mode=False,
+        working_dir=working_dir,
     )
 
     agent_config = exec_services.agent_config_service.get_agent_configuration(conversation.agent_role)
