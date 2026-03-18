@@ -149,14 +149,14 @@ class TestConversationsRouter:
 
         assert response.status_code == 200
         assert response.json() == {"conversation_id": test_conversation.id}
-        mock_manager.start_execution.assert_called_once()
+        mock_manager.start_agent_execution.assert_called_once()
 
     def test_send_conversation_message_returns_tool_request(self, client, test_conversation):
         """Test that 409 is returned when an execution is already active."""
         message_request = {"message": "Please update the document with better content"}
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
-            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
         assert response.status_code == 409
@@ -255,14 +255,14 @@ class TestConversationsRouter:
 
         assert response.status_code == 200
         assert response.json() == {"conversation_id": test_conversation.id}
-        mock_manager.start_execution.assert_called_once()
+        mock_manager.start_agent_execution.assert_called_once()
 
     def test_stream_conversation_message_returns_multiple_events(self, client, test_conversation):
         """Test that duplicate POST /messages with active execution returns 409."""
         message_request = {"message": "First message"}
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
-            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
         assert response.status_code == 409
@@ -287,14 +287,14 @@ class TestConversationsRouter:
 
         assert response.status_code == 200
         assert response.json() == {"conversation_id": test_conversation.id}
-        mock_manager.start_execution.assert_called_once()
+        mock_manager.start_agent_execution.assert_called_once()
 
     def test_stream_approve_conversation_tools_multiple_events(self, client, test_conversation):
         """Test that POST /approve-tools with active execution returns 409."""
         approval_request = {"approvals": {"call_1": {"approved": True}}}
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
-            mock_manager.start_execution.side_effect = ConversationBusyError(test_conversation.id)
+            mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request)
 
         assert response.status_code == 409

@@ -5,7 +5,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.background_execution import run_agent_for_conversation
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
@@ -126,12 +125,7 @@ def _start_agent_execution(
 
     cid = conversation.id
     try:
-        conversation_execution_manager.start_execution(
-            cid,
-            lambda q, ie: run_agent_for_conversation(
-                q, ie, conversation_id=cid, message_or_approvals=message_or_approvals
-            ),
-        )
+        conversation_execution_manager.start_agent_execution(cid, message_or_approvals)
     except ConversationBusyError as err:
         raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 

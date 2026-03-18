@@ -28,7 +28,7 @@ class TestSendConversationMessage:
         conversation = _get_task_conversation(db_session, test_task)
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
-            mock_mgr.start_execution.return_value = Mock(spec=ConversationExecution)
+            mock_mgr.start_agent_execution.return_value = Mock(spec=ConversationExecution)
 
             response = client.post(
                 f"/api/conversations/{conversation.id}/messages",
@@ -37,14 +37,14 @@ class TestSendConversationMessage:
 
         assert response.status_code == 200
         assert response.json() == {"conversation_id": conversation.id}
-        mock_mgr.start_execution.assert_called_once()
+        mock_mgr.start_agent_execution.assert_called_once()
 
     def test_returns_409_when_execution_already_active(self, client, db_session, test_task):
         """Should return 409 Conflict if an execution is already running."""
         conversation = _get_task_conversation(db_session, test_task)
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
-            mock_mgr.start_execution.side_effect = ConversationBusyError(conversation.id)
+            mock_mgr.start_agent_execution.side_effect = ConversationBusyError(conversation.id)
 
             response = client.post(
                 f"/api/conversations/{conversation.id}/messages",
@@ -91,7 +91,7 @@ class TestApproveConversationTools:
         conversation = _get_task_conversation(db_session, test_task)
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
-            mock_mgr.start_execution.return_value = Mock(spec=ConversationExecution)
+            mock_mgr.start_agent_execution.return_value = Mock(spec=ConversationExecution)
 
             response = client.post(
                 f"/api/conversations/{conversation.id}/approve-tools",
@@ -100,14 +100,14 @@ class TestApproveConversationTools:
 
         assert response.status_code == 200
         assert response.json() == {"conversation_id": conversation.id}
-        mock_mgr.start_execution.assert_called_once()
+        mock_mgr.start_agent_execution.assert_called_once()
 
     def test_returns_409_when_execution_already_active(self, client, db_session, test_task):
         """Should return 409 Conflict if an execution is already running."""
         conversation = _get_task_conversation(db_session, test_task)
 
         with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
-            mock_mgr.start_execution.side_effect = ConversationBusyError(conversation.id)
+            mock_mgr.start_agent_execution.side_effect = ConversationBusyError(conversation.id)
 
             response = client.post(
                 f"/api/conversations/{conversation.id}/approve-tools",

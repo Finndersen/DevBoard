@@ -876,7 +876,7 @@ class TestWorkflowActions:
         assert response.status_code == 200
         data = response.json()
         assert "conversation_id" in data
-        mock_manager.start_execution.assert_called_once()
+        mock_manager.start_agent_execution.assert_called_once()
 
     def test_workflow_action_returns_completed_when_no_prompt(
         self, client_with_mock_workflow_deps, test_task_for_workflow, db_session
@@ -900,7 +900,7 @@ class TestWorkflowActions:
 
         assert response.status_code == 200
         assert response.json() == {"status": "completed"}
-        mock_manager.start_execution.assert_not_called()
+        mock_manager.start_agent_execution.assert_not_called()
 
     def test_workflow_action_returns_400_on_value_error(self, client_with_mock_workflow_deps, test_task_for_workflow):
         """Test that ValueError from workflow action returns 400."""

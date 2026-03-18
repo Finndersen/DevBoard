@@ -5,7 +5,6 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.background_execution import run_agent_for_conversation
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution_manager import conversation_execution_manager
 from devboard.api.dependencies.entities import get_verified_task
@@ -387,10 +386,7 @@ async def execute_workflow_action(
 
     cid = conversation.id
     try:
-        conversation_execution_manager.start_execution(
-            cid,
-            lambda q, ie: run_agent_for_conversation(q, ie, conversation_id=cid, message_or_approvals=prompt),
-        )
+        conversation_execution_manager.start_agent_execution(cid, prompt)
     except ConversationBusyError as err:
         raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 

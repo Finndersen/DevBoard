@@ -1,4 +1,4 @@
-"""Tests for run_agent_for_conversation background execution coroutine."""
+"""Tests for _run_agent_for_conversation background execution coroutine."""
 
 import asyncio
 import datetime
@@ -43,7 +43,7 @@ def _make_mock_exec_service(stream_fn):
 
 
 class TestRunAgentForConversation:
-    """Tests for the run_agent_for_conversation coroutine."""
+    """Tests for the _run_agent_for_conversation coroutine."""
 
     @pytest.mark.asyncio
     async def test_passes_services_to_factories(self, mock_services, mock_conversation):
@@ -56,13 +56,13 @@ class TestRunAgentForConversation:
         mock_role = Mock()
 
         with (
-            patch("devboard.agents.background_execution.SessionLocal") as mock_session_local,
-            patch("devboard.agents.background_execution.DependencyResolver") as mock_resolver_cls,
+            patch("devboard.agents.execution_manager.SessionLocal") as mock_session_local,
+            patch("devboard.agents.execution_manager.DependencyResolver") as mock_resolver_cls,
             patch(
-                "devboard.agents.background_execution.create_agent_role_for_conversation", new_callable=AsyncMock
+                "devboard.agents.execution_manager.create_agent_role_for_conversation", new_callable=AsyncMock
             ) as mock_create_role,
-            patch("devboard.agents.background_execution.create_agent_execution_service") as mock_create_exec,
-            patch("devboard.agents.background_execution.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution_manager.create_agent_execution_service") as mock_create_exec,
+            patch("devboard.agents.execution_manager.ensure_project_directory", return_value="/projects/test"),
         ):
             mock_db = Mock()
             mock_session_local.return_value = mock_db
@@ -80,9 +80,9 @@ class TestRunAgentForConversation:
             event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
-            from devboard.agents.background_execution import run_agent_for_conversation
+            from devboard.agents.execution_manager import _run_agent_for_conversation
 
-            await run_agent_for_conversation(
+            await _run_agent_for_conversation(
                 event_queue,
                 interrupt_event,
                 conversation_id=1,
@@ -121,11 +121,11 @@ class TestRunAgentForConversation:
             yield event
 
         with (
-            patch("devboard.agents.background_execution.SessionLocal") as mock_session_local,
-            patch("devboard.agents.background_execution.DependencyResolver") as mock_resolver_cls,
-            patch("devboard.agents.background_execution.create_agent_role_for_conversation", new_callable=AsyncMock),
-            patch("devboard.agents.background_execution.create_agent_execution_service") as mock_create_exec,
-            patch("devboard.agents.background_execution.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution_manager.SessionLocal") as mock_session_local,
+            patch("devboard.agents.execution_manager.DependencyResolver") as mock_resolver_cls,
+            patch("devboard.agents.execution_manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution_manager.create_agent_execution_service") as mock_create_exec,
+            patch("devboard.agents.execution_manager.ensure_project_directory", return_value="/projects/test"),
         ):
             mock_db = Mock()
             mock_session_local.return_value = mock_db
@@ -142,9 +142,9 @@ class TestRunAgentForConversation:
             event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
-            from devboard.agents.background_execution import run_agent_for_conversation
+            from devboard.agents.execution_manager import _run_agent_for_conversation
 
-            await run_agent_for_conversation(
+            await _run_agent_for_conversation(
                 event_queue,
                 interrupt_event,
                 conversation_id=1,
@@ -164,11 +164,11 @@ class TestRunAgentForConversation:
             yield
 
         with (
-            patch("devboard.agents.background_execution.SessionLocal") as mock_session_local,
-            patch("devboard.agents.background_execution.DependencyResolver") as mock_resolver_cls,
-            patch("devboard.agents.background_execution.create_agent_role_for_conversation", new_callable=AsyncMock),
-            patch("devboard.agents.background_execution.create_agent_execution_service") as mock_create_exec,
-            patch("devboard.agents.background_execution.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution_manager.SessionLocal") as mock_session_local,
+            patch("devboard.agents.execution_manager.DependencyResolver") as mock_resolver_cls,
+            patch("devboard.agents.execution_manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution_manager.create_agent_execution_service") as mock_create_exec,
+            patch("devboard.agents.execution_manager.ensure_project_directory", return_value="/projects/test"),
         ):
             mock_db = Mock()
             mock_session_local.return_value = mock_db
@@ -185,9 +185,9 @@ class TestRunAgentForConversation:
             event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
-            from devboard.agents.background_execution import run_agent_for_conversation
+            from devboard.agents.execution_manager import _run_agent_for_conversation
 
-            await run_agent_for_conversation(
+            await _run_agent_for_conversation(
                 event_queue,
                 interrupt_event,
                 conversation_id=1,
@@ -207,11 +207,11 @@ class TestRunAgentForConversation:
             yield  # make it an async generator
 
         with (
-            patch("devboard.agents.background_execution.SessionLocal") as mock_session_local,
-            patch("devboard.agents.background_execution.DependencyResolver") as mock_resolver_cls,
-            patch("devboard.agents.background_execution.create_agent_role_for_conversation", new_callable=AsyncMock),
-            patch("devboard.agents.background_execution.create_agent_execution_service") as mock_create_exec,
-            patch("devboard.agents.background_execution.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution_manager.SessionLocal") as mock_session_local,
+            patch("devboard.agents.execution_manager.DependencyResolver") as mock_resolver_cls,
+            patch("devboard.agents.execution_manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution_manager.create_agent_execution_service") as mock_create_exec,
+            patch("devboard.agents.execution_manager.ensure_project_directory", return_value="/projects/test"),
         ):
             mock_db = Mock()
             mock_session_local.return_value = mock_db
@@ -228,10 +228,10 @@ class TestRunAgentForConversation:
             event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
-            from devboard.agents.background_execution import run_agent_for_conversation
+            from devboard.agents.execution_manager import _run_agent_for_conversation
 
             with pytest.raises(RuntimeError, match="Agent failed"):
-                await run_agent_for_conversation(
+                await _run_agent_for_conversation(
                     event_queue,
                     interrupt_event,
                     conversation_id=1,
@@ -246,8 +246,8 @@ class TestRunAgentForConversation:
     async def test_conversation_not_found_raises(self, mock_services):
         """Verify ValueError is raised when conversation is not found."""
         with (
-            patch("devboard.agents.background_execution.SessionLocal") as mock_session_local,
-            patch("devboard.agents.background_execution.DependencyResolver") as mock_resolver_cls,
+            patch("devboard.agents.execution_manager.SessionLocal") as mock_session_local,
+            patch("devboard.agents.execution_manager.DependencyResolver") as mock_resolver_cls,
         ):
             mock_db = Mock()
             mock_session_local.return_value = mock_db
@@ -263,10 +263,10 @@ class TestRunAgentForConversation:
             event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
-            from devboard.agents.background_execution import run_agent_for_conversation
+            from devboard.agents.execution_manager import _run_agent_for_conversation
 
             with pytest.raises(ValueError, match="Conversation 99 not found"):
-                await run_agent_for_conversation(
+                await _run_agent_for_conversation(
                     event_queue,
                     interrupt_event,
                     conversation_id=99,

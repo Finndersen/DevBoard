@@ -29,7 +29,7 @@
 - add tool to allow agent to update task custom field values
 - Custom macros/prompts for Project Agent for creating task from Jira ticket etc
 - Refactor run_sub_agent() into "new" and "resume" variants
-- Move Github PR status info to a tool instead of automatically in context
+- add concept of a "thread" - an idea or intiaitive, soemthing you're working on or need to keep notes/status about, like a scratchpad? how should they be managed? lifecycle etc? relation to proejcts and tasks? 
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
