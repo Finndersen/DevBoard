@@ -41,9 +41,11 @@ class StepExecutionAgentRole(AgentRole):
         self,
         task: Task,
         step: ImplementationStep,
+        working_dir: str,
     ):
         self.task = task
         self.step = step
+        self._working_dir = working_dir
 
     def get_system_prompt(self) -> str:
         type_preamble = STEP_TYPE_PREAMBLES.get(self.step.type, STEP_TYPE_PREAMBLES[ImplementationStepType.CODE_CHANGE])
@@ -53,7 +55,7 @@ class StepExecutionAgentRole(AgentRole):
         return []
 
     async def get_context_content(self) -> str:
-        return build_task_context(self.task, include_step_outcomes=True)
+        return build_task_context(self.task, working_dir=self._working_dir, include_step_outcomes=True)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

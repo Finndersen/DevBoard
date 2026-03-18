@@ -282,6 +282,7 @@ def create_execute_implementation_step_tool(
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     task_git_service: TaskGitService,
+    working_dir: str,
 ) -> Tool:
     async def execute_implementation_step(
         step_number: int,
@@ -342,12 +343,12 @@ def create_execute_implementation_step_tool(
                         }
                     )
 
-                role = CodeReviewAgentRole(task=task, working_dir=task.get_current_workspace_dir())
+                role = CodeReviewAgentRole(task=task, working_dir=working_dir)
                 additional_context = "\n\n".join(filter(None, [step.details or None, notes]))
                 prompt = build_code_review_prompt(diff=diff, additional_context=additional_context or None)
                 role_type = AgentRoleType.CODE_REVIEW
             else:
-                role = StepExecutionAgentRole(task=task, step=step)
+                role = StepExecutionAgentRole(task=task, step=step, working_dir=working_dir)
                 prompt = f"## Step {step.step_number}: {step.title}\n\n{step.details}"
                 if notes:
                     prompt += f"\n\n## Coordinator Notes\n\n{notes}"
@@ -361,6 +362,7 @@ def create_execute_implementation_step_tool(
                 conversation_repo=conversation_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=task.id,
+                working_dir=working_dir,
                 parent_conversation_id=parent_conversation_id,
             )
 

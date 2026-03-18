@@ -61,9 +61,11 @@ def format_pr_status(status: PRStatus) -> str:
     return "\n".join(lines)
 
 
-def build_task_pr_review_context(task: Task, pr_status_content: str = "") -> str:
+def build_task_pr_review_context(task: Task, *, working_dir: str, pr_status_content: str = "") -> str:
     """Build context for PR review agent."""
-    return build_task_context(task, include_step_outcomes=True, pr_status_content=pr_status_content)
+    return build_task_context(
+        task, working_dir=working_dir, include_step_outcomes=True, pr_status_content=pr_status_content
+    )
 
 
 class TaskPRReviewAgentRole(AgentRole):
@@ -128,7 +130,9 @@ class TaskPRReviewAgentRole(AgentRole):
             logfire.error(f"Error fetching PR status: {e}")
             pr_status_content = f"Error fetching PR status: {e}"
 
-        return build_task_pr_review_context(self.task, pr_status_content)
+        return build_task_pr_review_context(
+            self.task, working_dir=self._working_dir, pr_status_content=pr_status_content
+        )
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

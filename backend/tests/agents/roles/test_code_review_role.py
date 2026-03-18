@@ -29,7 +29,6 @@ def mock_task(temp_codebase_path):
 
     task = Mock(spec=Task)
     task.codebase = codebase
-    task.get_current_workspace_dir.return_value = str(temp_codebase_path)
     return task
 
 
@@ -38,7 +37,7 @@ class TestCodeReviewAgentRole:
 
     def test_get_system_prompt(self, mock_task):
         """Test role returns the code review system prompt."""
-        role = CodeReviewAgentRole(task=mock_task)
+        role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
         prompt = role.get_system_prompt()
 
@@ -50,7 +49,7 @@ class TestCodeReviewAgentRole:
 
     def test_get_tools_returns_five_readonly_tools(self, mock_task):
         """Test role provides 5 read-only codebase tools."""
-        role = CodeReviewAgentRole(task=mock_task)
+        role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
         tools = role.get_tools()
 
@@ -64,27 +63,28 @@ class TestCodeReviewAgentRole:
 
     def test_allowed_builtin_tools(self, mock_task):
         """Test allowed builtin tools is Bash only."""
-        role = CodeReviewAgentRole(task=mock_task)
+        role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
         assert role.allowed_builtin_tools == ["Bash"]
 
-    def test_uses_task_workspace_dir(self, mock_task, tmp_path):
-        """Test that the task's current workspace dir is used for codebase integration."""
+    def test_uses_provided_working_dir(self, mock_task, tmp_path):
+        """Test that the provided working_dir is used for codebase integration."""
         worktree = tmp_path / "worktree"
         worktree.mkdir()
-        mock_task.get_current_workspace_dir.return_value = str(worktree)
 
-        CodeReviewAgentRole(task=mock_task)
+        role = CodeReviewAgentRole(task=mock_task, working_dir=str(worktree))
 
-        mock_task.get_current_workspace_dir.assert_called_once()
+        assert role._codebase_integration._codebase_path == worktree.resolve()
 
     @pytest.mark.asyncio
     async def test_context_content_uses_build_task_context(self, mock_task):
         """Test context content delegates to build_task_context."""
-        role = CodeReviewAgentRole(task=mock_task)
+        role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
         with patch("devboard.agents.roles.code_review.build_task_context", return_value="mocked context") as mock_build:
             content = await role.get_context_content()
 
-        mock_build.assert_called_once_with(mock_task)
+        mock_build.assert_called_once_with(
+            mock_task, working_dir=str(mock_task.codebase.local_path), include_step_outcomes=True
+        )
         assert content == "mocked context"

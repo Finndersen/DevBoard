@@ -103,6 +103,7 @@ class CodeReviewAgentRole(AgentRole):
 
     def __init__(self, task: Task, working_dir: str):
         self._task = task
+        self._working_dir = working_dir
         self._codebase_integration = CodebaseIntegration(working_dir)
 
     def get_system_prompt(self) -> str:
@@ -122,4 +123,4 @@ class CodeReviewAgentRole(AgentRole):
         return ["Bash"]
 
     async def get_context_content(self) -> str:
-        return build_task_context(self._task, include_step_outcomes=True)
+        return build_task_context(self._task, working_dir=self._working_dir, include_step_outcomes=True)

@@ -19,8 +19,6 @@ def mock_task() -> MagicMock:
     task.codebase.name = "test-codebase"
     task.codebase.repository_url = "https://github.com/test/repo"
     task.codebase.description = "A test codebase"
-    task.get_current_workspace_dir.return_value = "/tmp/worktree/test"
-
     task.project.specification.content = "# Project Spec\n\nProject content."
     task.specification.content = "# Task Spec\n\nTask content."
     task.implementation_plan.content = "# Implementation\n\n1. Step one"
@@ -34,7 +32,7 @@ class TestBuildTaskContext:
 
     def test_includes_all_sections_by_default(self, mock_task: MagicMock):
         """Test that all sections are included with default parameters."""
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "Name: Test Task Title" in result
         assert "Status: planning" in result
@@ -49,7 +47,7 @@ class TestBuildTaskContext:
 
     def test_excludes_project_specification_when_disabled(self, mock_task: MagicMock):
         """Test that project specification is excluded when flag is False."""
-        result = build_task_context(mock_task, include_project_specification=False)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_project_specification=False)
 
         assert "## Project Specification" not in result
         assert "Project content." not in result
@@ -58,28 +56,28 @@ class TestBuildTaskContext:
     def test_excludes_implementation_plan_when_none(self, mock_task: MagicMock):
         """Test that implementation plan is excluded when task has none."""
         mock_task.implementation_plan = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Implementation Plan" not in result
         assert "## Task Specification" in result
 
     def test_includes_pr_number_when_present(self, mock_task: MagicMock):
         """Test that PR number is automatically included when present."""
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "PR: #42" in result
 
     def test_excludes_pr_number_when_none(self, mock_task: MagicMock):
         """Test that PR number line is omitted when task has no PR."""
         mock_task.github_pr_number = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "PR:" not in result
 
     def test_includes_pr_status_when_provided(self, mock_task: MagicMock):
         """Test that PR status is included when provided."""
         pr_status = "**State:** open\n**Merged:** False"
-        result = build_task_context(mock_task, pr_status_content=pr_status)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content=pr_status)
 
         assert "## PR Status" in result
         assert "**State:** open" in result
@@ -87,14 +85,14 @@ class TestBuildTaskContext:
 
     def test_excludes_pr_status_when_empty(self, mock_task: MagicMock):
         """Test that PR status section is omitted when empty."""
-        result = build_task_context(mock_task, pr_status_content="")
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content="")
 
         assert "## PR Status" not in result
 
     def test_handles_empty_project_specification(self, mock_task: MagicMock):
         """Test that empty project specification shows <EMPTY>."""
         mock_task.project.specification.content = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Project Specification" in result
         assert "<EMPTY>" in result
@@ -102,7 +100,7 @@ class TestBuildTaskContext:
     def test_handles_empty_task_specification(self, mock_task: MagicMock):
         """Test that empty task specification shows <EMPTY>."""
         mock_task.specification.content = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Task Specification" in result
         assert "<EMPTY>" in result
@@ -110,14 +108,14 @@ class TestBuildTaskContext:
     def test_handles_missing_implementation_plan(self, mock_task: MagicMock):
         """Test that missing implementation plan excludes the section."""
         mock_task.implementation_plan = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Implementation Plan" not in result
 
     def test_handles_empty_implementation_plan_content(self, mock_task: MagicMock):
         """Test that empty implementation plan content shows <EMPTY>."""
         mock_task.implementation_plan.content = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Implementation Plan" in result
         assert "<EMPTY>" in result
@@ -125,20 +123,20 @@ class TestBuildTaskContext:
     def test_handles_missing_repository_url(self, mock_task: MagicMock):
         """Test that missing repository URL shows N/A."""
         mock_task.codebase.repository_url = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "Repository URL: N/A" in result
 
     def test_handles_missing_codebase_description(self, mock_task: MagicMock):
         """Test that missing description shows N/A."""
         mock_task.codebase.description = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "Description: N/A" in result
 
     def test_section_order_is_consistent(self, mock_task: MagicMock):
         """Test that sections appear in consistent order."""
-        result = build_task_context(mock_task, pr_status_content="PR info")
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", pr_status_content="PR info")
 
         # Find positions of each section
         project_pos = result.find("# Project")
@@ -156,7 +154,7 @@ class TestBuildTaskContext:
         """Test configuration matching TaskSpecificationAgentRole (no impl plan yet)."""
         mock_task.implementation_plan = None
         mock_task.github_pr_number = None
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "## Project Specification" in result
         assert "## Task Specification" in result
@@ -166,7 +164,7 @@ class TestBuildTaskContext:
     def test_implementation_role_configuration(self, mock_task: MagicMock):
         """Test configuration matching TaskImplementationAgentRole needs."""
         mock_task.github_pr_number = None
-        result = build_task_context(mock_task, include_project_specification=False)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_project_specification=False)
 
         assert "## Project Specification" not in result
         assert "## Task Specification" in result
@@ -176,6 +174,7 @@ class TestBuildTaskContext:
         """Test configuration matching TaskPRReviewAgentRole needs."""
         result = build_task_context(
             mock_task,
+            working_dir="/tmp/worktree/test",
             include_project_specification=False,
             pr_status_content="**State:** open",
         )
@@ -208,7 +207,7 @@ class TestBuildTaskContext:
         plan.steps = [step1, step2]
         mock_task.implementation_plan_structured = plan
 
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "First step" in result
         assert "Second step" in result
@@ -236,7 +235,7 @@ class TestBuildTaskContext:
         plan.steps = [step1, step2]
         mock_task.implementation_plan_structured = plan
 
-        result = build_task_context(mock_task, include_step_outcomes=True)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_step_outcomes=True)
 
         assert "First step" in result
         assert "Second step" in result
@@ -264,7 +263,7 @@ class TestBuildTaskContext:
         plan.steps = [step1, step2]
         mock_task.implementation_plan_structured = plan
 
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "CURRENT STEP" not in result
 
@@ -283,9 +282,15 @@ class TestBuildTaskContext:
         plan.steps = [step1]
         mock_task.implementation_plan_structured = plan
 
-        result = build_task_context(mock_task)
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "EXECUTION GRAPH" not in result
+
+    def test_includes_working_dir_in_codebase_info(self, mock_task: MagicMock):
+        """Test that working_dir is used for codebase worktree directory."""
+        result = build_task_context(mock_task, working_dir="/custom/working/dir")
+
+        assert "Worktree directory: /custom/working/dir" in result
 
 
 def _make_step(

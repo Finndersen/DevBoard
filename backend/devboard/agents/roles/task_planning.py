@@ -136,6 +136,7 @@ class TaskPlanningAgentRole(AgentRole):
         task_service: TaskService,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
+        working_dir: str,
         plan_service: TaskImplementationPlanService | None = None,
     ):
         self.task = task
@@ -144,6 +145,7 @@ class TaskPlanningAgentRole(AgentRole):
         self.task_service = task_service
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
+        self._working_dir = working_dir
         self.plan_service = plan_service
 
     def get_system_prompt(self) -> str:
@@ -207,6 +209,7 @@ class TaskPlanningAgentRole(AgentRole):
                 self.agent_config_service,
                 conversation_repo=self.conversation_repo,
                 parent_conversation_id=self.conversation_id,
+                working_dir=self._working_dir,
             )
         )
 
@@ -224,7 +227,7 @@ class TaskPlanningAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, project spec, task spec, and implementation plan
         """
-        return build_task_context(self.task)
+        return build_task_context(self.task, working_dir=self._working_dir)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

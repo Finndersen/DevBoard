@@ -137,7 +137,7 @@ class TestBuildTaskPlanningContext:
 
     def test_builds_context_with_all_documents(self, task_with_documents: Task):
         """Test that context includes all required documents when implementation plan exists."""
-        context = build_task_planning_context(task_with_documents)
+        context = build_task_planning_context(task_with_documents, working_dir="/tmp/test-codebase")
 
         # Check task metadata
         assert f"ID: {task_with_documents.id}" in context
@@ -158,7 +158,7 @@ class TestBuildTaskPlanningContext:
 
     def test_builds_context_without_implementation_plan(self, task_without_implementation_plan: Task):
         """Test that context excludes implementation plan section when it doesn't exist."""
-        context = build_task_planning_context(task_without_implementation_plan)
+        context = build_task_planning_context(task_without_implementation_plan, working_dir="/tmp/test-codebase")
 
         # Check task metadata
         assert f"ID: {task_without_implementation_plan.id}" in context
@@ -216,7 +216,7 @@ class TestBuildTaskPlanningContext:
         db_session.commit()
         db_session.refresh(task)
 
-        context = build_task_planning_context(task)
+        context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
         # Should have <EMPTY> for both task documents (but not project spec)
         assert context.count("<EMPTY>") == 2
@@ -256,7 +256,7 @@ class TestBuildTaskPlanningContext:
         db_session.commit()
         db_session.refresh(task)
 
-        context = build_task_planning_context(task)
+        context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
         assert "<EMPTY>" in context
         # Implementation plan section should not be present (no plan exists)
@@ -310,7 +310,7 @@ class TestBuildTaskPlanningContext:
         db_session.commit()
         db_session.refresh(task)
 
-        context = build_task_planning_context(task)
+        context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
         # Should show <EMPTY> for project spec
         assert "## Project Specification" in context
@@ -356,7 +356,7 @@ class TestBuildTaskPlanningContext:
         db_session.refresh(task)
 
         # Access context - should trigger lazy load of project
-        context = build_task_planning_context(task)
+        context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
         # Verify project specification was loaded
         assert "This is a test project specification." in context

@@ -32,12 +32,12 @@ def _format_task_metadata(task: Task) -> str:
     return "\n".join(lines)
 
 
-def _format_codebase_info(task: Task) -> str:
+def _format_codebase_info(task: Task, working_dir: str) -> str:
     """Format codebase information block."""
     return f"""# Codebase
 - Name: {task.codebase.name}
 - Repository URL: {task.codebase.repository_url or "N/A"}
-- Worktree directory: {task.get_current_workspace_dir()}
+- Worktree directory: {working_dir}
 - Description: {task.codebase.description or "N/A"}"""
 
 
@@ -148,6 +148,7 @@ def _format_custom_fields(task: Task) -> str:
 def build_task_context(
     task: Task,
     *,
+    working_dir: str,
     include_project_specification: bool = True,
     include_step_outcomes: bool = False,
     pr_status_content: str = "",
@@ -156,6 +157,7 @@ def build_task_context(
 
     Args:
         task: Task instance with eager-loaded relationships
+        working_dir: Working directory path for the task's codebase
         include_project_specification: Whether to include the full project specification document
         include_step_outcomes: Whether to include full step outcomes in the structured plan
         pr_status_content: Formatted PR status string (for PR review role)
@@ -169,7 +171,7 @@ def build_task_context(
     if include_project_specification:
         sections.append(_format_project_specification(task))
 
-    sections.append(_format_codebase_info(task))
+    sections.append(_format_codebase_info(task, working_dir))
     sections.append(_format_task_metadata(task))
     sections.append(_format_task_specification(task))
 

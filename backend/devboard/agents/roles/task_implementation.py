@@ -181,6 +181,7 @@ class TaskImplementationAgentRole(AgentRole):
                         self.conversation_repo,
                         self.conversation_id,
                         self.task_git_service,
+                        self._working_dir,
                     ),
                     create_read_implementation_step_details_tool(self.task, self.plan_service),
                 ]
@@ -206,6 +207,7 @@ class TaskImplementationAgentRole(AgentRole):
                     self.agent_config_service,
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
+                    working_dir=self._working_dir,
                 ),
                 create_code_review_tool(
                     self.task,
@@ -213,6 +215,7 @@ class TaskImplementationAgentRole(AgentRole):
                     self.task_git_service,
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
+                    working_dir=self._working_dir,
                 ),
                 create_rebase_task_branch_tool(self.task, self.task_git_service),
             ]
@@ -239,7 +242,7 @@ class TaskImplementationAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, specification, and implementation plan
         """
-        context = build_task_context(self.task)
+        context = build_task_context(self.task, working_dir=self._working_dir)
         execution_graph = build_execution_graph_context(self.task)
         if execution_graph:
             context += "\n\n" + execution_graph
