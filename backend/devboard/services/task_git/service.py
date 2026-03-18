@@ -4,7 +4,7 @@ import logfire
 
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import Task
-from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.shell import ShellCommandError
 from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
 from devboard.services.task_git.merge_strategy import get_merge_strategy
@@ -18,10 +18,16 @@ class TaskGitService:
     async def _fetch_remote_gracefully(self, git: GitRepoIntegration, base_branch: str) -> bool:
         """Attempt to fetch the base branch from remote, returning success status.
 
-        Returns True if fetch succeeded, False if it failed (logged as warning).
+        Returns True if fetch succeeded or branch is local (no fetch needed).
+        Returns False if remote fetch failed (logged as warning).
         """
+        remotes = await git.list_remotes()
+        parsed = parse_remote_branch(base_branch, remotes)
+        if parsed is None:
+            return True
+        remote, branch = parsed
         try:
-            await git.fetch(branch=base_branch, timeout=10.0)
+            await git.fetch(remote=remote, branch=branch, timeout=10.0)
             return True
         except ShellCommandError as e:
             logfire.warn(f"Remote fetch failed for base branch '{base_branch}' (proceeding with local state): {e}")

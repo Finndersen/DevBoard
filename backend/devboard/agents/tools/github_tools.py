@@ -3,8 +3,14 @@
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models.task import Task
-from devboard.integrations.git import GitRepoIntegration
-from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment, ReviewWithComments
+from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
+from devboard.integrations.github import (
+    CommentThread,
+    GitHubIntegration,
+    OpenPullRequest,
+    ReviewComment,
+    ReviewWithComments,
+)
 from devboard.services.task_service import TaskService
 
 
@@ -70,10 +76,14 @@ def create_github_pr_tool(
 
         # Fetch latest remote state so conflict check is against up-to-date base branch
         main_git = GitRepoIntegration(task.codebase.local_path)
-        try:
-            await main_git.fetch(branch=task.base_branch)
-        except Exception:
-            pass  # Fetch failure is non-fatal - continue with local state
+        remotes = await main_git.list_remotes()
+        parsed = parse_remote_branch(task.base_branch, remotes)
+        if parsed:
+            remote, branch = parsed
+            try:
+                await main_git.fetch(remote=remote, branch=branch)
+            except Exception:
+                pass  # Fetch failure is non-fatal - continue with local state
 
         # Check for merge conflicts with base branch
         comparison = await main_git.get_branch_comparison(task.branch_name, task.base_branch)
@@ -235,3 +245,61 @@ def create_get_pr_feedback_tool(task: Task, github_integration: GitHubIntegratio
         return "\n".join(sections)
 
     return Tool(function=get_pr_feedback, name="get_pr_feedback")
+
+
+def format_pr_status_from_graphql(status: OpenPullRequest) -> str:
+    """Format OpenPullRequest as a readable markdown string."""
+    lines = [
+        f"**PR #{status.number}:** {status.title}",
+        f"**State:** {status.state}",
+        f"**Mergeable:** {status.mergeable_state or 'UNKNOWN'}",
+    ]
+
+    if status.review_decision:
+        lines.append(f"**Review Decision:** {status.review_decision}")
+    else:
+        lines.append("**Review Decision:** No decision yet")
+
+    if status.ci_status:
+        lines.append(f"**CI Status:** {status.ci_status}")
+    else:
+        lines.append("**CI Status:** No CI checks configured")
+
+    lines.append(f"**Review comments:** {status.comment_count} (use get_pr_feedback to read full details)")
+
+    return "\n".join(lines)
+
+
+def create_get_pr_status_tool(task: Task, github_integration: GitHubIntegration) -> Tool:
+    """Create a tool for fetching current PR status.
+
+    Fetches PR state, mergeable status, CI rollup, review decision, and comment count
+    in a single GraphQL call.
+
+    Args:
+        task: Task instance with github_pr_number and codebase.repository_url set
+        github_integration: GitHub integration for API calls
+    """
+
+    async def get_pr_status() -> str:
+        """Fetch current PR status including state, CI checks, and review decision.
+
+        Returns a summary of the PR's current state:
+        - PR state (OPEN, CLOSED, MERGED)
+        - Mergeable status
+        - CI/checks rollup status
+        - Review decision (APPROVED, CHANGES_REQUESTED, etc.)
+        - Comment count hint (use get_pr_feedback for full details)
+        """
+        if not task.github_pr_number or not task.codebase.repository_url:
+            raise ModelRetry("Task does not have PR number or repository URL configured.")
+
+        try:
+            owner, repo = github_integration.parse_repo_url(task.codebase.repository_url)
+            status = await github_integration.get_pull_request_status(owner, repo, task.github_pr_number)
+        except Exception as e:
+            raise ModelRetry(f"Failed to fetch PR status: {e}") from e
+
+        return format_pr_status_from_graphql(status)
+
+    return Tool(function=get_pr_status, name="get_pr_status")

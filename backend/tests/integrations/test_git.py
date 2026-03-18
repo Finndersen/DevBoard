@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.shell import ShellCommandResult
 from devboard.integrations.types import BranchReleaseResult
 
@@ -390,6 +390,8 @@ class TestGetDefaultBranch:
         git = GitRepoIntegration(temp_git_repo)
 
         async def mock_run_git_command(args, **kwargs):
+            if args == ["remote"]:
+                return "origin"
             if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
                 return "origin/main"
             return ""
@@ -405,8 +407,8 @@ class TestGetDefaultBranch:
         git = GitRepoIntegration(temp_git_repo)
 
         async def mock_run_git_command(args, **kwargs):
-            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
-                return ""  # No remote HEAD
+            if args == ["remote"]:
+                return ""  # No remotes
             if args == ["rev-parse", "--verify", "refs/heads/main"]:
                 return "abc123"  # main branch exists
             return ""
@@ -422,8 +424,8 @@ class TestGetDefaultBranch:
         git = GitRepoIntegration(temp_git_repo)
 
         async def mock_run_git_command(args, **kwargs):
-            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
-                return ""  # No remote HEAD
+            if args == ["remote"]:
+                return ""  # No remotes
             if args == ["rev-parse", "--verify", "refs/heads/main"]:
                 return ""  # main doesn't exist
             if args == ["rev-parse", "--verify", "refs/heads/master"]:
@@ -441,8 +443,8 @@ class TestGetDefaultBranch:
         git = GitRepoIntegration(temp_git_repo)
 
         async def mock_run_git_command(args, **kwargs):
-            if args == ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]:
-                return ""  # No remote HEAD
+            if args == ["remote"]:
+                return ""  # No remotes
             if args == ["rev-parse", "--verify", "refs/heads/main"]:
                 return ""  # main doesn't exist
             if args == ["rev-parse", "--verify", "refs/heads/master"]:
@@ -469,6 +471,74 @@ class TestGetDefaultBranch:
                 await git.get_default_branch()
 
         assert "Unable to determine repository default branch" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_returns_remote_head_for_non_origin_remote(self, temp_git_repo):
+        """Test that non-origin remotes are used for default branch detection."""
+        git = GitRepoIntegration(temp_git_repo)
+
+        async def mock_run_git_command(args, **kwargs):
+            if args == ["remote"]:
+                return "upstream"
+            if args == ["symbolic-ref", "--short", "refs/remotes/upstream/HEAD"]:
+                return "upstream/main"
+            return ""
+
+        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+            result = await git.get_default_branch()
+
+        assert result == "upstream/main"
+
+
+class TestListRemotes:
+    """Tests for list_remotes method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_list_of_remote_names(self, temp_git_repo):
+        git = GitRepoIntegration(temp_git_repo)
+        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = "origin\nupstream"
+            result = await git.list_remotes()
+        assert result == ["origin", "upstream"]
+        mock_cmd.assert_called_once_with(["remote"], raise_on_error=False, timeout=10.0)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_no_remotes(self, temp_git_repo):
+        git = GitRepoIntegration(temp_git_repo)
+        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ""
+            result = await git.list_remotes()
+        assert result == []
+
+
+class TestParseRemoteBranch:
+    """Tests for parse_remote_branch utility function."""
+
+    def test_returns_remote_and_branch_for_known_remote(self):
+        result = parse_remote_branch("origin/main", ["origin"])
+        assert result == ("origin", "main")
+
+    def test_handles_non_origin_remote(self):
+        result = parse_remote_branch("upstream/develop", ["origin", "upstream"])
+        assert result == ("upstream", "develop")
+
+    def test_returns_none_for_local_branch(self):
+        result = parse_remote_branch("main", ["origin"])
+        assert result is None
+
+    def test_returns_none_for_feature_branch_with_slash(self):
+        """Branch names containing '/' that don't match a remote are treated as local."""
+        result = parse_remote_branch("feat/my-feature", ["origin"])
+        assert result is None
+
+    def test_returns_none_when_no_remotes(self):
+        result = parse_remote_branch("origin/main", [])
+        assert result is None
+
+    def test_branch_name_preserves_slashes(self):
+        """Branch part after remote prefix can itself contain slashes."""
+        result = parse_remote_branch("origin/release/v1.0", ["origin"])
+        assert result == ("origin", "release/v1.0")
 
 
 class TestHasCommits:

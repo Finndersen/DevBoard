@@ -3,7 +3,7 @@
 import logfire
 
 from devboard.db.models.task import Task
-from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.shell import RebaseConflictError, ShellCommandExecutionError
 from devboard.services.task_git.types import BaseBranchChanges, RebaseOutcome, RebaseResult
 
@@ -70,10 +70,14 @@ class TaskRebaseCoordinator:
 
         fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
 
-        try:
-            await git.fetch(branch=task.base_branch)
-        except ShellCommandExecutionError:
-            pass  # Fetch failure is non-fatal - continue with local state
+        remotes = await git.list_remotes()
+        parsed = parse_remote_branch(task.base_branch, remotes)
+        if parsed:
+            remote, branch = parsed
+            try:
+                await git.fetch(remote=remote, branch=branch)
+            except ShellCommandExecutionError:
+                pass  # Fetch failure is non-fatal - continue with local state
 
         base_head_current = await git.get_branch_head(task.base_branch)
 

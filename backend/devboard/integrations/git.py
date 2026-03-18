@@ -24,6 +24,18 @@ GIT_ENV = {
 }
 
 
+def parse_remote_branch(base_branch: str, remotes: list[str]) -> tuple[str, str] | None:
+    """Parse a remote-tracking branch ref into (remote, branch_name).
+
+    Returns None if base_branch is a local branch (no matching remote prefix).
+    Example: parse_remote_branch("origin/main", ["origin"]) -> ("origin", "main")
+    """
+    for remote in remotes:
+        if base_branch.startswith(remote + "/"):
+            return remote, base_branch[len(remote) + 1 :]
+    return None
+
+
 class GitRepoIntegration:
     """
     Integration for Git operations on code repositories.
@@ -561,7 +573,7 @@ class GitRepoIntegration:
         """Get the repository's default branch.
 
         Detection strategy:
-        1. Try remote HEAD reference (origin/main, origin/master, etc.)
+        1. Try remote HEAD reference for each configured remote
         2. Fall back to local HEAD (current branch for repos without remotes)
         3. Check for common branch names (main, master) as last resort
 
@@ -572,16 +584,15 @@ class GitRepoIntegration:
         Raises:
             Exception: If unable to determine default branch
         """
-        # 1. Try remote HEAD first (best for repos with remotes)
-        output = await self._run_git_command(
-            ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
-            raise_on_error=False,
-            timeout=10.0,
-        )
-        if output:
-            return output
+        for remote in await self.list_remotes():
+            output = await self._run_git_command(
+                ["symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD"],
+                raise_on_error=False,
+                timeout=10.0,
+            )
+            if output:
+                return output
 
-        # 2. Check for common default branch names
         for branch_name in ["main", "master"]:
             exists = await self._run_git_command(
                 ["rev-parse", "--verify", f"refs/heads/{branch_name}"],
@@ -591,7 +602,6 @@ class GitRepoIntegration:
             if exists:
                 return branch_name
 
-        # 3. Last resort: local HEAD (may not be the default branch)
         output = await self._run_git_command(
             ["symbolic-ref", "--short", "HEAD"],
             raise_on_error=False,
@@ -774,6 +784,11 @@ class GitRepoIntegration:
             ShellCommandExecutionError: If git command fails
         """
         await self._run_git_command(["switch", "--detach"])
+
+    async def list_remotes(self) -> list[str]:
+        """Return all configured remote names for this repository."""
+        output = await self._run_git_command(["remote"], raise_on_error=False, timeout=10.0)
+        return output.splitlines() if output else []
 
     async def fetch(self, remote: str = "origin", branch: str | None = None, timeout: float = 30.0) -> None:
         """Fetch latest changes from a remote.
