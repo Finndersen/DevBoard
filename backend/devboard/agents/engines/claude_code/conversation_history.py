@@ -54,14 +54,11 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
         try:
             session_messages = claude_session_service.load_session_messages(self.session_id)
         except FileNotFoundError:
-            # Session file was cleaned up - reset session ID and return warning
-            logfire.info(f"Session file not found for conversation {self.conversation.id}, resetting session ID")
-            self.conversation_repo.update_external_session_id(self.conversation, None)
-            self.conversation_repo.commit()
+            logfire.warn(f"Session file not found for conversation {self.conversation.id}, session ID preserved")
             return [
                 SystemEvent(
                     type=SystemEventType.SESSION_EXPIRED,
-                    data={"message": "Claude session was cleaned up, starting new conversation"},
+                    data={"message": "Claude Code session file not found. Clear this conversation to start a new one."},
                     timestamp=datetime.now(UTC),
                 )
             ]

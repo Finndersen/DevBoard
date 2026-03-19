@@ -82,15 +82,12 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                 logfire.info(f"Claude Code agent execution interrupted for conversation {self.conversation.id}")
                 raise AgentInterruptedError("Agent execution interrupted")
         except FileNotFoundError:
-            # Session file was cleaned up - reset session ID and notify user
-            logfire.info(
-                f"Session file not found during streaming for conversation {self.conversation.id}, resetting session ID"
+            logfire.warn(
+                f"Session file not found during streaming for conversation {self.conversation.id}, session ID preserved"
             )
-            self.conversation_repo.update_external_session_id(self.conversation, None)
-            self.conversation_repo.commit()
             yield SystemEvent(
                 type=SystemEventType.SESSION_EXPIRED,
-                data={"message": "Claude session was cleaned up, starting new conversation"},
+                data={"message": "Claude Code session file not found. Clear this conversation to start a new one."},
                 timestamp=datetime.now(UTC),
             )
 

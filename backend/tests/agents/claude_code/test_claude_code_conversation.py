@@ -109,11 +109,13 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         event = events[0]
         assert event.event_type == "system"
         assert event.type == SystemEventType.SESSION_EXPIRED
-        assert event.data["message"] == "Claude session was cleaned up, starting new conversation"
+        assert (
+            event.data["message"] == "Claude Code session file not found. Clear this conversation to start a new one."
+        )
 
-        # Verify the session ID was reset
+        # Verify the session ID is preserved
         db_session.refresh(conversation)
-        assert conversation.external_session_id is None
+        assert conversation.external_session_id == "test-session-id-12345"
 
     @pytest.mark.asyncio
     async def test_get_conversation_messages_no_session_id(self, conversation_repo, db_session):
@@ -175,11 +177,14 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         # Second event is the SESSION_EXPIRED system event
         assert events[1].event_type == "system"
         assert events[1].type == SystemEventType.SESSION_EXPIRED
-        assert events[1].data["message"] == "Claude session was cleaned up, starting new conversation"
+        assert (
+            events[1].data["message"]
+            == "Claude Code session file not found. Clear this conversation to start a new one."
+        )
 
-        # Verify the session ID was reset
+        # Verify the session ID is preserved
         db_session.refresh(conversation)
-        assert conversation.external_session_id is None
+        assert conversation.external_session_id == "test-session-id-12345"
 
     @pytest.mark.asyncio
     async def test_stream_events_session_expired_immediate(
@@ -211,9 +216,9 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         assert events[0].event_type == "system"
         assert events[0].type == SystemEventType.SESSION_EXPIRED
 
-        # Verify the session ID was reset
+        # Verify the session ID is preserved
         db_session.refresh(conversation)
-        assert conversation.external_session_id is None
+        assert conversation.external_session_id == "test-session-id-12345"
 
 
 class TestSessionMessagesToEvents:
