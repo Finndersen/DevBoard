@@ -47,11 +47,33 @@ check_command() {
     fi
 }
 
+install_node() {
+    if command -v brew &> /dev/null; then
+        info "Installing node via Homebrew..."
+        brew install node
+    else
+        error "node is not installed and Homebrew is not available. Please install node manually."
+    fi
+}
+
+install_pnpm() {
+    info "Installing pnpm via npm..."
+    npm install -g pnpm
+}
+
 # Check prerequisites
 info "Checking prerequisites..."
 
-check_command node
-check_command pnpm
+if ! command -v node &> /dev/null; then
+    warn "node not found, attempting to install..."
+    install_node
+fi
+
+if ! command -v pnpm &> /dev/null; then
+    warn "pnpm not found, attempting to install..."
+    install_pnpm
+fi
+
 check_command uv
 
 info "All prerequisites satisfied"
