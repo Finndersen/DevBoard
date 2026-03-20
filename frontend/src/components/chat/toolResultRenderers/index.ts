@@ -10,6 +10,7 @@ import type { ComponentType, JSX } from 'react'
 import type { ToolCall, ToolResult } from '../../../lib/api'
 
 import CreateTaskResultRenderer from './CreateTaskResultRenderer'
+import EditTaskResultRenderer from './EditTaskResultRenderer'
 import RenderHtmlToolDisplay from './RenderHtmlToolDisplay'
 import SubAgentResultRenderer from './SubAgentResultRenderer'
 
@@ -34,6 +35,7 @@ export type RichResultRenderer = ComponentType<RichResultRendererProps>
  */
 const richResultRenderers: Record<string, RichResultRenderer> = {
   create_task: CreateTaskResultRenderer,
+  edit_task: EditTaskResultRenderer,
   investigate_codebase: SubAgentResultRenderer,
   execute_implementation_step: SubAgentResultRenderer,
   review_code_changes: SubAgentResultRenderer,

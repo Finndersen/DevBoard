@@ -207,6 +207,17 @@ export function getToolDisplayLabel(
       return { toolName: cleanedName }
     }
 
+    case 'edit_task': {
+      const updatedFields: string[] = []
+      if (args.title != null) updatedFields.push('title')
+      if (args.specification_content != null) updatedFields.push('specification')
+      if (args.custom_fields != null) updatedFields.push('custom fields')
+      if (updatedFields.length > 0) {
+        return { toolName: 'edit_task', details: updatedFields.join(', ') }
+      }
+      return { toolName: cleanedName }
+    }
+
     default: {
       if (isDocumentTool(cleanedName)) {
         const reasoning = args.reasoning as string | undefined

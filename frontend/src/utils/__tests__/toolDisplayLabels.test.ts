@@ -41,6 +41,47 @@ describe('getToolDisplayLabel', () => {
       expect(getToolDisplayLabel('TaskOutput', null)).toEqual({ toolName: 'TaskOutput' })
     })
   })
+
+  describe('edit_task', () => {
+    it('returns title as details when only title is updated', () => {
+      expect(getToolDisplayLabel('edit_task', { title: 'New title' })).toEqual({
+        toolName: 'edit_task',
+        details: 'title',
+      })
+    })
+
+    it('returns specification as details when only specification_content is updated', () => {
+      expect(getToolDisplayLabel('edit_task', { specification_content: 'New spec' })).toEqual({
+        toolName: 'edit_task',
+        details: 'specification',
+      })
+    })
+
+    it('returns both fields as details when title and specification_content are updated', () => {
+      expect(getToolDisplayLabel('edit_task', { title: 'New title', specification_content: 'New spec' })).toEqual({
+        toolName: 'edit_task',
+        details: 'title, specification',
+      })
+    })
+
+    it('returns custom fields as details when only custom_fields is updated', () => {
+      expect(getToolDisplayLabel('edit_task', { custom_fields: { priority: 'high' } })).toEqual({
+        toolName: 'edit_task',
+        details: 'custom fields',
+      })
+    })
+
+    it('returns all fields when all are updated', () => {
+      expect(getToolDisplayLabel('edit_task', { title: 'T', specification_content: 'S', custom_fields: { k: 'v' } })).toEqual({
+        toolName: 'edit_task',
+        details: 'title, specification, custom fields',
+      })
+    })
+
+    it('returns toolName only when no updatable args', () => {
+      expect(getToolDisplayLabel('edit_task', null)).toEqual({ toolName: 'edit_task' })
+    })
+  })
 })
 
 describe('relativizePath', () => {

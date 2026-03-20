@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { TaskStatus } from '../../lib/api'
-import type { Task, ToolCall } from '../../lib/api'
+import type { Task, ToolCall, ToolResult } from '../../lib/api'
 import { useToolCallHandler, useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 
 interface UseTaskEventHandlersParams {
@@ -29,21 +29,22 @@ export function useTaskEventHandlers({
   markStepRunning,
 }: UseTaskEventHandlersParams) {
 
-  const specificationHandler = useCallback(async (toolName: string, _result: unknown) => {
-    if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
+  const editTaskHandler = useCallback(async (toolName: string, result: ToolResult) => {
+    if (toolName === 'edit_task' || toolName.endsWith('__edit_task')) {
       try {
-        console.log('[TaskDetail] specificationHandler: refetching spec and task')
-        await refetchSpecification()
         await refetch()
-        setActiveTab('specification')
-        console.log('[TaskDetail] specificationHandler: completed successfully')
+        const parsed = JSON.parse(result.result_content)
+        if (parsed?.specification_updated) {
+          await refetchSpecification()
+          setActiveTab('specification')
+        }
       } catch (error) {
-        console.error('Failed to refetch specification document:', error)
+        console.error('Failed to refetch task after edit_task:', error)
       }
     }
-  }, [refetchSpecification, refetch, setActiveTab])
+  }, [refetch, refetchSpecification, setActiveTab])
 
-  useToolResultHandler(specificationHandler)
+  useToolResultHandler(editTaskHandler)
 
   const implementationPlanHandler = useCallback(async (toolName: string, _result: unknown) => {
     if (toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content')) {
