@@ -79,11 +79,10 @@ class TestTaskPlanningRoleWithSpec:
         """Test role creates correct tools when no implementation plan exists."""
         tools = role.get_tools()
 
-        # Should have set_content for spec, edit for spec, codebase investigation tool, create_task, edit_task
-        assert len(tools) == 5
+        # Should have edit_task (own task), edit for spec, codebase investigation tool, create_task
+        assert len(tools) == 4
         tool_names = [tool.name for tool in tools]
 
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
@@ -165,11 +164,10 @@ class TestTaskPlanningRoleWithPlan:
         """Test role creates tools for both documents in planning."""
         tools = role.get_tools()
 
-        # Should have: set_content for spec, edit for spec, set_content for plan, edit for plan, investigate, create_task, edit_task
-        assert len(tools) == 7
+        # Should have: edit_task (own task), edit for spec, set_content for plan, edit for plan, investigate, create_task
+        assert len(tools) == 6
 
         tool_names = [tool.name for tool in tools]
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
@@ -472,8 +470,7 @@ class TestRoleToolSelection:
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # Should have set_content for spec, set_content for plan, investigation tool, create_task, edit_task
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        # Should have edit_task (own task), set_content for plan, investigation tool, create_task
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
@@ -500,12 +497,12 @@ class TestRoleToolSelection:
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
+        assert "edit_task" in tool_names
 
     def test_planning_role_provides_spec_tools_only_when_no_plan_exists(
         self, mock_task_with_spec_only, mock_document_repo, mock_agent_config_service, mock_task_service
@@ -524,11 +521,11 @@ class TestRoleToolSelection:
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # Should have spec tools
-        assert f"set_{DocumentType.TASK_SPECIFICATION}_content" in tool_names
+        # Should have edit_task (own), edit for spec, investigate, create_task
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
+        assert "edit_task" in tool_names
 
         # Should NOT have plan tools (no plan exists yet)
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names

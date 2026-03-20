@@ -140,7 +140,7 @@ class ProjectQAAgentRole(AgentRole):
             create_list_tasks_tool(self.project, self.task_service),
             create_view_task_details_tool(self.project, self.task_service),
             create_create_task_tool(self.project, self.task_service),
-            create_edit_task_tool(self.project, self.task_service),
+            create_edit_task_tool(self.project, self.task_service, self.document_repository),
             # HTML rendering tool
             create_render_html_tool(),
         ]

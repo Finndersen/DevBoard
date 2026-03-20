@@ -13,11 +13,13 @@ from devboard.agents.tools.task_tools import (
     _format_tasks_as_toon,
     _task_to_toon_record,
     create_create_task_tool,
+    create_edit_own_task_tool,
     create_edit_task_tool,
     create_list_tasks_tool,
     create_view_task_details_tool,
 )
 from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Document, Project, Task, TaskStatus
+from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
 
 
@@ -55,6 +57,8 @@ def mock_task(mock_codebase):
     task.base_branch = "main"
     task.github_pr_number = None
     task.custom_fields = {"priority": "high"}
+    task.specification = Mock(spec=Document)
+    task.specification.content = "Existing specification content."
     return task
 
 
@@ -90,6 +94,13 @@ def mock_task_service():
     service.task_repo.db = Mock()
     service.get_custom_fields.return_value = []
     return service
+
+
+@pytest.fixture
+def mock_document_repo():
+    """Create a mock DocumentRepository."""
+    repo = Mock(spec=DocumentRepository)
+    return repo
 
 
 class TestTaskToToonRecord:
@@ -855,22 +866,22 @@ class TestToolSchemas:
 class TestCreateEditTaskTool:
     """Tests for create_edit_task_tool."""
 
-    def test_edit_task_tool_creation(self, mock_project, mock_task_service):
+    def test_edit_task_tool_creation(self, mock_project, mock_task_service, mock_document_repo):
         """Tool is created with name 'edit_task'."""
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
 
         assert isinstance(tool, Tool)
         assert tool.name == "edit_task"
         assert tool.function is not None
 
     @pytest.mark.asyncio
-    async def test_edit_task_title(self, mock_project, mock_task_service, mock_task):
+    async def test_edit_task_title(self, mock_project, mock_task_service, mock_document_repo, mock_task):
         """Updates task title and returns confirmation JSON."""
         mock_task_service.get_task_by_id.return_value = mock_task
         mock_task_service.update_task.return_value = mock_task
         mock_task.title = "New Title"
 
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         result = await tool.function(task_id=1, title="New Title")
 
         mock_task_service.update_task.assert_called_once_with(mock_task, title="New Title", custom_fields=None)
@@ -882,13 +893,13 @@ class TestCreateEditTaskTool:
         }
 
     @pytest.mark.asyncio
-    async def test_edit_task_custom_fields(self, mock_project, mock_task_service, mock_task):
+    async def test_edit_task_custom_fields(self, mock_project, mock_task_service, mock_document_repo, mock_task):
         """Updates custom fields and returns confirmation JSON."""
         mock_task_service.get_task_by_id.return_value = mock_task
         mock_task_service.update_task.return_value = mock_task
         mock_task.custom_fields = {"priority": "high", "team": "backend"}
 
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         result = await tool.function(task_id=1, custom_fields={"team": "backend"})
 
         mock_task_service.update_task.assert_called_once_with(mock_task, title=None, custom_fields={"team": "backend"})
@@ -900,9 +911,42 @@ class TestCreateEditTaskTool:
         }
 
     @pytest.mark.asyncio
-    async def test_edit_task_nothing_to_update(self, mock_project, mock_task_service):
+    async def test_edit_task_specification_content(
+        self, mock_project, mock_task_service, mock_document_repo, mock_task
+    ):
+        """Updates specification content and returns confirmation JSON with specification_updated flag."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+        mock_task_service.update_task.return_value = mock_task
+
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+        result = await tool.function(task_id=1, specification_content="New specification content")
+
+        mock_task_service.get_task_by_id.assert_called_once_with(1, with_documents=True)
+        mock_document_repo.update_content.assert_called_once_with(mock_task.specification, "New specification content")
+        mock_document_repo.commit.assert_called_once()
+        result_data = json.loads(result)
+        assert result_data["specification_updated"] is True
+        assert result_data["task_id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_edit_task_specification_content_empty(
+        self, mock_project, mock_task_service, mock_document_repo, mock_task
+    ):
+        """Raises ModelRetry when specification_content is empty/whitespace."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=1, specification_content="   ")
+
+        assert "specification_content cannot be empty" in str(exc_info.value)
+        mock_document_repo.update_content.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_edit_task_nothing_to_update(self, mock_project, mock_task_service, mock_document_repo):
         """Raises ModelRetry when no fields provided to update."""
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(task_id=1)
@@ -911,11 +955,11 @@ class TestCreateEditTaskTool:
         mock_task_service.get_task_by_id.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_edit_task_not_found(self, mock_project, mock_task_service):
+    async def test_edit_task_not_found(self, mock_project, mock_task_service, mock_document_repo):
         """Raises ModelRetry when task not found."""
         mock_task_service.get_task_by_id.return_value = None
 
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(task_id=999, title="New Title")
@@ -924,12 +968,12 @@ class TestCreateEditTaskTool:
         mock_task_service.update_task.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_edit_task_wrong_project(self, mock_project, mock_task_service, mock_task):
+    async def test_edit_task_wrong_project(self, mock_project, mock_task_service, mock_document_repo, mock_task):
         """Raises ModelRetry when task belongs to a different project."""
         mock_task.project_id = 999
         mock_task_service.get_task_by_id.return_value = mock_task
 
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(task_id=1, title="New Title")
@@ -937,26 +981,82 @@ class TestCreateEditTaskTool:
         assert "does not belong to this project" in str(exc_info.value)
         mock_task_service.update_task.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_edit_task_title_and_specification_content(
+        self, mock_project, mock_task_service, mock_document_repo, mock_task
+    ):
+        """Updates both title and specification content in a single call."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+        mock_task_service.update_task.return_value = mock_task
+        mock_task.title = "New Title"
+
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+        result = await tool.function(task_id=1, title="New Title", specification_content="New spec")
+
+        mock_task_service.update_task.assert_called_once_with(mock_task, title="New Title", custom_fields=None)
+        mock_document_repo.update_content.assert_called_once_with(mock_task.specification, "New spec")
+        mock_document_repo.commit.assert_called_once()
+        result_data = json.loads(result)
+        assert result_data == {
+            "task_id": 1,
+            "title": "New Title",
+            "custom_fields": {"priority": "high"},
+            "specification_updated": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_edit_task_empty_specification_does_not_update_title(
+        self, mock_project, mock_task_service, mock_document_repo, mock_task
+    ):
+        """Empty specification_content raises ModelRetry before any mutations occur."""
+        mock_task_service.get_task_by_id.return_value = mock_task
+
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=1, title="New Title", specification_content="   ")
+
+        assert "specification_content cannot be empty" in str(exc_info.value)
+        mock_task_service.update_task.assert_not_called()
+        mock_document_repo.update_content.assert_not_called()
+
 
 class TestEditTaskToolSchemas:
     """Tests for edit_task tool schema construction."""
 
-    def test_edit_task_schema_has_task_id_required(self, mock_project, mock_task_service):
+    def test_edit_task_schema_has_task_id_required(self, mock_project, mock_task_service, mock_document_repo):
         """task_id is required; no other fields are required."""
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         schema = tool.tool_def.parameters_json_schema
 
         assert "task_id" in schema["properties"]
         assert schema["required"] == ["task_id"]
 
-    def test_edit_task_schema_no_custom_fields(self, mock_project, mock_task_service):
+    def test_edit_task_schema_has_task_id(self, mock_project, mock_task_service, mock_document_repo):
+        """task_id is present in required when using create_edit_task_tool."""
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "task_id" in schema["properties"]
+        assert "task_id" in schema["required"]
+
+    def test_edit_task_schema_has_specification_content(self, mock_project, mock_task_service, mock_document_repo):
+        """specification_content is present in schema."""
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "specification_content" in schema["properties"]
+        assert "anyOf" in schema["properties"]["specification_content"]
+        assert "specification" in schema["properties"]["specification_content"]["description"].lower()
+
+    def test_edit_task_schema_no_custom_fields(self, mock_project, mock_task_service, mock_document_repo):
         """custom_fields is omitted when no field definitions provided."""
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         schema = tool.tool_def.parameters_json_schema
 
         assert "custom_fields" not in schema["properties"]
 
-    def test_edit_task_schema_with_custom_fields_nullable(self, mock_project, mock_task_service):
+    def test_edit_task_schema_with_custom_fields_nullable(self, mock_project, mock_task_service, mock_document_repo):
         """Each custom field uses anyOf with null; no required array in custom_fields object."""
         priority_def = Mock(spec=CustomFieldDefinition)
         priority_def.name = "priority"
@@ -973,7 +1073,7 @@ class TestEditTaskToolSchemas:
         notes_def.mandatory = False
 
         mock_task_service.get_custom_fields.return_value = [priority_def, notes_def]
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         schema = tool.tool_def.parameters_json_schema
 
         assert "custom_fields" in schema["properties"]
@@ -994,10 +1094,74 @@ class TestEditTaskToolSchemas:
         null_schemas = [s for s in notes_prop["anyOf"] if s.get("type") == "null"]
         assert len(null_schemas) == 1
 
-    def test_edit_task_schema_title_optional(self, mock_project, mock_task_service):
+    def test_edit_task_schema_title_optional(self, mock_project, mock_task_service, mock_document_repo):
         """title is in schema properties but not in required."""
-        tool = create_edit_task_tool(mock_project, mock_task_service)
+        tool = create_edit_task_tool(mock_project, mock_task_service, mock_document_repo)
         schema = tool.tool_def.parameters_json_schema
 
         assert "title" in schema["properties"]
         assert "title" not in schema.get("required", [])
+
+
+class TestCreateEditOwnTaskTool:
+    """Tests for create_edit_own_task_tool."""
+
+    def test_edit_own_task_tool_creation(self, mock_task, mock_task_service, mock_document_repo):
+        """Tool name is 'edit_task' and is created successfully."""
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "edit_task"
+        assert tool.function is not None
+
+    @pytest.mark.asyncio
+    async def test_edit_own_task_title(self, mock_task, mock_task_service, mock_document_repo):
+        """Updates title via pre-bound task."""
+        mock_task_service.update_task.return_value = mock_task
+        mock_task.title = "Updated Title"
+
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+        result = await tool.function(title="Updated Title")
+
+        mock_task_service.update_task.assert_called_once_with(mock_task, title="Updated Title", custom_fields=None)
+        result_data = json.loads(result)
+        assert result_data["task_id"] == 1
+        assert result_data["title"] == "Updated Title"
+
+    @pytest.mark.asyncio
+    async def test_edit_own_task_specification_content(self, mock_task, mock_task_service, mock_document_repo):
+        """Updates specification content via pre-bound task."""
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+        result = await tool.function(specification_content="New spec content")
+
+        mock_document_repo.update_content.assert_called_once_with(mock_task.specification, "New spec content")
+        mock_document_repo.commit.assert_called_once()
+        result_data = json.loads(result)
+        assert result_data["specification_updated"] is True
+        assert result_data["task_id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_edit_own_task_nothing_to_update(self, mock_task, mock_task_service, mock_document_repo):
+        """Raises ModelRetry when no fields provided."""
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function()
+
+        assert "No fields to update" in str(exc_info.value)
+
+    def test_edit_own_task_schema_no_task_id(self, mock_task, mock_task_service, mock_document_repo):
+        """task_id is NOT in schema properties."""
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "task_id" not in schema["properties"]
+        assert schema.get("required", []) == []
+
+    def test_edit_own_task_schema_has_specification_content(self, mock_task, mock_task_service, mock_document_repo):
+        """specification_content is in schema properties."""
+        tool = create_edit_own_task_tool(mock_task, mock_task_service, mock_document_repo)
+        schema = tool.tool_def.parameters_json_schema
+
+        assert "specification_content" in schema["properties"]
+        assert "anyOf" in schema["properties"]["specification_content"]

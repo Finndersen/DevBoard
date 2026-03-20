@@ -8,6 +8,7 @@ import toons
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Project, Task, TaskStatus
+from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
 
 MAX_TASKS_LIMIT = 20
@@ -338,18 +339,21 @@ def _build_edit_custom_fields_schema(
 
 def _build_edit_task_json_schema(
     custom_field_definitions: list[CustomFieldDefinition],
+    include_task_id: bool = True,
 ) -> dict[str, Any]:
     """Build the full JSON schema for the edit_task tool."""
-    properties: dict[str, Any] = {
-        "task_id": {
+    properties: dict[str, Any] = {}
+
+    if include_task_id:
+        properties["task_id"] = {
             "type": "integer",
             "description": "The ID of the task to edit",
-        },
-        "title": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "New title for the task (leave null to keep unchanged)",
-            "default": None,
-        },
+        }
+
+    properties["title"] = {
+        "anyOf": [{"type": "string"}, {"type": "null"}],
+        "description": "New title for the task (leave null to keep unchanged)",
+        "default": None,
     }
 
     edit_custom_fields_schema = _build_edit_custom_fields_schema(custom_field_definitions)
@@ -360,35 +364,98 @@ def _build_edit_task_json_schema(
             "default": None,
         }
 
+    properties["specification_content"] = {
+        "anyOf": [{"type": "string"}, {"type": "null"}],
+        "description": "New content for the task specification document. Replaces the entire specification. Leave null to keep unchanged.",
+        "default": None,
+    }
+
     return {
         "type": "object",
         "properties": properties,
-        "required": ["task_id"],
+        "required": ["task_id"] if include_task_id else [],
         "additionalProperties": False,
     }
+
+
+async def _apply_task_edits(
+    task: Task,
+    task_service: TaskService,
+    document_repository: DocumentRepository,
+    title: str | None = None,
+    custom_fields: dict[str, Any] | None = None,
+    specification_content: str | None = None,
+) -> str:
+    """Apply edits to a task and return a JSON result.
+
+    Args:
+        task: The task to edit
+        task_service: Service for task operations
+        document_repository: Repository for document operations
+        title: New title (leave None to keep unchanged)
+        custom_fields: Custom field values to merge (leave None to keep unchanged)
+        specification_content: New specification content (leave None to keep unchanged)
+
+    Returns:
+        JSON string with updated task fields
+    """
+    if title is None and custom_fields is None and specification_content is None:
+        raise ModelRetry("No fields to update. Provide at least one of: title, custom_fields, specification_content.")
+    if specification_content is not None and not specification_content.strip():
+        raise ModelRetry("specification_content cannot be empty or whitespace.")
+
+    try:
+        updated_task = task
+        if title is not None or custom_fields is not None:
+            updated_task = task_service.update_task(task, title=title, custom_fields=custom_fields)
+
+        spec_updated = False
+        if specification_content is not None:
+            document_repository.update_content(task.specification, specification_content)
+            document_repository.commit()
+            spec_updated = True
+
+        result: dict[str, Any] = {
+            "task_id": updated_task.id,
+            "title": updated_task.title,
+            "custom_fields": updated_task.custom_fields,
+        }
+        if spec_updated:
+            result["specification_updated"] = True
+
+        return json.dumps(result)
+    except ModelRetry:
+        raise
+    except Exception as e:
+        raise ModelRetry(f"Failed to update task: {e}") from e
 
 
 def create_edit_task_tool(
     project: Project,
     task_service: TaskService,
+    document_repository: DocumentRepository,
 ) -> Tool:
-    """Create a tool for editing task metadata within a project.
+    """Create a tool for editing task metadata and specification within a project.
 
     Args:
         project: The project context (for security validation)
         task_service: Service for task operations
+        document_repository: Repository for document operations
     """
 
     async def edit_task(
         task_id: int,
         title: str | None = None,
         custom_fields: dict[str, Any] | None = None,
+        specification_content: str | None = None,
     ) -> str:
-        """Edit metadata fields of an existing task within the current project."""
-        if title is None and custom_fields is None:
-            raise ModelRetry("No fields to update. Provide at least one of: title, custom_fields.")
+        """Edit metadata fields and/or specification content of an existing task within the current project."""
+        if title is None and custom_fields is None and specification_content is None:
+            raise ModelRetry(
+                "No fields to update. Provide at least one of: title, custom_fields, specification_content."
+            )
 
-        task = task_service.get_task_by_id(task_id)
+        task = task_service.get_task_by_id(task_id, with_documents=bool(specification_content))
 
         if not task:
             raise ModelRetry(f"Task with ID {task_id} not found.")
@@ -396,24 +463,61 @@ def create_edit_task_tool(
         if task.project_id != project.id:
             raise ModelRetry(f"Task with ID {task_id} does not belong to this project.")
 
-        try:
-            updated_task = task_service.update_task(task, title=title, custom_fields=custom_fields)
-            return json.dumps(
-                {
-                    "task_id": updated_task.id,
-                    "title": updated_task.title,
-                    "custom_fields": updated_task.custom_fields,
-                }
-            )
-        except Exception as e:
-            raise ModelRetry(f"Failed to update task: {e}") from e
+        return await _apply_task_edits(
+            task=task,
+            task_service=task_service,
+            document_repository=document_repository,
+            title=title,
+            custom_fields=custom_fields,
+            specification_content=specification_content,
+        )
 
-    json_schema = _build_edit_task_json_schema(task_service.get_custom_fields())
+    json_schema = _build_edit_task_json_schema(task_service.get_custom_fields(), include_task_id=True)
 
     return Tool.from_schema(
         function=edit_task,
         name="edit_task",
-        description="Edit metadata fields (title, custom fields) of an existing task within the current project.",
+        description="Edit metadata fields (title, custom fields) and/or specification content of an existing task within the current project.",
+        json_schema=json_schema,
+    )
+
+
+def create_edit_own_task_tool(
+    task: Task,
+    task_service: TaskService,
+    document_repository: DocumentRepository,
+) -> Tool:
+    """Create a tool for editing the current task's metadata and specification.
+
+    The task is pre-bound at creation time, so no task_id parameter is exposed.
+
+    Args:
+        task: The pre-bound task to edit
+        task_service: Service for task operations
+        document_repository: Repository for document operations
+    """
+
+    async def edit_task(
+        title: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
+        specification_content: str | None = None,
+    ) -> str:
+        """Edit metadata fields and/or specification content of the current task."""
+        return await _apply_task_edits(
+            task=task,
+            task_service=task_service,
+            document_repository=document_repository,
+            title=title,
+            custom_fields=custom_fields,
+            specification_content=specification_content,
+        )
+
+    json_schema = _build_edit_task_json_schema(task_service.get_custom_fields(), include_task_id=False)
+
+    return Tool.from_schema(
+        function=edit_task,
+        name="edit_task",
+        description="Edit metadata fields (title, custom fields) and/or specification content of the current task.",
         json_schema=json_schema,
     )
 

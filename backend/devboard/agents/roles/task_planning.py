@@ -17,7 +17,7 @@ from devboard.agents.tools.implementation_plan_tools import (
     create_set_implementation_plan_steps_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
-from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_task_tool
+from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_own_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
@@ -162,10 +162,8 @@ class TaskPlanningAgentRole(AgentRole):
             plus codebase search tools and investigation tool (if codebase available)
         """
         tools: list[Tool] = [
-            # Tool to set task specification content (always available)
-            create_set_document_content_tool(
-                self.task.specification, self.document_repository, requires_approval=False
-            ),
+            # Tool to edit task metadata and/or specification content (always available)
+            create_edit_own_task_tool(self.task, self.task_service, self.document_repository),
         ]
 
         # Tool to edit task specification (only if it has content)
@@ -217,9 +215,6 @@ class TaskPlanningAgentRole(AgentRole):
 
         # Add create_task tool
         tools.append(create_create_task_tool(self.task.project, self.task_service))
-
-        # Add edit_task tool
-        tools.append(create_edit_task_tool(self.task.project, self.task_service))
 
         return tools
 
