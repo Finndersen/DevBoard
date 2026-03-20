@@ -5,6 +5,7 @@ import logfire
 from claude_agent_sdk import (
     AssistantMessage,
     Message,
+    RateLimitEvent,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -92,6 +93,9 @@ def describe_message(message: Message) -> str:
         status = "error" if message.is_error else "success"
         cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else "N/A"
         return f"ResultMessage({status}, cost={cost}, turns={message.num_turns})"
+
+    elif isinstance(message, RateLimitEvent):
+        return f"RateLimitEvent(status={message.rate_limit_info.status})"
 
     else:
         # StreamEvent

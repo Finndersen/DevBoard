@@ -1215,6 +1215,12 @@ export class ApiClient {
     })
   }
 
+  async createTaskBranch(taskId: number | string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/tasks/${taskId}/create-branch`, {
+      method: 'POST',
+    })
+  }
+
   async getWorktreePoolStatus(codebaseId: number | string): Promise<WorktreePoolStatus> {
     return this.request<WorktreePoolStatus>(`/api/codebases/${codebaseId}/worktree-pool`)
   }

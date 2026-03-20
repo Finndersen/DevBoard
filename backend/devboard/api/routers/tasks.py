@@ -504,6 +504,33 @@ async def abort_task_rebase(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.post("/{task_id}/create-branch", response_model=DeleteResponse)
+async def create_task_branch(
+    task_id: int,
+    task: Task = Depends(get_verified_task),
+    task_git_service: TaskGitService = Depends(get_task_git_service),
+) -> DeleteResponse:
+    """Create (or recreate) the git branch for a task.
+
+    Uses TaskGitService.create_task_branch which is idempotent — skips if branch
+    already exists, creates from task.base_branch if not.
+
+    Returns:
+        Success confirmation
+
+    Raises:
+        HTTPException: 400 if branch creation fails
+    """
+    try:
+        await task_git_service.create_task_branch(task)
+        return DeleteResponse(
+            success=True,
+            message=f"Branch {task.branch_name} created successfully",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.post("/{task_id}/checkout-to-main", response_model=CheckoutToMainResponse)
 async def checkout_task_to_main(
     task_id: int,
