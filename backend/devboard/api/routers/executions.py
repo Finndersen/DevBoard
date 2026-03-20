@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from devboard.agents.execution_manager import ExecutionStatus, conversation_execution_manager
+from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.execution.types import ExecutionStatus
 from devboard.db.database import get_db
 from devboard.db.models import ParentEntityType
 from devboard.db.repositories import ConversationRepository, TaskRepository
@@ -38,7 +39,7 @@ async def list_active_executions(
 
     Returns execution metadata enriched with conversation and task information.
     """
-    running = conversation_execution_manager.list_active_executions()
+    running = get_execution_manager().list_active_executions()
     if not running:
         return ActiveExecutionsResponse(executions=[])
 

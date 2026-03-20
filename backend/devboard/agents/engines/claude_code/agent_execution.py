@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 import logfire
 from pydantic_ai import Tool
 
-from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError
+from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 

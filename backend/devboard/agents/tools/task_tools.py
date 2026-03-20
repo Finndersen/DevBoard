@@ -7,6 +7,7 @@ from typing import Any, Literal
 import toons
 from pydantic_ai import ModelRetry, Tool
 
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.db.models import (
     Codebase,
     CustomFieldDefinition,
@@ -603,14 +604,10 @@ def create_create_task_tool(
                     "Ensure the task has a specification and no existing plan."
                 )
 
-            from devboard.agents.execution_manager import conversation_execution_manager
-
             assert conversation_repo is not None  # Already validated above
             try:
                 conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
-                conversation_execution_manager.start_agent_execution(
-                    conversation.id, CreateImplementationPlanAction.PROMPT
-                )
+                get_execution_manager().start_agent_execution(conversation.id, CreateImplementationPlanAction.PROMPT)
                 active_conversation_id = conversation.id
             except Exception as e:
                 raise ModelRetry(f"Failed to start auto-plan execution: {e}") from e

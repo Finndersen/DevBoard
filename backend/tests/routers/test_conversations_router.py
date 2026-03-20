@@ -1,6 +1,6 @@
 """Tests for conversations router."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
@@ -144,7 +144,9 @@ class TestConversationsRouter:
         """Test sending a message starts a background execution and returns conversation_id."""
         message_request = {"message": "Help me analyze my project and answer questions."}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
         assert response.status_code == 200
@@ -155,7 +157,9 @@ class TestConversationsRouter:
         """Test that 409 is returned when an execution is already active."""
         message_request = {"message": "Please update the document with better content"}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
@@ -250,7 +254,9 @@ class TestConversationsRouter:
         """Test that POST /messages starts background execution and returns conversation_id."""
         message_request = {"message": "Help me analyze my project and answer questions."}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
         assert response.status_code == 200
@@ -261,7 +267,9 @@ class TestConversationsRouter:
         """Test that duplicate POST /messages with active execution returns 409."""
         message_request = {"message": "First message"}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
@@ -272,7 +280,8 @@ class TestConversationsRouter:
         message_request = {"message": "Please update the document"}
 
         # Patch Task.status to be COMPLETE to test the validation
-        with patch("devboard.api.routers.conversations.conversation_execution_manager"):
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_get_mgr.return_value = Mock()
             # Test with a project conversation (no completed task check)
             response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
 
@@ -282,7 +291,9 @@ class TestConversationsRouter:
         """Test that POST /approve-tools starts background execution and returns conversation_id."""
         approval_request = {"approvals": {"test_call_1": {"approved": True, "feedback": "Looks good"}}}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             response = client.post(f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request)
 
         assert response.status_code == 200
@@ -293,7 +304,9 @@ class TestConversationsRouter:
         """Test that POST /approve-tools with active execution returns 409."""
         approval_request = {"approvals": {"call_1": {"approved": True}}}
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             mock_manager.start_agent_execution.side_effect = ConversationBusyError(test_conversation.id)
             response = client.post(f"/api/conversations/{test_conversation.id}/approve-tools", json=approval_request)
 
@@ -301,7 +314,9 @@ class TestConversationsRouter:
 
     def test_interrupt_conversation(self, client, test_conversation):
         """Test that POST /interrupt signals the active execution to stop."""
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             mock_manager.request_interrupt.return_value = True
             response = client.post(f"/api/conversations/{test_conversation.id}/interrupt")
 
@@ -311,7 +326,9 @@ class TestConversationsRouter:
 
     def test_interrupt_conversation_no_active_execution(self, client, test_conversation):
         """Test that POST /interrupt returns 404 when no active execution."""
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
             mock_manager.request_interrupt.return_value = False
             response = client.post(f"/api/conversations/{test_conversation.id}/interrupt")
 

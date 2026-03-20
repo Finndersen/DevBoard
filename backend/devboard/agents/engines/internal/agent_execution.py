@@ -6,11 +6,11 @@ import logfire
 from pydantic_ai import Tool
 from pydantic_ai.messages import ModelMessage
 
-from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.conversation_history import convert_messages_to_pydantic
 from devboard.agents.events import ConversationEvent
 from devboard.agents.exceptions import AgentInterruptedError
+from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage

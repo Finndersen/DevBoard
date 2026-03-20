@@ -8,11 +8,8 @@ import pytest
 
 from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
-from devboard.agents.execution_manager import (
-    ConversationExecution,
-    ConversationExecutionManager,
-    ExecutionStatus,
-)
+from devboard.agents.execution.manager import ConversationExecutionManager
+from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
 
 
 @pytest.fixture
@@ -49,7 +46,7 @@ class TestStartAgentExecution:
     @pytest.mark.asyncio
     async def test_creates_running_execution(self, manager):
         """Starting an execution should create a RUNNING ConversationExecution."""
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_simple_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             execution = manager.start_agent_execution(1, "Hello")
 
         assert isinstance(execution, ConversationExecution)
@@ -69,7 +66,7 @@ class TestStartAgentExecution:
         async def _blocking(q, ie, *, conversation_id, message_or_approvals):
             await blocker.wait()
 
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_blocking):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
             manager.start_agent_execution(1, "Hello")
             with pytest.raises(ConversationBusyError):
                 manager.start_agent_execution(1, "Hello")
@@ -79,7 +76,7 @@ class TestStartAgentExecution:
     @pytest.mark.asyncio
     async def test_allows_new_after_completion(self, manager):
         """Should allow a new execution after the previous one completes."""
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_simple_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             first = manager.start_agent_execution(1, "Hello")
             await first.asyncio_task
             await asyncio.sleep(0.01)
@@ -94,7 +91,7 @@ class TestExecutionLifecycle:
 
     @pytest.mark.asyncio
     async def test_completed_status_on_success(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_simple_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
         await asyncio.sleep(0.01)
@@ -104,7 +101,7 @@ class TestExecutionLifecycle:
 
     @pytest.mark.asyncio
     async def test_interrupted_status_on_agent_interrupted_error(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_interrupt_raising_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_interrupt_raising_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
         await asyncio.sleep(0.01)
@@ -114,7 +111,7 @@ class TestExecutionLifecycle:
 
     @pytest.mark.asyncio
     async def test_failed_status_on_generic_exception(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_error_raising_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_error_raising_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
         await asyncio.sleep(0.01)
@@ -125,7 +122,7 @@ class TestExecutionLifecycle:
 
     @pytest.mark.asyncio
     async def test_sentinel_pushed_to_queue_on_completion(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_simple_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
 
@@ -134,7 +131,7 @@ class TestExecutionLifecycle:
 
     @pytest.mark.asyncio
     async def test_events_then_sentinel_in_queue(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_event_pushing_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_event_pushing_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
 
@@ -154,7 +151,7 @@ class TestInterrupt:
         async def _blocking(q, ie, *, conversation_id, message_or_approvals):
             await blocker.wait()
 
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_blocking):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
             execution = manager.start_agent_execution(1, "Hello")
 
         result = manager.request_interrupt(1)
@@ -171,7 +168,7 @@ class TestInterrupt:
 
     @pytest.mark.asyncio
     async def test_request_interrupt_returns_false_after_completion(self, manager):
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_simple_coro):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
         await asyncio.sleep(0.01)
@@ -190,7 +187,7 @@ class TestGetExecution:
         async def _blocking(q, ie, *, conversation_id, message_or_approvals):
             await blocker.wait()
 
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_blocking):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
             manager.start_agent_execution(1, "Hello")
         assert manager.has_active_execution(1) is True
 
@@ -207,7 +204,7 @@ class TestGetExecution:
         async def _blocking(q, ie, *, conversation_id, message_or_approvals):
             await blocker.wait()
 
-        with patch("devboard.agents.execution_manager._run_agent_for_conversation", new=_blocking):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
             execution = manager.start_agent_execution(1, "Hello")
         fetched = manager.get_execution(1)
         assert fetched is execution

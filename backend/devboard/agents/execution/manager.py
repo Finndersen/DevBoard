@@ -1,69 +1,33 @@
-"""Conversation execution manager for background task execution."""
+"""Conversation execution manager for background agent execution."""
 
 import asyncio
-import dataclasses
 import datetime
 from collections.abc import AsyncIterator, Coroutine
-from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 
 import logfire
 from opentelemetry import context as otel_context
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
+from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
 from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
-from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
+from devboard.db.models import Codebase, Project, Task, TaskStatus
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
 
 
-class ExecutionStatus(StrEnum):
-    RUNNING = "running"
-    COMPLETED = "completed"
-    INTERRUPTED = "interrupted"
-    FAILED = "failed"
-
-
-class ExecutionLifecycleEventType(StrEnum):
-    EXECUTION_STARTED = "execution_started"
-    EXECUTION_COMPLETED = "execution_completed"
-
-
-class ExecutionLifecycleEvent(BaseModel):
-    """WebSocket lifecycle message for execution state changes."""
-
-    event_type: Literal["execution_lifecycle"] = "execution_lifecycle"
-    event: ExecutionLifecycleEventType
-    status: ExecutionStatus | None = None
-    error: str | None = None
-
-
-@dataclasses.dataclass
-class ConversationExecution:
-    """Tracks a single active agent execution for a conversation."""
-
-    conversation_id: int
-    event_queue: asyncio.Queue[ConversationEvent | None]
-    interrupt_requested: asyncio.Event
-    asyncio_task: asyncio.Task[None]
-    status: ExecutionStatus
-    started_at: datetime.datetime
-    completed_at: datetime.datetime | None = None
-    error: str | None = None
-
-
 class ConversationExecutionManager:
-    """Process-level singleton that tracks all active agent executions.
+    """Manages all active agent executions.
 
-    Manages background task lifecycle, event queues, and interrupt signaling.
+    Tracks background task lifecycle, event queues, and interrupt signaling.
     Keyed by conversation_id — at most one execution per conversation at a time.
+
+    Created and registered during FastAPI lifespan startup via the execution registry.
     """
 
     def __init__(self) -> None:
@@ -165,7 +129,7 @@ class ConversationExecutionManager:
 
 async def _drain_events(
     stream: AsyncIterator[ConversationEvent],
-    db: Session,
+    db,
     event_queue: asyncio.Queue[ConversationEvent | None],
 ) -> None:
     async for event in stream:
@@ -175,7 +139,7 @@ async def _drain_events(
 
 async def _create_agent_stream(
     services: ExecutionServices,
-    conversation: Conversation,
+    conversation,
     message_or_approvals: str | ToolApprovals,
     interrupt_event: asyncio.Event,
     working_dir: str,
@@ -229,7 +193,6 @@ async def _run_agent_for_conversation(
         is_task = isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE
 
         if is_task:
-            assert isinstance(conversation_parent, Task)
             try:
                 async with services.workspace_service.allocate_workspace(conversation_parent) as slot:
                     agent_stream = await _create_agent_stream(
@@ -285,7 +248,3 @@ async def _run_agent_for_conversation(
     finally:
         await asyncio.to_thread(db.commit)
         await asyncio.to_thread(db.close)
-
-
-# Process-level singleton
-conversation_execution_manager = ConversationExecutionManager()

@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from devboard.agents.execution_manager import conversation_execution_manager
+from devboard.agents.execution.manager import ConversationExecutionManager
+from devboard.agents.execution.registry import get_execution_manager, set_execution_manager
 from devboard.api.routers import (
     agents,
     claude_code,
@@ -74,6 +75,7 @@ _GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
+    set_execution_manager(ConversationExecutionManager())
     await ss_mcp.start_session()
     await cleanup_stale_locks_on_startup()
     try:
@@ -90,7 +92,7 @@ async def _shutdown_active_executions() -> None:
     Executions are not interrupted — they are allowed to complete naturally,
     consistent with how uvicorn handles in-flight HTTP requests.
     """
-    active = conversation_execution_manager.list_active_executions()
+    active = get_execution_manager().list_active_executions()
     if not active:
         return
 

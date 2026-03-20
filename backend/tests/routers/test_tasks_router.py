@@ -628,7 +628,9 @@ class TestWorkflowActions:
         """Test that workflow action returning a prompt starts background execution."""
         prompt_action_request = {"action_key": "task.create_implementation_plan"}
 
-        with patch("devboard.api.routers.tasks.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.tasks.get_execution_manager") as mock_get_mgr:
+            mock_manager = MagicMock()
+            mock_get_mgr.return_value = mock_manager
             response = client_with_mock_workflow_deps.post(
                 f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
                 json=prompt_action_request,
@@ -653,7 +655,9 @@ class TestWorkflowActions:
         ]()
         mock_task_service_for_workflow.transition_to_complete = MagicMock()
 
-        with patch("devboard.api.routers.tasks.conversation_execution_manager") as mock_manager:
+        with patch("devboard.api.routers.tasks.get_execution_manager") as mock_get_mgr:
+            mock_manager = MagicMock()
+            mock_get_mgr.return_value = mock_manager
             response = client_with_mock_workflow_deps.post(
                 f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
                 json={"action_key": "task.finalise"},

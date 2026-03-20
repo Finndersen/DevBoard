@@ -10,7 +10,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.events import ConversationEvent
 from devboard.agents.exceptions import ConversationBusyError
-from devboard.agents.execution_manager import conversation_execution_manager
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.api.dependencies.conversations import get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.factories import create_agent_role_for_conversation
@@ -125,7 +125,7 @@ def _start_agent_execution(
 
     cid = conversation.id
     try:
-        conversation_execution_manager.start_agent_execution(cid, message_or_approvals)
+        get_execution_manager().start_agent_execution(cid, message_or_approvals)
     except ConversationBusyError as err:
         raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 
@@ -180,7 +180,7 @@ async def interrupt_conversation(
     Raises:
         HTTPException 404: If no active execution for this conversation
     """
-    interrupted = conversation_execution_manager.request_interrupt(conversation.id)
+    interrupted = get_execution_manager().request_interrupt(conversation.id)
     if not interrupted:
         raise HTTPException(status_code=404, detail="No active execution for this conversation")
     return {"status": "interrupt_requested"}

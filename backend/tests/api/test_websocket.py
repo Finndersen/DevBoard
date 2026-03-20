@@ -9,11 +9,7 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from devboard.agents.events import MessageRole, TextMessage
-from devboard.agents.execution_manager import (
-    ConversationExecution,
-    ExecutionLifecycleEventType,
-    ExecutionStatus,
-)
+from devboard.agents.execution.types import ConversationExecution, ExecutionLifecycleEventType, ExecutionStatus
 from devboard.api.routers.websocket import _stream_single_execution
 from devboard.db.models import ParentEntityType
 from devboard.db.repositories import ConversationRepository
@@ -75,7 +71,9 @@ class TestWebSocketConnectionLifecycle:
         conversation = _get_task_conversation(db_session, test_task)
 
         with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.conversation_execution_manager") as mock_mgr:
+            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+                mock_mgr = Mock()
+                mock_get_mgr.return_value = mock_mgr
                 mock_mgr.get_execution.return_value = None
 
                 with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
@@ -96,7 +94,9 @@ class TestWebSocketEventStreaming:
         execution.event_queue.put_nowait(None)  # sentinel
 
         with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.conversation_execution_manager") as mock_mgr:
+            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+                mock_mgr = Mock()
+                mock_get_mgr.return_value = mock_mgr
                 mock_mgr.get_execution.return_value = execution
 
                 with pytest.raises(WebSocketDisconnect) as exc_info:
@@ -135,7 +135,9 @@ class TestWebSocketEventStreaming:
         execution.event_queue.put_nowait(None)  # sentinel
 
         with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.conversation_execution_manager") as mock_mgr:
+            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+                mock_mgr = Mock()
+                mock_get_mgr.return_value = mock_mgr
                 mock_mgr.get_execution.return_value = execution
 
                 with pytest.raises(WebSocketDisconnect) as exc_info:
@@ -172,7 +174,9 @@ class TestWebSocketEventStreaming:
         execution.event_queue.put_nowait(None)
 
         with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.conversation_execution_manager") as mock_mgr:
+            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+                mock_mgr = Mock()
+                mock_get_mgr.return_value = mock_mgr
                 mock_mgr.get_execution.return_value = execution
 
                 with pytest.raises(WebSocketDisconnect) as exc_info:
@@ -198,7 +202,9 @@ class TestWebSocketEventStreaming:
         execution.event_queue.put_nowait(None)
 
         with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.conversation_execution_manager") as mock_mgr:
+            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+                mock_mgr = Mock()
+                mock_get_mgr.return_value = mock_mgr
                 mock_mgr.get_execution.return_value = execution
 
                 with pytest.raises(WebSocketDisconnect) as exc_info:
@@ -234,9 +240,10 @@ class TestWebSocketDisconnectRequeue:
         # First send_text succeeds (execution_started), second raises disconnect (the event send)
         mock_websocket.send_text.side_effect = [None, WebSocketDisconnect()]
 
-        with patch(
-            "devboard.api.routers.websocket.conversation_execution_manager.get_execution", return_value=execution
-        ):
+        with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
+            mock_mgr.get_execution.return_value = execution
             with pytest.raises(WebSocketDisconnect):
                 await _stream_single_execution(mock_websocket, conversation_id=1)
 
@@ -266,9 +273,10 @@ class TestWebSocketDisconnectRequeue:
         # execution_started succeeds, first event succeeds, second event disconnects
         mock_websocket.send_text.side_effect = [None, None, WebSocketDisconnect()]
 
-        with patch(
-            "devboard.api.routers.websocket.conversation_execution_manager.get_execution", return_value=execution
-        ):
+        with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
+            mock_mgr.get_execution.return_value = execution
             with pytest.raises(WebSocketDisconnect):
                 await _stream_single_execution(mock_websocket, conversation_id=1)
 

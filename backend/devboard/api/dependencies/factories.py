@@ -6,11 +6,11 @@ from fastapi import HTTPException
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService, ClaudeCodeConversationHistoryService
 from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
+from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole

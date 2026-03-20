@@ -5,12 +5,8 @@ import asyncio
 import logfire
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from devboard.agents.execution_manager import (
-    ExecutionLifecycleEvent,
-    ExecutionLifecycleEventType,
-    ExecutionStatus,
-    conversation_execution_manager,
-)
+from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.execution.types import ExecutionLifecycleEvent, ExecutionLifecycleEventType, ExecutionStatus
 from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories import ConversationRepository
 
@@ -68,7 +64,7 @@ async def conversation_websocket(
 
 async def _stream_single_execution(websocket: WebSocket, conversation_id: int) -> None:
     """Stream events for the current execution, then close the WebSocket."""
-    execution = conversation_execution_manager.get_execution(conversation_id)
+    execution = get_execution_manager().get_execution(conversation_id)
     if execution is None:
         await websocket.close(code=4404, reason="No active execution")
         return

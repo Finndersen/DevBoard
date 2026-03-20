@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.agents.agent_execution import AgentExecutionService
 from devboard.agents.events import SystemEvent, SystemEventType
+from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.mcp.mcp_tool_factory import MCPServerSetupFailure
 
 
@@ -55,7 +55,7 @@ class TestAgentExecutionMCPSetupFailures:
         mock_factory.__aenter__ = AsyncMock(return_value=mock_factory)
         mock_factory.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("devboard.agents.agent_execution.MCPToolFactory", return_value=mock_factory):
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=mock_factory):
             events = []
             async for event in service.stream_events_for_message_or_approval("hello"):
                 events.append(event)
@@ -84,7 +84,7 @@ class TestAgentExecutionMCPSetupFailures:
         mock_factory.__aenter__ = AsyncMock(return_value=mock_factory)
         mock_factory.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("devboard.agents.agent_execution.MCPToolFactory", return_value=mock_factory):
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=mock_factory):
             events = []
             async for event in service.stream_events_for_message_or_approval("hello"):
                 events.append(event)

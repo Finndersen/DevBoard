@@ -125,8 +125,10 @@ class TestCreateTaskAutoplan:
                 "devboard.workflow_actions.task_workflows.CreateImplementationPlanAction.is_available",
                 return_value=True,
             ),
-            patch("devboard.agents.execution_manager.conversation_execution_manager") as mock_exec_manager,
+            patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr,
         ):
+            mock_exec_manager = Mock()
+            mock_get_mgr.return_value = mock_exec_manager
             result = await tool.function(
                 title="New Task",
                 codebase_name="backend",
@@ -153,7 +155,9 @@ class TestCreateTaskAutoplan:
             conversation_repo=mock_conversation_repo,
         )
 
-        with patch("devboard.agents.execution_manager.conversation_execution_manager") as mock_exec_manager:
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_exec_manager = Mock()
+            mock_get_mgr.return_value = mock_exec_manager
             result = await tool.function(
                 title="New Task",
                 codebase_name="backend",

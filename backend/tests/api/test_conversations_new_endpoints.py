@@ -3,7 +3,7 @@
 from unittest.mock import Mock, patch
 
 from devboard.agents.exceptions import ConversationBusyError
-from devboard.agents.execution_manager import ConversationExecution
+from devboard.agents.execution.types import ConversationExecution
 from devboard.db.models import ParentEntityType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import ConversationRepository
@@ -27,7 +27,9 @@ class TestSendConversationMessage:
         """Should start background execution and return conversation_id."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.start_agent_execution.return_value = Mock(spec=ConversationExecution)
 
             response = client.post(
@@ -43,7 +45,9 @@ class TestSendConversationMessage:
         """Should return 409 Conflict if an execution is already running."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.start_agent_execution.side_effect = ConversationBusyError(conversation.id)
 
             response = client.post(
@@ -90,7 +94,9 @@ class TestApproveConversationTools:
         """Should start background execution with approvals and return conversation_id."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.start_agent_execution.return_value = Mock(spec=ConversationExecution)
 
             response = client.post(
@@ -106,7 +112,9 @@ class TestApproveConversationTools:
         """Should return 409 Conflict if an execution is already running."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.start_agent_execution.side_effect = ConversationBusyError(conversation.id)
 
             response = client.post(
@@ -132,7 +140,9 @@ class TestInterruptConversation:
         """Should return 200 and interrupt_requested status when execution is active."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.request_interrupt.return_value = True
 
             response = client.post(f"/api/conversations/{conversation.id}/interrupt")
@@ -145,7 +155,9 @@ class TestInterruptConversation:
         """Should return 404 when no active execution exists."""
         conversation = _get_task_conversation(db_session, test_task)
 
-        with patch("devboard.api.routers.conversations.conversation_execution_manager") as mock_mgr:
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_mgr = Mock()
+            mock_get_mgr.return_value = mock_mgr
             mock_mgr.request_interrupt.return_value = False
 
             response = client.post(f"/api/conversations/{conversation.id}/interrupt")
