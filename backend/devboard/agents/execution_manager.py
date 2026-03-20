@@ -10,6 +10,7 @@ from typing import Any, Literal
 import logfire
 from opentelemetry import context as otel_context
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
@@ -18,7 +19,7 @@ from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
-from devboard.db.models import Codebase, Project, Task, TaskStatus
+from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
 
@@ -164,7 +165,7 @@ class ConversationExecutionManager:
 
 async def _drain_events(
     stream: AsyncIterator[ConversationEvent],
-    db,
+    db: Session,
     event_queue: asyncio.Queue[ConversationEvent | None],
 ) -> None:
     async for event in stream:
@@ -174,7 +175,7 @@ async def _drain_events(
 
 async def _create_agent_stream(
     services: ExecutionServices,
-    conversation,
+    conversation: Conversation,
     message_or_approvals: str | ToolApprovals,
     interrupt_event: asyncio.Event,
     working_dir: str,
@@ -228,6 +229,7 @@ async def _run_agent_for_conversation(
         is_task = isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE
 
         if is_task:
+            assert isinstance(conversation_parent, Task)
             try:
                 async with services.workspace_service.allocate_workspace(conversation_parent) as slot:
                     agent_stream = await _create_agent_stream(

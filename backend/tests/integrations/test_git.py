@@ -484,7 +484,7 @@ class TestGetDefaultBranch:
                 return "upstream/main"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_default_branch()
 
         assert result == "upstream/main"
@@ -496,7 +496,7 @@ class TestListRemotes:
     @pytest.mark.asyncio
     async def test_returns_list_of_remote_names(self, temp_git_repo):
         git = GitRepoIntegration(temp_git_repo)
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = "origin\nupstream"
             result = await git.list_remotes()
         assert result == ["origin", "upstream"]
@@ -505,7 +505,7 @@ class TestListRemotes:
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_remotes(self, temp_git_repo):
         git = GitRepoIntegration(temp_git_repo)
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = ""
             result = await git.list_remotes()
         assert result == []

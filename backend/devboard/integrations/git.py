@@ -511,7 +511,7 @@ class GitRepoIntegration:
 
     async def prune_worktrees(self) -> None:
         """Remove stale git worktree references for directories that no longer exist on disk."""
-        await self._run_git_command(["worktree", "prune"])
+        await self.run_git_command(["worktree", "prune"])
 
     async def create_branch(self, name: str, base: str = "HEAD") -> None:
         """Create a new git branch without checking it out.
@@ -796,7 +796,7 @@ class GitRepoIntegration:
 
     async def list_remotes(self) -> list[str]:
         """Return all configured remote names for this repository."""
-        output = await self._run_git_command(["remote"], raise_on_error=False, timeout=10.0)
+        output = await self.run_git_command(["remote"], raise_on_error=False, timeout=10.0)
         return output.splitlines() if output else []
 
     async def fetch(self, remote: str = "origin", branch: str | None = None, timeout: float = 30.0) -> None:

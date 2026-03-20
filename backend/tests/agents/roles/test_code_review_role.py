@@ -74,7 +74,7 @@ class TestCodeReviewAgentRole:
 
         role = CodeReviewAgentRole(task=mock_task, working_dir=str(worktree))
 
-        assert role._codebase_integration._codebase_path == worktree.resolve()
+        assert role._codebase_integration.codebase_path == worktree.resolve()
 
     @pytest.mark.asyncio
     async def test_context_content_uses_build_task_context(self, mock_task):

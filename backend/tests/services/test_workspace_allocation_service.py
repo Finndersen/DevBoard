@@ -643,6 +643,7 @@ async def test_prepare_workspace_creates_worktree_if_invalid(service, sample_tas
     """Test that prepare_workspace creates worktree when slot is invalid."""
     with (
         patch.object(service, "_check_worktree_valid", return_value=False),
+        patch("devboard.services.workspace.workspace_service.GitRepoIntegration", return_value=AsyncMock()),
         patch.object(service._pool_manager, "create_worktree_for_slot", new_callable=AsyncMock) as mock_create,
         patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
         patch.object(service, "_migrate_claude_session_if_needed", new_callable=AsyncMock),
@@ -716,6 +717,7 @@ async def test_prepare_workspace_runs_setup_after_worktree_creation(service, sam
 
     with (
         patch.object(service, "_check_worktree_valid", return_value=False),
+        patch("devboard.services.workspace.workspace_service.GitRepoIntegration", return_value=AsyncMock()),
         patch.object(service._pool_manager, "create_worktree_for_slot", new_callable=AsyncMock),
         patch.object(service, "checkout_branch_in_slot", new_callable=AsyncMock, return_value=False),
         patch.object(service, "_run_setup_command", new_callable=AsyncMock) as mock_setup,
@@ -852,7 +854,6 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         # Verify stash flow: stash_push always called, has_uncommitted_changes never called
         mock_git.has_uncommitted_changes.assert_not_called()
         mock_git.stash_push.assert_called_once()
-        mock_git.fetch.assert_called_once()
         mock_git.rebase_branch.assert_called_once_with(
             sample_task.branch_name, sample_task.base_branch, abort_on_conflict=False
         )

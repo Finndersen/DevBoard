@@ -96,7 +96,7 @@ async def _shutdown_active_executions() -> None:
 
     logfire.info(f"Shutdown: waiting for {len(active)} active execution(s) to complete")
     tasks = [e.asyncio_task for e in active]
-    done, pending = await asyncio.wait(tasks, timeout=_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS)
+    _, pending = await asyncio.wait(tasks, timeout=_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS)
 
     if pending:
         logfire.warning(f"Shutdown: {len(pending)} execution(s) did not finish within timeout, cancelling")
