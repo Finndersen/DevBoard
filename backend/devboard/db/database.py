@@ -3,6 +3,7 @@
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import logfire
 from sqlalchemy import create_engine, event
@@ -28,7 +29,7 @@ engine = create_engine(
 )
 
 
-def _configure_sqlite_connection(dbapi_connection, connection_record):
+def _configure_sqlite_connection(dbapi_connection: Any, connection_record: Any) -> None:
     """Configure SQLite connection settings on first connect."""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
@@ -41,7 +42,7 @@ if is_sqlite:
     event.listen(engine, "connect", _configure_sqlite_connection)
 
 
-def _log_sql_query(conn, cursor, statement, parameters, context, executemany):
+def _log_sql_query(conn: Any, cursor: Any, statement: Any, parameters: Any, context: Any, executemany: Any) -> None:
     logfire.debug("SQL: {statement}", statement=statement)
 
 

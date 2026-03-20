@@ -79,11 +79,11 @@ class InternalAgent(BaseAgent):
         """
         super().__init__(role, model, additional_tools, custom_instructions)
         self.conversation_history = conversation_history or []
-        self.last_run_result: AgentRunResult | None = None
+        self.last_run_result: AgentRunResult[str | DeferredToolRequests] | None = None
 
-    def _create_agent(self) -> Agent:
+    def _create_agent(self) -> Agent[None, str | DeferredToolRequests]:
         """Create PydanticAI agent using role's configuration."""
-        agent = Agent(
+        agent: Agent[None, str | DeferredToolRequests] = Agent(
             self._get_model(),
             system_prompt=self.get_full_system_prompt(),
             tools=self.get_tools(),
@@ -96,6 +96,7 @@ class InternalAgent(BaseAgent):
 
         Returns the model ID with provider-specific adjustments for PydanticAI compatibility.
         """
+        assert self.model is not None, "InternalAgent requires a non-None model"
         # Replace google with google-gla for compatibility with PydanticAI
         return self.model.id.replace("google", "google-gla")
 
@@ -133,13 +134,15 @@ class InternalAgent(BaseAgent):
                     message = "The tool call was DENIED."
                 converted_approvals[tool_call_id] = ToolDenied(message=message)
 
-        return DeferredToolResults(approvals=converted_approvals)
+        return DeferredToolResults(approvals=converted_approvals)  # type: ignore[arg-type]
 
-    def _convert_pydantic_event_to_conversation_events(self, event: AgentStreamEvent) -> Generator[ConversationEvent]:
+    def _convert_pydantic_event_to_conversation_events(
+        self, event: AgentStreamEvent | AgentRunResultEvent[str | DeferredToolRequests]
+    ) -> Generator[ConversationEvent]:
         """Convert PydanticAI stream event to ConversationEvent.
 
         Args:
-            event: PydanticAI stream event
+            event: PydanticAI stream event or agent run result event
 
         Returns:
             ConversationEvent or None if event should not be included
@@ -187,7 +190,7 @@ class InternalAgent(BaseAgent):
                         tool_args=tool_call.args if tool_call.args else None,
                         timestamp=timestamp,
                     )
-            elif isinstance(result.output, str):
+            elif isinstance(result.output, str):  # pyright: ignore[reportUnnecessaryIsInstance]
                 # Text response
                 yield TextMessage(
                     role=MessageRole.AGENT,

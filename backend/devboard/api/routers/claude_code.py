@@ -50,7 +50,7 @@ async def list_sessions(
     task_info_by_session = conversation_repo.get_task_info_by_session_ids(session_ids)
     sub_agent_info_by_session = conversation_repo.get_sub_agent_info_by_session_ids(session_ids)
 
-    results = []
+    results: list[ClaudeCodeSessionResponse] = []
     for s in sessions:
         task_info_data = task_info_by_session.get(s.session_id)
         task_info = (

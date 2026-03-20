@@ -114,7 +114,7 @@ class TestGitHubContextProvider:
     def mock_integration(self, mock_github_repo):
         """Mock GitHub integration."""
         integration = Mock()
-        integration.get_repository = Mock(return_value=mock_github_repo)
+        integration.get_repository = AsyncMock(return_value=mock_github_repo)
         return integration
 
     @pytest.fixture
@@ -249,7 +249,7 @@ class TestCodebaseContextProvider:
     def mock_integration(self, tmp_path):
         """Mock Codebase integration."""
         integration = Mock()
-        integration._codebase_path = tmp_path
+        integration.codebase_path = tmp_path
         integration.read_file = AsyncMock(return_value="file content")
         integration.get_file_info = AsyncMock(return_value={"size": 100})
         integration.investigate_codebase = AsyncMock(return_value="Analysis result")

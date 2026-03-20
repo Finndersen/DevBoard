@@ -1,6 +1,7 @@
 """Worktree pool management API endpoints."""
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -45,7 +46,7 @@ async def get_worktree_pool_status(
     slots_with_info: list[WorktreeSlotWithTaskInfo] = []
     for slot in pool_status.slots:
         # Convert dataclass to dict for Pydantic schema
-        slot_dict = {
+        slot_dict: dict[str, Any] = {
             "id": slot.id,
             "path": slot.path,
             "is_main_repo": slot.is_main_repo,

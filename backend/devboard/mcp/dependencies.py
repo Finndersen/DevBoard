@@ -19,7 +19,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
 from devboard.agents.language_models import llm_registry
 from devboard.db.database import SessionLocal
-from devboard.db.repositories import ConfigurationRepository
+from devboard.db.repositories import AgentRoleConfigRepository, ConfigurationRepository
 from devboard.services.config_service import ConfigService
 
 
@@ -63,7 +63,9 @@ def create_agent_config_service(db: Session) -> AgentConfigService:
     """
     config_repo = ConfigurationRepository(db)
     config_service = ConfigService(config_repo)
+    agent_role_config_repo = AgentRoleConfigRepository(db)
     return AgentConfigService(
+        agent_role_config_repo=agent_role_config_repo,
         config_service=config_service,
         llm_registry=llm_registry,
         engine_registry=agent_engine_registry,

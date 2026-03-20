@@ -190,7 +190,7 @@ async def investigate_codebase(codebase_name: str, query: str) -> str:
             )
 
             # Run the investigation (with codebase name since it's now required)
-            result = await investigation_tool.function(codebase_name=codebase.name, query=query)
+            result = await investigation_tool.function(codebase_name=codebase.name, query=query)  # type: ignore[call-arg]
             return result
 
     except Exception as e:

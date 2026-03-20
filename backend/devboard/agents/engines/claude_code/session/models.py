@@ -17,11 +17,19 @@ class BaseSessionMessage:
     is_sidechain: bool
 
 
+def _user_content_factory() -> list[TextBlockDict | ToolResultBlockDict]:
+    return []
+
+
+def _assistant_content_factory() -> list[TextBlockDict | ToolUseBlockDict]:
+    return []
+
+
 @dataclass
 class UserSessionMessage(BaseSessionMessage):
     """User message from a Claude Code session (text or tool results)."""
 
-    content: list[TextBlockDict | ToolResultBlockDict] = field(default_factory=list)
+    content: list[TextBlockDict | ToolResultBlockDict] = field(default_factory=_user_content_factory)
 
     @property
     def text_content(self) -> str:
@@ -36,7 +44,7 @@ class UserSessionMessage(BaseSessionMessage):
 class AssistantSessionMessage(BaseSessionMessage):
     """Assistant message from a Claude Code session (text and/or tool calls)."""
 
-    content: list[TextBlockDict | ToolUseBlockDict] = field(default_factory=list)
+    content: list[TextBlockDict | ToolUseBlockDict] = field(default_factory=_assistant_content_factory)
 
     @property
     def text_content(self) -> str:

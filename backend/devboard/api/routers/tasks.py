@@ -1,6 +1,7 @@
 """Task API endpoints."""
 
 import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -76,7 +77,7 @@ router = APIRouter()
 
 def _get_available_workflow_actions(task: Task) -> list[WorkflowActionInfo]:
     """Get list of available workflow actions for a task."""
-    available_actions = []
+    available_actions: list[WorkflowActionInfo] = []
 
     for action_class in workflow_action_registry.list_values():
         if action_class.is_available(task):
@@ -163,6 +164,9 @@ async def update_task(
     # Handle implementation plan content update separately
     implementation_plan = update_data.pop("implementation_plan", None)
     if implementation_plan is not None:
+        assert task.implementation_plan is not None, (
+            "Cannot update implementation plan content: no plan document exists"
+        )
         # Update the implementation plan document content
         document_repo.update_content(task.implementation_plan, implementation_plan)
 
@@ -207,7 +211,7 @@ async def delete_task(
     delete_branch: bool = False,
     task: Task = Depends(get_verified_task),
     task_service: TaskService = Depends(get_task_service),
-):
+) -> dict[str, Any]:
     """Delete a task and all related data (conversations, messages, documents, associations).
 
     Args:
@@ -266,7 +270,7 @@ async def delete_task_resource(
     resource_id: int,
     task: Task = Depends(get_verified_task),
     resource_service: ResourceService = Depends(get_resource_service),
-):
+) -> dict[str, Any]:
     """Remove a context provider resource from a task."""
 
     deleted = resource_service.delete_task_resource(task_id, resource_id)
@@ -339,7 +343,7 @@ async def execute_workflow_action(
     task_git_service: TaskGitService = Depends(get_task_git_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     integration_service: IntegrationService = Depends(get_integration_service),
-) -> dict:
+) -> dict[str, Any]:
     """Execute a task workflow action.
 
     Runs the action's procedural steps (state transitions, DB changes) synchronously.

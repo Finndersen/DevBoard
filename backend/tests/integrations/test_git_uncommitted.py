@@ -24,7 +24,7 @@ class TestGetUncommittedFilePaths:
         """Returns empty list when no uncommitted changes exist."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock, return_value=""):
+        with patch.object(git, "run_git_command", new_callable=AsyncMock, return_value=""):
             result = await git.get_uncommitted_file_paths()
 
         assert result == []
@@ -39,7 +39,7 @@ class TestGetUncommittedFilePaths:
                 return ""
             return "src/main.py\nsrc/utils.py"
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run):
+        with patch.object(git, "run_git_command", side_effect=mock_run):
             result = await git.get_uncommitted_file_paths()
 
         assert result == ["src/main.py", "src/utils.py"]
@@ -54,7 +54,7 @@ class TestGetUncommittedFilePaths:
                 return "src/new_file.py"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run):
+        with patch.object(git, "run_git_command", side_effect=mock_run):
             result = await git.get_uncommitted_file_paths()
 
         assert result == ["src/new_file.py"]
@@ -69,7 +69,7 @@ class TestGetUncommittedFilePaths:
                 return "src/main.py\nsrc/staged_only.py"
             return "src/main.py\nsrc/unstaged_only.py"
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run):
+        with patch.object(git, "run_git_command", side_effect=mock_run):
             result = await git.get_uncommitted_file_paths()
 
         assert result == ["src/main.py", "src/staged_only.py", "src/unstaged_only.py"]
@@ -84,7 +84,7 @@ class TestGetUncommittedFilePaths:
                 return "shared.py"
             return "shared.py"
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run):
+        with patch.object(git, "run_git_command", side_effect=mock_run):
             result = await git.get_uncommitted_file_paths()
 
         assert result == ["shared.py"]
@@ -98,7 +98,7 @@ class TestGetChangedFilePaths:
         """Returns file paths changed between two commits."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock, return_value="file_a.py\nfile_b.py"):
+        with patch.object(git, "run_git_command", new_callable=AsyncMock, return_value="file_a.py\nfile_b.py"):
             result = await git.get_changed_file_paths("abc123", "def456")
 
         assert result == ["file_a.py", "file_b.py"]
@@ -108,7 +108,7 @@ class TestGetChangedFilePaths:
         """Returns empty list when no files changed."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock, return_value=""):
+        with patch.object(git, "run_git_command", new_callable=AsyncMock, return_value=""):
             result = await git.get_changed_file_paths("abc123", "abc123")
 
         assert result == []

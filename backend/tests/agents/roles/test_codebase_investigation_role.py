@@ -51,7 +51,7 @@ class TestCodebaseInvestigationRole:
 
         assert role._codebase == mock_codebase
         assert role._codebase_integration is not None
-        assert str(role._codebase_integration._codebase_path) == mock_codebase.local_path
+        assert str(role._codebase_integration.codebase_path) == mock_codebase.local_path
 
     def test_system_prompt(self, mock_codebase):
         """Test role has appropriate system prompt."""

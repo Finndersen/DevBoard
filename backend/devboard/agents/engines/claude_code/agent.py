@@ -3,11 +3,12 @@
 import asyncio
 import datetime
 import difflib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 import logfire
 from claude_agent_sdk import (
     AssistantMessage,
+    Message,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -249,7 +250,9 @@ class ClaudeCodeAgent(BaseAgent):
         # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
             # Capture the stream generator to ensure proper cleanup on exception
-            stream_generator = client.stream(user_query=current_message, interrupt_event=interrupt_event)
+            stream_generator: AsyncGenerator[Message, None] = client.stream(  # type: ignore[assignment]
+                user_query=current_message, interrupt_event=interrupt_event
+            )
             should_retry_api_error = False
             last_assistant_text: str | None = None
             try:
@@ -357,7 +360,7 @@ class ClaudeCodeAgent(BaseAgent):
             raise ValueError(f"No messages in session {self.session_id} - cannot process tool approvals")
 
         # Parse virtual tool call from message text content using centralized parser
-        tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)
+        tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)  # type: ignore[union-attr]
         if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
 

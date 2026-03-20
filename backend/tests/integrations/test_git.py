@@ -232,7 +232,7 @@ class TestStageUntrackedFilesIntent:
                 return ""
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stage_untracked_files_intent()
 
         # Should return the two untracked files
@@ -259,7 +259,7 @@ class TestStageUntrackedFilesIntent:
                 return ""
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stage_untracked_files_intent()
 
         assert len(result) == 2
@@ -289,7 +289,7 @@ MM both_modified.py
                 return ""
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stage_untracked_files_intent()
 
         # Only untracked.py should be processed
@@ -318,7 +318,7 @@ MM both_modified.py
                 return ""
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stage_untracked_files_intent()
 
         # Only file2.py should be in results (file1.py failed)
@@ -396,7 +396,7 @@ class TestGetDefaultBranch:
                 return "origin/main"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_default_branch()
 
         assert result == "origin/main"
@@ -413,7 +413,7 @@ class TestGetDefaultBranch:
                 return "abc123"  # main branch exists
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_default_branch()
 
         assert result == "main"
@@ -432,7 +432,7 @@ class TestGetDefaultBranch:
                 return "def456"  # master exists
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_default_branch()
 
         assert result == "master"
@@ -453,7 +453,7 @@ class TestGetDefaultBranch:
                 return "develop"  # Current branch is develop
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_default_branch()
 
         assert result == "develop"
@@ -466,7 +466,7 @@ class TestGetDefaultBranch:
         async def mock_run_git_command(args, **kwargs):
             return ""  # All detection methods fail
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             with pytest.raises(Exception) as exc_info:
                 await git.get_default_branch()
 
@@ -554,7 +554,7 @@ class TestHasCommits:
                 return "abc123def456"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.has_commits()
 
         assert result is True
@@ -567,7 +567,7 @@ class TestHasCommits:
         async def mock_run_git_command(args, **kwargs):
             return ""  # rev-parse HEAD returns empty for unborn branch
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.has_commits()
 
         assert result is False
@@ -586,7 +586,7 @@ class TestGetForkPoint:
                 return "abc123"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_fork_point("main", "feature")
 
         assert result == "abc123"
@@ -601,7 +601,7 @@ class TestGetForkPoint:
                 return ""  # No common ancestor
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_fork_point("main", "feature")
 
         assert result is None
@@ -622,7 +622,7 @@ class TestStashPush:
                 return "abc123def456"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stash_push()
 
         assert result == "abc123def456"
@@ -642,7 +642,7 @@ class TestStashPush:
                 return "abc123"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.stash_push(include_untracked=True)
 
         assert result == "abc123"
@@ -663,7 +663,7 @@ class TestStashApply:
             calls.append(args)
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             await git.stash_apply("abc123def456")
 
         assert ["stash", "apply", "abc123def456"] in calls
@@ -682,7 +682,7 @@ class TestStashStore:
             calls.append(args)
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             await git.stash_store("abc123def456")
 
         assert ["stash", "store", "abc123def456"] in calls
@@ -697,7 +697,7 @@ class TestStashStore:
             calls.append(args)
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             await git.stash_store("abc123def456", message="My stash message")
 
         assert ["stash", "store", "abc123def456", "-m", "My stash message"] in calls
@@ -716,7 +716,7 @@ class TestResetWorkingTree:
             calls.append(args)
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             await git.reset_working_tree(include_untracked=True)
 
         assert ["checkout", "."] in calls
@@ -732,7 +732,7 @@ class TestResetWorkingTree:
             calls.append(args)
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             await git.reset_working_tree(include_untracked=False)
 
         assert ["checkout", "."] in calls
@@ -826,7 +826,7 @@ class TestGetCommitsInRangeWithFileFilter:
             assert "--" not in args
             return output
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_commits_in_range("base", "head")
 
         assert len(result) == 1
@@ -843,7 +843,7 @@ class TestGetCommitsInRangeWithFileFilter:
             captured_args.extend(args)
             return output
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_commits_in_range("base", "head", file_paths=["file1.py", "file2.py"])
 
         assert len(result) == 1
@@ -867,7 +867,7 @@ class TestGetConflictedFiles:
                 return "file1.py\nfile2.py\n"
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_conflicted_files()
 
         assert result == ["file1.py", "file2.py"]
@@ -882,7 +882,7 @@ class TestGetConflictedFiles:
                 return ""
             return ""
 
-        with patch.object(git, "_run_git_command", side_effect=mock_run_git_command):
+        with patch.object(git, "run_git_command", side_effect=mock_run_git_command):
             result = await git.get_conflicted_files()
 
         assert result == []
@@ -1029,7 +1029,7 @@ class TestFetch:
         """Fetch with branch argument passes branch to git command."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = ""
             await git.fetch(branch="main")
 
@@ -1040,7 +1040,7 @@ class TestFetch:
         """Fetch without branch argument does not append branch."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = ""
             await git.fetch()
 
@@ -1051,7 +1051,7 @@ class TestFetch:
         """Fetch passes custom timeout to _run_git_command."""
         git = GitRepoIntegration(temp_git_repo)
 
-        with patch.object(git, "_run_git_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = ""
             await git.fetch(branch="main", timeout=10.0)
 

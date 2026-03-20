@@ -132,7 +132,7 @@ class TaskGitStatus(BaseModel):
     remote_fetch_failed: bool = False
 
 
-def _stash_conflict_message(repo_path: str) -> str:
+def stash_conflict_message(repo_path: str) -> str:
     """Build a user-facing message for a stash pop conflict after a successful merge."""
     return (
         f"Merge succeeded, but restoring pre-merge stashed changes in '{repo_path}' had conflicts "

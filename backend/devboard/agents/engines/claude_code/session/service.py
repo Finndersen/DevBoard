@@ -47,7 +47,7 @@ class ClaudeCodeSessionService:
                 todo_files = [main_todo_file]
             except FileNotFoundError:
                 return []
-        todos = []
+        todos: list[TodoItem] = []
         for todo_file in todo_files:
             todos.extend(load_todo_list_from_file(todo_file))
         return todos

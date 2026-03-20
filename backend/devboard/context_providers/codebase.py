@@ -45,7 +45,7 @@ class CodebaseContextProvider(BaseContextProvider):
     def __init__(self, integration: CodebaseIntegration):
         """Initialize with Filesystem integration."""
         self.integration = integration
-        self.base_path = integration._codebase_path
+        self.base_path = integration.codebase_path
 
     @classmethod
     def can_handle_uri(cls, resource_uri: str) -> bool:
@@ -165,7 +165,7 @@ Please search and analyze the codebase for patterns, implementations, or concept
         try:
             file_path = self._normalize_file_path(resource_uri)
 
-            full_path = self.integration._codebase_path / file_path
+            full_path = self.integration.codebase_path / file_path
             if full_path.is_file():
                 # Get file info and generate description
                 file_info = await self.integration.get_file_info(file_path)

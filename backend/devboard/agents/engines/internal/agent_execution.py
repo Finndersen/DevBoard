@@ -114,7 +114,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
     def _store_new_messages(self, new_messages: list[ModelMessage]) -> list[DbConversationMessage]:
         """Store new messages from agent result in DB."""
         # Extract all messages from the agent result
-        saved_messages = []
+        saved_messages: list[DbConversationMessage] = []
         for message in new_messages:
             saved_messages.append(self.conversation_repo.create_message(self.conversation.id, message))
         return saved_messages

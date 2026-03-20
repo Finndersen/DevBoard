@@ -28,4 +28,9 @@ async def test_integration_connection(
     if not result.success and result.error_type == "unsupported_integration":
         raise HTTPException(status_code=404, detail=result.error_message)
 
-    return result
+    return IntegrationTestResponse(
+        integration_type=result.integration_type,
+        success=result.success,
+        error_message=result.error_message,
+        error_type=result.error_type,
+    )

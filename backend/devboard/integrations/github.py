@@ -258,7 +258,7 @@ class GitHubPR:
                         replies_by_parent[c.in_reply_to_id] = []
                     replies_by_parent[c.in_reply_to_id].append(c)
 
-            threads = []
+            threads: list[CommentThread] = []
             for root in root_comments:
                 # Collect all replies (including nested) - flatten into single list
                 all_replies: list[ReviewComment] = []
@@ -283,7 +283,7 @@ class GitHubPR:
             return threads
 
         # Build reviews with comment threads
-        reviews_with_comments = []
+        reviews_with_comments: list[ReviewWithComments] = []
         for review in raw_reviews:
             review_comments = comments_by_review.get(review.id, [])
             threads = build_threads(review_comments)
@@ -416,6 +416,16 @@ class GitHubRepository:
     def full_name(self) -> str:
         """Full repository name (owner/repo)."""
         return self._repo.full_name
+
+    @property
+    def description(self) -> str | None:
+        """Repository description."""
+        return self._repo.description
+
+    @property
+    def language(self) -> str | None:
+        """Primary programming language of the repository."""
+        return self._repo.language
 
     async def get_pull_request(self, pr_number: int) -> GitHubPR:
         """Fetch a pull request and return a wrapped GitHubPR instance.

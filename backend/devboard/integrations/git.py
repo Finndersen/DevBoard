@@ -68,7 +68,11 @@ class GitRepoIntegration:
 
         return IntegrationConnectionResult(success=True, message=f"Git repository accessible at: {self._repo_path}")
 
-    async def _run_git_command(
+    @property
+    def repo_path(self) -> Path:
+        return self._repo_path
+
+    async def run_git_command(
         self,
         args: list[str],
         raise_on_error: bool = True,
@@ -118,7 +122,7 @@ class GitRepoIntegration:
             args.append("--")
             args.append(file_path)
 
-        output = await self._run_git_command(args)
+        output = await self.run_git_command(args)
 
         return self._parse_git_log_output(output)
 
@@ -149,7 +153,7 @@ class GitRepoIntegration:
             args.append("--")
             args.append(file_path)
 
-        return await self._run_git_command(args)
+        return await self.run_git_command(args)
 
     async def get_merge_base(self, branch1: str, branch2: str) -> str:
         """Get the merge base (common ancestor) between two branches.
@@ -161,7 +165,7 @@ class GitRepoIntegration:
         Returns:
             Commit hash of the merge base
         """
-        return await self._run_git_command(["merge-base", branch1, branch2])
+        return await self.run_git_command(["merge-base", branch1, branch2])
 
     async def get_fork_point(self, base_branch: str, feature_branch: str) -> str | None:
         """Get the fork point where feature branch diverged from base branch.
@@ -177,7 +181,7 @@ class GitRepoIntegration:
         Returns:
             Commit hash of the fork point, or None if it cannot be determined
         """
-        merge_base = await self._run_git_command(
+        merge_base = await self.run_git_command(
             ["merge-base", base_branch, feature_branch],
             raise_on_error=False,
         )
@@ -204,7 +208,7 @@ class GitRepoIntegration:
         Returns:
             List of GitLogEntry objects
         """
-        commits = []
+        commits: list[GitLogEntry] = []
         if not output.strip():
             return commits
 
@@ -261,7 +265,7 @@ class GitRepoIntegration:
             args.append("--")
             args.extend(file_paths)
 
-        output = await self._run_git_command(args)
+        output = await self.run_git_command(args)
 
         return self._parse_git_log_output(output)
 
@@ -274,7 +278,7 @@ class GitRepoIntegration:
         Returns:
             Diff output as string
         """
-        return await self._run_git_command(["show", "--format=", commit_hash])
+        return await self.run_git_command(["show", "--format=", commit_hash])
 
     def _parse_git_diff(self, raw_diff: str) -> StructuredDiff:
         """Parse raw git diff output into structured per-file diffs.
@@ -372,7 +376,7 @@ class GitRepoIntegration:
             CommitDiff with commit metadata and parsed files
         """
         # Get commit metadata using show with format
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             [
                 "show",
                 "--no-patch",
@@ -413,8 +417,8 @@ class GitRepoIntegration:
         if remote:
             args.append("-r")
 
-        output = await self._run_git_command(args)
-        branches = []
+        output = await self.run_git_command(args)
+        branches: list[str] = []
         for line in output.split("\n"):
             branch = line.strip()
             if branch and not branch.startswith("*"):
@@ -433,17 +437,17 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        output = await self._run_git_command(["worktree", "list", "--porcelain"])
+        output = await self.run_git_command(["worktree", "list", "--porcelain"])
 
-        worktrees = []
-        current_worktree = {}
+        worktrees: list[WorktreeInfo] = []
+        current_worktree: dict[str, str] = {}
 
         for line in output.split("\n"):
             line = line.strip()
             if not line:
                 if current_worktree:
                     # Determine if this is the main repository
-                    is_main = current_worktree.get("path") == str(self._repo_path)
+                    is_main: bool = current_worktree.get("path") == str(self._repo_path)
                     worktrees.append(
                         WorktreeInfo(
                             path=current_worktree["path"],
@@ -488,7 +492,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["worktree", "add", path, branch])
+        await self.run_git_command(["worktree", "add", path, branch])
 
     async def remove_worktree(self, path: str, force: bool = False) -> None:
         """Remove a git worktree.
@@ -503,7 +507,7 @@ class GitRepoIntegration:
         args = ["worktree", "remove", path]
         if force:
             args.append("--force")
-        await self._run_git_command(args)
+        await self.run_git_command(args)
 
     async def prune_worktrees(self) -> None:
         """Remove stale git worktree references for directories that no longer exist on disk."""
@@ -519,7 +523,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["branch", name, base])
+        await self.run_git_command(["branch", name, base])
 
     async def checkout_branch(self, name: str) -> None:
         """Checkout a git branch.
@@ -530,7 +534,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["checkout", name])
+        await self.run_git_command(["checkout", name])
 
     async def delete_branch(self, name: str, force: bool = False) -> None:
         """Delete a git branch.
@@ -545,7 +549,7 @@ class GitRepoIntegration:
         args = ["branch"]
         args.append("-D" if force else "-d")
         args.append(name)
-        await self._run_git_command(args)
+        await self.run_git_command(args)
 
     async def get_current_branch(self) -> str:
         """Get the currently checked out branch name.
@@ -556,7 +560,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        return await self._run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+        return await self.run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
 
     async def get_branch_head(self, branch: str) -> str | None:
         """Get the HEAD commit hash for a branch.
@@ -567,7 +571,7 @@ class GitRepoIntegration:
         Returns:
             The commit hash, or None if the branch doesn't exist
         """
-        result = await self._run_git_command(
+        result = await self.run_git_command(
             ["rev-parse", "--verify", branch],
             raise_on_error=False,
         )
@@ -589,7 +593,7 @@ class GitRepoIntegration:
             Exception: If unable to determine default branch
         """
         for remote in await self.list_remotes():
-            output = await self._run_git_command(
+            output = await self.run_git_command(
                 ["symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD"],
                 raise_on_error=False,
                 timeout=10.0,
@@ -598,7 +602,7 @@ class GitRepoIntegration:
                 return output
 
         for branch_name in ["main", "master"]:
-            exists = await self._run_git_command(
+            exists = await self.run_git_command(
                 ["rev-parse", "--verify", f"refs/heads/{branch_name}"],
                 raise_on_error=False,
                 timeout=10.0,
@@ -606,7 +610,8 @@ class GitRepoIntegration:
             if exists:
                 return branch_name
 
-        output = await self._run_git_command(
+        # 3. Last resort: local HEAD (may not be the default branch)
+        output = await self.run_git_command(
             ["symbolic-ref", "--short", "HEAD"],
             raise_on_error=False,
             timeout=10.0,
@@ -628,7 +633,7 @@ class GitRepoIntegration:
         Returns:
             True if branch exists, False otherwise
         """
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             ["rev-parse", "--verify", f"refs/heads/{name}"],
             raise_on_error=False,
         )
@@ -640,7 +645,7 @@ class GitRepoIntegration:
         Returns:
             True if repository has at least one commit, False otherwise
         """
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             ["rev-parse", "HEAD"],
             raise_on_error=False,
             timeout=10.0,
@@ -661,7 +666,7 @@ class GitRepoIntegration:
         ahead = 0
         behind = 0
         try:
-            output = await self._run_git_command(["rev-list", "--left-right", "--count", f"{base}...{branch}"])
+            output = await self.run_git_command(["rev-list", "--left-right", "--count", f"{base}...{branch}"])
             parts = output.split()
             behind = int(parts[0]) if len(parts) > 0 else 0
             ahead = int(parts[1]) if len(parts) > 1 else 0
@@ -672,9 +677,9 @@ class GitRepoIntegration:
         has_conflicts = False
         try:
             # Get merge base
-            merge_base = await self._run_git_command(["merge-base", base, branch])
+            merge_base = await self.run_git_command(["merge-base", base, branch])
             # Check for conflicts with merge-tree
-            merge_tree_output = await self._run_git_command(["merge-tree", merge_base, base, branch])
+            merge_tree_output = await self.run_git_command(["merge-tree", merge_base, base, branch])
             # If merge-tree output contains conflict markers, there are conflicts
             has_conflicts = "<<<<<<<" in merge_tree_output
         except Exception:
@@ -710,10 +715,10 @@ class GitRepoIntegration:
         args = ["merge", source]
         if no_ff:
             args.append("--no-ff")
-        await self._run_git_command(args)
+        await self.run_git_command(args)
 
         # Return the new HEAD commit hash
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def has_uncommitted_changes(self, include_untracked: bool = False) -> bool:
         """Check if there are staged or unstaged changes in the working directory.
@@ -726,7 +731,7 @@ class GitRepoIntegration:
             True if there are uncommitted changes, False otherwise
         """
         args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
-        output = await self._run_git_command(args, raise_on_error=False)
+        output = await self.run_git_command(args, raise_on_error=False)
         return bool(output)
 
     async def get_uncommitted_change_count(self, include_untracked: bool = False) -> int:
@@ -739,7 +744,7 @@ class GitRepoIntegration:
             Number of changed/untracked files (0 means clean)
         """
         args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
-        output = await self._run_git_command(args, raise_on_error=False)
+        output = await self.run_git_command(args, raise_on_error=False)
         if not output:
             return 0
         return len([line for line in output.splitlines() if line.strip()])
@@ -750,9 +755,9 @@ class GitRepoIntegration:
         Returns:
             List of file paths that have staged or unstaged changes
         """
-        unstaged = await self._run_git_command(["diff", "--name-only"], raise_on_error=False)
-        staged = await self._run_git_command(["diff", "--name-only", "--cached"], raise_on_error=False)
-        paths = set()
+        unstaged = await self.run_git_command(["diff", "--name-only"], raise_on_error=False)
+        staged = await self.run_git_command(["diff", "--name-only", "--cached"], raise_on_error=False)
+        paths: set[str] = set()
         for output in (unstaged, staged):
             paths.update(f for f in output.strip().split("\n") if f)
         return sorted(paths)
@@ -767,7 +772,7 @@ class GitRepoIntegration:
         Returns:
             List of file paths changed between the two commits
         """
-        output = await self._run_git_command(["diff", "--name-only", commit_a, commit_b], raise_on_error=False)
+        output = await self.run_git_command(["diff", "--name-only", commit_a, commit_b], raise_on_error=False)
         return [f for f in output.strip().split("\n") if f]
 
     async def get_conflicted_files(self) -> list[str]:
@@ -776,7 +781,7 @@ class GitRepoIntegration:
         Returns:
             List of file paths that have unmerged conflicts
         """
-        output = await self._run_git_command(["diff", "--name-only", "--diff-filter=U"])
+        output = await self.run_git_command(["diff", "--name-only", "--diff-filter=U"])
         return [f for f in output.strip().split("\n") if f]
 
     async def switch_detach(self) -> None:
@@ -787,7 +792,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["switch", "--detach"])
+        await self.run_git_command(["switch", "--detach"])
 
     async def list_remotes(self) -> list[str]:
         """Return all configured remote names for this repository."""
@@ -808,7 +813,7 @@ class GitRepoIntegration:
         args = ["fetch", remote]
         if branch:
             args.append(branch)
-        await self._run_git_command(args, timeout=timeout)
+        await self.run_git_command(args, timeout=timeout)
 
     async def rebase_branch(self, branch: str, onto: str, abort_on_conflict: bool = True) -> str:
         """Rebase a branch onto another branch.
@@ -829,20 +834,20 @@ class GitRepoIntegration:
             ShellCommandExecutionError: If git command fails for other reasons
         """
         try:
-            await self._run_git_command(["rebase", onto, branch])
+            await self.run_git_command(["rebase", onto, branch])
         except ShellCommandExecutionError as e:
             # Check if this is a conflict error
             error_msg = str(e).lower()
             if "conflict" in error_msg or "could not apply" in error_msg:
                 if abort_on_conflict:
                     # Abort the rebase
-                    await self._run_git_command(["rebase", "--abort"], raise_on_error=False)
+                    await self.run_git_command(["rebase", "--abort"], raise_on_error=False)
                 raise RebaseConflictError(f"Rebase of {branch} onto {onto} encountered conflicts") from e
             # Re-raise other errors
             raise
 
         # Return new HEAD commit hash
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        return await self.run_git_command(["rev-parse", "HEAD"])
 
     def is_rebase_in_progress(self) -> bool:
         """Check if a rebase is currently in progress.
@@ -880,10 +885,10 @@ class GitRepoIntegration:
             ShellCommandExecutionError: If git command fails for other reasons
         """
         # Stage all changes - during rebase conflict, unstaged changes are the resolved files
-        await self._run_git_command(["add", "-A"])
+        await self.run_git_command(["add", "-A"])
 
         try:
-            await self._run_git_command(["rebase", "--continue"])
+            await self.run_git_command(["rebase", "--continue"])
         except ShellCommandExecutionError as e:
             # Check if this is a conflict error
             error_msg = str(e).lower()
@@ -893,7 +898,7 @@ class GitRepoIntegration:
             raise
 
         # Return new HEAD commit hash
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def rebase_abort(self) -> None:
         """Abort an in-progress rebase.
@@ -904,7 +909,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["rebase", "--abort"])
+        await self.run_git_command(["rebase", "--abort"])
 
     async def detect_git_remote_url(self) -> str | None:
         """Detect git remote URL for this repository.
@@ -913,7 +918,7 @@ class GitRepoIntegration:
             Remote URL if found, None otherwise
         """
         # Try to get "origin" remote URL
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             ["remote", "get-url", "origin"],
             raise_on_error=False,
             timeout=10.0,
@@ -923,7 +928,7 @@ class GitRepoIntegration:
             return output
 
         # If no origin, list all remotes and get URL of first remote
-        remotes = await self._run_git_command(
+        remotes = await self.run_git_command(
             ["remote"],
             raise_on_error=False,
             timeout=10.0,
@@ -931,7 +936,7 @@ class GitRepoIntegration:
 
         if remotes:
             first_remote = remotes.split("\n")[0]
-            output = await self._run_git_command(
+            output = await self.run_git_command(
                 ["remote", "get-url", first_remote],
                 raise_on_error=False,
                 timeout=10.0,
@@ -952,7 +957,7 @@ class GitRepoIntegration:
             List of file paths that were staged with intent-to-add
         """
         # Get untracked files via git status --porcelain
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             ["status", "--porcelain"],
             raise_on_error=False,
         )
@@ -961,11 +966,11 @@ class GitRepoIntegration:
             return []
 
         # Find untracked files (lines starting with ??)
-        untracked_files = []
+        untracked_files: list[str] = []
         for line in output.split("\n"):
             if line.startswith("?? "):
                 # Extract file path (remove "?? " prefix)
-                file_path = line[3:].strip()
+                file_path: str = line[3:].strip()
                 # Remove quotes if present (git quotes paths with special chars)
                 if file_path.startswith('"') and file_path.endswith('"'):
                     file_path = file_path[1:-1]
@@ -975,10 +980,10 @@ class GitRepoIntegration:
             return []
 
         # Stage each untracked file with intent-to-add
-        staged_files = []
+        staged_files: list[str] = []
         for file_path in untracked_files:
             try:
-                await self._run_git_command(
+                await self.run_git_command(
                     ["add", "-N", file_path],
                     raise_on_error=False,
                 )
@@ -1008,7 +1013,7 @@ class GitRepoIntegration:
         if message:
             args.extend(["-m", message])
 
-        await self._run_git_command(args)
+        await self.run_git_command(args)
 
         # Return the stash reference
         return "stash@{0}"
@@ -1020,11 +1025,11 @@ class GitRepoIntegration:
             True if stash was popped successfully, False if no stash to pop
         """
         # Check if there are any stashes
-        stash_list = await self._run_git_command(["stash", "list"], raise_on_error=False)
+        stash_list = await self.run_git_command(["stash", "list"], raise_on_error=False)
         if not stash_list:
             return False
 
-        await self._run_git_command(["stash", "pop"])
+        await self.run_git_command(["stash", "pop"])
         return True
 
     async def stash_push(self, include_untracked: bool = False, message: str | None = None) -> str | None:
@@ -1039,7 +1044,7 @@ class GitRepoIntegration:
         """
         # Stage all changes first to sync index with working tree
         # This prevents "not uptodate" errors when files have partial staging
-        await self._run_git_command(["add", "-A"])
+        await self.run_git_command(["add", "-A"])
 
         args = ["stash", "push"]
         if include_untracked:
@@ -1047,12 +1052,12 @@ class GitRepoIntegration:
         if message:
             args.extend(["-m", message])
 
-        output = await self._run_git_command(args)
+        output = await self.run_git_command(args)
         if "No local changes to save" in output:
             return None
 
         # Return SHA instead of "stash@{0}" for stability across worktrees
-        sha = await self._run_git_command(["rev-parse", "stash@{0}"])
+        sha = await self.run_git_command(["rev-parse", "stash@{0}"])
         return sha.strip()
 
     async def stash_apply(self, stash_ref: str) -> None:
@@ -1064,7 +1069,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["stash", "apply", stash_ref])
+        await self.run_git_command(["stash", "apply", stash_ref])
 
     async def find_stash_by_message(self, message_pattern: str) -> str | None:
         """Find a stash entry by message pattern.
@@ -1075,7 +1080,7 @@ class GitRepoIntegration:
         Returns:
             Stash reference (e.g., 'stash@{0}') if found, None otherwise
         """
-        stash_list = await self._run_git_command(["stash", "list"], raise_on_error=False)
+        stash_list = await self.run_git_command(["stash", "list"], raise_on_error=False)
         if not stash_list:
             return None
 
@@ -1096,7 +1101,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["stash", "drop", stash_ref])
+        await self.run_git_command(["stash", "drop", stash_ref])
 
     async def stash_store(self, commit_sha: str, message: str | None = None) -> None:
         """Store a stash commit to the stash list.
@@ -1113,7 +1118,7 @@ class GitRepoIntegration:
         args = ["stash", "store", commit_sha]
         if message:
             args.extend(["-m", message])
-        await self._run_git_command(args)
+        await self.run_git_command(args)
 
     async def reset_working_tree(self, include_untracked: bool = True) -> None:
         """Reset all uncommitted changes in the working tree.
@@ -1124,9 +1129,9 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If git command fails
         """
-        await self._run_git_command(["checkout", "."])
+        await self.run_git_command(["checkout", "."])
         if include_untracked:
-            await self._run_git_command(["clean", "-fd"])
+            await self.run_git_command(["clean", "-fd"])
 
     async def merge_squash(
         self,
@@ -1174,13 +1179,13 @@ class GitRepoIntegration:
         await self.checkout_branch(target)
 
         # Perform the squash merge (stages changes but doesn't commit)
-        await self._run_git_command(["merge", "--squash", source])
+        await self.run_git_command(["merge", "--squash", source])
 
         # Commit the squashed changes
-        await self._run_git_command(["commit", "-m", message])
+        await self.run_git_command(["commit", "-m", message])
 
         # Return the new commit hash
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def push_branch(self, branch: str, remote: str = "origin", set_upstream: bool = True) -> None:
         """Push a branch to a remote.
@@ -1197,7 +1202,7 @@ class GitRepoIntegration:
         if set_upstream:
             args.append("-u")
         args.extend([remote, branch])
-        await self._run_git_command(args, timeout=60.0)
+        await self.run_git_command(args, timeout=60.0)
 
     async def push_delete_branch(self, branch: str, remote: str = "origin") -> None:
         """Delete a branch from a remote.
@@ -1209,7 +1214,7 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If deletion fails
         """
-        await self._run_git_command(["push", remote, "--delete", branch], timeout=60.0)
+        await self.run_git_command(["push", remote, "--delete", branch], timeout=60.0)
 
     async def get_checked_out_location(self, branch: str) -> str | None:
         """Get the path where a branch is currently checked out.
@@ -1276,7 +1281,7 @@ class GitRepoIntegration:
         Returns:
             True if the branch exists on the remote, False otherwise
         """
-        output = await self._run_git_command(
+        output = await self.run_git_command(
             ["ls-remote", "--heads", remote, branch],
             raise_on_error=False,
             timeout=30.0,
@@ -1301,8 +1306,8 @@ class GitRepoIntegration:
             ShellCommandExecutionError: If fast-forward is not possible
         """
         await self.checkout_branch(target)
-        await self._run_git_command(["merge", "--ff-only", source])
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        await self.run_git_command(["merge", "--ff-only", source])
+        return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def commit(self, message: str) -> str:
         """Create a commit with staged changes.
@@ -1316,5 +1321,5 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If commit fails
         """
-        await self._run_git_command(["commit", "-m", message])
-        return await self._run_git_command(["rev-parse", "HEAD"])
+        await self.run_git_command(["commit", "-m", message])
+        return await self.run_git_command(["rev-parse", "HEAD"])

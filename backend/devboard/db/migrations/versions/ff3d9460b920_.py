@@ -40,4 +40,4 @@ def downgrade() -> None:
     with op.batch_alter_table("custom_field_definitions", recreate="always") as batch_op:
         batch_op.drop_constraint("uq_custom_field_name_entity_type", type_="unique")
         batch_op.drop_column("entity_type")
-        batch_op.create_unique_constraint(None, ["name"])
+        batch_op.create_unique_constraint("uq_custom_field_name", ["name"])

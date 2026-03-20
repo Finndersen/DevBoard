@@ -7,7 +7,7 @@ import logfire
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import Task
 from devboard.integrations.git import GitRepoIntegration
-from devboard.services.task_git.types import MergeOutcome, MergeResult, _stash_conflict_message
+from devboard.services.task_git.types import MergeOutcome, MergeResult, stash_conflict_message
 
 
 class MergeStrategy(ABC):
@@ -72,7 +72,7 @@ class SquashMerge(MergeStrategy):
                 return MergeResult(
                     outcome=MergeOutcome.STASH_CONFLICT,
                     merge_method=merge_method,
-                    message=_stash_conflict_message(git.repo_path),
+                    message=stash_conflict_message(str(git.repo_path)),
                     merge_commit=merge_commit,
                 )
 
@@ -108,7 +108,7 @@ class SquashMerge(MergeStrategy):
 
     async def _squash_merge_to_remote_base(self, task: Task, git: GitRepoIntegration) -> str:
         local_base = task.base_branch.replace("origin/", "")
-        await git._run_git_command(["fetch", "origin", local_base])
+        await git.run_git_command(["fetch", "origin", local_base])
         merge_commit = await git.merge_squash(
             source=task.branch_name,
             target=local_base,
@@ -133,8 +133,8 @@ class RebaseMerge(MergeStrategy):
 
             if is_remote_base:
                 local_base = task.base_branch.replace("origin/", "")
-                await git._run_git_command(["push", "origin", f"{task.branch_name}:{local_base}"])
-                merge_commit = await git._run_git_command(["rev-parse", task.branch_name])
+                await git.run_git_command(["push", "origin", f"{task.branch_name}:{local_base}"])
+                merge_commit = await git.run_git_command(["rev-parse", task.branch_name])
             else:
                 checkout_path = await git.get_checked_out_location(task.base_branch)
                 if checkout_path:
@@ -176,7 +176,7 @@ class RebaseMerge(MergeStrategy):
                 return MergeResult(
                     outcome=MergeOutcome.STASH_CONFLICT,
                     merge_method=merge_method,
-                    message=_stash_conflict_message(git.repo_path),
+                    message=stash_conflict_message(str(git.repo_path)),
                     merge_commit=merge_commit,
                 )
 
@@ -200,7 +200,7 @@ class MergeCommitMerge(MergeStrategy):
         try:
             if is_remote_base:
                 local_base = task.base_branch.replace("origin/", "")
-                await git._run_git_command(["fetch", "origin", local_base])
+                await git.run_git_command(["fetch", "origin", local_base])
                 current_branch = await git.get_current_branch()
                 await git.checkout_branch(local_base)
                 try:
@@ -245,7 +245,7 @@ class MergeCommitMerge(MergeStrategy):
                 return MergeResult(
                     outcome=MergeOutcome.STASH_CONFLICT,
                     merge_method=merge_method,
-                    message=_stash_conflict_message(git.repo_path),
+                    message=stash_conflict_message(str(git.repo_path)),
                     merge_commit=merge_commit,
                 )
 

@@ -10,7 +10,7 @@ from devboard.services.task_git.types import (
     TaskDiffResult,
     TaskDiffView,
     TaskGitStatus,
-    _stash_conflict_message,
+    stash_conflict_message,
 )
 
 __all__ = [
@@ -23,5 +23,5 @@ __all__ = [
     "TaskDiffResult",
     "TaskDiffView",
     "TaskGitStatus",
-    "_stash_conflict_message",
+    "stash_conflict_message",
 ]

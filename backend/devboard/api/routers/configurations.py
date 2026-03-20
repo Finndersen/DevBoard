@@ -20,7 +20,7 @@ async def list_configurations(
 ) -> list[ConfigurationDetail]:
     """List configuration details, filtered by key prefix."""
     keys = config_service.list_configs(prefix=prefix)
-    results = []
+    results: list[ConfigurationDetail] = []
 
     for key in keys:
         config_detail = config_service.get_config_details_by_key(key)

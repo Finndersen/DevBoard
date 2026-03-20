@@ -16,21 +16,21 @@ class CodebaseIntegration:
     """
 
     def __init__(self, codebase_path: str | Path):
-        self._codebase_path = Path(codebase_path).resolve()
+        self.codebase_path = Path(codebase_path).resolve()
 
     async def validate(self) -> IntegrationConnectionResult:
         """Test filesystem access to codebase directory."""
-        if not self._codebase_path.exists():
+        if not self.codebase_path.exists():
             return IntegrationConnectionResult(
-                success=False, message=f"Codebase path does not exist: {self._codebase_path}"
+                success=False, message=f"Codebase path does not exist: {self.codebase_path}"
             )
 
-        if not self._codebase_path.is_dir():
+        if not self.codebase_path.is_dir():
             return IntegrationConnectionResult(
-                success=False, message=f"Codebase path is not a directory: {self._codebase_path}"
+                success=False, message=f"Codebase path is not a directory: {self.codebase_path}"
             )
 
-        return IntegrationConnectionResult(success=True, message=f"Directory accessible at: {self._codebase_path}")
+        return IntegrationConnectionResult(success=True, message=f"Directory accessible at: {self.codebase_path}")
 
     async def read_file(
         self,
@@ -55,7 +55,7 @@ class CodebaseIntegration:
             FileNotFoundError: If the file does not exist
             ValueError: If the path is not a file or if line range is invalid
         """
-        full_path = self._codebase_path / file_path
+        full_path = self.codebase_path / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -110,7 +110,7 @@ class CodebaseIntegration:
         Returns:
             List of relative paths. Directories are marked with trailing '/' when included.
         """
-        dir_path = self._codebase_path / directory
+        dir_path = self.codebase_path / directory
         if not dir_path.exists():
             raise FileNotFoundError(f"Directory not found: {directory}")
 
@@ -185,7 +185,7 @@ class CodebaseIntegration:
 
         result = await execute_shell_command(
             cmd,
-            working_dir=self._codebase_path,
+            working_dir=self.codebase_path,
             timeout=30.0,
             raise_on_error=False,
         )
@@ -235,7 +235,7 @@ class CodebaseIntegration:
 
         result = await execute_shell_command(
             cmd,
-            working_dir=self._codebase_path,
+            working_dir=self.codebase_path,
             timeout=30.0,
             raise_on_error=False,
         )
@@ -283,7 +283,7 @@ class CodebaseIntegration:
 
         result = await execute_shell_command(
             cmd,
-            working_dir=self._codebase_path,
+            working_dir=self.codebase_path,
             timeout=30.0,
             raise_on_error=False,
         )
@@ -323,7 +323,7 @@ class CodebaseIntegration:
 
         result = await execute_shell_command(
             [piped_cmd],
-            working_dir=self._codebase_path,
+            working_dir=self.codebase_path,
             timeout=30.0,
             raise_on_error=False,
         )
@@ -345,7 +345,7 @@ class CodebaseIntegration:
         Raises:
             FileNotFoundError: If the file does not exist
         """
-        full_path = self._codebase_path / file_path
+        full_path = self.codebase_path / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -377,7 +377,7 @@ class CodebaseIntegration:
         full_path = Path(file_path).resolve()
 
         try:
-            relative_path = full_path.relative_to(self._codebase_path)
+            relative_path = full_path.relative_to(self.codebase_path)
             return str(relative_path)
         except ValueError:
             logfire.warning(f"File path outside codebase directory: {file_path}")

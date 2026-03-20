@@ -26,7 +26,7 @@ from starlette.requests import Request
 class _OverridesProvider:
     """Minimal dependency overrides provider for use outside a FastAPI app context."""
 
-    def __init__(self, overrides: dict[Callable, Callable]):
+    def __init__(self, overrides: dict[Callable[..., Any], Callable[..., Any]]):
         self.dependency_overrides = overrides
 
 
@@ -102,7 +102,7 @@ class DependencyResolver:
         self,
         *,
         app: FastAPI | None = None,
-        dependency_overrides: dict[Callable, Callable] | None = None,
+        dependency_overrides: dict[Callable[..., Any], Callable[..., Any]] | None = None,
     ):
         """
         Initialize resolver.

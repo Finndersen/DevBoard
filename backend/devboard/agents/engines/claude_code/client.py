@@ -12,6 +12,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     Message,
     ResultMessage,
+    SdkMcpTool,
     create_sdk_mcp_server,
     tool,
 )
@@ -160,7 +161,7 @@ class ClaudeClient:
             disallowed_tools=disallowed_tools,
             model=model,
             cwd=cwd,
-            mcp_servers=mcp_servers,
+            mcp_servers=mcp_servers,  # type: ignore[arg-type]
             permission_mode=permission_mode,
             setting_sources=["local", "project", "user"] if load_settings else None,
             env=env_vars,
@@ -193,8 +194,8 @@ class ClaudeClient:
             Tuple of (MCP server config, list of custom tool names for allowed_tools)
         """
         # Wrap tools with SDK's @tool decorator
-        sdk_tools = []
-        custom_tool_names = []
+        sdk_tools: list[SdkMcpTool[Any]] = []
+        custom_tool_names: list[str] = []
         for pydantic_tool in tools:
             # Extract metadata from PydanticAI Tool's function_schema
             tool_name = pydantic_tool.name
@@ -208,10 +209,10 @@ class ClaudeClient:
             # All function tools are read-only by design (write operations go through virtual tools).
             sdk_tool = tool(
                 name=tool_name,
-                description=pydantic_tool.description,
+                description=pydantic_tool.description or "",
                 input_schema=pydantic_tool.function_schema.json_schema,
                 annotations=ToolAnnotations(readOnlyHint=True),
-            )(wrapper_func)
+            )(wrapper_func)  # type: ignore[arg-type]
             sdk_tools.append(sdk_tool)
             custom_tool_names.append(f"mcp__{BUILTIN_TOOLS_MCP_NAME}__{tool_name}")
 
@@ -251,7 +252,7 @@ class ClaudeClient:
                     validated_args = args
 
                 try:
-                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)
+                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]
                 except Exception as e:
                     error_text = f"An error occurred during tool execution: {e}"
                     logfire.exception(

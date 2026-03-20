@@ -131,6 +131,7 @@ async def execute_shell_command(
         stdout_text = stdout.decode("utf-8")
         stderr_text = stderr.decode("utf-8")
 
+        assert process.returncode is not None, "Process return code is None after communicate()"
         result = ShellCommandResult(stdout_text, stderr_text, process.returncode)
 
         if not result.success and raise_on_error:

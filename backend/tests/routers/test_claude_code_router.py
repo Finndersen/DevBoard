@@ -44,6 +44,7 @@ def _make_session_info(session_id: str):
         session_id=session_id,
         label=f"Session {session_id}",
         last_activity=datetime(2026, 3, 7, 12, 0, 0, tzinfo=UTC),
+        start_time=datetime(2026, 3, 7, 10, 0, 0, tzinfo=UTC),
         file_size=1024,
         is_empty=False,
         linked_session_id=None,

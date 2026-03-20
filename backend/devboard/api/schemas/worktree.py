@@ -1,6 +1,7 @@
 """Worktree Pydantic schemas."""
 
 import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -28,8 +29,8 @@ class WorktreeSlotWithTaskInfo(BaseModel):
     status: str  # "locked" | "available" | "missing"
     current_branch: str | None
     last_used_at: datetime.datetime | None
-    locked_by_task: dict | None = None  # {"id": int, "title": str} - only present if locked
-    last_used_by_task: dict | None = (
+    locked_by_task: dict[str, Any] | None = None  # {"id": int, "title": str} - only present if locked
+    last_used_by_task: dict[str, Any] | None = (
         None  # {"id": int, "title": str} - only present if available and was previously used
     )
     has_uncommitted_changes: bool = False
@@ -42,7 +43,7 @@ class WorktreePoolStatusResponse(BaseModel):
     codebase_id: int
     codebase_path: str
     slots: list[WorktreeSlotWithTaskInfo]
-    stats: dict  # {"total_slots": int, "available": int, "locked": int}
+    stats: dict[str, Any]  # {"total_slots": int, "available": int, "locked": int}
 
 
 class WorkspaceAllocationResponse(BaseModel):
@@ -57,7 +58,7 @@ class WorkspaceAllocationErrorResponse(BaseModel):
     """Schema for workspace allocation error (all slots locked)."""
 
     error: str
-    locked_by: list[dict]  # [{"task_id": int, "title": str, "slot": str}]
+    locked_by: list[dict[str, Any]]  # [{"task_id": int, "title": str, "slot": str}]
     can_create_new: bool
 
 

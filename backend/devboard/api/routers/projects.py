@@ -178,7 +178,7 @@ async def update_project(
 async def delete_project(
     project_id: int,
     project_repo: ProjectRepository = Depends(get_project_repository),
-):
+) -> dict[str, Any]:
     """Delete a project."""
     deleted = project_repo.delete_by_id(project_id)
     if not deleted:
@@ -247,7 +247,7 @@ async def list_project_tasks(
     project_repo: ProjectRepository = Depends(get_project_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-):
+) -> list[TaskResponse]:
     """List all tasks for a project."""
     # Verify project exists
     project = project_repo.get_by_id(project_id)
@@ -257,7 +257,7 @@ async def list_project_tasks(
     tasks = task_repo.get_for_project(project_id)
 
     # Get conversations for all tasks
-    task_responses = []
+    task_responses: list[TaskResponse] = []
     for task in tasks:
         # TODO: Make SimpleTaskResponse model with limited fields for list view
         try:

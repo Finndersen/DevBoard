@@ -187,16 +187,19 @@ class GitHubContextProvider(BaseContextProvider):
                     resource_id=resource_id,
                 )
 
-                github_repo = self.integration.get_repository(owner, repo)
+                github_repo = await self.integration.get_repository(owner, repo)
 
                 # Load full data for small-scope resources
                 if resource_type == "pull":
+                    assert resource_id is not None, "Missing PR number in URL"
                     github_pr = await github_repo.get_pull_request(int(resource_id))
                     return {"type": "pull_request", "data": self._pr_to_dict(github_pr.pr), "uri": resource_uri}
                 elif resource_type == "issues":
+                    assert resource_id is not None, "Missing issue number in URL"
                     issue = await github_repo.get_issue(int(resource_id))
                     return {"type": "issue", "data": self._issue_to_dict(issue), "uri": resource_uri}
                 elif resource_type == "commit":
+                    assert resource_id is not None, "Missing commit SHA in URL"
                     commit = await github_repo.get_commit(resource_id)
                     return {"type": "commit", "data": self._commit_to_dict(commit), "uri": resource_uri}
                 else:
@@ -240,7 +243,7 @@ class GitHubContextProvider(BaseContextProvider):
                     resource_id=resource_id,
                 )
 
-                github_repo = self.integration.get_repository(owner, repo)
+                github_repo = await self.integration.get_repository(owner, repo)
 
                 # Fetch appropriate data based on resource type
                 if resource_type == "pull":
@@ -309,8 +312,8 @@ Based on this commit data, here is the relevant context for your query:
                     context = f"""
 GitHub Repository: {github_repo.full_name}
 URL: {resource_uri}
-Description: {github_repo._repo.description or "No description"}
-Language: {github_repo._repo.language or "Unknown"}
+Description: {github_repo.description or "No description"}
+Language: {github_repo.language or "Unknown"}
 
 Query: {query}
 
@@ -339,27 +342,30 @@ Based on this repository data, here is the relevant context for your query:
 
             owner, repo = parsed["owner"], parsed["repo"]
             resource_type = parsed.get("type")
-            resource_id: str = parsed.get("id")
+            resource_id: str | None = parsed.get("id")
 
-            github_repo = self.integration.get_repository(owner, repo)
+            github_repo = await self.integration.get_repository(owner, repo)
 
             if resource_type == "pull":
+                assert resource_id is not None, "Missing PR number in URL"
                 github_pr = await github_repo.get_pull_request(int(resource_id))
                 pr = github_pr.pr
                 return f"GitHub PR #{resource_id}: {pr.title} ({pr.state})"
 
             elif resource_type == "issues":
+                assert resource_id is not None, "Missing issue number in URL"
                 issue = await github_repo.get_issue(int(resource_id))
                 return f"GitHub Issue #{resource_id}: {issue.title} ({issue.state})"
 
             elif resource_type == "commit":
+                assert resource_id is not None, "Missing commit SHA in URL"
                 commit = await github_repo.get_commit(resource_id)
                 message = commit.commit.message if commit.commit else "No message"
                 short_message = message.split("\n")[0][:80]
                 return f"GitHub Commit {resource_id[:7]}: {short_message}"
 
             else:
-                description = github_repo._repo.description or "No description"
+                description = github_repo.description or "No description"
                 return f"GitHub Repository {owner}/{repo}: {description}"
 
         except Exception as e:

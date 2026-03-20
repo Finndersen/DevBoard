@@ -6,6 +6,7 @@ Ensures proper agent configuration and conversation state throughout the task li
 
 import re
 from datetime import UTC, datetime
+from typing import Any
 
 import logfire
 
@@ -63,7 +64,7 @@ class TaskService:
         codebase_id: int,
         specification_content: str = "",
         branch_name: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Task:
         """Create a new task with initial conversation.
 
@@ -326,7 +327,7 @@ class TaskService:
         self,
         task: Task,
         title: str | None = None,
-        custom_fields: dict | None = None,
+        custom_fields: dict[str, Any] | None = None,
     ) -> Task:
         """Update task metadata fields with merge semantics for custom fields.
 

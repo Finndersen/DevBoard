@@ -246,8 +246,7 @@ class WorktreePoolManager:
                 await git.remove_worktree(slot.path, force=force)
                 logfire.info(f"Removed worktree at {slot.path}")
             except ShellCommandExecutionError as e:
-                error_msg = e.stderr if hasattr(e, "stderr") else str(e)
-                raise ValueError(f"Failed to remove worktree at {slot.path}: {error_msg}") from e
+                raise ValueError(f"Failed to remove worktree at {slot.path}: {e}") from e
         else:
             git = GitRepoIntegration(codebase.local_path)
             await git.prune_worktrees()

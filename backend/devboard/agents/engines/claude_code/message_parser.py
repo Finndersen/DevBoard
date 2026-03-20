@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 from pydantic_core import ValidationError
@@ -239,7 +239,7 @@ class ClaudeResponseParser:
                 postamble=postamble,
             )
         except ValidationError as e:
-            tool_name = json_data.get("tool_name")
+            tool_name = cast(str | None, json_data.get("tool_name"))
             error_details = "\n".join([f"- {err['loc'][0]}: {err['msg']}" for err in e.errors()])
             return VirtualToolCall(
                 tool_name=tool_name or "invalid_tool_call",

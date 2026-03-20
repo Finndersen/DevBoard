@@ -13,7 +13,6 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
 )
-from claude_agent_sdk.types import StreamEvent
 
 # MCP server name for internal PydanticAI tools
 BUILTIN_TOOLS_MCP_NAME = "builtin_tools"
@@ -92,12 +91,10 @@ def describe_message(message: Message) -> str:
         cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else "N/A"
         return f"ResultMessage({status}, cost={cost}, turns={message.num_turns})"
 
-    elif isinstance(message, StreamEvent):
+    else:
+        # StreamEvent
         event_type = message.event.get("type", "unknown")
         return f"StreamEvent(type={event_type})"
-
-    else:
-        return f"Unknown message type: {type(message).__name__}"
 
 
 def normalize_tool_name(tool_name: str) -> str:

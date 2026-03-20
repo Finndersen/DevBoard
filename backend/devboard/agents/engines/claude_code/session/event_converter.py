@@ -9,7 +9,6 @@ from devboard.agents.engines.claude_code.message_parser import (
     ClaudeResponseParser,
     TextResponse,
     VirtualToolCall,
-    VirtualToolResult,
     convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session.models import (
@@ -95,7 +94,8 @@ def session_messages_to_events(
                         event.uuid = session_msg.uuid
                     events.extend(tool_call_events)
 
-                elif isinstance(parsed, VirtualToolResult):
+                else:
+                    # VirtualToolResult
                     events.append(
                         ToolResult(
                             tool_call_id=parsed.tool_name,

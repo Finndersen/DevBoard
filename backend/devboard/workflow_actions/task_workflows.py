@@ -56,7 +56,6 @@ class CreateImplementationPlanAction(TaskWorkflowAction):
     def is_available(cls, task: Task) -> bool:
         return (
             task.status == TaskStatus.PLANNING
-            and task.specification is not None
             and bool(task.specification.content.strip())
             and not task.implementation_plan_structured
             and task.implementation_plan is None

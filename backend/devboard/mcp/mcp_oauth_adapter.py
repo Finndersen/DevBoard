@@ -5,11 +5,13 @@ import json
 import urllib.parse
 import webbrowser
 from collections.abc import Awaitable, Callable
+from typing import Literal, cast
 
 import logfire
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
 from mcp.shared.auth import OAuthToken as MCPOAuthToken
+from pydantic import AnyUrl
 
 from devboard.services.oauth_service import OAuthService, TokenData
 
@@ -55,7 +57,7 @@ class MCPTokenStorageAdapter:
 
         return MCPOAuthToken(
             access_token=db_token.access_token,
-            token_type=db_token.token_type,
+            token_type=cast("Literal['Bearer']", db_token.token_type),
             expires_in=expires_in,
             scope=db_token.scopes,
             refresh_token=db_token.refresh_token,
@@ -209,7 +211,7 @@ async def create_oauth_provider(
 
     client_metadata = OAuthClientMetadata(
         client_name="DevBoard",
-        redirect_uris=[redirect_uri],
+        redirect_uris=cast(list[AnyUrl], [redirect_uri]),
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
         scope=scopes,
@@ -222,7 +224,7 @@ async def create_oauth_provider(
         client_info = OAuthClientInformationFull(
             client_id=client_id,
             client_secret=client_secret,
-            redirect_uris=[redirect_uri],
+            redirect_uris=cast(list[AnyUrl], [redirect_uri]),
         )
         await storage.set_client_info(client_info)
 

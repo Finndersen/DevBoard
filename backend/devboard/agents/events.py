@@ -94,6 +94,7 @@ class ToolCallRequest(BaseModel):
     tool_name: str
     tool_args: str | dict[str, Any] | None = None
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 class MetaMessage(BaseModel):
@@ -141,6 +142,7 @@ class SystemEvent(BaseModel):
     type: SystemEventType
     data: dict[str, Any] | None = None
     timestamp: datetime.datetime
+    uuid: str | None = None
 
 
 def describe_event(event: "ConversationEvent") -> str:
@@ -168,10 +170,8 @@ def describe_event(event: "ConversationEvent") -> str:
         return f"LocalCommand(type={event.command_type}, command={event.command!r})"
     elif isinstance(event, MetaMessage):
         return f"MetaMessage(type={event.meta_type})"
-    elif isinstance(event, SystemEvent):
-        return f"SystemEvent(type={event.type})"
     else:
-        return type(event).__name__
+        return f"SystemEvent(type={event.type})"
 
 
 # Union type for all conversation events

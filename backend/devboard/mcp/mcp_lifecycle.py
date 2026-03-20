@@ -7,7 +7,7 @@ from different async tasks.
 
 import asyncio
 import tempfile
-from typing import IO, Any
+from typing import IO, Any, cast
 
 import httpx
 import logfire
@@ -17,7 +17,6 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
 from devboard.db.models.mcp_server import (
-    HttpMCPConfig,
     MCPServerConfig,
     StdioMCPConfig,
 )
@@ -26,7 +25,8 @@ from devboard.db.models.mcp_server import (
 def _unwrap_exception_group(exc: BaseException) -> Exception:
     """Extract root cause from single-exception ExceptionGroups."""
     while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
-        exc = exc.exceptions[0]
+        inner = cast(BaseException, exc.exceptions[0])
+        exc = inner
     if isinstance(exc, Exception):
         return exc
     return RuntimeError(str(exc))
@@ -100,19 +100,16 @@ class MCPLifecycleManager:
                 **kwargs,
             )
 
-        if isinstance(typed_config, HttpMCPConfig):
-            if typed_config.auth_type == "oauth" and self._oauth_provider:
-                http_client = httpx.AsyncClient(auth=self._oauth_provider)
-                return streamable_http_client(typed_config.url, http_client=http_client)
-
-            headers: dict[str, str] = {}
-            if typed_config.auth_type == "bearer" and typed_config.bearer_token:
-                headers["Authorization"] = f"Bearer {typed_config.bearer_token}"
-
-            http_client = httpx.AsyncClient(headers=headers) if headers else None
+        if typed_config.auth_type == "oauth" and self._oauth_provider:
+            http_client = httpx.AsyncClient(auth=self._oauth_provider)
             return streamable_http_client(typed_config.url, http_client=http_client)
 
-        raise ValueError(f"Unknown config type: {type(typed_config)}")
+        headers: dict[str, str] = {}
+        if typed_config.auth_type == "bearer" and typed_config.bearer_token:
+            headers["Authorization"] = f"Bearer {typed_config.bearer_token}"
+
+        http_client = httpx.AsyncClient(headers=headers) if headers else None
+        return streamable_http_client(typed_config.url, http_client=http_client)
 
     @property
     def active(self) -> bool:

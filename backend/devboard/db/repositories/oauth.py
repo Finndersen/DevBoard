@@ -1,8 +1,10 @@
 """OAuth repository for OAuth-related data access operations."""
 
 import datetime
+from typing import Any, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 
 from devboard.db.models import OAuthClientInfo, OAuthProvider, OAuthToken, PendingOAuthAuthorization
 from devboard.db.repositories.base import BaseRepository
@@ -170,4 +172,4 @@ class OAuthRepository(BaseRepository[OAuthProvider]):
         stmt = delete(PendingOAuthAuthorization).where(PendingOAuthAuthorization.initiated_at < cutoff)
         result = self.db.execute(stmt)
         self.db.flush()
-        return result.rowcount
+        return cast(CursorResult[Any], result).rowcount

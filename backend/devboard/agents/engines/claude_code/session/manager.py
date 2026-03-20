@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
@@ -303,14 +304,12 @@ class ClaudeSessionManager:
         return "No messages", True
 
     @staticmethod
-    def _extract_text_from_content(content: str | list) -> str:
+    def _extract_text_from_content(content: str | list[Any]) -> str:
         """Extract plain text from a message content field."""
         if isinstance(content, str):
             return content
-        if isinstance(content, list):
-            parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-            return "\n".join(parts)
-        return ""
+        parts: list[str] = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+        return "\n".join(parts)
 
     async def _resolve_custom_titles(self, project_dir: Path) -> dict[str, str]:
         """Run ripgrep to find custom-title entries and build a session_id → title map."""
@@ -416,9 +415,12 @@ class ClaudeSessionManager:
             try:
                 jsonl_entry = json.loads(raw_line)
                 message_uuid = jsonl_entry.get("uuid")
-                content = jsonl_entry.get("message", {}).get("content")
+                content: Any = jsonl_entry.get("message", {}).get("content")
                 if isinstance(content, list):
-                    text_parts = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                    content_list = cast(list[Any], content)
+                    text_parts: list[str] = [
+                        b["text"] for b in content_list if isinstance(b, dict) and b.get("type") == "text"
+                    ]
                     joined = "\n".join(text_parts)
                     text_snippet = joined[:200] if joined else None
                 elif isinstance(content, str):
