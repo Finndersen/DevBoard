@@ -35,9 +35,10 @@ class WorktreePoolManager:
 
     def bootstrap_main_repo_slot(self, codebase: Codebase) -> WorktreeSlot:
         """Create the main repository slot (slot 0) if it doesn't exist."""
-        existing_main = self.worktree_slot_repo.get_by_path(codebase.local_path)
-        if existing_main:
-            return existing_main
+        try:
+            return self.worktree_slot_repo.get_main_slot_for_codebase(codebase.id)
+        except ValueError:
+            pass
 
         logfire.info(f"Bootstrapping main repo slot for codebase {codebase.id}")
         return self.worktree_slot_repo.create(

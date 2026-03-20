@@ -118,6 +118,7 @@ async def update_codebase(
     codebase_update: CodebaseUpdate,
     codebase: Codebase = Depends(get_verified_codebase),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Update a codebase."""
     update_data = codebase_update.model_dump(exclude_unset=True)
@@ -141,6 +142,16 @@ async def update_codebase(
         setattr(codebase, field, value)
 
     updated_codebase = codebase_repo.update(codebase)
+
+    # Sync main slot path when local_path changes
+    if "local_path" in update_data:
+        try:
+            main_slot = worktree_slot_repo.get_main_slot_for_codebase(codebase_id)
+            main_slot.path = update_data["local_path"]
+            worktree_slot_repo.update(main_slot)
+        except ValueError:
+            pass
+
     codebase_repo.db.commit()
     codebase_repo.db.refresh(updated_codebase)
     return updated_codebase

@@ -189,3 +189,37 @@ def test_generate_new_worktree_path_central_mode_falls_back_to_home(worktree_slo
 
     expected = str(Path.home() / ".devboard" / "worktrees" / f"{sample_codebase.id}_test-repo.worktree-0")
     assert path == expected
+
+
+# =============================================================================
+# Bootstrap Main Repo Slot
+# =============================================================================
+
+
+def test_bootstrap_creates_main_slot_when_none_exists(pool_manager, worktree_slot_repo, sample_codebase):
+    """No main slot exists — creates a new one."""
+    worktree_slot_repo.get_main_slot_for_codebase.side_effect = ValueError("No main repo slot found")
+    new_slot = _make_slot(slot_id=1, path=sample_codebase.local_path, locked=False, last_used_by_task_id=None)
+    new_slot.is_main_repo = True
+    worktree_slot_repo.create.return_value = new_slot
+
+    result = pool_manager.bootstrap_main_repo_slot(sample_codebase)
+
+    assert result is new_slot
+    worktree_slot_repo.create.assert_called_once_with(
+        codebase_id=sample_codebase.id,
+        path=sample_codebase.local_path,
+        is_main_repo=True,
+    )
+
+
+def test_bootstrap_returns_existing_main_slot(pool_manager, worktree_slot_repo, sample_codebase):
+    """Existing main slot — returned directly without creating."""
+    existing = _make_slot(slot_id=1, path=sample_codebase.local_path, locked=False, last_used_by_task_id=None)
+    existing.is_main_repo = True
+    worktree_slot_repo.get_main_slot_for_codebase.return_value = existing
+
+    result = pool_manager.bootstrap_main_repo_slot(sample_codebase)
+
+    assert result is existing
+    worktree_slot_repo.create.assert_not_called()

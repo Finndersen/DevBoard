@@ -4,7 +4,7 @@ import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devboard.integrations.git import GitRepoIntegration
@@ -25,6 +25,14 @@ class WorktreeSlot(Base):
     """
 
     __tablename__ = "worktree_slots"
+    __table_args__ = (
+        Index(
+            "uq_one_main_repo_per_codebase",
+            "codebase_id",
+            unique=True,
+            sqlite_where=text("is_main_repo = 1"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     codebase_id: Mapped[int] = mapped_column(ForeignKey("codebases.id"))
