@@ -30,6 +30,8 @@
 - Custom macros/prompts for Project Agent for creating task from Jira ticket etc
 - Refactor run_sub_agent() into "new" and "resume" variants
 - add concept of a "thread" - an idea or intiaitive, soemthing you're working on or need to keep notes/status about, like a scratchpad? how should they be managed? lifecycle etc? relation to proejcts and tasks? 
+- Use dynamic Claude code sub-agent configs instead of "native"? only real benefit is session organisation though...
+- Add PR status cache layer that can be used in different places, e.g. show PR status in task detail / conversation list and agent context if available. allow manual refresh and auto-refresh after stale time
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
