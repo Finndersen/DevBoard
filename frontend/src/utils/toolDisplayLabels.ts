@@ -175,6 +175,14 @@ export function getToolDisplayLabel(
       return { toolName: cleanedName }
     }
 
+    case 'execute_implementation_step': {
+      const stepNumber = args.step_number as number | undefined
+      if (stepNumber != null) {
+        return { toolName: 'execute_implementation_step', details: `Step ${stepNumber}` }
+      }
+      return { toolName: cleanedName }
+    }
+
     case 'Skill': {
       const skill = args.skill as string | undefined
       if (skill) {

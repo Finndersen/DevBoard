@@ -9,6 +9,7 @@ import type { RichResultRendererProps } from './index'
 interface SubAgentResultData {
   result: string
   conversation_id: number | null
+  step_type?: string
 }
 
 function isSubAgentResultData(data: unknown): data is SubAgentResultData {
@@ -33,15 +34,8 @@ export default function SubAgentResultRenderer({ data }: RichResultRendererProps
   }
 
   return (
-    <div>
-      <div className="max-h-96 overflow-y-auto">
-        <Markdown>{data.result}</Markdown>
-      </div>
-      {data.conversation_id !== null && (
-        <div className="mt-2 text-[11px] text-gray-400 dark:text-gray-500 font-mono select-text">
-          Conversation: {data.conversation_id}
-        </div>
-      )}
+    <div className="max-h-96 overflow-y-auto">
+      <Markdown>{data.result}</Markdown>
     </div>
   )
 }

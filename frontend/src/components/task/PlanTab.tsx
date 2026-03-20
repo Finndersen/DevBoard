@@ -40,7 +40,7 @@ function StepDuration({ step }: StepDurationProps) {
       setElapsedSeconds(Math.floor((Date.now() - new Date(step.started_at!).getTime()) / 1000))
     }, 1000)
     return () => clearInterval(interval)
-  }, [step.status])
+  }, [step.status, step.started_at])
 
   if (step.status === 'running' && step.started_at) {
     return <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">{formatDuration(elapsedSeconds)}</span>
@@ -125,12 +125,11 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
         </span>
 
         <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+          <StepDuration step={step} />
           <StatusBadge variant={typeConfig.variant} size="sm">
             <typeConfig.icon className="w-3 h-3 mr-1" />
             {typeConfig.label}
           </StatusBadge>
-
-          <StepDuration step={step} />
         </div>
       </div>
 

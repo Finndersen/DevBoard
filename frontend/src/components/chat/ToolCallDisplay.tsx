@@ -47,13 +47,17 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
 
   // Extract conversation_id from DevBoard sub-agent tool results (investigate_codebase / review_code_changes)
   const devboardSubAgentInfo = useMemo(() => {
-    if (!['investigate_codebase', 'review_code_changes'].includes(toolCall.tool_name) || !toolResult?.result_content) return null
+    if (!['investigate_codebase', 'review_code_changes', 'execute_implementation_step'].includes(toolCall.tool_name) || !toolResult?.result_content) return null
     try {
       const data = JSON.parse(toolResult.result_content)
       if (typeof data.conversation_id !== 'number') return null
       return {
         conversationId: data.conversation_id as number,
-        description: toolCall.tool_name === 'investigate_codebase' ? 'Investigation' : 'Code Review',
+        description: toolCall.tool_name === 'investigate_codebase'
+          ? 'Investigation'
+          : toolCall.tool_name === 'review_code_changes'
+            ? 'Code Review'
+            : 'Step Execution',
       }
     } catch {
       return null
@@ -190,8 +194,28 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
                 return (
                   <div className={`px-3 py-2 border-t min-w-0 ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30'}`}>
                     <div className="flex justify-between items-center mb-1.5 min-w-0">
-                      <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
-                        {isError ? 'Error:' : 'Result:'}
+                      <div className="flex items-center gap-2">
+                        <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                          {isError ? 'Error:' : 'Result:'}
+                        </div>
+                        {parsedData !== null && (() => {
+                          const d = parsedData as Record<string, unknown>
+                          return <>
+                            {d.step_type != null && (
+                              <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono select-text">
+                                type: {d.step_type as string}
+                              </span>
+                            )}
+                            {d.step_type != null && d.conversation_id != null && (
+                              <span className="text-[11px] text-gray-300 dark:text-gray-600 select-none">|</span>
+                            )}
+                            {d.conversation_id != null && (
+                              <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono select-text">
+                                conversation: {d.conversation_id as number}
+                              </span>
+                            )}
+                          </>
+                        })()}
                       </div>
                       <div className="text-xs text-gray-600 dark:text-gray-500 select-none">
                         {formatDuration(duration)}

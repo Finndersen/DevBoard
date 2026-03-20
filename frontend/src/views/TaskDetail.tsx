@@ -373,7 +373,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       ...implementationPlan,
       status: 'executing',
       steps: implementationPlan.steps.map(s =>
-        s.step_number === stepNumber ? { ...s, status: 'running' as const } : s
+        s.step_number === stepNumber ? { ...s, status: 'running' as const, started_at: new Date().toISOString() } : s
       )
     })
   }, [implementationPlan, setImplementationPlan])
@@ -711,6 +711,15 @@ function TaskDetail({ id }: TaskDetailProps) {
                           {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
                             <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
                           )}
+                          {tab.id === 'plan' && implementationPlan?.status === 'executing' && (
+                            <ArrowPathIcon className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                          )}
+                          {tab.id === 'plan' && implementationPlan?.status === 'complete' && (
+                            <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                          )}
+                          {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
+                            <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
+                          )}
                         </button>
                       ))}
                     </nav>
@@ -839,6 +848,15 @@ function TaskDetail({ id }: TaskDetailProps) {
                         )}
                         {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
                           <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                        )}
+                        {tab.id === 'plan' && implementationPlan?.status === 'executing' && (
+                          <ArrowPathIcon className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                        )}
+                        {tab.id === 'plan' && implementationPlan?.status === 'complete' && (
+                          <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                        )}
+                        {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
+                          <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
                         )}
                       </button>
                     ))}
