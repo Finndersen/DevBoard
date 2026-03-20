@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { ChatBubbleLeftRightIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import NavigationMenu from './NavigationMenu'
 import ViewContainer from './ViewContainer'
@@ -6,6 +7,7 @@ import GitHubPRDropdown from '../github/GitHubPRDropdown'
 import ConversationsPanel from '../conversations/ConversationsPanel'
 import CreateTaskModal from '../modals/CreateTaskModal'
 import { useUIStore } from '../../stores/uiStore'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
 import { useStreamHealthCheck } from '../../hooks/useStreamHealthCheck'
 import { useURLSync } from '../../hooks/useURLSync'
@@ -19,6 +21,18 @@ export default function AppShell() {
     toggleConversationsPanel,
     unreadConversationIds,
   } = useUIStore()
+
+  const streamingCount = useConversationStreamStore(
+    useCallback((state) => {
+      let count = 0
+      for (const [, stream] of state.activeStreams) {
+        if (stream.isStreaming) count++
+      }
+      return count
+    }, [])
+  )
+
+  const unreadCount = unreadConversationIds.length
 
   // Bootstrap active streams on app startup
   useStreamBootstrap()
@@ -47,17 +61,24 @@ export default function AppShell() {
             className="h-full w-80 flex items-center gap-2 px-3 border-r border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors shrink-0"
             aria-label={conversationsPanelCollapsed ? 'Expand conversations' : 'Collapse conversations'}
           >
-            <div className="relative shrink-0">
-              <ChatBubbleLeftRightIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              {conversationsPanelCollapsed && unreadConversationIds.length > 0 && (
-                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                  {unreadConversationIds.length}
-                </span>
-              )}
-            </div>
+            <ChatBubbleLeftRightIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 shrink-0" />
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex-1 text-left">
               Conversations
             </span>
+            <div className="flex items-center gap-1.5">
+              {streamingCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 rounded-full h-5 bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {streamingCount}
+                </span>
+              )}
+              {unreadCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 rounded-full h-5 bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  {unreadCount}
+                </span>
+              )}
+            </div>
             {conversationsPanelCollapsed ? (
               <ChevronRightIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
             ) : (

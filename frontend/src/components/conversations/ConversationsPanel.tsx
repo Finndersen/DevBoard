@@ -259,7 +259,7 @@ export default function ConversationsPanel() {
 
               let borderStyle: string
               if (needsAttention) {
-                borderStyle = 'border-l-2 border-l-blue-500 bg-blue-50/50 dark:bg-blue-900/10'
+                borderStyle = 'border-l-2 border-l-blue-500 bg-blue-50 dark:bg-blue-900/20'
               } else if (isSelected) {
                 borderStyle = 'border-l-2 border-l-gray-400 dark:border-l-gray-500 bg-gray-100 dark:bg-gray-700/70'
               } else {
