@@ -12,6 +12,15 @@ from devboard.services.task_git.rebase_coordinator import TaskRebaseCoordinator
 from devboard.services.task_git.types import MergeOutcome, MergeResult, RebaseResult, TaskDiffView, TaskGitStatus
 
 
+class TaskBranchNotFoundException(Exception):
+    def __init__(self, branch_name: str, task_id: int):
+        super().__init__(
+            f"Task branch '{branch_name}' does not exist. It may have been deleted or is not available on this machine."
+        )
+        self.branch_name = branch_name
+        self.task_id = task_id
+
+
 class TaskGitService:
     """Service for task git operations."""
 
@@ -33,7 +42,7 @@ class TaskGitService:
             logfire.warn(f"Remote fetch failed for base branch '{base_branch}' (proceeding with local state): {e}")
             return False
 
-    async def ensure_task_branch(self, task: Task) -> str:
+    async def create_task_branch(self, task: Task) -> str:
         """Ensure task's git branch exists, creating it if necessary.
 
         Args:
@@ -54,6 +63,14 @@ class TaskGitService:
             logfire.info(f"Branch {branch_name} already exists for task {task.id}")
 
         return branch_name
+
+    async def verify_task_branch_exists(self, task: Task) -> None:
+        git = GitRepoIntegration(task.codebase.local_path)
+        if not await git.branch_exists(task.branch_name):
+            raise TaskBranchNotFoundException(
+                branch_name=task.branch_name,
+                task_id=task.id,
+            )
 
     async def get_task_commit_metadata(self, task: Task) -> list[GitLogEntry]:
         """Get lightweight commit metadata for a task branch.

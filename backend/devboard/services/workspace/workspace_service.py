@@ -148,7 +148,7 @@ class WorkspaceService:
         """
         slot: WorktreeSlot | None = None
         try:
-            await self.task_git_service.ensure_task_branch(task)
+            await self.task_git_service.verify_task_branch_exists(task)
 
             try:
                 slot = await self._pool_manager.allocate_for_task(task)

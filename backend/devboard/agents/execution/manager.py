@@ -18,6 +18,7 @@ from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
 from devboard.db.models import Codebase, Project, Task, TaskStatus
 from devboard.services.project_directory import ensure_project_directory
+from devboard.services.task_git.service import TaskBranchNotFoundException
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
 
 
@@ -207,6 +208,17 @@ async def _run_agent_for_conversation(
                     SystemEvent(
                         type=SystemEventType.STREAM_ERROR,
                         data={"error_code": "BRANCH_IN_USE", "message": str(e)},
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    )
+                )
+            except TaskBranchNotFoundException as e:
+                await event_queue.put(
+                    SystemEvent(
+                        type=SystemEventType.STREAM_ERROR,
+                        data={
+                            "error_code": "BRANCH_NOT_FOUND",
+                            "message": f"Task branch '{e.branch_name}' does not exist. It may have been deleted or is not available on this machine. Please recreate the branch or fetch it from a remote.",
+                        },
                         timestamp=datetime.datetime.now(datetime.UTC),
                     )
                 )

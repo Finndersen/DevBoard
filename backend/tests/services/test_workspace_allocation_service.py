@@ -34,8 +34,8 @@ def service(mock_repos):
         worktree_slot_repo=worktree_slot_repo,
         conversation_repo=conversation_repo,
     )
-    # Mock TaskGitService.ensure_task_branch to avoid git operations in tests
-    service.task_git_service.ensure_task_branch = AsyncMock(return_value="feature/test-branch")
+    # Mock TaskGitService.verify_task_branch_exists to avoid git operations in tests
+    service.task_git_service.verify_task_branch_exists = AsyncMock(return_value=None)
     return service
 
 

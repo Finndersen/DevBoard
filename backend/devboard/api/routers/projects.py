@@ -318,7 +318,7 @@ async def create_project_task(
 
     # Create git branch immediately to ensure consistent codebase view during planning
     # Branch name will be auto-generated if not provided
-    await task_git_service.ensure_task_branch(created_task)
+    await task_git_service.create_task_branch(created_task)
 
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found

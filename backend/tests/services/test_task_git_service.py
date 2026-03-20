@@ -7,7 +7,7 @@ import pytest
 from devboard.db.models.task import Task
 from devboard.integrations.shell import ShellCommandExecutionError, ShellCommandTimeoutError
 from devboard.integrations.types import BranchComparison
-from devboard.services.task_git.service import TaskGitService
+from devboard.services.task_git.service import TaskBranchNotFoundException, TaskGitService
 
 
 @pytest.fixture
@@ -193,8 +193,8 @@ class TestGetTaskGitStatusUncommittedOverlap:
         assert status.has_uncommitted_base_overlap is False
 
 
-class TestEnsureTaskBranchFetch:
-    """Tests for remote fetch behaviour in ensure_task_branch."""
+class TestCreateTaskBranch:
+    """Tests for remote fetch behaviour in create_task_branch."""
 
     @pytest.mark.asyncio
     async def test_fetches_before_creating_branch(self, mock_task_no_worktree):
@@ -224,7 +224,7 @@ class TestEnsureTaskBranchFetch:
             git.create_branch = mock_create_branch
             MockGit.return_value = git
 
-            await service.ensure_task_branch(mock_task_no_worktree)
+            await service.create_task_branch(mock_task_no_worktree)
 
         assert call_order == ["branch_exists", "fetch", "create_branch"]
         assert fetch_kwargs == {"remote": "origin", "branch": "main", "timeout": 10.0}
@@ -243,7 +243,7 @@ class TestEnsureTaskBranchFetch:
             git.create_branch = AsyncMock()
             MockGit.return_value = git
 
-            result = await service.ensure_task_branch(mock_task_no_worktree)
+            result = await service.create_task_branch(mock_task_no_worktree)
 
         assert result == "feature/test-branch"
         git.create_branch.assert_called_once_with("feature/test-branch", "origin/main")
@@ -262,7 +262,7 @@ class TestEnsureTaskBranchFetch:
             git.create_branch = AsyncMock()
             MockGit.return_value = git
 
-            result = await service.ensure_task_branch(mock_task_no_worktree)
+            result = await service.create_task_branch(mock_task_no_worktree)
 
         assert result == "feature/test-branch"
         git.create_branch.assert_called_once()
@@ -279,7 +279,7 @@ class TestEnsureTaskBranchFetch:
             git.branch_exists = AsyncMock(return_value=True)
             MockGit.return_value = git
 
-            await service.ensure_task_branch(mock_task_no_worktree)
+            await service.create_task_branch(mock_task_no_worktree)
 
         git.fetch.assert_not_called()
 
@@ -297,10 +297,42 @@ class TestEnsureTaskBranchFetch:
             git.create_branch = AsyncMock()
             MockGit.return_value = git
 
-            await service.ensure_task_branch(mock_task_no_worktree)
+            await service.create_task_branch(mock_task_no_worktree)
 
         git.fetch.assert_not_called()
         git.create_branch.assert_called_once_with("feature/test-branch", "main")
+
+
+class TestVerifyTaskBranchExists:
+    """Tests for verify_task_branch_exists."""
+
+    @pytest.mark.asyncio
+    async def test_raises_when_branch_missing(self, mock_task_no_worktree):
+        """TaskBranchNotFoundException is raised when the branch does not exist."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.branch_exists = AsyncMock(return_value=False)
+            MockGit.return_value = git
+
+            with pytest.raises(TaskBranchNotFoundException) as exc_info:
+                await service.verify_task_branch_exists(mock_task_no_worktree)
+
+        assert exc_info.value.branch_name == "feature/test-branch"
+        assert exc_info.value.task_id == mock_task_no_worktree.id
+
+    @pytest.mark.asyncio
+    async def test_passes_when_branch_exists(self, mock_task_no_worktree):
+        """No exception is raised when the branch exists."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.branch_exists = AsyncMock(return_value=True)
+            MockGit.return_value = git
+
+            await service.verify_task_branch_exists(mock_task_no_worktree)  # should not raise
 
 
 class TestGetTaskGitStatusFetch:
