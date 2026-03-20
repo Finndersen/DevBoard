@@ -72,7 +72,7 @@ function TaskDocumentView({ taskId }: { taskId: number }) {
 
   // Or handle all document edits together
   useToolResultHandler(async (toolName, result) => {
-    if (toolName.startsWith('mcp__devboard_tools__') && (toolName.includes('edit_') || toolName.includes('set_'))) {
+    if ((toolName.includes('edit_') || toolName.includes('set_'))) {
       console.log('Document edited, refetching all...')
       await Promise.all([refetchSpec(), refetchPlan()])
     }

@@ -15,7 +15,9 @@ from claude_agent_sdk import (
 )
 
 # MCP server name for internal PydanticAI tools
-BUILTIN_TOOLS_MCP_NAME = "builtin_tools"
+BUILTIN_TOOLS_MCP_NAME = "devboard"
+
+_LEGACY_MCP_PREFIXES = ("mcp__devboard__", "mcp__builtin_tools__")
 
 
 def load_env_from_settings() -> dict[str, str]:
@@ -100,27 +102,21 @@ def describe_message(message: Message) -> str:
 def normalize_tool_name(tool_name: str) -> str:
     """Normalize tool name by stripping MCP prefix for internal tools only.
 
-    Only internal PydanticAI tools (prefixed with mcp__builtin_tools__) are normalized.
-    External MCP server tools keep their full prefixed names since the application
-    may not have built-in handling for them.
-
-    Args:
-        tool_name: Raw tool name (possibly with MCP prefix)
-
-    Returns:
-        Normalized tool name with builtin_tools prefix removed if present
+    Only internal PydanticAI tools (prefixed with mcp__devboard__ or the legacy
+    mcp__builtin_tools__) are normalized. External MCP server tools keep their full
+    prefixed names since the application may not have built-in handling for them.
 
     Examples:
-        >>> normalize_tool_name("mcp__builtin_tools__render_html")
+        >>> normalize_tool_name("mcp__devboard__render_html")
         "render_html"
-        >>> normalize_tool_name("mcp__builtin_tools__my__custom__tool")
-        "my__custom__tool"
+        >>> normalize_tool_name("mcp__builtin_tools__edit_task")  # legacy prefix
+        "edit_task"
         >>> normalize_tool_name("mcp__github__create_issue")
         "mcp__github__create_issue"  # External tools keep prefix
         >>> normalize_tool_name("render_html")
         "render_html"
     """
-    prefix = f"mcp__{BUILTIN_TOOLS_MCP_NAME}__"
-    if tool_name.startswith(prefix):
-        return tool_name.replace(prefix, "", 1)
+    for prefix in _LEGACY_MCP_PREFIXES:
+        if tool_name.startswith(prefix):
+            return tool_name[len(prefix) :]
     return tool_name

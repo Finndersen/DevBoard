@@ -110,7 +110,7 @@ export function useToolCallHandler(handler: ToolCallHandler): void {
  * @example
  * Handle specific tool:
  * useToolResultHandler((toolName, result) => {
- *   if (toolName === 'mcp__devboard_tools__edit_specification') {
+ *   if (toolName === 'edit_specification') {
  *     refetchSpecification()
  *   }
  * })
