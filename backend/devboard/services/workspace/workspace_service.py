@@ -187,6 +187,8 @@ class WorkspaceService:
                 data={"task_id": task.id, "slot_id": slot.id},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
+            main_git = GitRepoIntegration(task.codebase.local_path)
+            await main_git.prune_worktrees()
             await self._pool_manager.create_worktree_for_slot(slot, task)
             worktree_created = True
 

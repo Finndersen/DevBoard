@@ -374,25 +374,15 @@ class TaskService:
         created_after: datetime | None = None,
         created_before: datetime | None = None,
         codebase_name: str | None = None,
+        limit: int | None = None,
     ) -> list[Task]:
-        """Get tasks for a project with optional filtering.
-
-        Args:
-            project_id: The project ID to get tasks for
-            status_filter: Optional list of TaskStatus values to filter by
-            created_after: Optional datetime to filter tasks created after
-            created_before: Optional datetime to filter tasks created before
-            codebase_name: Optional codebase name to filter by
-
-        Returns:
-            List of tasks matching the filters, with codebase eager-loaded
-        """
         return self.task_repo.get_tasks_filtered(
             project_id=project_id,
             status_filter=status_filter,
             created_after=created_after,
             created_before=created_before,
             codebase_name=codebase_name,
+            limit=limit,
         )
 
     def get_custom_fields(self) -> list[CustomFieldDefinition]:

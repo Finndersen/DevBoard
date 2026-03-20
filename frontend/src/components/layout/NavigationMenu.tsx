@@ -38,7 +38,7 @@ export default function NavigationMenu() {
   } = useUIStore()
 
   const isCompact = navigationCompactMode
-  const panelWidth = isCompact ? 'w-16' : 'w-44'
+  const panelWidth = isCompact ? 'w-16' : 'w-40'
 
   return (
     <div
@@ -67,7 +67,7 @@ export default function NavigationMenu() {
             <Link
               key={section.route}
               to={section.route}
-              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-md transition-colors ${
+              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'} px-2 py-2 rounded-md transition-colors ${
                 isActive
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'

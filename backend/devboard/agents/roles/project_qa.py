@@ -68,10 +68,18 @@ Focus on connecting information across different sources to provide comprehensiv
 """
 
 
-def _format_task_summary_line(task: Task) -> str:
+_TASK_TABLE_HEADER = "ID|Status|Title|Created|Updated"
+
+
+def _format_task_summary_row(task: Task) -> str:
     created = task.created_at.strftime("%Y-%m-%d")
     updated = task.updated_at.strftime("%Y-%m-%d")
-    return f'- #{task.id} [{task.status.value}] "{task.title}" | Created: {created} | Last updated: {updated}'
+    return f"{task.id}|{task.status.value}|{task.title}|{created}|{updated}"
+
+
+def _format_task_table(tasks: list[Task]) -> str:
+    rows = "\n".join(_format_task_summary_row(t) for t in tasks)
+    return f"{_TASK_TABLE_HEADER}\n{rows}"
 
 
 def build_project_qa_context(
@@ -79,21 +87,6 @@ def build_project_qa_context(
     active_tasks: list[Task],
     recent_completed_tasks: list[Task],
 ) -> str:
-    """Build context for project Q&A agent.
-
-    Includes project metadata, specification document, and task summaries.
-
-    Note: Requires project to be loaded within an active SQLAlchemy session,
-    as it will lazy-load relationships if needed.
-
-    Args:
-        project: Project instance with eager-loaded documents
-        active_tasks: Tasks with planning/implementing/pr_open status
-        recent_completed_tasks: Recently completed tasks
-
-    Returns:
-        Formatted context string
-    """
     context = f"""
 PROJECT NAME: {project.name}
 
@@ -103,12 +96,10 @@ PROJECT SPECIFICATION DOCUMENT:
 </document>
 """
     if active_tasks:
-        lines = "\n".join(_format_task_summary_line(t) for t in active_tasks)
-        context += f"\nACTIVE TASKS:\n{lines}\n"
+        context += f"\nACTIVE TASKS:\n{_format_task_table(active_tasks)}\n"
 
     if recent_completed_tasks:
-        lines = "\n".join(_format_task_summary_line(t) for t in recent_completed_tasks)
-        context += f"\nRECENTLY COMPLETED TASKS:\n{lines}\n"
+        context += f"\nRECENTLY COMPLETED TASKS:\n{_format_task_table(recent_completed_tasks)}\n"
 
     return context
 

@@ -1,5 +1,7 @@
 """Worktree pool management API endpoints."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from devboard.api.dependencies.entities import get_verified_codebase, get_verified_worktree_slot
@@ -96,12 +98,13 @@ async def delete_worktree_slot(
     if slot.locked:
         raise HTTPException(status_code=409, detail="Cannot delete locked worktree slot (currently in use by a task)")
 
-    git = GitRepoIntegration(slot.path)
-    if await git.has_uncommitted_changes(include_untracked=True):
-        raise HTTPException(
-            status_code=409,
-            detail="Cannot delete worktree with uncommitted changes or untracked files",
-        )
+    if Path(slot.path).exists():
+        git = GitRepoIntegration(slot.path)
+        if await git.has_uncommitted_changes(include_untracked=True):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete worktree with uncommitted changes or untracked files",
+            )
 
     await pool_manager.delete_worktree_slot(slot)
     return Response(status_code=204)

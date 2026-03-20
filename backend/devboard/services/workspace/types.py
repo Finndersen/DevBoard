@@ -37,7 +37,7 @@ class SlotInfo:
     id: int
     path: str
     is_main_repo: bool
-    status: Literal["locked", "available"]
+    status: Literal["locked", "available", "missing"]
     current_branch: str | None
     last_used_at: str | None
     locked_by_task: LockedByTaskInfo | None = None

@@ -129,10 +129,7 @@ class TestBuildProjectQAContext:
         context = build_project_qa_context(project_with_spec, [task], [])
 
         assert "ACTIVE TASKS:" in context
-        assert (
-            f'- #{task.id} [planning] "Add user authentication" | Created: 2026-03-10 | Last updated: 2026-03-15'
-            in context
-        )
+        assert f"{task.id}|planning|Add user authentication|2026-03-10|2026-03-15" in context
         assert "RECENTLY COMPLETED TASKS:" not in context
 
     def test_recently_completed_tasks_section(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
@@ -150,9 +147,7 @@ class TestBuildProjectQAContext:
         context = build_project_qa_context(project_with_spec, [], [task])
 
         assert "RECENTLY COMPLETED TASKS:" in context
-        assert (
-            f'- #{task.id} [complete] "Setup CI pipeline" | Created: 2026-03-01 | Last updated: 2026-03-09' in context
-        )
+        assert f"{task.id}|complete|Setup CI pipeline|2026-03-01|2026-03-09" in context
         assert "ACTIVE TASKS:" not in context
 
     def test_both_active_and_completed_sections(
@@ -182,8 +177,8 @@ class TestBuildProjectQAContext:
 
         assert "ACTIVE TASKS:" in context
         assert "RECENTLY COMPLETED TASKS:" in context
-        assert "[implementing]" in context
-        assert "[complete]" in context
+        assert "|implementing|" in context
+        assert "|complete|" in context
 
     def test_date_format_no_time_component(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
         """Dates formatted as YYYY-MM-DD with no time component."""
@@ -199,13 +194,13 @@ class TestBuildProjectQAContext:
 
         context = build_project_qa_context(project_with_spec, [task], [])
 
-        assert "Created: 2026-03-10" in context
-        assert "Last updated: 2026-03-15" in context
+        assert "2026-03-10" in context
+        assert "2026-03-15" in context
         assert "14:30" not in context
         assert "09:00" not in context
 
-    def test_line_format(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
-        """Each task line matches the expected format."""
+    def test_row_format(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
+        """Task table includes header row and pipe-delimited data rows."""
         task = _create_task(
             db_session,
             project_id=project_with_spec.id,
@@ -218,10 +213,8 @@ class TestBuildProjectQAContext:
 
         context = build_project_qa_context(project_with_spec, [task], [])
 
-        expected_line = (
-            f'- #{task.id} [pr_open] "Add user authentication" | Created: 2026-03-10 | Last updated: 2026-03-15'
-        )
-        assert expected_line in context
+        assert "ID|Status|Title|Created|Updated" in context
+        assert f"{task.id}|pr_open|Add user authentication|2026-03-10|2026-03-15" in context
 
 
 class TestGetProjectTaskSummaries:

@@ -1,6 +1,7 @@
 """Worktree slot database model."""
 
 import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, String
@@ -46,11 +47,7 @@ class WorktreeSlot(Base):
     )
 
     async def get_current_branch(self) -> str | None:
-        """Get the current git branch for this worktree slot.
-
-        Returns:
-            Current branch name, or None if unable to determine
-        """
+        if not Path(self.path).exists():
+            return None
         git = GitRepoIntegration(self.path)
-        # Run the async method synchronously
         return await git.get_current_branch()

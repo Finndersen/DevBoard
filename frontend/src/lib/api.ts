@@ -377,7 +377,7 @@ export interface WorktreeSlot {
   id: number
   path: string
   is_main_repo: boolean
-  status: 'locked' | 'available'
+  status: 'locked' | 'available' | 'missing'
   current_branch: string | null
   last_used_at: string | null
   locked_by_task: TaskInfoSimple | null

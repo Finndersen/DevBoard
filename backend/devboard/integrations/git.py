@@ -505,6 +505,10 @@ class GitRepoIntegration:
             args.append("--force")
         await self._run_git_command(args)
 
+    async def prune_worktrees(self) -> None:
+        """Remove stale git worktree references for directories that no longer exist on disk."""
+        await self._run_git_command(["worktree", "prune"])
+
     async def create_branch(self, name: str, base: str = "HEAD") -> None:
         """Create a new git branch without checking it out.
 

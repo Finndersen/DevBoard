@@ -26,7 +26,7 @@ def _task_to_toon_record(task: Task) -> dict[str, Any]:
     }
 
 
-def _format_tasks_as_toon(tasks: list[Task], total_count: int) -> str:
+def _format_tasks_as_toon(tasks: list[Task], limit: int) -> str:
     """Format tasks as TOON-encoded output string."""
     if not tasks:
         return "No tasks found matching the filters."
@@ -34,8 +34,8 @@ def _format_tasks_as_toon(tasks: list[Task], total_count: int) -> str:
     task_records = [_task_to_toon_record(task) for task in tasks]
     toon_output = toons.dumps(task_records)
 
-    if total_count > len(tasks):
-        return f"Showing {len(tasks)} of {total_count} tasks (limit reached):\n{toon_output}"
+    if len(tasks) == limit:
+        return f"{toon_output}\n\nNote: {limit} results returned (the limit). There may be additional tasks not shown — use filters or increase max_results to see more."
 
     return toon_output
 
@@ -55,10 +55,12 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
         created_after_date: str | None = None,
         created_before_date: str | None = None,
         codebase_name: str | None = None,
+        max_results: int = MAX_TASKS_LIMIT,
     ) -> str:
         """List tasks belonging to this project with optional filtering.
 
         Use this tool to get an overview of tasks in the project, filtered by various criteria.
+        Results are ordered by most recently updated first.
 
         Args:
             status_filter: Filter by one or more status values.
@@ -66,12 +68,12 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
             created_after_date: Filter tasks created on or after this date (format: 'YYYY-MM-DD')
             created_before_date: Filter tasks created before this date (format: 'YYYY-MM-DD')
             codebase_name: Filter by codebase name. Choose from the available codebases.
+            max_results: Maximum number of tasks to return (default: 20).
 
         Returns:
             TOON-encoded list of tasks with fields: id, title, status, created_at, codebase, branch, custom_fields.
             Returns a message if no tasks match the filters.
         """
-        # Parse status filter
         parsed_statuses: list[TaskStatus] | None = None
         if status_filter:
             try:
@@ -81,7 +83,6 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
                     f"Invalid status value: {e}. Valid values: {', '.join(s.value for s in TaskStatus)}"
                 ) from e
 
-        # Parse date filters
         parsed_created_after: datetime | None = None
         parsed_created_before: datetime | None = None
         try:
@@ -92,19 +93,16 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
         except ValueError as e:
             raise ModelRetry(f"Invalid date format: {e}. Use format 'YYYY-MM-DD' (e.g., '2024-01-15')") from e
 
-        # Query tasks
         tasks = task_service.get_tasks_filtered(
             project_id=project.id,
             status_filter=parsed_statuses,
             created_after=parsed_created_after,
             created_before=parsed_created_before,
             codebase_name=codebase_name,
+            limit=max_results,
         )
 
-        total_count = len(tasks)
-        limited_tasks = tasks[:MAX_TASKS_LIMIT]
-
-        return _format_tasks_as_toon(limited_tasks, total_count)
+        return _format_tasks_as_toon(tasks, max_results)
 
     # Dynamically set the Literal annotation for codebase_name parameter if codebases exist
     if codebase_names:

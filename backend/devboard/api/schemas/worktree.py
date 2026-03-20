@@ -25,7 +25,7 @@ class WorktreeSlotWithTaskInfo(BaseModel):
     id: int
     path: str
     is_main_repo: bool
-    status: str  # "locked" | "available"
+    status: str  # "locked" | "available" | "missing"
     current_branch: str | None
     last_used_at: datetime.datetime | None
     locked_by_task: dict | None = None  # {"id": int, "title": str} - only present if locked

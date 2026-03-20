@@ -80,6 +80,8 @@ class WorktreePoolManager:
 
     async def slot_has_uncommitted_changes(self, slot: WorktreeSlot) -> bool:
         """Check if a worktree slot has uncommitted git changes."""
+        if not Path(slot.path).exists():
+            return False
         git = GitRepoIntegration(slot.path)
         return await git.has_uncommitted_changes()
 
@@ -246,6 +248,10 @@ class WorktreePoolManager:
             except ShellCommandExecutionError as e:
                 error_msg = e.stderr if hasattr(e, "stderr") else str(e)
                 raise ValueError(f"Failed to remove worktree at {slot.path}: {error_msg}") from e
+        else:
+            git = GitRepoIntegration(codebase.local_path)
+            await git.prune_worktrees()
+            logfire.info(f"Pruned stale git worktree reference for missing slot {slot.id} at {slot.path}")
 
         self.worktree_slot_repo.delete(slot)
         logfire.info(f"Deleted worktree slot {slot.id}")
@@ -259,6 +265,29 @@ class WorktreePoolManager:
         locked_count = 0
 
         for slot in slots:
+            if not Path(slot.path).exists():
+                logfire.warn(f"Worktree slot {slot.id} path {slot.path} does not exist on disk")
+                last_used_by_task = None
+                if slot.last_used_by_task:
+                    last_used_by_task = LastUsedByTaskInfo(
+                        id=slot.last_used_by_task.id,
+                        title=slot.last_used_by_task.title,
+                    )
+                slot_data.append(
+                    SlotInfo(
+                        id=slot.id,
+                        path=slot.path,
+                        is_main_repo=slot.is_main_repo,
+                        status="missing",
+                        current_branch=None,
+                        last_used_at=slot.last_used_at.isoformat() if slot.last_used_at else None,
+                        last_used_by_task=last_used_by_task,
+                        has_uncommitted_changes=False,
+                        uncommitted_change_count=0,
+                    )
+                )
+                continue
+
             if slot.locked:
                 locked_count += 1
             else:

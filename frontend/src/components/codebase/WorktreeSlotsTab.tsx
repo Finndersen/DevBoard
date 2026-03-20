@@ -49,6 +49,7 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
   }
 
   const getDeleteTooltip = (slot: WorktreeSlot): string | undefined => {
+    if (slot.status === 'missing') return undefined
     if (slot.status === 'locked') return 'Cannot delete: slot is locked by a task'
     if (slot.has_uncommitted_changes) return 'Cannot delete: worktree has uncommitted changes'
     return undefined
@@ -70,8 +71,9 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
   }
 
   const renderSlotCard = (slot: WorktreeSlot) => {
+    const isMissing = slot.status === 'missing'
     const isLocked = slot.status === 'locked'
-    const isDeleteDisabled = isLocked || slot.has_uncommitted_changes || deletingSlotId === slot.id
+    const isDeleteDisabled = !isMissing && (isLocked || slot.has_uncommitted_changes) || deletingSlotId === slot.id
     const deleteTooltip = getDeleteTooltip(slot)
 
     return (
@@ -84,8 +86,8 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                 <h4 className={`text-sm font-semibold ${textColors.primary}`}>
                   {getSlotIdentifier(slot)}
                 </h4>
-                <StatusBadge variant={isLocked ? 'warning' : 'success'} size="sm">
-                  {isLocked ? 'Locked' : 'Available'}
+                <StatusBadge variant={isMissing ? 'error' : isLocked ? 'warning' : 'success'} size="sm">
+                  {isMissing ? 'Missing' : isLocked ? 'Locked' : 'Available'}
                 </StatusBadge>
                 {slot.has_uncommitted_changes && (
                   <StatusBadge variant="warning" size="sm">
@@ -114,6 +116,11 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
                 {slot.path}
               </code>
             </div>
+            {isMissing && (
+              <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                Directory not found on disk. Delete this slot to clean up.
+              </p>
+            )}
 
             {slot.current_branch && (
               <div className="flex items-center justify-between gap-2">

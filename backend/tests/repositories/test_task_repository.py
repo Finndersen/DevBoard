@@ -602,3 +602,55 @@ class TestTaskRepository:
         assert tasks[0].codebase is not None
         assert tasks[0].codebase.name == "Test Codebase"
         assert tasks[0].codebase.local_path == "/tmp/test-codebase"
+
+    def test_get_tasks_filtered_ordered_by_updated_at_descending(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered returns tasks sorted by updated_at descending."""
+        now = datetime(2026, 3, 16, tzinfo=UTC)
+        for i, title in enumerate(["Oldest", "Middle", "Newest"]):
+            spec_doc = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+            task = repo.create(
+                project_id=project.id,
+                title=title,
+                specification=spec_doc,
+                base_branch="main",
+                codebase_id=codebase.id,
+                branch_name=f"feature/{title.lower()}",
+            )
+            task.updated_at = now - timedelta(days=2 - i)
+        db_session.flush()
+
+        tasks = repo.get_tasks_filtered(project.id)
+
+        assert [t.title for t in tasks] == ["Newest", "Middle", "Oldest"]
+
+    def test_get_tasks_filtered_with_limit(
+        self,
+        repo: TaskRepository,
+        project: Project,
+        codebase: Codebase,
+        document_repository: DocumentRepository,
+        db_session: Session,
+    ):
+        """Test get_tasks_filtered respects the limit parameter."""
+        for i in range(5):
+            spec_doc = document_repository.create(DocumentType.TASK_SPECIFICATION, "")
+            repo.create(
+                project_id=project.id,
+                title=f"Task {i}",
+                specification=spec_doc,
+                base_branch="main",
+                codebase_id=codebase.id,
+                branch_name=f"feature/task-{i}",
+            )
+        db_session.flush()
+
+        tasks = repo.get_tasks_filtered(project.id, limit=3)
+
+        assert len(tasks) == 3

@@ -170,8 +170,8 @@ class TestFormatTasksAsToon:
         assert parsed[1]["status"] == "implementing"
         assert parsed[1]["branch"] == "feature/task-2"
 
-    def test_shows_truncation_message_when_exceeds_limit(self, mock_codebase):
-        """Shows truncation message when total exceeds displayed count."""
+    def test_shows_limit_warning_when_result_count_equals_limit(self, mock_codebase):
+        """Shows warning when result count equals the limit (there may be more)."""
         task = Mock(spec=Task)
         task.id = 1
         task.title = "Task"
@@ -181,11 +181,12 @@ class TestFormatTasksAsToon:
         task.branch_name = "feature/task"
         task.custom_fields = {}
 
-        result = _format_tasks_as_toon([task], 25)
+        result = _format_tasks_as_toon([task], limit=1)
 
-        assert "Showing 1 of 25 tasks (limit reached):" in result
-        # Verify the TOON data is still present after the message
-        toon_data = result.split("\n", 1)[1]
+        assert "Note: 1 results returned (the limit)" in result
+        assert "increase max_results" in result
+        # Verify the TOON data is still present before the note
+        toon_data = result.split("\n\nNote:")[0]
         parsed = toons.loads(toon_data)
         assert len(parsed) == 1
         assert parsed[0]["id"] == 1
@@ -216,6 +217,7 @@ class TestCreateListTasksTool:
             created_after=None,
             created_before=None,
             codebase_name=None,
+            limit=MAX_TASKS_LIMIT,
         )
         # Parse TOON output and verify task data
         parsed = toons.loads(result)
@@ -240,6 +242,7 @@ class TestCreateListTasksTool:
             created_after=None,
             created_before=None,
             codebase_name=None,
+            limit=MAX_TASKS_LIMIT,
         )
         parsed = toons.loads(result)
         assert parsed[0]["title"] == "Implement feature X"
@@ -299,20 +302,21 @@ class TestCreateListTasksTool:
             created_after=None,
             created_before=None,
             codebase_name="backend",
+            limit=MAX_TASKS_LIMIT,
         )
         parsed = toons.loads(result)
         assert parsed[0]["title"] == "Implement feature X"
 
     @pytest.mark.asyncio
-    async def test_list_tasks_limits_results(self, mock_project, mock_task_service, mock_codebase):
-        """Limits results to MAX_TASKS_LIMIT."""
+    async def test_list_tasks_limit_reached_warning(self, mock_project, mock_task_service, mock_codebase):
+        """Includes warning when result count equals the limit (may be more tasks)."""
         tasks = []
-        for i in range(25):
+        for i in range(MAX_TASKS_LIMIT):
             task = Mock(spec=Task)
             task.id = i
             task.title = f"Task {i}"
             task.status = TaskStatus.PLANNING
-            task.created_at = datetime(2024, 1, i + 1, tzinfo=UTC)
+            task.created_at = datetime(2024, 1, 1, tzinfo=UTC)
             task.codebase = mock_codebase
             task.branch_name = f"feature/task-{i}"
             task.custom_fields = {}
@@ -323,11 +327,25 @@ class TestCreateListTasksTool:
         tool = create_list_tasks_tool(mock_project, mock_task_service)
         result = await tool.function()
 
-        assert f"Showing {MAX_TASKS_LIMIT} of 25 tasks (limit reached):" in result
-        # Verify the TOON data is still present after the message
-        toon_data = result.split("\n", 1)[1]
-        parsed = toons.loads(toon_data)
-        assert len(parsed) == MAX_TASKS_LIMIT
+        assert f"Note: {MAX_TASKS_LIMIT} results returned (the limit)" in result
+        assert "increase max_results" in result
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_custom_max_results(self, mock_project, mock_task_service, mock_task):
+        """Passes max_results to the service as limit."""
+        mock_task_service.get_tasks_filtered.return_value = [mock_task]
+
+        tool = create_list_tasks_tool(mock_project, mock_task_service)
+        await tool.function(max_results=5)
+
+        mock_task_service.get_tasks_filtered.assert_called_once_with(
+            project_id=1,
+            status_filter=None,
+            created_after=None,
+            created_before=None,
+            codebase_name=None,
+            limit=5,
+        )
 
     @pytest.mark.asyncio
     async def test_list_tasks_no_matches(self, mock_project, mock_task_service):
