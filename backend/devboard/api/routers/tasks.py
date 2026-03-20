@@ -18,7 +18,6 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
-    get_resource_service,
     get_task_git_service,
     get_task_implementation_plan_service,
     get_task_service,
@@ -40,11 +39,9 @@ from devboard.api.schemas import (
     PRFeedbackResponse,
     PRFeedbackReviewResponse,
     PromptActionRequest,
-    ResourceResponse,
     TaskBranchInfo,
     TaskDiffResponse,
     TaskListResponse,
-    TaskResourceCreate,
     TaskResponse,
     TaskUpdate,
     WorkflowActionInfo,
@@ -60,10 +57,6 @@ from devboard.db.repositories import (
 from devboard.integrations.base import IntegrationError
 from devboard.integrations.github import CommentThread, GitHubIntegration, ReviewComment
 from devboard.services.integration_service import IntegrationService
-from devboard.services.resource_service import (
-    ResourceService,
-    UnsupportedResourceUriError,
-)
 from devboard.services.task_git import TaskGitStatus
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
@@ -164,10 +157,8 @@ async def update_task(
     # Handle implementation plan content update separately
     implementation_plan = update_data.pop("implementation_plan", None)
     if implementation_plan is not None:
-        assert task.implementation_plan is not None, (
-            "Cannot update implementation plan content: no plan document exists"
-        )
         # Update the implementation plan document content
+        assert task.implementation_plan is not None
         document_repo.update_content(task.implementation_plan, implementation_plan)
 
     # Update other task fields
@@ -211,7 +202,7 @@ async def delete_task(
     delete_branch: bool = False,
     task: Task = Depends(get_verified_task),
     task_service: TaskService = Depends(get_task_service),
-) -> dict[str, Any]:
+):
     """Delete a task and all related data (conversations, messages, documents, associations).
 
     Args:
@@ -227,58 +218,6 @@ async def delete_task(
     await task_service.delete_task(task, delete_branch=delete_branch)
 
     return {"message": "Task deleted successfully", "success": True}
-
-
-# Task Resource Endpoints
-
-
-@router.get("/{task_id}/resources", response_model=list[ResourceResponse])
-async def list_task_resources(
-    task_id: int,
-    task: Task = Depends(get_verified_task),
-    resource_service: ResourceService = Depends(get_resource_service),
-):
-    """Get all context provider resources for a task."""
-
-    resources = resource_service.get_resources_for_task(task_id)
-    return resources
-
-
-@router.post("/{task_id}/resources", response_model=ResourceResponse)
-async def create_task_resource(
-    task_id: int,
-    resource: TaskResourceCreate,
-    task: Task = Depends(get_verified_task),
-    resource_service: ResourceService = Depends(get_resource_service),
-):
-    """Add a context provider resource to a task."""
-
-    try:
-        created_resource = await resource_service.create_task_resource(
-            task_id=task_id,
-            resource_uri=resource.resource_uri,
-            description=resource.description,
-        )
-        return created_resource
-    except UnsupportedResourceUriError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@router.delete("/{task_id}/resources/{resource_id}", response_model=DeleteResponse)
-async def delete_task_resource(
-    task_id: int,
-    resource_id: int,
-    task: Task = Depends(get_verified_task),
-    resource_service: ResourceService = Depends(get_resource_service),
-) -> dict[str, Any]:
-    """Remove a context provider resource from a task."""
-
-    deleted = resource_service.delete_task_resource(task_id, resource_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Resource not found or does not belong to this task")
-
-    resource_service.repository.db.commit()
-    return {"message": "Resource deleted successfully", "success": True}
 
 
 @router.get("/{task_id}/diff", response_model=TaskDiffResponse)

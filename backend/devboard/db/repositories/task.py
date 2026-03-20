@@ -3,11 +3,10 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Task, TaskStatus
-from devboard.db.models.base import task_context_resource_association
 from devboard.db.models.implementation_plan import ImplementationPlan
 from devboard.db.repositories.base import BaseRepository
 
@@ -123,19 +122,6 @@ class TaskRepository(BaseRepository[Task]):
         """
         self.db.merge(task)
         return task
-
-    def delete_task_context_resources(self, task: Task) -> int:
-        """Delete all task-context resource associations for a task.
-
-        Args:
-            task: The task to clean up associations for
-
-        Returns:
-            Number of association rows deleted
-        """
-        stmt = delete(task_context_resource_association).where(task_context_resource_association.c.task_id == task.id)
-        result = self.db.execute(stmt)
-        return result.rowcount  # type: ignore[attr-defined]
 
     def delete_implementation_plan_structured(self, task: Task) -> None:
         """Delete the structured implementation plan for a task if it exists.

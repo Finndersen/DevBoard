@@ -1,16 +1,11 @@
 """Configuration-related database models."""
 
 import datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base, project_context_resource_association, task_context_resource_association
-
-if TYPE_CHECKING:
-    from .project import Project
-    from .task import Task
+from .base import Base
 
 
 class Configuration(Base):
@@ -24,24 +19,4 @@ class Configuration(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=lambda: datetime.datetime.now(datetime.UTC),
         onupdate=lambda: datetime.datetime.now(datetime.UTC),
-    )
-
-
-class ContextProviderResource(Base):
-    """Represents a context provider resource that can be shared across projects and tasks."""
-
-    __tablename__ = "context_provider_resources"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    provider_name: Mapped[str] = mapped_column(String(255))  # References context provider by name
-    resource_uri: Mapped[str] = mapped_column(String(1024), unique=True)  # Enforce uniqueness
-    description: Mapped[str] = mapped_column(String(1024))
-    created_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
-
-    # M2M relationships
-    projects: Mapped[list["Project"]] = relationship(
-        secondary=project_context_resource_association, back_populates="context_resources"
-    )
-    tasks: Mapped[list["Task"]] = relationship(
-        secondary=task_context_resource_association, back_populates="context_resources"
     )

@@ -5,7 +5,6 @@ from .base import BaseRepository
 from .claude_project import ClaudeProjectCacheRepository
 from .codebase import CodebaseRepository
 from .configuration import ConfigurationRepository
-from .context_provider_resource import ContextProviderResourceRepository
 from .conversation import ConversationRepository
 from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
@@ -23,7 +22,6 @@ __all__ = [
     "CodebaseRepository",
     "ConfigurationRepository",
     "CustomFieldRepository",
-    "ContextProviderResourceRepository",
     "ConversationRepository",
     "DocumentRepository",
     "TaskImplementationPlanRepository",

@@ -9,12 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import (
     Base,
     project_codebase_association,
-    project_context_resource_association,
 )
 
 if TYPE_CHECKING:
     from .codebase import Codebase
-    from .configuration import ContextProviderResource
     from .document import Document
     from .task import Task
 
@@ -40,10 +38,6 @@ class Project(Base):
     codebases: Mapped[list["Codebase"]] = relationship(
         secondary=project_codebase_association, back_populates="projects"
     )
-    context_resources: Mapped[list["ContextProviderResource"]] = relationship(
-        secondary=project_context_resource_association, back_populates="projects"
-    )
-
     # Document relationship with eager loading
     specification: Mapped["Document"] = relationship(
         foreign_keys=[specification_document_id],

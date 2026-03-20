@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, task_context_resource_association
+from .base import Base
 
 if TYPE_CHECKING:
     from .codebase import Codebase
-    from .configuration import ContextProviderResource
     from .document import Document
     from .implementation_plan import ImplementationPlan
     from .project import Project
@@ -58,9 +57,6 @@ class Task(Base):
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
     codebase: Mapped["Codebase"] = relationship(back_populates="tasks")
-    context_resources: Mapped[list["ContextProviderResource"]] = relationship(
-        secondary=task_context_resource_association, back_populates="tasks"
-    )
     worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(
         foreign_keys="WorktreeSlot.last_used_by_task_id", back_populates="last_used_by_task"
     )

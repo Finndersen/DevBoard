@@ -15,7 +15,6 @@ from devboard.db.models.document import DocumentType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     CodebaseRepository,
-    ContextProviderResourceRepository,
     ConversationRepository,
     DocumentRepository,
     ProjectRepository,
@@ -30,15 +29,6 @@ def test_task_data():
         "title": "Test Task",
         "status": TaskStatus.PLANNING,
         "project_id": 1,
-    }
-
-
-@pytest.fixture
-def test_resource_data():
-    """Sample context provider resource data for testing."""
-    return {
-        "resource_uri": "https://github.com/owner/repo",
-        "description": "Test GitHub repository",
     }
 
 
@@ -278,12 +268,11 @@ class TestTasksRouter:
         assert response.status_code == 404
         assert response.json()["detail"] == "Task not found"
 
-    def test_delete_task_success(self, client, db_session, test_codebase, test_task_data, test_resource_data):
+    def test_delete_task_success(self, client, db_session, test_codebase, test_task_data):
         """Test deleting a task with comprehensive cleanup."""
         from sqlalchemy import select
 
         from devboard.db.models import ConversationMessage
-        from devboard.db.models.base import task_context_resource_association
 
         # Create test project using repository
         project_repo = ProjectRepository(db_session)
@@ -335,31 +324,12 @@ class TestTasksRouter:
         )
         db_session.add(message1)
         db_session.add(message2)
-
-        # Create a context resource and associate it with the task
-        resource_repo = ContextProviderResourceRepository(db_session)
-        resource = resource_repo.create_task_resource(
-            task_id=created_task.id,
-            resource_uri=test_resource_data["resource_uri"],
-            provider_name="github",
-            description=test_resource_data["description"],
-        )
-
         db_session.commit()
 
-        # Store IDs for verification after deletion
         task_id = created_task.id
         conversation_id = conversation.id
         spec_doc_id = task_spec_doc.id
         plan_doc_id = task_plan_doc.id
-        resource_id = resource.id
-
-        # Verify setup: task-context association exists
-        assoc_stmt = select(task_context_resource_association).where(
-            task_context_resource_association.c.task_id == task_id
-        )
-        assoc_before = db_session.execute(assoc_stmt).first()
-        assert assoc_before is not None, "Task-context association should exist before deletion"
 
         # Delete the task
         response = client.delete(f"/api/tasks/{task_id}")
@@ -378,14 +348,6 @@ class TestTasksRouter:
         messages_stmt = select(ConversationMessage).where(ConversationMessage.conversation_id == conversation_id)
         remaining_messages = db_session.execute(messages_stmt).scalars().all()
         assert len(remaining_messages) == 0, "All conversation messages should be deleted"
-
-        # Verify task-context resource associations are deleted
-        assoc_after = db_session.execute(assoc_stmt).first()
-        assert assoc_after is None, "Task-context association should be deleted"
-
-        # Verify resource itself still exists (it's M2M, resource should not be deleted)
-        resource_after = resource_repo.get_by_id(resource_id)
-        assert resource_after is not None, "Resource should still exist (not exclusive to task)"
 
         # Verify documents are deleted
         spec_doc_after = document_repo.get_by_id(spec_doc_id)
@@ -574,207 +536,6 @@ class TestTasksRouter:
         get_response = client.get(f"/api/tasks/{test_task.id}")
         assert get_response.status_code == 200
         assert get_response.json()["codebase_id"] == created_codebase.id
-
-
-class TestTaskResourcesRouter:
-    """Test task resource endpoints."""
-
-    def test_list_task_resources_empty(self, client, db_session, test_codebase, test_task_data):
-        """Test listing task resources when none exist."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        document_repo = DocumentRepository(db_session)
-        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development", specification=spec_doc
-        )
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-            specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
-            base_branch="main",
-            codebase_id=test_codebase.id,
-            branch_name="feature/test-task",
-        )
-        db_session.commit()
-
-        response = client.get(f"/api/tasks/{created_task.id}/resources")
-        assert response.status_code == 200
-        assert response.json() == []
-
-    def test_list_task_resources_with_data(self, client, db_session, test_codebase, test_task_data, test_resource_data):
-        """Test listing task resources with existing data."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        document_repo = DocumentRepository(db_session)
-        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development", specification=spec_doc
-        )
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-            specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
-            base_branch="main",
-            codebase_id=test_codebase.id,
-            branch_name="feature/test-task",
-        )
-        db_session.commit()
-
-        # Create test resource
-        resource_repo = ContextProviderResourceRepository(db_session)
-        resource = resource_repo.create_task_resource(
-            task_id=created_task.id,
-            resource_uri=test_resource_data["resource_uri"],
-            provider_name="github",
-            description=test_resource_data["description"],
-        )
-        db_session.commit()
-
-        response = client.get(f"/api/tasks/{created_task.id}/resources")
-        assert response.status_code == 200
-
-        resources = response.json()
-        assert len(resources) == 1
-        assert resources[0]["resource_uri"] == test_resource_data["resource_uri"]
-        assert resources[0]["description"] == test_resource_data["description"]
-        assert resources[0]["id"] == resource.id
-
-    def test_list_task_resources_task_not_found(self, client, test_codebase):
-        """Test listing resources for non-existent task."""
-        response = client.get("/api/tasks/999/resources")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Task not found"
-
-    def test_create_task_resource(self, client, db_session, test_codebase, test_task_data, test_resource_data):
-        """Test creating a new task resource."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        document_repo = DocumentRepository(db_session)
-        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development", specification=spec_doc
-        )
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-            specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
-            base_branch="main",
-            codebase_id=test_codebase.id,
-            branch_name="feature/test-task",
-        )
-        db_session.commit()
-
-        response = client.post(f"/api/tasks/{created_task.id}/resources", json=test_resource_data)
-        assert response.status_code == 200
-
-        resource_data = response.json()
-        assert resource_data["resource_uri"] == test_resource_data["resource_uri"]
-        assert resource_data["description"] == test_resource_data["description"]
-        assert "id" in resource_data
-
-    def test_create_task_resource_task_not_found(self, client, test_resource_data, test_codebase):
-        """Test creating a resource for non-existent task."""
-        response = client.post("/api/tasks/999/resources", json=test_resource_data)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Task not found"
-
-    def test_delete_task_resource_success(self, client, db_session, test_codebase, test_task_data, test_resource_data):
-        """Test deleting a task resource."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        document_repo = DocumentRepository(db_session)
-        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development", specification=spec_doc
-        )
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-            specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
-            base_branch="main",
-            codebase_id=test_codebase.id,
-            branch_name="feature/test-task",
-        )
-        db_session.commit()
-
-        # Create test resource
-        resource_repo = ContextProviderResourceRepository(db_session)
-        resource = resource_repo.create_task_resource(
-            task_id=created_task.id,
-            resource_uri=test_resource_data["resource_uri"],
-            provider_name="github",
-            description=test_resource_data["description"],
-        )
-        db_session.commit()
-
-        response = client.delete(f"/api/tasks/{created_task.id}/resources/{resource.id}")
-        assert response.status_code == 200
-        assert response.json()["message"] == "Resource deleted successfully"
-
-    def test_delete_task_resource_task_not_found(self, client, test_codebase):
-        """Test deleting a resource for non-existent task."""
-        response = client.delete("/api/tasks/999/resources/1")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Task not found"
-
-    def test_delete_task_resource_not_found(self, client, db_session, test_codebase, test_task_data):
-        """Test deleting a non-existent task resource."""
-        # Create test project using repository
-        project_repo = ProjectRepository(db_session)
-        document_repo = DocumentRepository(db_session)
-        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
-        created_project = project_repo.create(
-            name="Test Project", description="A test project for development", specification=spec_doc
-        )
-
-        # Create test task using repository
-        task_repo = TaskRepository(db_session)
-        task_spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
-        task_plan_doc = document_repo.create(DocumentType.TASK_IMPLEMENTATION_PLAN, "")
-        created_task = task_repo.create(
-            project_id=created_project.id,
-            title=test_task_data["title"],
-            status=test_task_data["status"],
-            specification=task_spec_doc,
-            implementation_plan=task_plan_doc,
-            base_branch="main",
-            codebase_id=test_codebase.id,
-            branch_name="feature/test-task",
-        )
-        db_session.commit()
-
-        response = client.delete(f"/api/tasks/{created_task.id}/resources/999")
-        assert response.status_code == 404
-        assert "Resource not found or does not belong to this task" in response.json()["detail"]
 
 
 class TestTaskStateTransition:

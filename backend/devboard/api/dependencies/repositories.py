@@ -9,7 +9,6 @@ from devboard.db.repositories import (
     ClaudeProjectCacheRepository,
     CodebaseRepository,
     ConfigurationRepository,
-    ContextProviderResourceRepository,
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
@@ -32,13 +31,6 @@ def get_configuration_repository(
 ) -> ConfigurationRepository:
     """Get ConfigurationRepository instance."""
     return ConfigurationRepository(db)
-
-
-def get_context_provider_resource_repository(
-    db: Session = Depends(get_db),
-) -> ContextProviderResourceRepository:
-    """Get ContextProviderResourceRepository instance."""
-    return ContextProviderResourceRepository(db)
 
 
 def get_document_repository(db: Session = Depends(get_db)) -> DocumentRepository:

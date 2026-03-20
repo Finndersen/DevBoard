@@ -23,7 +23,6 @@ from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
     ConfigurationRepository,
-    ContextProviderResourceRepository,
     ConversationRepository,
     DocumentRepository,
     ProjectRepository,
@@ -137,12 +136,6 @@ def project_repository(db_session):
 def task_repository(db_session):
     """Task repository instance for testing."""
     return TaskRepository(db_session)
-
-
-@fixture
-def context_provider_resource_repository(db_session):
-    """Context provider resource repository instance for testing."""
-    return ContextProviderResourceRepository(db_session)
 
 
 @fixture

@@ -53,15 +53,6 @@ from .oauth import (
 )
 from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .prompt_action import PromptActionRequest
-from .resource import (
-    ContextProviderResourceBase,
-    ContextProviderResourceCreate,
-    ContextProviderResourceResponse,
-    ContextProviderResourceUpdate,
-    ProjectResourceCreate,
-    ResourceResponse,
-    TaskResourceCreate,
-)
 from .task import (
     CheckoutToMainResponse,
     CommitMetadata,
@@ -118,14 +109,6 @@ __all__ = [
     "DocumentCreate",
     "DocumentResponse",
     "DocumentUpdate",
-    # Configuration
-    "ContextProviderResourceBase",
-    "ContextProviderResourceCreate",
-    "ContextProviderResourceResponse",
-    "ContextProviderResourceUpdate",
-    "ProjectResourceCreate",
-    "ResourceResponse",
-    "TaskResourceCreate",
     # Integration
     "AgentConfigurationResponse",
     "AgentEngineInfo",

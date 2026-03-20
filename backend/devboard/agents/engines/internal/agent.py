@@ -50,7 +50,6 @@ from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
-from devboard.services.context_assembly import ProjectContextData
 
 
 class InternalAgent(BaseAgent):
@@ -123,7 +122,7 @@ class InternalAgent(BaseAgent):
         Returns:
             DeferredToolResults for PydanticAI agent execution
         """
-        converted_approvals: dict[str, DeferredToolApprovalResult] = {}
+        converted_approvals: dict[str, bool | DeferredToolApprovalResult] = {}
         for tool_call_id, decision in approvals.approvals.items():
             if decision.approved:
                 converted_approvals[tool_call_id] = ToolApproved()
@@ -134,7 +133,7 @@ class InternalAgent(BaseAgent):
                     message = "The tool call was DENIED."
                 converted_approvals[tool_call_id] = ToolDenied(message=message)
 
-        return DeferredToolResults(approvals=converted_approvals)  # type: ignore[arg-type]
+        return DeferredToolResults(approvals=converted_approvals)
 
     def _convert_pydantic_event_to_conversation_events(
         self, event: AgentStreamEvent | AgentRunResultEvent[str | DeferredToolRequests]
@@ -253,28 +252,3 @@ class InternalAgent(BaseAgent):
         if self.last_run_result is None:
             raise RuntimeError("get_new_messages() called before agent run completed")
         return self.last_run_result.new_messages()
-
-    def _build_context_summary(self, context_data: ProjectContextData) -> str:
-        """
-        Build a summary of available context for the agent.
-        TODO: Rework
-        """
-        summary_parts: list[str] = []
-
-        # EAGER context summary
-        if context_data.eager_context:
-            summary_parts.append("EAGER CONTEXT (pre-loaded):")
-            for context in context_data.eager_context:
-                description = context.description or "No description"
-                summary_parts.append(f"- [{context.provider_type.upper()}] {context.uri}: {description}")
-
-        # ON_DEMAND resources summary
-        if context_data.on_demand_resources:
-            summary_parts.append("\nON_DEMAND RESOURCES (use get_relevant_context tool):")
-            for resource in context_data.on_demand_resources:
-                summary_parts.append(f"- [{resource.provider_type.upper()}] {resource.uri}: {resource.description}")
-
-        if not summary_parts:
-            return "No context resources configured for this project."
-
-        return "\n".join(summary_parts)

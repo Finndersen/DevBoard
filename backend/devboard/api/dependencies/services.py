@@ -10,7 +10,6 @@ from devboard.agents.language_models import llm_registry
 from devboard.api.dependencies.repositories import (
     get_agent_role_config_repository,
     get_configuration_repository,
-    get_context_provider_resource_repository,
     get_conversation_repository,
     get_custom_field_repository,
     get_document_repository,
@@ -22,11 +21,9 @@ from devboard.api.dependencies.repositories import (
     get_worktree_slot_repository,
 )
 from devboard.config.integration_configs import DevBoardConfig, WorktreeLocationMode
-from devboard.context_providers.registry import context_provider_registry
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
     ConfigurationRepository,
-    ContextProviderResourceRepository,
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
@@ -39,35 +36,17 @@ from devboard.db.repositories import (
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
-from devboard.services.context_assembly import ContextAssemblyService
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.mcp_service import MCPService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
-from devboard.services.resource_service import ResourceService
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
 from devboard.services.workspace import WorkspaceService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
-
-
-def get_context_assembly_service(
-    project_repo: ProjectRepository = Depends(get_project_repository),
-    task_repo: TaskRepository = Depends(get_task_repository),
-    resource_repo: ContextProviderResourceRepository = Depends(get_context_provider_resource_repository),
-) -> ContextAssemblyService:
-    """Get ContextAssemblyService instance."""
-    return ContextAssemblyService(project_repo, task_repo, resource_repo)
-
-
-def get_resource_service(
-    resource_repo: ContextProviderResourceRepository = Depends(get_context_provider_resource_repository),
-) -> ResourceService:
-    """Get ResourceService instance."""
-    return ResourceService(resource_repo, context_provider_registry)
 
 
 def get_config_service(

@@ -139,20 +139,16 @@ class TaskService:
         """Hard-delete a task and all related data.
 
         Performs a transactional deletion of:
-        1. Task-context resource associations
-        2. Conversations and their messages for the task
-        3. The task itself
-        4. Task-specific documents (specification and implementation plan)
-        5. Optionally delete the git branch (if requested)
+        1. Conversations and their messages for the task
+        2. The task itself
+        3. Task-specific documents (specification and implementation plan)
+        4. Optionally delete the git branch (if requested)
 
         Args:
             task: Task to delete
             delete_branch: If True, also delete the task's git branch (if it exists)
         """
-        # 1. Delete task-context resource associations (required - no CASCADE on FK)
-        self.task_repo.delete_task_context_resources(task)
-
-        # 2. Delete conversations and messages for the task
+        # 1. Delete conversations and messages for the task
         self.conversation_service.delete_conversations_for_parent(task)
 
         # These documents are exclusive to the task, so safe to delete
@@ -165,10 +161,10 @@ class TaskService:
         # Explicitly delete structured plan (also cascade-deleted by ORM, belt-and-suspenders)
         self.task_repo.delete_implementation_plan_structured(task)
 
-        # 3. Delete the task itself
+        # 2. Delete the task itself
         self.task_repo.delete(task)
 
-        # 4. Delete git branch if requested
+        # 3. Delete git branch if requested
         if delete_branch:
             try:
                 task_git_service = TaskGitService()
