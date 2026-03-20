@@ -7,9 +7,19 @@ from typing import Any, Literal
 import toons
 from pydantic_ai import ModelRetry, Tool
 
-from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Project, Task, TaskStatus
+from devboard.db.models import (
+    Codebase,
+    CustomFieldDefinition,
+    CustomFieldType,
+    ParentEntityType,
+    Project,
+    Task,
+    TaskStatus,
+)
+from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
+from devboard.workflow_actions.task_workflows import CreateImplementationPlanAction
 
 MAX_TASKS_LIMIT = 20
 
@@ -281,6 +291,11 @@ def _build_create_task_json_schema(
             "description": "Optional working branch name (auto-generated from title if not provided)",
             "default": None,
         },
+        "auto_plan": {
+            "type": "boolean",
+            "description": "Automatically begin creating the implementation plan after task creation. Only enable when the task specification is complete and ready for implementation planning. Requires specification_content to be provided.",
+            "default": False,
+        },
     }
 
     custom_fields_schema = _build_custom_fields_schema(custom_field_definitions)
@@ -525,12 +540,14 @@ def create_edit_own_task_tool(
 def create_create_task_tool(
     project: Project,
     task_service: TaskService,
+    conversation_repo: ConversationRepository | None = None,
 ) -> Tool:
     """Create a tool for creating new tasks within a project.
 
     Args:
         project: The project to create tasks in
         task_service: Service for task creation
+        conversation_repo: Optional repository for conversation access (required for auto_plan)
     """
     # Build codebase name -> Codebase mapping for lookup
     codebase_map: dict[str, Codebase] = {cb.name: cb for cb in project.codebases} if project.codebases else {}
@@ -543,11 +560,19 @@ def create_create_task_tool(
         base_branch: str | None = None,
         branch_name: str | None = None,
         custom_fields: dict[str, Any] | None = None,
+        auto_plan: bool = False,
     ) -> str:
         """Create a new task within the current project.
 
         Use this tool to create a new task for tracking work to be done.
         """
+        # Fail fast: validate auto_plan requirements before creating task
+        if auto_plan:
+            if not specification_content:
+                raise ModelRetry("auto_plan requires specification_content to be provided")
+            if conversation_repo is None:
+                raise ModelRetry("auto_plan is not supported in this context")
+
         # Look up codebase from the pre-built map
         codebase = codebase_map.get(codebase_name)
         if not codebase:
@@ -566,18 +591,41 @@ def create_create_task_tool(
                 branch_name=branch_name,
                 custom_fields=custom_fields,
             )
-            return json.dumps(
-                {
-                    "task_id": task.id,
-                    "title": task.title,
-                    "status": task.status.value,
-                    "branch_name": task.branch_name,
-                    "base_branch": task.base_branch,
-                    "codebase_name": codebase.name,
-                }
-            )
         except Exception as e:
             raise ModelRetry(f"Failed to create task: {e}") from e
+
+        active_conversation_id = None
+
+        if auto_plan:
+            if not CreateImplementationPlanAction.is_available(task):
+                raise ModelRetry(
+                    "Cannot auto-plan: task is not eligible for implementation plan creation. "
+                    "Ensure the task has a specification and no existing plan."
+                )
+
+            from devboard.agents.execution_manager import conversation_execution_manager
+
+            assert conversation_repo is not None  # Already validated above
+            try:
+                conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
+                conversation_execution_manager.start_agent_execution(
+                    conversation.id, CreateImplementationPlanAction.PROMPT
+                )
+                active_conversation_id = conversation.id
+            except Exception as e:
+                raise ModelRetry(f"Failed to start auto-plan execution: {e}") from e
+
+        result: dict[str, Any] = {
+            "task_id": task.id,
+            "title": task.title,
+            "status": task.status.value,
+            "branch_name": task.branch_name,
+            "base_branch": task.base_branch,
+            "codebase_name": codebase.name,
+        }
+        if active_conversation_id is not None:
+            result["active_conversation_id"] = active_conversation_id
+        return json.dumps(result)
 
     json_schema = _build_create_task_json_schema(codebase_names, task_service.get_custom_fields())
 

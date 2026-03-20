@@ -232,7 +232,7 @@ class TaskImplementationAgentRole(AgentRole):
         # For MANUAL branch handling, no completion tools are provided
 
         # Add create_task tool for creating related tasks
-        tools.append(create_create_task_tool(self.task.project, self.task_service))
+        tools.append(create_create_task_tool(self.task.project, self.task_service, self.conversation_repo))
 
         return tools
 

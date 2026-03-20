@@ -214,7 +214,7 @@ class TaskPlanningAgentRole(AgentRole):
         )
 
         # Add create_task tool
-        tools.append(create_create_task_tool(self.task.project, self.task_service))
+        tools.append(create_create_task_tool(self.task.project, self.task_service, self.conversation_repo))
 
         return tools
 

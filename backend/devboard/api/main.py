@@ -36,7 +36,7 @@ from devboard.config.logfire_config import setup_logfire
 from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
-from devboard.mcp import mcp
+from devboard.mcp.server import mcp
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 
 """Load environment variables from .env files in current directory or home directory."""
