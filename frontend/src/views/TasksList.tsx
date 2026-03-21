@@ -132,7 +132,7 @@ export default function TasksList() {
               <select
                 value={selectedProjectId ?? ''}
                 onChange={handleProjectFilterChange}
-                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-[180px]"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white min-w-[180px]"
               >
                 <option value="">All Projects</option>
                 {projects?.map(project => (
@@ -164,7 +164,7 @@ export default function TasksList() {
           <Card key={status} padding="xs" className="bg-gray-50 dark:bg-gray-800 flex flex-col overflow-hidden">
             <h3 className={`font-medium ${textColors.primary} mb-4 flex items-center justify-between flex-shrink-0`}>
               {STATUS_LABELS[status] ?? status}
-              <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
+              <span className="bg-gray-200 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">
                 {taskGroups[status]?.length || 0}
               </span>
             </h3>
@@ -176,7 +176,7 @@ export default function TasksList() {
                   <Link
                     key={task.id}
                     to={`/tasks/${task.id}`}
-                    className="block bg-white dark:bg-gray-700 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
+                    className="block bg-white dark:bg-white/[0.06] rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
                   >
                     <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
                       {task.title}

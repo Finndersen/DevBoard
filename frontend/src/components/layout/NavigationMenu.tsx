@@ -42,10 +42,10 @@ export default function NavigationMenu() {
 
   return (
     <div
-      className={`${panelWidth} shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-200 flex flex-col`}
+      className={`${panelWidth} shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-white/[0.08] transition-all duration-200 flex flex-col`}
     >
       {/* Logo header */}
-      <div className={`h-16 flex items-center ${isCompact ? 'justify-center px-2' : 'px-3'} border-b border-gray-200 dark:border-gray-700 flex-shrink-0`}>
+      <div className={`h-16 flex items-center ${isCompact ? 'justify-center px-2' : 'px-3'} border-b border-gray-200 dark:border-white/[0.08] flex-shrink-0`}>
         <Link to="/" className={`flex items-center ${isCompact ? '' : 'gap-3'}`}>
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
             <span className="text-white font-bold text-sm">DB</span>
@@ -97,7 +97,7 @@ export default function NavigationMenu() {
       </nav>
 
       {/* Footer: collapse toggle */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-2">
+      <div className="border-t border-gray-200 dark:border-white/[0.08] p-2">
         <button
           onClick={toggleNavigationCompactMode}
           className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"

@@ -50,7 +50,7 @@ export default function SessionIdModal({
           </div>
           <button
             onClick={handleCopy}
-            className="absolute top-2 right-2 p-2 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600 transition-colors"
+            className="absolute top-2 right-2 p-2 bg-white dark:bg-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.12] rounded border border-gray-200 dark:border-gray-600 transition-colors"
             title={copied ? "Copied!" : "Copy to clipboard"}
           >
             {copied ? (

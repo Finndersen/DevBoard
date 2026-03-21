@@ -213,7 +213,7 @@ export default function ConversationsPanel() {
   }
 
   return (
-    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-gray-700'} flex flex-col overflow-hidden transition-all duration-300`}>
+    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-white/[0.08]'} flex flex-col overflow-hidden transition-all duration-300`}>
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
         {loading && !conversations && (
@@ -261,7 +261,7 @@ export default function ConversationsPanel() {
               if (needsAttention) {
                 borderStyle = 'border-l-2 border-l-blue-500 bg-blue-50 dark:bg-blue-900/20'
               } else if (isSelected) {
-                borderStyle = 'border-l-2 border-l-gray-400 dark:border-l-gray-500 bg-gray-100 dark:bg-gray-700/70'
+                borderStyle = 'border-l-2 border-l-gray-400 dark:border-l-gray-500 bg-gray-100 dark:bg-white/[0.05]'
               } else {
                 borderStyle = 'border-l-2 border-l-transparent'
               }
@@ -270,7 +270,7 @@ export default function ConversationsPanel() {
                 <button
                   key={item.id}
                   onClick={() => handleClick(item)}
-                  className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${borderStyle} ${isPulsing ? 'animate-attention-pulse' : ''}`}
+                  className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors ${borderStyle} ${isPulsing ? 'animate-attention-pulse' : ''}`}
                 >
                   {/* Row 1: Icon + name + draft indicator + activity dot */}
                   <div className="flex items-center gap-2 min-w-0">

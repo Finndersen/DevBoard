@@ -29,7 +29,7 @@ export default function CollapsedPanelStrip({
         transition-all duration-200
         ${highlightStrip
           ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/15'
-          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          : 'border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-white/[0.06]'
         }
         ${needsAttention && !showStreamingDot ? 'animate-attention-pulse' : ''}
         ${className}

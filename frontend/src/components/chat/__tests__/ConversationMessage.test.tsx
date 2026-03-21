@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { render } from '../../../test/utils'
 import ConversationMessageComponent from '../ConversationMessage'
-import type { ConversationMessage, ToolCall, ToolResult, ToolCallRequest, SystemEvent } from '../../../lib/api'
+import type { ConversationMessage, ToolCall, ToolResult, ToolCallRequest, SystemEvent, ThinkingEvent } from '../../../lib/api'
 
 // Mock the Markdown and ToolCallDisplay components
 vi.mock('../../ui', () => ({
@@ -524,6 +524,128 @@ describe('ConversationMessage', () => {
 
       // Should render nothing
       expect(container.firstChild).toBeNull()
+    })
+  })
+
+  describe('thinking events', () => {
+    it('renders thinking event with duration as purple pill badge', () => {
+      const thinkingEvent: ThinkingEvent = {
+        event_type: 'thinking',
+        duration_seconds: 4.1,
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={thinkingEvent} />)
+
+      const badge = screen.getByText('Thinking · 4.1s').closest('.rounded-full')
+      expect(badge).toBeInTheDocument()
+      expect(badge).toHaveClass('bg-purple-500/10', 'border', 'border-purple-500/25', 'text-purple-400')
+    })
+
+    it('renders thinking event without duration showing just "Thinking"', () => {
+      const thinkingEvent: ThinkingEvent = {
+        event_type: 'thinking',
+        duration_seconds: null,
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={thinkingEvent} />)
+
+      expect(screen.getByText('Thinking')).toBeInTheDocument()
+      expect(screen.queryByText(/·/)).not.toBeInTheDocument()
+    })
+
+    it('renders thinking badge centered', () => {
+      const thinkingEvent: ThinkingEvent = {
+        event_type: 'thinking',
+        duration_seconds: 2.5,
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={thinkingEvent} />)
+
+      const centeredContainer = screen.getByText('Thinking · 2.5s').closest('.justify-center')
+      expect(centeredContainer).toBeInTheDocument()
+    })
+
+    it('renders clock icon inside the thinking badge', () => {
+      const thinkingEvent: ThinkingEvent = {
+        event_type: 'thinking',
+        duration_seconds: 1.0,
+        timestamp: '2024-01-01T10:00:00Z',
+      }
+
+      render(<ConversationMessageComponent message={thinkingEvent} />)
+
+      const badge = screen.getByText('Thinking · 1.0s').closest('.rounded-full')
+      expect(badge?.querySelector('svg')).toBeInTheDocument()
+    })
+  })
+
+  describe('hover-reveal timestamps', () => {
+    it('user message has group class for hover and timing badge', () => {
+      const userMessage: ConversationMessage = {
+        event_type: 'message',
+        role: 'user',
+        text_content: 'Hello',
+        timestamp: '2024-01-01T10:00:05Z',
+      }
+
+      const { container } = render(
+        <ConversationMessageComponent
+          message={userMessage}
+          previousEventTimestamp="2024-01-01T10:00:00Z"
+        />
+      )
+
+      // Outer container has group class
+      const groupEl = container.querySelector('.group')
+      expect(groupEl).toBeInTheDocument()
+
+      // Timing badge exists and is initially hidden
+      const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(timingEl).toBeInTheDocument()
+      // Should contain delay text (+5s)
+      expect(timingEl?.textContent).toContain('+5.0s')
+    })
+
+    it('agent message has group class and timing badge', () => {
+      const agentMessage: ConversationMessage = {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Response text',
+        timestamp: '2024-01-01T10:00:10Z',
+      }
+
+      const { container } = render(
+        <ConversationMessageComponent
+          message={agentMessage}
+          previousEventTimestamp="2024-01-01T10:00:00Z"
+        />
+      )
+
+      const groupEl = container.querySelector('.group')
+      expect(groupEl).toBeInTheDocument()
+
+      const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(timingEl).toBeInTheDocument()
+      expect(timingEl?.textContent).toContain('+10.0s')
+    })
+
+    it('user message without previousEventTimestamp shows only HH:MM', () => {
+      const userMessage: ConversationMessage = {
+        event_type: 'message',
+        role: 'user',
+        text_content: 'Hello',
+        timestamp: '2024-01-01T10:05:00Z',
+      }
+
+      const { container } = render(<ConversationMessageComponent message={userMessage} />)
+
+      const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(timingEl).toBeInTheDocument()
+      // Should not contain a delay component
+      expect(timingEl?.textContent).not.toContain('+')
     })
   })
 })

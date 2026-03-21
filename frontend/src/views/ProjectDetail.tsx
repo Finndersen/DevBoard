@@ -343,7 +343,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   return (
     <div ref={containerRef} className="h-full flex flex-col">
       {/* Navigation Tabs with Project Name and Actions */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-4 flex-shrink-0">
+      <div className="border-b border-gray-200 dark:border-white/[0.08] mb-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Left: Navigation Tabs */}
           <nav className="-mb-px flex space-x-8 shrink-0">
@@ -588,7 +588,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                 <select
                   value={selectedCodebaseToLink}
                   onChange={(e) => setSelectedCodebaseToLink(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
                   disabled={linkingCodebase}
                 >
                   <option value="">Select a codebase to link...</option>
@@ -636,7 +636,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
                 {projectCodebases.map((codebase) => (
                   <div
                     key={codebase.id}
-                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-white dark:bg-white/[0.06] border border-gray-200 dark:border-gray-600 rounded-lg"
                   >
                     <div className="flex-1 min-w-0">
                       <Link

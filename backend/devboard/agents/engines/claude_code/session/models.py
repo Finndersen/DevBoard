@@ -3,7 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from devboard.agents.engines.claude_code.session.types import TextBlockDict, ToolResultBlockDict, ToolUseBlockDict
+from devboard.agents.engines.claude_code.session.types import (
+    TextBlockDict,
+    ThinkingBlockDict,
+    ToolResultBlockDict,
+    ToolUseBlockDict,
+)
 from devboard.agents.events import LocalCommandType, MetaMessageType
 
 
@@ -21,7 +26,7 @@ def _user_content_factory() -> list[TextBlockDict | ToolResultBlockDict]:
     return []
 
 
-def _assistant_content_factory() -> list[TextBlockDict | ToolUseBlockDict]:
+def _assistant_content_factory() -> list[TextBlockDict | ThinkingBlockDict | ToolUseBlockDict]:
     return []
 
 
@@ -42,9 +47,11 @@ class UserSessionMessage(BaseSessionMessage):
 
 @dataclass
 class AssistantSessionMessage(BaseSessionMessage):
-    """Assistant message from a Claude Code session (text and/or tool calls)."""
+    """Assistant message from a Claude Code session (text, thinking, and/or tool calls)."""
 
-    content: list[TextBlockDict | ToolUseBlockDict] = field(default_factory=_assistant_content_factory)
+    content: list[TextBlockDict | ThinkingBlockDict | ToolUseBlockDict] = field(
+        default_factory=_assistant_content_factory
+    )
 
     @property
     def text_content(self) -> str:

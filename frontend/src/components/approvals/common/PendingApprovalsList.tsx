@@ -109,7 +109,7 @@ export default function PendingApprovalsList({
 
       {/* Global Feedback for Batch Operations */}
       {approvals.length > 1 && (
-        <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+        <div className="p-3 bg-gray-50 dark:bg-white/[0.05] rounded-lg">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Global feedback (applies to all tools):
           </label>

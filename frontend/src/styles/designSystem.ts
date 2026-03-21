@@ -13,8 +13,8 @@ export const colors = {
   },
   gray: {
     50: 'bg-gray-50 dark:bg-gray-900',
-    100: 'bg-gray-100 dark:bg-gray-800',
-    200: 'bg-gray-200 dark:bg-gray-700',
+    100: 'bg-gray-100 dark:bg-white/[0.03]',
+    200: 'bg-gray-200 dark:bg-white/[0.06]',
     300: 'bg-gray-300 dark:bg-gray-600',
     700: 'bg-gray-700 dark:bg-gray-300',
     800: 'bg-gray-800 dark:bg-gray-200',
@@ -32,7 +32,7 @@ export const textColors = {
 
 // Border colors
 export const borderColors = {
-  default: 'border-gray-200 dark:border-gray-700',
+  default: 'border-gray-200 dark:border-white/[0.08]',
   input: 'border-gray-300 dark:border-gray-600',
   focus: 'border-blue-500'
 }

@@ -682,7 +682,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           >
             <Card padding="none" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
               {/* Card Header with Tabs */}
-              <div className="border-b border-gray-200 dark:border-gray-700">
+              <div className="border-b border-gray-200 dark:border-white/[0.08]">
                 <div className="px-6 py-3">
                   <div className="flex items-center justify-between">
                     <nav className="flex space-x-6">
@@ -704,7 +704,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                           <tab.icon className="w-4 h-4" />
                           <span>{tab.name}</span>
                           {tab.badge != null && tab.badge > 0 && (
-                            <span className="text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-1.5">
+                            <span className="text-xs bg-gray-100 dark:bg-white/[0.05] rounded-full px-1.5">
                               {tab.badge}
                             </span>
                           )}
@@ -820,7 +820,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           {/* Right Column: Document Content with Integrated Tabs */}
           <Card padding="none" className="h-full flex flex-col overflow-hidden">
             {/* Card Header with Tabs */}
-            <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="border-b border-gray-200 dark:border-white/[0.08]">
               <div className="px-6 py-3">
                 <div className="flex items-center justify-between">
                   <nav className="flex space-x-6">
@@ -842,7 +842,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                         <tab.icon className="w-4 h-4" />
                         <span>{tab.name}</span>
                         {tab.badge != null && tab.badge > 0 && (
-                          <span className="text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-1.5">
+                          <span className="text-xs bg-gray-100 dark:bg-white/[0.05] rounded-full px-1.5">
                             {tab.badge}
                           </span>
                         )}

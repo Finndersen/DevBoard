@@ -28,7 +28,7 @@ export default function ClaudeCodeView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <ViewHeader icon={CommandLineIcon} title="Claude Code" />
-      <div className="border-b border-gray-200 dark:border-gray-700 px-6 shrink-0">
+      <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 shrink-0">
         <nav className="-mb-px flex space-x-8">
           {VALID_TABS.map(tab => {
             const { label, icon: Icon } = TAB_CONFIG[tab]

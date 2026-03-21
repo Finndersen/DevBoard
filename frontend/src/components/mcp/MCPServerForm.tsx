@@ -284,7 +284,7 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
             )}
 
             {formData.auth_type === 'oauth' && (
-              <div className="space-y-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md">
+              <div className="space-y-3 p-3 border border-gray-200 dark:border-white/[0.08] rounded-md">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   OAuth will be initiated when you verify the server. Leave fields blank for automatic discovery and registration.
                 </p>

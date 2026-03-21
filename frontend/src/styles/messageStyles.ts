@@ -17,7 +17,7 @@ export const getMessageBubbleClasses = (isUser: boolean, additionalClasses?: str
     return getUserMessageClasses(additionalClasses)
   }
   const baseClasses = 'rounded-lg px-3 py-1.5 text-sm'
-  const colorClasses = 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+  const colorClasses = 'bg-gray-100 dark:bg-white/[0.03] text-gray-900 dark:text-white'
 
   return `${baseClasses} ${colorClasses} ${additionalClasses || ''}`
 }
@@ -52,6 +52,26 @@ export const formatDuration = (durationMs: number) => {
     return `${Math.round(durationMs)}ms`
   }
   return `${(durationMs / 1000).toFixed(1)}s`
+}
+
+/**
+ * Returns "+Xs" or "+Xms" delay string between two timestamps, or null if no previous timestamp.
+ */
+export const formatDelay = (currentTimestamp: string, previousTimestamp: string | null): string | null => {
+  if (!previousTimestamp) return null
+  const diffMs = new Date(currentTimestamp).getTime() - new Date(previousTimestamp).getTime()
+  if (diffMs < 0) return null
+  return `+${formatDuration(diffMs)}`
+}
+
+/**
+ * Returns "HH:MM · +Xs" for display alongside message events.
+ * Returns just "HH:MM" if no previous timestamp.
+ */
+export const formatEventTiming = (timestamp: string, previousTimestamp: string | null): string => {
+  const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const delay = formatDelay(timestamp, previousTimestamp)
+  return delay ? `${time} · ${delay}` : time
 }
 
 export const getStatusIcon = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {

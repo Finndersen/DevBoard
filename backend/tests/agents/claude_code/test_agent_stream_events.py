@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     ResultMessage,
     SystemMessage,
     TextBlock,
+    ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -19,7 +20,7 @@ from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent, _should_retry_error_result
 from devboard.agents.engines.claude_code.session import AssistantSessionMessage
-from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
+from devboard.agents.events import MessageRole, TextMessage, ThinkingEvent, ToolCall, ToolCallRequest, ToolResult
 from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
@@ -1285,3 +1286,63 @@ class TestStreamEventsApi400Retry:
         assert isinstance(events[0], TextMessage)
         assert "API Error: 400" in events[0].text_content
         assert "invalid parameter value" in events[0].text_content
+
+
+class TestStreamEventsThinkingBlock:
+    """Tests for stream_events() with ThinkingBlock content."""
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_thinking_block_yields_thinking_event(self, mock_client_class, agent_with_virtual_tool):
+        """Test that a ThinkingBlock yields a ThinkingEvent."""
+        session_id = "test-session-thinking"
+        thinking_message = AssistantMessage(
+            content=[ThinkingBlock(thinking="Let me think about this...", signature="sig")],
+            model="claude-sonnet-4",
+            parent_tool_use_id=None,
+        )
+        messages = [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            thinking_message,
+            create_mock_result_message("", session_id=session_id),
+        ]
+        setup_mock_client(mock_client_class, messages)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], ThinkingEvent)
+        assert events[0].duration_seconds is None
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_thinking_block_followed_by_text(self, mock_client_class, agent_with_virtual_tool):
+        """Test that ThinkingBlock + TextBlock yields ThinkingEvent then TextMessage."""
+        session_id = "test-session-thinking-text"
+        mixed_message = AssistantMessage(
+            content=[
+                ThinkingBlock(thinking="Reasoning here...", signature="sig"),
+                TextBlock(text="Here is my answer."),
+            ],
+            model="claude-sonnet-4",
+            parent_tool_use_id=None,
+        )
+        messages = [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            mixed_message,
+            create_mock_result_message("Here is my answer.", session_id=session_id),
+        ]
+        setup_mock_client(mock_client_class, messages)
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        assert len(events) == 2
+        assert isinstance(events[0], ThinkingEvent)
+        assert events[0].duration_seconds is None
+        assert isinstance(events[1], TextMessage)
+        assert events[1].text_content == "Here is my answer."
+        assert events[1].role == MessageRole.AGENT

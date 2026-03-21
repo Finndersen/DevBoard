@@ -20,9 +20,9 @@ function getReviewStateBadge(state: string) {
     case 'CHANGES_REQUESTED':
       return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Changes Requested</span>
     case 'COMMENTED':
-      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Commented</span>
+      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700 dark:bg-white/[0.05] dark:text-gray-300">Commented</span>
     default:
-      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">{state}</span>
+      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600 dark:bg-white/[0.05] dark:text-gray-400">{state}</span>
   }
 }
 
@@ -162,7 +162,7 @@ function FileThreadSection({ thread, onSubmit }: { thread: PRFeedbackCommentThre
         )}
       </div>
       {thread.original.diff_hunk && (
-        <pre className="text-xs font-mono bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-2 mb-2 overflow-x-auto whitespace-pre">
+        <pre className="text-xs font-mono bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] rounded p-2 mb-2 overflow-x-auto whitespace-pre">
           {thread.original.diff_hunk}
         </pre>
       )}

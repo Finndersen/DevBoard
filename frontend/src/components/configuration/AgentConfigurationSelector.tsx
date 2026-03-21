@@ -209,7 +209,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
               type="button"
               onClick={() => setIsEngineOpen(!isEngineOpen)}
               disabled={saving}
-              className={`relative w-44 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
+              className={`relative w-44 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
                 saving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -226,7 +226,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
             </button>
 
             {isEngineOpen && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
                 {configuration.available_engines.map((engine) => {
                   const isUnavailable = !engine.is_available
                   return (
@@ -274,7 +274,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
               type="button"
               onClick={() => setIsModelOpen(!isModelOpen)}
               disabled={saving}
-              className={`relative w-60 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
+              className={`relative w-60 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
                 saving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -291,7 +291,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
             </button>
 
             {isModelOpen && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
                 {/* Show "Default" option for engines that don't require model selection */}
                 {!selectedEngineRequiresModelSelection() && (
                   <button

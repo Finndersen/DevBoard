@@ -24,6 +24,7 @@ from devboard.agents.events import (
     MessageRole,
     MetaMessage,
     TextMessage,
+    ThinkingEvent,
     ToolCall,
     ToolResult,
 )
@@ -70,7 +71,19 @@ def session_messages_to_events(
             continue
 
         for content_block in session_msg.content:
-            if content_block["type"] == "text":
+            if content_block["type"] == "thinking":
+                duration: float | None = None
+                if events:
+                    duration = (session_msg.timestamp - events[-1].timestamp).total_seconds()
+                events.append(
+                    ThinkingEvent(
+                        duration_seconds=duration,
+                        timestamp=session_msg.timestamp,
+                        uuid=session_msg.uuid,
+                    )
+                )
+
+            elif content_block["type"] == "text":
                 parsed = ClaudeResponseParser.parse_message_content(content_block["text"])
 
                 if isinstance(parsed, TextResponse):

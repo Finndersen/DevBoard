@@ -468,8 +468,8 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      // Duration between 10:00:00 and 10:00:05 should be 5.0s
-      expect(screen.getByText('5.0s')).toBeInTheDocument()
+      // Duration between 10:00:00 and 10:00:05 should be 5.0s (appears in header and expanded section)
+      expect(screen.getAllByText('5.0s').length).toBeGreaterThanOrEqual(1)
     })
 
     it('displays duration in milliseconds for sub-second durations', async () => {
@@ -486,8 +486,8 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      // Duration should be 234ms
-      expect(screen.getByText('234ms')).toBeInTheDocument()
+      // Duration should be 234ms (appears in header and expanded section)
+      expect(screen.getAllByText('234ms').length).toBeGreaterThanOrEqual(1)
     })
 
     it('shows duration with correct styling', async () => {
@@ -496,9 +496,11 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      // Check duration styling with theme-aware classes
-      const duration = screen.getByText('5.0s')
-      expect(duration).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
+      // Check duration styling with theme-aware classes (expanded section element)
+      const durations = screen.getAllByText('5.0s')
+      const expandedDuration = durations.find(el => el.classList.contains('text-xs'))
+      expect(expandedDuration).toBeDefined()
+      expect(expandedDuration).toHaveClass('text-xs', 'text-gray-600', 'dark:text-gray-500')
     })
   })
 
@@ -1147,6 +1149,65 @@ describe('ToolCallDisplay', () => {
       render(<ToolCallDisplay toolCall={investigateToolCall} />)
 
       expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Timing badge', () => {
+    it('shows execution duration in header when tool result is present', () => {
+      render(<ToolCallDisplay toolCall={mockToolCall} toolResult={mockToolResult} />)
+
+      // mockToolCall timestamp: 2024-01-01T10:00:00Z, mockToolResult: 2024-01-01T10:00:05Z => 5s
+      expect(screen.getByText('5.0s')).toBeInTheDocument()
+    })
+
+    it('does not show execution duration when no tool result', () => {
+      render(<ToolCallDisplay toolCall={mockToolCall} />)
+
+      // No result means no duration
+      expect(screen.queryByText(/\d+\.\d+s/)).not.toBeInTheDocument()
+    })
+
+    it('shows HH:MM timing with opacity-0 group-hover class when previousEventTimestamp provided', () => {
+      const { container } = render(
+        <ToolCallDisplay
+          toolCall={mockToolCall}
+          toolResult={mockToolResult}
+          previousEventTimestamp="2024-01-01T09:59:50Z"
+        />
+      )
+
+      // The hover-reveal span should be initially hidden
+      const hoverEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(hoverEl).toBeInTheDocument()
+      // Should contain the delay
+      expect(hoverEl?.textContent).toContain('+10.0s')
+    })
+
+    it('execution duration is positioned after the hover-reveal timing', () => {
+      const { container } = render(
+        <ToolCallDisplay
+          toolCall={mockToolCall}
+          toolResult={mockToolResult}
+          previousEventTimestamp="2024-01-01T10:00:00Z"
+        />
+      )
+
+      const timingBadge = container.querySelector('[class*="text-\\[10px\\]"]')
+      expect(timingBadge).toBeInTheDocument()
+
+      // The execution duration span should be the last child (after the hover-reveal span)
+      const children = Array.from(timingBadge?.children ?? [])
+      expect(children.length).toBeGreaterThanOrEqual(1)
+      const lastChild = children[children.length - 1]
+      // Last child should be the execution duration (not hidden)
+      expect(lastChild).not.toHaveClass('opacity-0')
+    })
+
+    it('adds group class to tool call card container', () => {
+      const { container } = render(<ToolCallDisplay toolCall={mockToolCall} />)
+
+      const card = container.querySelector('[role="button"]')
+      expect(card).toHaveClass('group')
     })
   })
 })

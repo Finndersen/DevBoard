@@ -268,7 +268,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                 type="button"
                 onClick={() => setIsEngineOpen(!isEngineOpen)}
                 disabled={saving}
-                className={`relative w-48 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
+                className={`relative w-48 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
               >
                 <span className="block truncate">
@@ -284,7 +284,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
               </button>
 
               {isEngineOpen && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
                   {configuration.available_engines.map((engine) => {
                     const isUnavailable = !engine.is_available
                     return (
@@ -330,7 +330,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                 type="button"
                 onClick={() => setIsModelOpen(!isModelOpen)}
                 disabled={saving}
-                className={`relative w-64 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
+                className={`relative w-64 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
               >
                 <span className="block truncate">
@@ -346,7 +346,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
               </button>
 
               {isModelOpen && (
-                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
                   {!selectedEngineRequiresModelSelection() && (
                     <button
                       type="button"
@@ -417,7 +417,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
           }}
           placeholder="Enter custom instructions for this agent..."
           rows={4}
-          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
         />
       </div>
 
@@ -454,14 +454,14 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
             {assignedTools.map((tool) => (
               <div
                 key={tool.tool_id}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                       {tool.tool_name}
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded">
                       {tool.server_name}
                     </span>
                   </div>

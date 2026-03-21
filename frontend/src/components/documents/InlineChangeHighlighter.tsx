@@ -81,9 +81,9 @@ export function ChangeComparison({
   className = '' 
 }: ChangeComparisonProps) {
   return (
-    <div className={`border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden ${className}`}>
+    <div className={`border border-gray-200 dark:border-white/[0.08] rounded-lg overflow-hidden ${className}`}>
       {title && (
-        <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+        <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-white/[0.08]">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
             {title}
           </span>
@@ -92,7 +92,7 @@ export function ChangeComparison({
       
       <div className="grid grid-cols-1 lg:grid-cols-2">
         {/* Before (Old) */}
-        <div className="border-r border-gray-200 dark:border-gray-700">
+        <div className="border-r border-gray-200 dark:border-white/[0.08]">
           <div className="bg-red-50 dark:bg-red-900/20 px-4 py-2 border-b border-red-200 dark:border-red-800">
             <span className="text-xs font-medium text-red-700 dark:text-red-400">
               Before:

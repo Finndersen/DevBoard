@@ -156,7 +156,7 @@ export default function ConversationModelSelector({
             />
 
             {/* Dropdown options */}
-            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-20 max-h-64 overflow-y-auto">
+            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-white/[0.08] z-20 max-h-64 overflow-y-auto">
               {/* Show "Default" option for engines that don't require model selection */}
               {!engineRequiresModelSelection() && (
                 <button

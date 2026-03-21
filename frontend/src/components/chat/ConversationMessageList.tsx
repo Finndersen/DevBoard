@@ -21,11 +21,12 @@ interface SingleRenderItem {
   type: 'single'
   message: ConversationEvent
   index: number
+  previousEventTimestamp: string | null
 }
 
 interface GroupRenderItem {
   type: 'group'
-  items: Array<{ message: ToolCall; index: number }>
+  items: Array<{ message: ToolCall; index: number; previousEventTimestamp: string | null }>
 }
 
 type RenderItem = SingleRenderItem | GroupRenderItem
@@ -39,6 +40,7 @@ interface UserMessageItem {
   type: 'user_message'
   message: ConversationEvent
   index: number
+  previousEventTimestamp: string | null
 }
 
 type OuterRenderItem = UserMessageItem | AgentBlockItem
@@ -126,7 +128,8 @@ function ConversationMessageList({
   // Trailing tool calls (at end of list, not followed by a non-tool event) stay as individual items.
   const renderItems = useMemo((): RenderItem[] => {
     const result: RenderItem[] = []
-    let toolCallBuffer: Array<{ message: ToolCall; index: number }> = []
+    let toolCallBuffer: Array<{ message: ToolCall; index: number; previousEventTimestamp: string | null }> = []
+    let lastTimestamp: string | null = null
 
     const flushBuffer = (asGroup: boolean) => {
       if (toolCallBuffer.length === 0) return
@@ -135,7 +138,7 @@ function ConversationMessageList({
         result.push({ type: 'group', items: toolCallBuffer })
       } else {
         for (const item of toolCallBuffer) {
-          result.push({ type: 'single', message: item.message, index: item.index })
+          result.push({ type: 'single', message: item.message, index: item.index, previousEventTimestamp: item.previousEventTimestamp })
         }
       }
       toolCallBuffer = []
@@ -150,12 +153,16 @@ function ConversationMessageList({
       }
 
       if (message.event_type === 'tool_call') {
-        toolCallBuffer.push({ message: message as ToolCall, index: i })
+        // Previous for this tool call: the event before the buffer started (if first), or the previous tool call
+        const prevTs = toolCallBuffer.length === 0 ? lastTimestamp : toolCallBuffer[toolCallBuffer.length - 1].message.timestamp
+        toolCallBuffer.push({ message: message as ToolCall, index: i, previousEventTimestamp: prevTs })
       } else {
         // Non-tool event: flush buffer as a group, then add this event
         flushBuffer(true)
-        result.push({ type: 'single', message, index: i })
+        result.push({ type: 'single', message, index: i, previousEventTimestamp: lastTimestamp })
       }
+
+      lastTimestamp = message.timestamp
     }
 
     // Trailing tool calls are NOT grouped — keep them as individual items
@@ -179,7 +186,7 @@ function ConversationMessageList({
     for (const item of renderItems) {
       if (item.type === 'single' && item.message.event_type === 'message' && item.message.role === 'user') {
         flushAgentBuffer()
-        result.push({ type: 'user_message', message: item.message, index: item.index })
+        result.push({ type: 'user_message', message: item.message, index: item.index, previousEventTimestamp: item.previousEventTimestamp })
       } else {
         agentBuffer.push(item)
       }
@@ -237,6 +244,7 @@ function ConversationMessageList({
           isHighlighted={isHighlighted}
           codebaseLocalPath={codebaseLocalPath}
           sessionId={sessionId}
+          previousEventTimestamp={item.previousEventTimestamp}
         />
       </div>
     )
@@ -258,6 +266,7 @@ function ConversationMessageList({
                 isHighlighted={isHighlighted}
                 codebaseLocalPath={codebaseLocalPath}
                 sessionId={sessionId}
+                previousEventTimestamp={outerItem.previousEventTimestamp}
               />
             </div>
           )

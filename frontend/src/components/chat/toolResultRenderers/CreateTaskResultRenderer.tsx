@@ -81,7 +81,7 @@ export default function CreateTaskResultRenderer({ data }: RichResultRendererPro
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Branch: </span>
-          <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">{data.branch_name}</code>
+          <code className="bg-gray-100 dark:bg-white/[0.05] px-1 rounded">{data.branch_name}</code>
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Codebase: </span>

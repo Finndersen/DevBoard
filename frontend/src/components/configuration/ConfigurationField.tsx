@@ -41,7 +41,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
       placeholder:text-gray-400 dark:placeholder:text-gray-500
       focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:focus:ring-indigo-400
       disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500 dark:disabled:text-gray-400 disabled:cursor-not-allowed
-      dark:bg-gray-700 sm:text-sm sm:leading-6
+      dark:bg-white/[0.06] sm:text-sm sm:leading-6
     `.trim()
 
     const inputProps = {
@@ -62,7 +62,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => onChange(field.name, e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-600 disabled:bg-gray-50 dark:disabled:bg-gray-800 dark:bg-gray-700"
+            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-600 disabled:bg-gray-50 dark:disabled:bg-gray-800 dark:bg-white/[0.06]"
           />
         )
       case 'integer':
@@ -227,7 +227,7 @@ export const ConfigurationField: React.FC<ConfigurationFieldProps> = ({
                 checked={overrideEnabled}
                 onChange={(e) => onOverrideToggle(field.name, e.target.checked)}
               />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-4 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-white/[0.06] peer-checked:after:translate-x-4 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
             </label>
           </div>
         )}

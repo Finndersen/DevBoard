@@ -159,7 +159,7 @@ export default function GitBranchStatusModal({
                   </span>
                 )}
                 {gitStatus.commits_ahead === 0 && gitStatus.commits_behind === 0 && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-white/[0.05] dark:text-gray-200">
                     Up to date
                   </span>
                 )}
@@ -211,7 +211,7 @@ export default function GitBranchStatusModal({
 
         {/* Actions */}
         {gitStatus.branch_exists ? (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
+          <div className="border-t border-gray-200 dark:border-white/[0.08] pt-4 space-y-3">
             {/* Rebase button - show when behind */}
             {gitStatus.commits_behind > 0 && !gitStatus.rebase_in_progress && (
               <div className="space-y-2">
@@ -290,7 +290,7 @@ export default function GitBranchStatusModal({
           </div>
         ) : (
           /* Create branch action - shown when branch doesn't exist */
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <div className="border-t border-gray-200 dark:border-white/[0.08] pt-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">Create Branch</p>

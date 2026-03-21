@@ -11,8 +11,8 @@ export function ConfigurationSection({ title, children, isFirst = false }: Confi
     <>
       <div className={`px-6 py-3 bg-gray-50 dark:bg-gray-800 ${
         isFirst 
-          ? 'border-b border-gray-200 dark:border-gray-700' 
-          : 'border-y border-gray-200 dark:border-gray-700'
+          ? 'border-b border-gray-200 dark:border-white/[0.08]' 
+          : 'border-y border-gray-200 dark:border-white/[0.08]'
       }`}>
         <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           {title}

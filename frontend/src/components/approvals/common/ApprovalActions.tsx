@@ -103,7 +103,7 @@ export default function ApprovalActions({
       </div>
 
       {/* Footer with Actions */}
-      <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-gray-800">
         <div className="text-xs text-gray-500 dark:text-gray-400">
           {showDenyFeedback ? (
             <div>
@@ -111,8 +111,8 @@ export default function ApprovalActions({
                 <strong>Provide feedback</strong> and click <strong>Confirm Denial</strong> to reject the {approvalType === 'set' ? 'content' : 'changes'}.
               </div>
               <div className="mt-1 space-x-4">
-                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> Cancel</span>
-                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+Enter</kbd> Confirm</span>
+                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded text-xs">Esc</kbd> Cancel</span>
+                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded text-xs">⌘/Ctrl+Enter</kbd> Confirm</span>
               </div>
             </div>
           ) : (
@@ -122,9 +122,9 @@ export default function ApprovalActions({
                 <strong>Deny</strong> to reject them.
               </div>
               <div className="mt-1 space-x-4">
-                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> Close</span>
-                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+Enter</kbd> Accept</span>
-                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">⌘/Ctrl+R</kbd> Deny</span>
+                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded text-xs">Esc</kbd> Close</span>
+                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded text-xs">⌘/Ctrl+Enter</kbd> Accept</span>
+                <span><kbd className="px-1 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded text-xs">⌘/Ctrl+R</kbd> Deny</span>
               </div>
             </div>
           )}
@@ -135,7 +135,7 @@ export default function ApprovalActions({
               <button
                 onClick={handleCancelDeny}
                 disabled={disabled}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-white/[0.12] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Cancel denial"
               >
                 Cancel

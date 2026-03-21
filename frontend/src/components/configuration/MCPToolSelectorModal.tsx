@@ -105,7 +105,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/[0.08]">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
               Add MCP Tools
             </h3>
@@ -118,7 +118,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
           </div>
 
           {/* Filters */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+          <div className="p-4 border-b border-gray-200 dark:border-white/[0.08] space-y-3">
             {/* Search */}
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -127,7 +127,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
                 placeholder="Search tools..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
@@ -137,7 +137,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
               <select
                 value={selectedServer}
                 onChange={(e) => setSelectedServer(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Servers</option>
                 {serverNames.map(name => (
@@ -181,7 +181,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
                     className={`flex items-start p-3 border rounded-lg cursor-pointer transition-colors ${
                       selectedToolIds.has(tool.tool_id)
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        : 'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
                     <input
@@ -195,7 +195,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
                         <span className="text-sm font-medium text-gray-900 dark:text-white">
                           {tool.tool_name}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-0.5 bg-gray-100 dark:bg-white/[0.05] rounded">
                           {tool.server_name}
                         </span>
                       </div>
@@ -212,7 +212,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-white/[0.08]">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {selectedToolIds.size} tool{selectedToolIds.size !== 1 ? 's' : ''} selected
             </span>

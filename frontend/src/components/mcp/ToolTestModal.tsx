@@ -150,7 +150,7 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
     >
       <div className="flex flex-col flex-1 min-h-0">
         {/* Description — full-width at the top */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-4">
+        <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 mb-4">
           <div className="flex items-center justify-between mb-2">
             <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary}`}>Description</h4>
             {!isEditingDesc && (
@@ -202,7 +202,7 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
         </div>
 
         {/* Test Tool section — parameters + results side-by-side */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex-1 min-h-0 flex flex-col">
+        <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg p-4 flex-1 min-h-0 flex flex-col">
           <h4 className={`text-sm font-medium ${textColors.primary} mb-3 shrink-0`}>Test Tool</h4>
           <div className="flex gap-6 flex-1 min-h-0">
             <form onSubmit={handleSubmit} className="flex flex-col w-2/5 min-w-0 shrink-0 min-h-0">
@@ -271,7 +271,7 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
             </form>
 
             {/* Result */}
-            <div className="flex-1 min-w-0 border-l border-gray-200 dark:border-gray-700 pl-6">
+            <div className="flex-1 min-w-0 border-l border-gray-200 dark:border-white/[0.08] pl-6">
               <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary} mb-2`}>
                 {error ? 'Error' : 'Result'}
               </h4>
@@ -282,13 +282,13 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
                   </pre>
                 </div>
               ) : result !== null ? (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md max-h-[60vh] overflow-auto">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-md max-h-[60vh] overflow-auto">
                   <pre className={`text-sm ${textColors.primary} whitespace-pre-wrap font-mono`}>
                     {result || '(empty response)'}
                   </pre>
                 </div>
               ) : (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-md">
                   <p className={`text-sm ${textColors.secondary} italic`}>
                     Run the tool to see results here
                   </p>

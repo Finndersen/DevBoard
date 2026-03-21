@@ -31,6 +31,7 @@ from devboard.agents.events import (
     ConversationEvent,
     MessageRole,
     TextMessage,
+    ThinkingEvent,
     ToolCall,
     ToolResult,
 )
@@ -76,7 +77,7 @@ def convert_claude_message_to_events(
             elif isinstance(content_block, TextBlock):
                 yield from parse_claude_message_text(content_block.text, virtual_tools)
             elif isinstance(content_block, ThinkingBlock):
-                pass
+                yield ThinkingEvent(duration_seconds=None, timestamp=timestamp, uuid=None)
     elif isinstance(message, UserMessage):
         if isinstance(message.content, list):
             for content_block in message.content:

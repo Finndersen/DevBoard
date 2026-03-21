@@ -196,7 +196,7 @@ export function MCPServerDetail({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Server header bar */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+      <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/50 dark:bg-white/[0.03] shrink-0">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">

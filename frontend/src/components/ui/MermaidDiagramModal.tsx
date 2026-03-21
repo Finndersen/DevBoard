@@ -94,7 +94,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Mermaid Diagram" maxWidth="screen" scrollable={false}>
       <div className="flex flex-col h-[70vh]">
-        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-t-lg">
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-white/[0.08] rounded-t-lg">
           <div className="flex items-center gap-1">
             <button
               onClick={handleZoomOut}
@@ -130,7 +130,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
 
         <div
           ref={viewportRef}
-          className={`flex-1 min-h-0 border-x border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex-1 min-h-0 border-x border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-900 overflow-hidden select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -147,7 +147,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
           </div>
         </div>
 
-        <div className="border border-gray-200 dark:border-gray-700 rounded-b-lg">
+        <div className="border border-gray-200 dark:border-white/[0.08] rounded-b-lg">
           <div className="flex items-center justify-between px-3 py-2">
             <button
               onClick={() => setShowSource(prev => !prev)}
@@ -174,7 +174,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
             </button>
           </div>
           {showSource && (
-            <div className="max-h-48 overflow-auto border-t border-gray-200 dark:border-gray-700">
+            <div className="max-h-48 overflow-auto border-t border-gray-200 dark:border-white/[0.08]">
               <CodeBlock code={code} language="mermaid" />
             </div>
           )}

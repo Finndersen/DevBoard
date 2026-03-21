@@ -1,6 +1,7 @@
 """Tests for ClaudeCodeSessionService."""
 
 import json
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
@@ -1150,3 +1151,180 @@ class TestMigrateSessionToDirectory:
         assert new_session_dir.exists()
         assert (new_session_dir / "tool-result.txt").exists()
         assert not old_session_dir.exists()
+
+
+class TestThinkingEventParsing:
+    """Tests for thinking block parsing and ThinkingEvent emission."""
+
+    def _make_assistant_entry(self, uuid: str, timestamp: str, content: list) -> dict:
+        return {
+            "type": "assistant",
+            "uuid": uuid,
+            "timestamp": timestamp,
+            "isSidechain": False,
+            "message": {"role": "assistant", "content": content},
+        }
+
+    def _make_user_entry(self, uuid: str, timestamp: str, content: str) -> dict:
+        return {
+            "type": "user",
+            "uuid": uuid,
+            "timestamp": timestamp,
+            "isSidechain": False,
+            "message": {"role": "user", "content": content},
+        }
+
+    def test_parse_assistant_with_thinking_block(self):
+        """Thinking block in assistant content produces an AssistantSessionMessage with it included."""
+
+        entry = self._make_assistant_entry(
+            "asst-think-1",
+            "2025-10-08T15:10:05.000Z",
+            [{"type": "thinking", "thinking": "Let me reason about this..."}],
+        )
+
+        session_msg = parse_session_message(entry, line_num=2)
+
+        assert isinstance(session_msg, AssistantSessionMessage)
+        assert any(b["type"] == "thinking" for b in session_msg.content)
+
+    def test_thinking_block_emits_thinking_event(self):
+        """ThinkingEvent is emitted when an assistant message has a thinking block."""
+        from datetime import datetime
+
+        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage, UserSessionMessage
+        from devboard.agents.events import ThinkingEvent
+
+        user_msg = UserSessionMessage(
+            uuid="u1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 0, tzinfo=UTC),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Do something"}],
+        )
+        asst_msg = AssistantSessionMessage(
+            uuid="a1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 4, tzinfo=UTC),
+            line_num=2,
+            is_sidechain=False,
+            content=[{"type": "thinking", "thinking": "Let me think..."}],
+        )
+
+        events = session_messages_to_events([user_msg, asst_msg])
+
+        thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
+        assert len(thinking_events) == 1
+        te = thinking_events[0]
+        assert te.event_type == "thinking"
+        assert te.uuid == "a1"
+
+    def test_thinking_event_duration_calculation(self):
+        """Duration is calculated as thinking message timestamp minus previous event timestamp."""
+        from datetime import datetime
+
+        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage, UserSessionMessage
+        from devboard.agents.events import ThinkingEvent
+
+        user_msg = UserSessionMessage(
+            uuid="u1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 0, tzinfo=UTC),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Start"}],
+        )
+        # Thinking message arrives 4.5 seconds after the user message
+        asst_msg = AssistantSessionMessage(
+            uuid="a1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 4, 500000, tzinfo=UTC),
+            line_num=2,
+            is_sidechain=False,
+            content=[{"type": "thinking", "thinking": "Reasoning..."}],
+        )
+
+        events = session_messages_to_events([user_msg, asst_msg])
+
+        thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
+        assert len(thinking_events) == 1
+        assert thinking_events[0].duration_seconds == pytest.approx(4.5, abs=0.001)
+
+    def test_thinking_event_no_previous_event_gives_none_duration(self):
+        """When thinking is the first event, duration_seconds is None."""
+        from datetime import datetime
+
+        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage
+        from devboard.agents.events import ThinkingEvent
+
+        asst_msg = AssistantSessionMessage(
+            uuid="a1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 4, tzinfo=UTC),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "thinking", "thinking": "Initial thought..."}],
+        )
+
+        events = session_messages_to_events([asst_msg])
+
+        thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
+        assert len(thinking_events) == 1
+        assert thinking_events[0].duration_seconds is None
+
+    def test_thinking_event_serialization_round_trip(self):
+        """ThinkingEvent serializes and deserializes correctly via ConversationEvent union."""
+        import datetime
+
+        from devboard.agents.events import ThinkingEvent
+
+        original = ThinkingEvent(
+            duration_seconds=3.7,
+            timestamp=datetime.datetime(2025, 10, 8, 15, 10, 4, tzinfo=datetime.UTC),
+            uuid="msg-abc",
+        )
+
+        data = original.model_dump()
+        assert data["event_type"] == "thinking"
+        assert data["duration_seconds"] == pytest.approx(3.7)
+        assert data["uuid"] == "msg-abc"
+
+        restored = ThinkingEvent.model_validate(data)
+        assert restored.event_type == "thinking"
+        assert restored.duration_seconds == pytest.approx(3.7)
+        assert restored.uuid == "msg-abc"
+
+    def test_thinking_block_alongside_text_and_tool(self):
+        """A message with thinking + text + tool_use emits ThinkingEvent, TextMessage, and ToolCall."""
+        from datetime import datetime
+
+        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage, UserSessionMessage
+        from devboard.agents.events import TextMessage, ThinkingEvent, ToolCall
+
+        user_msg = UserSessionMessage(
+            uuid="u1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 0, tzinfo=UTC),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Do it"}],
+        )
+        asst_msg = AssistantSessionMessage(
+            uuid="a1",
+            timestamp=datetime(2025, 10, 8, 15, 10, 3, tzinfo=UTC),
+            line_num=2,
+            is_sidechain=False,
+            content=[
+                {"type": "thinking", "thinking": "Planning..."},
+                {"type": "text", "text": "I'll read the file."},
+                {"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "foo.py"}},
+            ],
+        )
+
+        events = session_messages_to_events([user_msg, asst_msg])
+
+        event_types = [type(e).__name__ for e in events]
+        assert "ThinkingEvent" in event_types
+        assert "TextMessage" in event_types
+        assert "ToolCall" in event_types
+
+        # Order: user message → thinking → text → tool call
+        assert isinstance(events[0], TextMessage)
+        assert isinstance(events[1], ThinkingEvent)
+        assert isinstance(events[2], TextMessage)
+        assert isinstance(events[3], ToolCall)

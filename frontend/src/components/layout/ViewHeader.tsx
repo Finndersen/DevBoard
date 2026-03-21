@@ -16,7 +16,7 @@ export default function ViewHeader({
   actions,
 }: ViewHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/[0.08] flex-shrink-0">
       <div className="flex items-center gap-3">
         <Icon className={`w-6 h-6 ${iconColor}`} />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>

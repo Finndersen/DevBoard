@@ -5,7 +5,7 @@ import { cleanToolName } from '../../utils/toolDisplayLabels'
 import ToolCallDisplay from './ToolCallDisplay'
 
 interface ToolCallGroupDisplayProps {
-  items: Array<{ message: ToolCall; index: number }>
+  items: Array<{ message: ToolCall; index: number; previousEventTimestamp?: string | null }>
   toolResultMap: Map<string, ToolResult>
   highlightSet: Set<string>
   codebaseLocalPath?: string
@@ -103,7 +103,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
     <div className="flex flex-col items-start min-w-0">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -149,8 +149,8 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
 
       {/* Expanded individual tool calls */}
       {isExpanded && (
-        <div className="w-full mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
-          {items.map(({ message, index }) => {
+        <div className="w-full mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-white/[0.08]">
+          {items.map(({ message, index, previousEventTimestamp: itemPrevTs }) => {
             const cacheKey = `${message.timestamp}-tool_call-${index}`
             const toolResult = toolResultMap.get(cacheKey)
             const uuid = (message as { uuid?: string }).uuid
@@ -164,6 +164,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
                   isHighlighted={isItemHighlighted}
                   codebaseLocalPath={codebaseLocalPath}
                   sessionId={sessionId}
+                  previousEventTimestamp={itemPrevTs}
                 />
               </div>
             )

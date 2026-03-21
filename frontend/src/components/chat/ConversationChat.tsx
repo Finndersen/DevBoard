@@ -224,7 +224,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
         {isStreaming && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">
+            <div className="bg-gray-100 dark:bg-white/[0.05] rounded-lg px-3 py-1.5 text-sm">
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>

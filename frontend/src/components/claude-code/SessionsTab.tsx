@@ -181,7 +181,7 @@ export default function SessionsTab() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Global toolbar */}
-      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-4">
+      <div className="px-4 py-2 border-b border-gray-200 dark:border-white/[0.08] shrink-0 flex items-center gap-4">
         <p className={`text-sm ${textColors.secondary} flex-1 min-w-0 truncate`}>
           Browse and search Claude Code project session histories
         </p>
@@ -206,11 +206,11 @@ export default function SessionsTab() {
 
       <div className="flex flex-1 overflow-hidden">
       {/* List panel — drill-down: shows either projects or sessions */}
-      <div className="w-96 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+      <div className="w-96 shrink-0 border-r border-gray-200 dark:border-white/[0.08] flex flex-col overflow-hidden">
         {!selectedProjectPath ? (
           /* State A: Project list */
           <>
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
               <h2 className={`text-sm font-semibold ${textColors.primary}`}>Projects</h2>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -238,7 +238,7 @@ export default function SessionsTab() {
         ) : (
           /* State B: Session list for selected project */
           <>
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
               <button
                 onClick={() => { setSelectedProjectPath(null); setSelectedSessionId(null) }}
                 className={`flex items-center gap-1 text-xs ${textColors.accent} hover:underline mb-1`}
@@ -279,7 +279,7 @@ export default function SessionsTab() {
       {/* Right panel: Conversation viewer */}
       {selectedSessionId ? (
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
             <h2 className={`text-sm font-semibold ${textColors.primary}`}>
               {selectedSession?.label ?? 'Session'}
             </h2>

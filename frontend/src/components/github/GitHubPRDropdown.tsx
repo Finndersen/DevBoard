@@ -85,9 +85,9 @@ export default function GitHubPRDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+        <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-white/[0.08] z-50">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-200 dark:border-white/[0.08] flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               Pull Requests ({prCount})
             </h3>
@@ -130,7 +130,7 @@ export default function GitHubPRDropdown() {
                 {data.prs.map(pr => (
                   <div
                     key={`${pr.repo_full_name}#${pr.pr_number}`}
-                    className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    className="p-3 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
                   >
                     <div className="flex items-start gap-2">
                       {/* Combined status indicator */}

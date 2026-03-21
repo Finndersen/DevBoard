@@ -32,6 +32,13 @@ class TextBlockDict(TypedDict):
     text: str
 
 
+class ThinkingBlockDict(TypedDict):
+    """Thinking content block in assistant messages."""
+
+    type: Literal["thinking"]
+    thinking: str
+
+
 class ToolUseBlockDict(TypedDict):
     """Tool use content block in assistant messages."""
 
@@ -51,7 +58,7 @@ class ToolResultBlockDict(TypedDict):
 
 
 # Union type for all content block types
-MessageContentDict = TextBlockDict | ToolUseBlockDict | ToolResultBlockDict
+MessageContentDict = TextBlockDict | ThinkingBlockDict | ToolUseBlockDict | ToolResultBlockDict
 
 
 class UserMessageDict(TypedDict):
@@ -65,7 +72,7 @@ class AssistantMessageDict(TypedDict):
     """Assistant message data structure (API response)."""
 
     role: str  # "assistant"
-    content: list[TextBlockDict | ToolUseBlockDict]
+    content: list[TextBlockDict | ThinkingBlockDict | ToolUseBlockDict]
     model: str
     id: str
     type: str

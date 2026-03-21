@@ -99,7 +99,7 @@ const TodoPanel = ({ conversationId, engine }: TodoPanelProps) => {
       {/* Collapsed bar */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className={`w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+        className={`w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors ${
           hasUpdates ? 'animate-pulse bg-blue-50 dark:bg-blue-900/20' : ''
         }`}
       >

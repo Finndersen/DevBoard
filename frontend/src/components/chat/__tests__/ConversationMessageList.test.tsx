@@ -2,14 +2,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { render } from '../../../test/utils'
 import ConversationMessageList from '../ConversationMessageList'
-import type { ConversationEvent, ToolCall, ToolResult } from '../../../lib/api'
+import type { ConversationEvent, ThinkingEvent, ToolCall, ToolResult } from '../../../lib/api'
 
 vi.mock('../ConversationMessage', () => ({
-  default: ({ message }: { message: ConversationEvent }) => (
+  default: ({ message, previousEventTimestamp }: { message: ConversationEvent; previousEventTimestamp?: string | null }) => (
     <div
       data-testid="conversation-message"
       data-event-type={message.event_type}
       data-role={(message as { role?: string }).role}
+      data-prev-ts={previousEventTimestamp ?? ''}
     />
   ),
 }))
@@ -21,8 +22,8 @@ vi.mock('../ToolCallDisplay', () => ({
 }))
 
 vi.mock('../ToolCallGroupDisplay', () => ({
-  default: ({ items }: { items: Array<{ message: ToolCall; index: number }> }) => (
-    <div data-testid="tool-call-group-display" data-count={items.length} />
+  default: ({ items }: { items: Array<{ message: ToolCall; index: number; previousEventTimestamp?: string | null }> }) => (
+    <div data-testid="tool-call-group-display" data-count={items.length} data-prev-ts={items[0]?.previousEventTimestamp ?? ''} />
   ),
 }))
 
@@ -65,6 +66,14 @@ function makeToolResult(toolCallId: string, id: string): ToolResult {
     result_content: 'result',
     is_error: false,
     timestamp: `2024-01-01T10:01:${id}Z`,
+  }
+}
+
+function makeThinkingEvent(id: string, durationSeconds: number | null = 2.5): ThinkingEvent {
+  return {
+    event_type: 'thinking',
+    duration_seconds: durationSeconds,
+    timestamp: `2024-01-01T10:00:${id}Z`,
   }
 }
 
@@ -298,6 +307,108 @@ describe('ConversationMessageList', () => {
       )
 
       expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+    })
+  })
+
+  describe('ThinkingEvent', () => {
+    it('renders a ThinkingEvent as a conversation-message element', () => {
+      const messages: ConversationEvent[] = [
+        makeThinkingEvent('01'),
+        makeMessage('02'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const els = screen.getAllByTestId('conversation-message')
+      expect(els).toHaveLength(2)
+      expect(els[0]).toHaveAttribute('data-event-type', 'thinking')
+    })
+
+    it('ThinkingEvent between tool calls breaks tool call grouping', () => {
+      const messages: ConversationEvent[] = [
+        makeToolCall('01'),
+        makeToolCall('02'),
+        makeThinkingEvent('03'),
+        makeToolCall('04'),
+        makeToolCall('05'),
+        makeMessage('06'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      // ThinkingEvent breaks the group: first two tool calls form one group,
+      // thinking is a single item, last two tool calls form a second group
+      expect(screen.getAllByTestId('tool-call-group-display')).toHaveLength(2)
+      const conversationMessages = screen.getAllByTestId('conversation-message')
+      const thinkingEl = conversationMessages.find(el => el.getAttribute('data-event-type') === 'thinking')
+      expect(thinkingEl).toBeDefined()
+    })
+
+    it('ThinkingEvent is part of agent blocks (not treated as user message)', () => {
+      const messages: ConversationEvent[] = [
+        makeUserMessage('01'),
+        makeThinkingEvent('02'),
+        makeMessage('03'),
+      ]
+
+      const { container } = render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      // One agent block containing the thinking event and agent message
+      const agentBlocks = container.querySelectorAll('.flex.flex-col')
+      expect(agentBlocks).toHaveLength(1)
+    })
+  })
+
+  describe('previousEventTimestamp threading', () => {
+    it('first event has null previousEventTimestamp', () => {
+      const messages: ConversationEvent[] = [makeMessage('01')]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const el = screen.getByTestId('conversation-message')
+      expect(el.getAttribute('data-prev-ts')).toBe('')
+    })
+
+    it('second event gets the first event timestamp as previousEventTimestamp', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeMessage('02'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const els = screen.getAllByTestId('conversation-message')
+      expect(els[1].getAttribute('data-prev-ts')).toBe('2024-01-01T10:00:01Z')
+    })
+
+    it('tool call group gets the timestamp of the event before the group', () => {
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        makeToolCall('02'),
+        makeToolCall('03'),
+        makeMessage('04'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const group = screen.getByTestId('tool-call-group-display')
+      expect(group.getAttribute('data-prev-ts')).toBe('2024-01-01T10:00:01Z')
+    })
+
+    it('tool_result events are skipped when computing previousEventTimestamp', () => {
+      const tc = makeToolCall('02')
+      const messages: ConversationEvent[] = [
+        makeMessage('01'),
+        tc,
+        makeToolResult(tc.tool_call_id, '03'),
+        makeMessage('04'),
+      ]
+
+      render(<ConversationMessageList messages={messages} {...defaultProps} />)
+
+      const els = screen.getAllByTestId('conversation-message')
+      // Last message (04) previous should be the tool_call at 02, not the tool_result at 03
+      expect(els[els.length - 1].getAttribute('data-prev-ts')).toBe('2024-01-01T10:00:02Z')
     })
   })
 })

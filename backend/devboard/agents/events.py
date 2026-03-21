@@ -20,6 +20,7 @@ class ConversationEventType(StrEnum):
     SYSTEM = "system"
     META_MESSAGE = "meta_message"
     LOCAL_COMMAND = "local_command"
+    THINKING = "thinking"
 
 
 class MetaMessageType(StrEnum):
@@ -119,6 +120,15 @@ class LocalCommand(BaseModel):
     uuid: str | None = None
 
 
+class ThinkingEvent(BaseModel):
+    """Agent thinking activity indicator."""
+
+    event_type: Literal["thinking"] = "thinking"
+    duration_seconds: float | None = None
+    timestamp: datetime.datetime
+    uuid: str | None = None
+
+
 class SystemEvent(BaseModel):
     """System-level event for entity changes and workflow notifications.
 
@@ -170,12 +180,15 @@ def describe_event(event: "ConversationEvent") -> str:
         return f"LocalCommand(type={event.command_type}, command={event.command!r})"
     elif isinstance(event, MetaMessage):
         return f"MetaMessage(type={event.meta_type})"
+    elif isinstance(event, ThinkingEvent):
+        dur = f"{event.duration_seconds:.1f}s" if event.duration_seconds is not None else "unknown"
+        return f"ThinkingEvent(duration={dur})"
     else:
         return f"SystemEvent(type={event.type})"
 
 
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage | LocalCommand,
+    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent,
     Field(discriminator="event_type"),
 ]

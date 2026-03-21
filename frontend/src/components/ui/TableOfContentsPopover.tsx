@@ -107,14 +107,14 @@ export default function TableOfContentsPopover({
     <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
+        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
       >
         <Bars3Icon className="w-3.5 h-3.5" />
         <span>Contents</span>
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 w-[230px] max-h-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
+        <div className="absolute top-full right-0 mt-1 w-[230px] max-h-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg shadow-lg z-50 py-1">
           {headings.map((heading) => (
             <button
               key={heading.slug}

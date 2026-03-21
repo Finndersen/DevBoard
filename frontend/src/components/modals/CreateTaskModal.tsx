@@ -245,7 +245,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             <select
               value={selectedProjectId}
               onChange={handleProjectChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
               required
             >
               <option value="">Select a project...</option>
@@ -286,7 +286,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                 <select
                   value={newTask.codebase_id ?? ''}
                   onChange={handleTaskCodebaseChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
                   required
                 >
                   <option value="">Select a codebase</option>

@@ -106,10 +106,10 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
   }, [step.details])
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
+    <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg">
       {/* Step Header */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -144,7 +144,7 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
 
       {/* Expanded Content */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700/50 mt-1 pt-3">
+        <div className="px-4 pb-4 border-t border-gray-100 dark:border-white/[0.08]/50 mt-1 pt-3">
           {/* Details */}
           <div className="relative">
             <h4 className={`text-xs font-semibold uppercase tracking-wide ${textColors.secondary} mb-2`}>Details</h4>
@@ -171,7 +171,7 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleStartEditing() }}
-                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-all text-gray-500 dark:text-gray-400"
+                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-all text-gray-500 dark:text-gray-400"
                 >
                   <PencilIcon className="w-3 h-3" />
                   Edit
@@ -216,7 +216,7 @@ function StructuredPlanView({ plan, taskId, onPlanUpdated }: StructuredPlanViewP
       {plan.overview && (
         <div>
           <h3 className={`text-sm font-semibold ${textColors.primary} mb-2`}>Plan Overview</h3>
-          <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="p-3 bg-gray-50 dark:bg-white/[0.05] rounded-lg border border-gray-200 dark:border-white/[0.08]">
             <Markdown>{plan.overview}</Markdown>
           </div>
         </div>

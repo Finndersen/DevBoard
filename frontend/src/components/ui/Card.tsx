@@ -17,7 +17,7 @@ const paddingClasses = {
 }
 
 export default function Card({ children, className = '', padding = 'md', hover = false, onClick }: CardProps) {
-  const baseClasses = 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'
+  const baseClasses = 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-white/[0.08]'
   const hoverClasses = hover ? 'hover:shadow-md transition-shadow' : ''
   const cursorClasses = onClick ? 'cursor-pointer' : ''
 

@@ -122,7 +122,7 @@ export function CustomFieldSettings() {
       case 'text': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
       case 'boolean': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
       case 'enum': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-white/[0.05] dark:text-gray-300'
     }
   }
 
@@ -140,7 +140,7 @@ export function CustomFieldSettings() {
           </Button>
         </div>
 
-        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+        <div className="flex border-b border-gray-200 dark:border-white/[0.08] mb-6">
           {(['task', 'project'] as const).map(entityType => (
             <button
               key={entityType}
@@ -169,9 +169,9 @@ export function CustomFieldSettings() {
         {loading ? (
           <div className="animate-pulse space-y-4">
             <div className="space-y-3">
-              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div className="h-12 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+              <div className="h-12 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+              <div className="h-12 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
             </div>
           </div>
         ) : fields.length === 0 ? (

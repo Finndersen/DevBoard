@@ -150,7 +150,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
     return (
       <div className="h-full flex flex-col overflow-hidden">
         {tabBarRight && (
-          <div className="flex items-center border-b border-gray-200 dark:border-gray-700 shrink-0 px-4 py-2">
+          <div className="flex items-center border-b border-gray-200 dark:border-white/[0.08] shrink-0 px-4 py-2">
             <div className="ml-auto flex items-center">
               {tabBarRight}
             </div>
@@ -172,7 +172,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div className="flex items-center border-b border-gray-200 dark:border-white/[0.08] shrink-0">
         <button
           onClick={() => { setActiveTab('plan'); onActiveTabChange?.('plan') }}
           className={`px-4 py-2 text-sm font-medium transition-colors ${

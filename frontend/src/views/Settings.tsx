@@ -177,7 +177,7 @@ export default function Settings() {
 
       <div className="flex-1 overflow-auto py-6">
       {/* Navigation Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-8">
+      <div className="border-b border-gray-200 dark:border-white/[0.08] mb-8">
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
@@ -207,7 +207,7 @@ export default function Settings() {
           {/* Combined Integration List */}
           <div className="md:col-span-1">
             <Card padding="none">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>All Integrations</h3>
                 <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Configure external connections
@@ -230,11 +230,11 @@ export default function Settings() {
               loadingStatuses || !configDetailsCache[selectedConfig] ? (
                 <Card className="p-6">
                   <div className="animate-pulse">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-1/4 mb-4"></div>
                     <div className="space-y-3">
-                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+                      <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+                      <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
                     </div>
                   </div>
                 </Card>
@@ -268,7 +268,7 @@ export default function Settings() {
           {/* Agent Role List */}
           <div className="md:col-span-1">
             <Card padding="none">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent Roles</h3>
                 <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Configure AI agent behavior
@@ -328,11 +328,11 @@ export default function Settings() {
                     checked={isDarkMode}
                     onChange={toggleDarkMode}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-white/[0.06] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                 </label>
               </div>
               
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+              <div className="border-t border-gray-200 dark:border-white/[0.08] pt-6">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">API Configuration</h4>
                 <div className="space-y-4">
                   <div>
@@ -342,7 +342,7 @@ export default function Settings() {
                     <input
                       type="text"
                       defaultValue="http://localhost:8000"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-white/[0.06] dark:text-white"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       URL of the DevBoard backend API
@@ -354,13 +354,13 @@ export default function Settings() {
           </Card>
 
           <Card padding="none">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
               <h3 className={`text-lg font-medium ${textColors.primary}`}>Workspace Configuration</h3>
               <p className={`text-sm ${textColors.secondary} mt-1`}>Configure how task workspaces are managed</p>
             </div>
             {loadingDevboardConfig ? (
               <div className="p-6 animate-pulse">
-                <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
               </div>
             ) : devboardConfig ? (
               <ConfigurationForm

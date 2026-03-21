@@ -53,8 +53,8 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
   const srcdoc = buildSrcdoc(code)
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div role="tablist" className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg overflow-hidden">
+      <div role="tablist" className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-white/[0.08]">
         <button
           type="button"
           role="tab"
@@ -62,7 +62,7 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
           onClick={() => setActiveTab('preview')}
           className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
             activeTab === 'preview'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              ? 'bg-white dark:bg-white/[0.06] text-gray-900 dark:text-gray-100 shadow-sm'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
@@ -75,7 +75,7 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
           onClick={() => setActiveTab('source')}
           className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
             activeTab === 'source'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              ? 'bg-white dark:bg-white/[0.06] text-gray-900 dark:text-gray-100 shadow-sm'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >

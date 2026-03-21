@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType, LocalCommand } from '../../lib/api'
 import {
-  getUserMessageClasses
+  getUserMessageClasses,
+  formatEventTiming,
+  formatDuration,
 } from '../../styles/messageStyles'
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
-function LocalCommandDisplay({ message, highlightRing }: { message: LocalCommand; highlightRing: string }) {
+function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }: { message: LocalCommand; highlightRing: string; previousEventTimestamp?: string | null }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isShell = message.command_type === 'shell'
   const hasOutput = message.output.length > 0
@@ -25,7 +27,7 @@ function LocalCommandDisplay({ message, highlightRing }: { message: LocalCommand
     <div className="flex w-full min-w-0">
       <button
         onClick={hasOutput ? () => setIsExpanded(!isExpanded) : undefined}
-        className={`rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-gray-800/30 ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-gray-800/50 cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
+        className={`group rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -39,22 +41,27 @@ function LocalCommandDisplay({ message, highlightRing }: { message: LocalCommand
               </svg>
             )}
           </div>
-          {hasOutput && (
-            <svg
-              className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-[10px] text-gray-600 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+              {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+            </span>
+            {hasOutput && (
+              <svg
+                className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </div>
         </div>
 
         {isExpanded && hasOutput && (
-          <div className="border-t border-gray-300 dark:border-gray-600 select-text min-w-0" onClick={(e) => e.stopPropagation()}>
-            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800/50">
-              <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-gray-700 select-text cursor-text whitespace-pre-wrap overflow-x-auto">
+          <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className="px-3 py-2 bg-gray-100 dark:bg-white/[0.05]">
+              <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-white/[0.08] select-text cursor-text whitespace-pre-wrap overflow-x-auto">
                 {message.output}
               </pre>
             </div>
@@ -101,11 +108,12 @@ interface ConversationMessageProps {
   isHighlighted?: boolean
   codebaseLocalPath?: string
   sessionId?: string
+  previousEventTimestamp?: string | null
 }
 
 const MAX_COLLAPSED_HEIGHT = 240 // ~10 lines at typical line height
 
-export default function ConversationMessageComponent({ message, toolResult, isLatest = false, isHighlighted = false, codebaseLocalPath, sessionId }: ConversationMessageProps) {
+export default function ConversationMessageComponent({ message, toolResult, isLatest = false, isHighlighted = false, codebaseLocalPath, sessionId, previousEventTimestamp }: ConversationMessageProps) {
   const highlightRing = isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''
   // Handle different event types
   if (message.event_type === 'message') {
@@ -127,7 +135,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     if (isUser) {
       return (
-        <div className={`${getUserMessageClasses()} ${highlightRing} flex`}>
+        <div className={`${getUserMessageClasses()} ${highlightRing} flex group`}>
           <div className="w-0.5 flex-shrink-0 rounded-full bg-blue-400 dark:bg-blue-500 mr-3" />
           <div className="flex-1 min-w-0">
             <div className="relative">
@@ -159,20 +167,32 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               </div>
             )}
           </div>
+          <div className="flex-shrink-0 self-start ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-[10px] text-gray-600 whitespace-nowrap leading-5">
+              {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+            </span>
+          </div>
         </div>
       )
     }
 
     // Agent message — plain text, no bubble
     return (
-      <div className={`w-full text-sm ${highlightRing}`}>
-        <Markdown>{message.text_content}</Markdown>
+      <div className={`w-full text-sm ${highlightRing} group flex items-start gap-2`}>
+        <div className="flex-1 min-w-0">
+          <Markdown>{message.text_content}</Markdown>
+        </div>
+        <div className="flex-shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="text-[10px] text-gray-600 whitespace-nowrap leading-5">
+            {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+          </span>
+        </div>
       </div>
     )
   }
 
   if (message.event_type === 'tool_call') {
-    return <ToolCallDisplay toolCall={message} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} />
+    return <ToolCallDisplay toolCall={message} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} previousEventTimestamp={previousEventTimestamp} />
   }
 
   // Tool results are rendered as part of their corresponding tool call
@@ -267,7 +287,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   // Local commands (shell commands or slash commands) - render as expandable cards
   if (message.event_type === 'local_command') {
     if (!message.command) return null
-    return <LocalCommandDisplay message={message} highlightRing={highlightRing} />
+    return <LocalCommandDisplay message={message} highlightRing={highlightRing} previousEventTimestamp={previousEventTimestamp} />
   }
 
   // Meta messages (compact summaries, skill content) - render as clickable indicator that opens a modal
@@ -297,6 +317,25 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={label} maxWidth="6xl">
           <Markdown>{message.text_content}</Markdown>
         </Modal>
+      </div>
+    )
+  }
+
+  // Thinking events - render as centered purple pill badge
+  if (message.event_type === 'thinking') {
+    const durationText = message.duration_seconds != null
+      ? `Thinking · ${formatDuration(message.duration_seconds * 1000)}`
+      : 'Thinking'
+
+    return (
+      <div className="flex w-full justify-center my-1">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-purple-500/10 border border-purple-500/25 text-purple-400">
+          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+          </svg>
+          <span>{durationText}</span>
+        </div>
       </div>
     )
   }

@@ -112,7 +112,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white resize-none"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-white/[0.06] dark:text-white resize-none"
           placeholder="Help text describing what this field is for"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -127,7 +127,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
         <select
           value={type}
           onChange={(e) => setType(e.target.value as CustomFieldType)}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-white/[0.06] dark:text-white"
         >
           <option value="text">Text - Free-form text input</option>
           <option value="boolean">Boolean - Toggle switch (yes/no)</option>
@@ -147,7 +147,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
               onChange={(e) => setNewOption(e.target.value)}
               onKeyDown={handleOptionKeyDown}
               placeholder="Add an option..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 dark:bg-white/[0.06] dark:text-white"
             />
             <Button
               type="button"
@@ -165,7 +165,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
               {options.map((option) => (
                 <span
                   key={option}
-                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 dark:bg-white/[0.05] text-gray-800 dark:text-gray-200"
                 >
                   {option}
                   <button
@@ -206,7 +206,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
         </label>
       </div>
 
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-white/[0.08]">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>

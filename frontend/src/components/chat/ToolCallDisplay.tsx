@@ -3,7 +3,7 @@ import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 
 import type { ToolCall, ToolResult } from '../../lib/api'
 import { apiClient } from '../../lib/api'
-import { formatDuration } from '../../styles/messageStyles'
+import { formatDuration, formatEventTiming } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
 import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
@@ -16,9 +16,10 @@ interface ToolCallDisplayProps {
   isHighlighted?: boolean
   codebaseLocalPath?: string
   sessionId?: string
+  previousEventTimestamp?: string | null
 }
 
-function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId }: ToolCallDisplayProps) {
+function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
   const hasResult = toolResult !== undefined
@@ -67,6 +68,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
   // Has any kind of sub-agent conversation to show
   const hasSubAgentConversation = subAgentInfo !== null || devboardSubAgentInfo !== null
 
+  // Execution duration for the collapsed header timing badge
+  const execDurationText = hasResult
+    ? formatDuration(new Date(toolResult!.timestamp).getTime() - new Date(toolCall.timestamp).getTime())
+    : null
+  const timingText = previousEventTimestamp ? formatEventTiming(toolCall.timestamp, previousEventTimestamp) : null
+
   // Build fetchMessages callback for the modal
   const fetchMessages = useCallback(() => {
     if (subAgentInfo) {
@@ -110,7 +117,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
         tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded) } }}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`group rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
@@ -156,6 +163,17 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
               </button>
             )}
           </div>
+          {/* Timing badge: HH:MM · +Xs (hover-reveal) · exec_duration (always) */}
+          {(timingText || execDurationText) && (
+            <div className="flex-shrink-0 text-[10px] text-gray-600 whitespace-nowrap flex items-center">
+              {timingText && (
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  {timingText}{execDurationText ? ' · ' : ''}
+                </span>
+              )}
+              {execDurationText && <span>{execDurationText}</span>}
+            </div>
+          )}
           {/* Expand/Collapse Chevron */}
           <svg
             className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
@@ -169,12 +187,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
 
           {/* Expanded Details */}
           {isExpanded && (
-            <div className="border-t border-gray-300 dark:border-gray-600 select-text min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>
               {/* Tool Arguments */}
               {hasArguments && (
-                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800/50">
+                <div className="px-3 py-2 bg-gray-100 dark:bg-white/[0.05]">
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-400 select-none mb-1.5">Arguments:</div>
-                  <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-gray-700 select-text cursor-text whitespace-pre overflow-x-auto">
+                  <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-white/[0.08] select-text cursor-text whitespace-pre overflow-x-auto">
                     {JSON.stringify(toolCall.tool_args, null, 2)}
                   </pre>
                 </div>
@@ -192,7 +210,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
                 const parsedData = RichRenderer ? tryParseToolResult(toolResult.result_content) : null
 
                 return (
-                  <div className={`px-3 py-2 border-t min-w-0 ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/30'}`}>
+                  <div className={`px-3 py-2 border-t min-w-0 ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.03]'}`}>
                     <div className="flex justify-between items-center mb-1.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
@@ -248,11 +266,11 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
   )
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId }: ToolCallDisplayProps) {
+export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
   const CustomDisplay = getCustomToolDisplay(toolCall.tool_name)
   if (CustomDisplay) {
     return <CustomDisplay toolCall={toolCall} toolResult={toolResult} />
   }
 
-  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} />
+  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} previousEventTimestamp={previousEventTimestamp} />
 }

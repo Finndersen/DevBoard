@@ -198,7 +198,7 @@ export default function MCPServersView() {
       {/* Two-panel layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left panel - server list */}
-        <div className="w-64 border-r border-gray-200 dark:border-gray-700 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+        <div className="w-64 border-r border-gray-200 dark:border-white/[0.08] overflow-y-auto bg-gray-50 dark:bg-gray-900">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />

@@ -123,8 +123,8 @@ export function CustomFieldsPopover({
 
       {/* Popover Panel */}
       {isOpen && allFieldNames.size > 0 && (
-        <div className="absolute right-0 top-full mt-1 z-20 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
-          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+        <div className="absolute right-0 top-full mt-1 z-20 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg shadow-lg">
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-white/[0.08]">
             <span className={`text-xs font-semibold uppercase tracking-wide ${textColors.secondary}`}>Custom Fields</span>
           </div>
           <div className="p-2 space-y-1 max-h-64 overflow-y-auto">
@@ -134,7 +134,7 @@ export function CustomFieldsPopover({
               const isOrphaned = !def
 
               return (
-                <div key={fieldName} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <div key={fieldName} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-white/[0.06]">
                   <span className={`text-xs font-medium shrink-0 mr-3 ${textColors.secondary}`}>
                     {fieldName}
                   </span>
@@ -160,7 +160,7 @@ export function CustomFieldsPopover({
                         value={(value as string) || ''}
                         onChange={(e) => handleEnumChange(fieldName, e.target.value)}
                         disabled={saving || savingField === fieldName}
-                        className="text-xs px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white max-w-[140px] truncate"
+                        className="text-xs px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white max-w-[140px] truncate"
                       >
                         <option value="">—</option>
                         {def.options?.map(opt => (
@@ -181,7 +181,7 @@ export function CustomFieldsPopover({
                             e.stopPropagation()
                           }
                         }}
-                        className="text-xs px-1 py-0.5 border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-0 w-full max-w-[140px]"
+                        className="text-xs px-1 py-0.5 border border-blue-400 rounded bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white min-w-0 w-full max-w-[140px]"
                       />
                     ) : (
                       <button

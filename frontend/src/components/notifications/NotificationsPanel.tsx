@@ -142,9 +142,9 @@ export default function NotificationsPanel() {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-white/[0.08] z-50">
             {/* Header */}
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="p-4 border-b border-gray-200 dark:border-white/[0.08] flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Notifications ({totalCount})
               </h3>
@@ -183,7 +183,7 @@ export default function NotificationsPanel() {
                       <button
                         key={`${key}-${approval.tool_call_id}`}
                         onClick={() => handleApprovalClick(key, approval)}
-                        className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
                       >
                         <div className="flex items-start space-x-3">
                           <div className="flex-shrink-0 mt-1">

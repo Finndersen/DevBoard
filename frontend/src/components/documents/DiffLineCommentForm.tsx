@@ -109,7 +109,7 @@ export default function DiffLineCommentForm({
   }, [handleSend, handleCancel])
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800/50 border-t border-b border-gray-200 dark:border-gray-700 p-3">
+    <div className="bg-gray-50 dark:bg-white/[0.05] border-t border-b border-gray-200 dark:border-white/[0.08] p-3">
       <div className="space-y-2">
         <textarea
           ref={textareaRef}

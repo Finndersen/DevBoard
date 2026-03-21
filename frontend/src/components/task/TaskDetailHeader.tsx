@@ -234,7 +234,7 @@ export function TaskDetailHeader({
                     </button>
 
                     {showCodebaseSelector && (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                      <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg shadow-lg z-10">
                         <div className="max-h-64 overflow-y-auto">
                           {codebases && codebases.map((codebase: Codebase) => (
                             <button
@@ -245,7 +245,7 @@ export function TaskDetailHeader({
                               }}
                               className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 ${
                                 codebase.id === task.codebase_id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : textColors.primary
-                              } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}
+                              } ${codebase.id !== codebases[0].id ? 'border-t border-gray-100 dark:border-white/[0.08]' : ''}`}
                             >
                               <div className="font-medium">{codebase.name}</div>
                               <div className={`text-xs ${textColors.secondary} truncate`}>{codebase.local_path}</div>
