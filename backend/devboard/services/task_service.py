@@ -56,7 +56,7 @@ class TaskService:
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
         return slug
 
-    def create_task(
+    async def create_task(
         self,
         project_id: int,
         title: str,
@@ -91,6 +91,17 @@ class TaskService:
             branch_name = self._generate_branch_name(title)
             logfire.info(f"Auto-generated branch name '{branch_name}' for new task")
 
+        mandatory_fields = self.get_mandatory_custom_fields()
+        if mandatory_fields:
+            provided = custom_fields or {}
+            missing = [
+                f.name
+                for f in mandatory_fields
+                if f.name not in provided or provided[f.name] is None or provided[f.name] == ""
+            ]
+            if missing:
+                raise ValueError(f"Missing required custom fields: {', '.join(missing)}")
+
         # Create documents
         specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, specification_content)
 
@@ -106,6 +117,8 @@ class TaskService:
             base_branch=base_branch,
             custom_fields=custom_fields,
         )
+
+        await TaskGitService.create_task_branch(task)
 
         # Create initial conversation with TASK_PLANNING role (handles both spec and planning)
         self.conversation_service.create_initial_conversation_for_parent_entity(
@@ -167,8 +180,7 @@ class TaskService:
         # 3. Delete git branch if requested
         if delete_branch:
             try:
-                task_git_service = TaskGitService()
-                await task_git_service.delete_task_branch(task, force=True)
+                await TaskGitService.delete_task_branch(task, force=True)
             except Exception as e:
                 # Log error but don't fail task deletion
                 logfire.warning(f"Failed to delete branch {task.branch_name} for task {task.id}: {e}")
@@ -259,8 +271,7 @@ class TaskService:
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch configured")
 
-        task_git_service = TaskGitService()
-        merge_result = await task_git_service.merge_task_feature_branch(task)
+        merge_result = await TaskGitService.merge_task_feature_branch(task)
 
         # SUCCESS, SKIPPED (already merged), and STASH_CONFLICT (merge succeeded, WIP restore had conflicts) are all acceptable
         if merge_result.outcome not in (MergeOutcome.SUCCESS, MergeOutcome.SKIPPED, MergeOutcome.STASH_CONFLICT):

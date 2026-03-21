@@ -583,7 +583,7 @@ def create_create_task_tool(
         resolved_base_branch = base_branch or codebase.default_branch
 
         try:
-            task = task_service.create_task(
+            task = await task_service.create_task(
                 project_id=project.id,
                 title=title,
                 base_branch=resolved_base_branch,

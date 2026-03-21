@@ -2,7 +2,7 @@
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import toons
@@ -93,6 +93,7 @@ def mock_task_service():
     service.task_repo = Mock()
     service.task_repo.db = Mock()
     service.get_custom_fields.return_value = []
+    service.create_task = AsyncMock()
     return service
 
 

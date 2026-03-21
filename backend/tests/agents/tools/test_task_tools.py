@@ -1,7 +1,7 @@
-"""Tests for create_task tool auto_plan functionality."""
+"""Tests for create_task tool functionality."""
 
 import json
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from pydantic_ai import ModelRetry
@@ -52,7 +52,8 @@ def mock_task(mock_codebase):
 def mock_task_service(mock_task):
     service = Mock(spec=TaskService)
     service.get_custom_fields.return_value = []
-    service.create_task.return_value = mock_task
+    service.get_mandatory_custom_fields.return_value = []
+    service.create_task = AsyncMock(return_value=mock_task)
     return service
 
 
@@ -126,6 +127,10 @@ class TestCreateTaskAutoplan:
                 return_value=True,
             ),
             patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr,
+            patch(
+                "devboard.services.task_service.TaskGitService.create_task_branch",
+                AsyncMock(return_value="new-task"),
+            ),
         ):
             mock_exec_manager = Mock()
             mock_get_mgr.return_value = mock_exec_manager
@@ -155,7 +160,13 @@ class TestCreateTaskAutoplan:
             conversation_repo=mock_conversation_repo,
         )
 
-        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+        with (
+            patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr,
+            patch(
+                "devboard.services.task_service.TaskGitService.create_task_branch",
+                AsyncMock(return_value="new-task"),
+            ),
+        ):
             mock_exec_manager = Mock()
             mock_get_mgr.return_value = mock_exec_manager
             result = await tool.function(
@@ -183,6 +194,10 @@ class TestCreateTaskAutoplan:
                 "devboard.workflow_actions.task_workflows.CreateImplementationPlanAction.is_available",
                 return_value=False,
             ),
+            patch(
+                "devboard.services.task_service.TaskGitService.create_task_branch",
+                AsyncMock(return_value="new-task"),
+            ),
             pytest.raises(ModelRetry) as exc_info,
         ):
             await tool.function(
@@ -208,3 +223,73 @@ class TestCreateTaskAutoplan:
         assert auto_plan_schema["type"] == "boolean"
         assert auto_plan_schema["default"] is False
         assert "specification_content" in auto_plan_schema["description"]
+
+
+class TestCreateTaskBranchCreation:
+    """Tests for git branch creation when creating a task via the tool."""
+
+    @pytest.mark.asyncio
+    async def test_creates_task_and_returns_task_id(self, mock_project, mock_task_service, mock_task):
+        """Branch creation is now handled inside TaskService.create_task."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+        )
+
+        result = await tool.function(title="New Task", codebase_name="backend")
+
+        mock_task_service.create_task.assert_called_once()
+        result_data = json.loads(result)
+        assert result_data["task_id"] == mock_task.id
+
+    @pytest.mark.asyncio
+    async def test_task_service_failure_raises_model_retry(self, mock_project, mock_task_service):
+        """Service errors (including branch failures) wrap into ModelRetry."""
+        mock_task_service.create_task.side_effect = ValueError("git error")
+
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+        )
+
+        with pytest.raises(ModelRetry, match="Failed to create task"):
+            await tool.function(title="New Task", codebase_name="backend")
+
+
+class TestCreateTaskMandatoryCustomFields:
+    """Tests for mandatory custom field validation in create_task tool.
+
+    Validation is now performed inside TaskService.create_task, so errors surface
+    as ModelRetry wrapping the ValueError raised by the service.
+    """
+
+    @pytest.mark.asyncio
+    async def test_missing_mandatory_fields_raises_model_retry(self, mock_project, mock_task_service):
+        mock_task_service.create_task.side_effect = ValueError("Missing required custom fields: priority")
+
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+        )
+
+        with pytest.raises(ModelRetry, match="Missing required custom fields: priority"):
+            await tool.function(title="New Task", codebase_name="backend")
+
+        mock_task_service.create_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_provided_mandatory_fields_pass_validation(self, mock_project, mock_task_service):
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+        )
+
+        result = await tool.function(
+            title="New Task",
+            codebase_name="backend",
+            custom_fields={"priority": "high"},
+        )
+
+        result_data = json.loads(result)
+        assert result_data["task_id"] == 42
+        mock_task_service.create_task.assert_called_once()

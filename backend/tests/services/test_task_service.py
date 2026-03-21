@@ -118,6 +118,119 @@ def task_in_implementing():
     return task
 
 
+class TestCreateTask:
+    """Tests for TaskService.create_task()."""
+
+    @pytest.mark.asyncio
+    async def test_create_task_basic(self, task_service, mock_task_repo, mock_document_repo, mock_conversation_service):
+        """Creates task with auto-generated branch name and calls git branch creation."""
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+        mock_custom_field_repo = task_service.custom_field_repo
+        mock_custom_field_repo.get_mandatory_fields.return_value = []
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ) as mock_create_branch:
+            result = await task_service.create_task(
+                project_id=1,
+                title="My New Task",
+                base_branch="main",
+                codebase_id=10,
+            )
+
+        mock_create_branch.assert_called_once_with(mock_task)
+        mock_conversation_service.create_initial_conversation_for_parent_entity.assert_called_once()
+        assert result is mock_task
+
+    @pytest.mark.asyncio
+    async def test_create_task_auto_generates_branch_name(self, task_service, mock_task_repo):
+        """Auto-generates branch name from title when not provided."""
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+        task_service.custom_field_repo.get_mandatory_fields.return_value = []
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ):
+            await task_service.create_task(
+                project_id=1,
+                title="My Feature Task",
+                base_branch="main",
+                codebase_id=10,
+            )
+
+        call_kwargs = mock_task_repo.create.call_args.kwargs
+        assert call_kwargs["branch_name"] == "my-feature-task"
+
+    @pytest.mark.asyncio
+    async def test_create_task_uses_provided_branch_name(self, task_service, mock_task_repo):
+        """Uses explicitly provided branch name without modification."""
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+        task_service.custom_field_repo.get_mandatory_fields.return_value = []
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ):
+            await task_service.create_task(
+                project_id=1,
+                title="My Task",
+                base_branch="main",
+                codebase_id=10,
+                branch_name="custom-branch",
+            )
+
+        call_kwargs = mock_task_repo.create.call_args.kwargs
+        assert call_kwargs["branch_name"] == "custom-branch"
+
+    @pytest.mark.asyncio
+    async def test_create_task_raises_on_missing_mandatory_fields(self, task_service):
+        """Raises ValueError when mandatory custom fields are missing."""
+        mandatory_field = MagicMock()
+        mandatory_field.name = "priority"
+        task_service.custom_field_repo.get_mandatory_fields.return_value = [mandatory_field]
+
+        with pytest.raises(ValueError, match="Missing required custom fields: priority"):
+            await task_service.create_task(
+                project_id=1,
+                title="Task",
+                base_branch="main",
+                codebase_id=10,
+            )
+
+    @pytest.mark.asyncio
+    async def test_create_task_passes_with_mandatory_fields_provided(self, task_service, mock_task_repo):
+        """Succeeds when all mandatory custom fields are provided."""
+        mandatory_field = MagicMock()
+        mandatory_field.name = "priority"
+        task_service.custom_field_repo.get_mandatory_fields.return_value = [mandatory_field]
+
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ):
+            result = await task_service.create_task(
+                project_id=1,
+                title="Task",
+                base_branch="main",
+                codebase_id=10,
+                custom_fields={"priority": "high"},
+            )
+
+        assert result is mock_task
+
+
 class TestTransitionToImplementing:
     """Tests for TaskService.transition_to_implementing()."""
 
@@ -268,11 +381,11 @@ class TestCompleteTaskWithLocalMerge:
             merge_commit="abc123",
         )
 
-        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
-            mock_git_service = MagicMock()
-            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
-            MockTaskGitService.return_value = mock_git_service
-
+        with patch(
+            "devboard.services.task_service.TaskGitService.merge_task_feature_branch",
+            new_callable=AsyncMock,
+            return_value=mock_merge_result,
+        ):
             result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
         assert result.outcome == MergeOutcome.SUCCESS
@@ -290,11 +403,11 @@ class TestCompleteTaskWithLocalMerge:
             message="Branch has no new commits - already merged",
         )
 
-        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
-            mock_git_service = MagicMock()
-            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
-            MockTaskGitService.return_value = mock_git_service
-
+        with patch(
+            "devboard.services.task_service.TaskGitService.merge_task_feature_branch",
+            new_callable=AsyncMock,
+            return_value=mock_merge_result,
+        ):
             result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
         assert result.outcome == MergeOutcome.SKIPPED
@@ -310,11 +423,11 @@ class TestCompleteTaskWithLocalMerge:
             message="Conflicts detected between feature and main",
         )
 
-        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
-            mock_git_service = MagicMock()
-            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
-            MockTaskGitService.return_value = mock_git_service
-
+        with patch(
+            "devboard.services.task_service.TaskGitService.merge_task_feature_branch",
+            new_callable=AsyncMock,
+            return_value=mock_merge_result,
+        ):
             with pytest.raises(ValueError, match="Merge failed"):
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
@@ -329,11 +442,11 @@ class TestCompleteTaskWithLocalMerge:
             message="Git command failed",
         )
 
-        with patch("devboard.services.task_service.TaskGitService") as MockTaskGitService:
-            mock_git_service = MagicMock()
-            mock_git_service.merge_task_feature_branch = AsyncMock(return_value=mock_merge_result)
-            MockTaskGitService.return_value = mock_git_service
-
+        with patch(
+            "devboard.services.task_service.TaskGitService.merge_task_feature_branch",
+            new_callable=AsyncMock,
+            return_value=mock_merge_result,
+        ):
             with pytest.raises(ValueError, match="Merge failed"):
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 

@@ -14,7 +14,6 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_conversation_service,
     get_project_service,
-    get_task_git_service,
     get_task_service,
 )
 from devboard.api.schemas import (
@@ -41,7 +40,6 @@ from devboard.db.repositories import (
 from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_service import ProjectService
-from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 router = APIRouter()
@@ -273,7 +271,6 @@ async def create_project_task(
     project_id: int,
     task: TaskCreateNested,
     task_service: TaskService = Depends(get_task_service),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
@@ -287,26 +284,12 @@ async def create_project_task(
 
     codebase = get_verified_codebase(task.codebase_id, codebase_repo)
 
-    # Validate mandatory custom fields
-    mandatory_fields = task_service.get_mandatory_custom_fields()
-    if mandatory_fields:
-        custom_fields = task.custom_fields or {}
-        missing_fields = []
-        for field in mandatory_fields:
-            if field.name not in custom_fields or custom_fields[field.name] is None or custom_fields[field.name] == "":
-                missing_fields.append(field.name)
-        if missing_fields:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing required custom fields: {', '.join(missing_fields)}",
-            )
-
     # Use provided base_branch or fall back to codebase's default_branch
     base_branch = task.base_branch or codebase.default_branch
 
     # Create task using service (creates task + documents + conversation)
     # Tasks always start in PLANNING status
-    created_task = task_service.create_task(
+    created_task = await task_service.create_task(
         project_id=project_id,
         title=task.title,
         codebase_id=task.codebase_id,
@@ -315,10 +298,6 @@ async def create_project_task(
         base_branch=base_branch,
         custom_fields=task.custom_fields,
     )
-
-    # Create git branch immediately to ensure consistent codebase view during planning
-    # Branch name will be auto-generated if not provided
-    await task_git_service.create_task_branch(created_task)
 
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found
