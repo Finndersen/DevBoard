@@ -917,9 +917,9 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               <div className="group">
                 <div className="flex items-start gap-2">
                   {codebase.developer_context ? (
-                    <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
+                    <pre className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
                       {codebase.developer_context}
-                    </code>
+                    </pre>
                   ) : (
                     <span className="text-sm text-gray-400 italic flex-1">
                       No developer context configured
@@ -939,7 +939,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             )}
             {developerContextField.error && <ErrorMessage message={developerContextField.error} />}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Context for AI agents about development commands: fast checks (lint/format/typecheck) and test commands.
+              Persistent context about this codebase available to all AI agents — testing commands, linting setup, conventions, etc.
             </p>
           </div>
         </div>

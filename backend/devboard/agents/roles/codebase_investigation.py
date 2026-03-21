@@ -100,11 +100,14 @@ class CodebaseInvestigationAgentRole(AgentRole):
         # Add directory tree with depth 3 for reasonable overview
         directory_tree = await self._codebase_integration.get_directory_tree(max_depth=3)
 
+        developer_context_section = (
+            f"\n- Developer Context:\n{self._codebase.developer_context}" if self._codebase.developer_context else ""
+        )
         base_context = f"""
 CODEBASE INFORMATION:
 - Name: {self._codebase.name}
 - Path: {self._working_dir}
-- Description: {self._codebase.description}
+- Description: {self._codebase.description}{developer_context_section}
 
 DIRECTORY STRUCTURE (depth=3):
 ```

@@ -39,6 +39,7 @@ def mock_codebase(temp_codebase_with_docs):
     codebase.name = "TestCodebase"
     codebase.description = "A test codebase"
     codebase.local_path = str(temp_codebase_with_docs)
+    codebase.developer_context = None
     return codebase
 
 
@@ -118,6 +119,36 @@ class TestCodebaseInvestigationRole:
         assert "This is the README" in content
 
     @pytest.mark.asyncio
+    async def test_context_includes_developer_context_when_present(self, mock_codebase):
+        """Test context content includes developer context when set."""
+        mock_codebase.developer_context = "## Testing\n- Run: pytest"
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
+
+        content = await role.get_context_content()
+
+        assert "Developer Context" in content
+        assert "## Testing\n- Run: pytest" in content
+
+    @pytest.mark.asyncio
+    async def test_context_omits_developer_context_when_none(self, mock_codebase):
+        """Test context content omits developer context when None."""
+        mock_codebase.developer_context = None
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
+
+        content = await role.get_context_content()
+
+        assert "Developer Context" not in content
+
+    @pytest.mark.asyncio
+    async def test_context_omits_developer_context_when_empty_string(self, mock_codebase):
+        mock_codebase.developer_context = ""
+        role = CodebaseInvestigationAgentRole(codebase=mock_codebase)
+
+        content = await role.get_context_content()
+
+        assert "Developer Context" not in content
+
+    @pytest.mark.asyncio
     async def test_context_handles_missing_docs_and_readme(self, tmp_path):
         """Test context handles missing docs/INDEX.md and README.md gracefully."""
         codebase_path = tmp_path / "test_codebase_no_docs"
@@ -128,6 +159,7 @@ class TestCodebaseInvestigationRole:
         codebase.name = "TestCodebase"
         codebase.description = "No docs"
         codebase.local_path = str(codebase_path)
+        codebase.developer_context = None
 
         role = CodebaseInvestigationAgentRole(codebase=codebase)
 

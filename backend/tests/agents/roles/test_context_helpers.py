@@ -19,6 +19,7 @@ def mock_task() -> MagicMock:
     task.codebase.name = "test-codebase"
     task.codebase.repository_url = "https://github.com/test/repo"
     task.codebase.description = "A test codebase"
+    task.codebase.developer_context = None
     task.project.specification.content = "# Project Spec\n\nProject content."
     task.specification.content = "# Task Spec\n\nTask content."
     task.implementation_plan.content = "# Implementation\n\n1. Step one"
@@ -118,6 +119,28 @@ class TestBuildTaskContext:
         result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
         assert "Description: N/A" in result
+
+    def test_includes_developer_context_when_present(self, mock_task: MagicMock):
+        """Test that developer context is included when set."""
+        mock_task.codebase.developer_context = "## Testing\n- Run: pytest"
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
+
+        assert "## Developer Context" in result
+        assert "## Testing\n- Run: pytest" in result
+
+    def test_omits_developer_context_when_none(self, mock_task: MagicMock):
+        """Test that developer context section is omitted when None."""
+        mock_task.codebase.developer_context = None
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
+
+        assert "Developer Context" not in result
+
+    def test_omits_developer_context_when_empty_string(self, mock_task: MagicMock):
+        """Test that developer context section is omitted when empty string."""
+        mock_task.codebase.developer_context = ""
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
+
+        assert "Developer Context" not in result
 
     def test_section_order_is_consistent(self, mock_task: MagicMock):
         """Test that sections appear in consistent order."""
