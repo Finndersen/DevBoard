@@ -232,17 +232,19 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }, [expandedPanel])
 
   // Handle creating a new project conversation
+  const invalidateConversations = useUIStore(s => s.invalidateConversations)
   const handleNewConversation = useCallback(async () => {
     if (!project) return
     try {
       const result = await apiClient.createProjectConversation(project.id)
       setActiveConversationId(result.id)
       updateConversationUrl(result.id)
+      invalidateConversations()
     } catch (error) {
       console.error('Failed to create conversation:', error)
       addNotification({ type: 'error', message: 'Failed to create new conversation' })
     }
-  }, [project, addNotification, updateConversationUrl])
+  }, [project, addNotification, updateConversationUrl, invalidateConversations])
 
   // Handle switching conversations
   const handleSelectConversation = useCallback((conversationId: number) => {

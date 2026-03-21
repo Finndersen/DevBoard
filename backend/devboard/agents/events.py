@@ -53,6 +53,7 @@ class SystemEventType(StrEnum):
     SESSION_EXPIRED = "session_expired"
     API_ERROR_RETRY = "api_error_retry"
     COMPACTING_CONVERSATION = "compacting_conversation"
+    RATE_LIMIT = "rate_limit"
 
 
 class TextMessage(BaseModel):

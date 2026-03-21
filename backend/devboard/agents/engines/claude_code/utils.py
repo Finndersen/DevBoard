@@ -95,7 +95,7 @@ def describe_message(message: Message) -> str:
         return f"ResultMessage({status}, cost={cost}, turns={message.num_turns})"
 
     elif isinstance(message, RateLimitEvent):
-        return f"RateLimitEvent(status={message.rate_limit_info.status})"
+        return f"RateLimitEvent(status={message.rate_limit_info.status}, utilization={message.rate_limit_info.utilization}, type={message.rate_limit_info.rate_limit_type})"
 
     else:
         # StreamEvent

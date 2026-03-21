@@ -6,6 +6,12 @@ from pathlib import Path
 
 from devboard.db.models.project import Project
 
+_DEFAULT_DEVBOARD_HOME = Path.home() / ".devboard"
+
+
+def get_devboard_home() -> Path:
+    return Path(os.environ.get("DEVBOARD_HOME", str(_DEFAULT_DEVBOARD_HOME)))
+
 
 def slugify_project_name(name: str) -> str:
     """Convert project name to a filesystem-safe slug.
@@ -21,8 +27,7 @@ def slugify_project_name(name: str) -> str:
 
 def get_project_directory(project: Project) -> Path:
     """Get the dedicated directory path for a project."""
-    devboard_home = Path(os.environ.get("DEVBOARD_HOME", str(Path.home() / ".devboard")))
-    return devboard_home / "projects" / slugify_project_name(project.name)
+    return get_devboard_home() / "projects" / slugify_project_name(project.name)
 
 
 def ensure_project_directory(project: Project) -> Path:

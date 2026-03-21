@@ -1,6 +1,7 @@
 """Tests for WorktreePoolManager."""
 
 import datetime
+import re
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -130,10 +131,12 @@ async def test_allocate_uses_unlocked_slot_with_branch_already_checked_out(
 # =============================================================================
 
 
+_WORKTREE_SUFFIX_RE = re.compile(r"\.worktree-[0-9a-f]{7}$")
+
+
 def test_generate_new_worktree_path_central_mode(worktree_slot_repo, sample_codebase, monkeypatch):
-    """Central mode generates path under DEVBOARD_HOME/worktrees/ with codebase_id prefix."""
+    """Central mode generates path under DEVBOARD_HOME/worktrees/ with a UUID suffix."""
     monkeypatch.setenv("DEVBOARD_HOME", "/devboard")
-    worktree_slot_repo.get_by_codebase.return_value = []  # slot_number = 0
 
     manager = WorktreePoolManager(
         worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.CENTRAL
@@ -142,53 +145,55 @@ def test_generate_new_worktree_path_central_mode(worktree_slot_repo, sample_code
     with patch("devboard.services.workspace.pool_manager.Path.mkdir") as mock_mkdir:
         path = manager._generate_new_worktree_path(sample_codebase)
 
-    assert path == f"/devboard/worktrees/{sample_codebase.id}_test-repo.worktree-0"
+    assert Path(path).parent == Path("/devboard/worktrees")
+    assert Path(path).name.startswith("test-repo.worktree-")
+    assert _WORKTREE_SUFFIX_RE.search(path)
     mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
 
 
-def test_generate_new_worktree_path_central_mode_increments_slot_number(
+def test_generate_new_worktree_path_central_mode_produces_unique_paths(
     worktree_slot_repo, sample_codebase, monkeypatch
 ):
-    """Central mode uses slot count as suffix number."""
+    """Two consecutive calls produce different paths."""
     monkeypatch.setenv("DEVBOARD_HOME", "/devboard")
-    existing_slots = [MagicMock(), MagicMock()]  # 2 existing slots
-    worktree_slot_repo.get_by_codebase.return_value = existing_slots
 
     manager = WorktreePoolManager(
         worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.CENTRAL
     )
 
     with patch("devboard.services.workspace.pool_manager.Path.mkdir"):
-        path = manager._generate_new_worktree_path(sample_codebase)
+        path1 = manager._generate_new_worktree_path(sample_codebase)
+        path2 = manager._generate_new_worktree_path(sample_codebase)
 
-    assert path == f"/devboard/worktrees/{sample_codebase.id}_test-repo.worktree-2"
+    assert path1 != path2
 
 
 def test_generate_new_worktree_path_alongside_mode(worktree_slot_repo, sample_codebase):
-    """Alongside mode generates path as sibling to main repo."""
-    worktree_slot_repo.get_by_codebase.return_value = []  # slot_number = 0
-
+    """Alongside mode generates path as sibling to main repo with a UUID suffix."""
     manager = WorktreePoolManager(
         worktree_slot_repo=worktree_slot_repo, worktree_location_mode=WorktreeLocationMode.ALONGSIDE
     )
 
     path = manager._generate_new_worktree_path(sample_codebase)
 
-    assert path == "/projects/test-repo.worktree-0"
+    assert Path(path).parent == Path("/projects")
+    assert Path(path).name.startswith("test-repo.worktree-")
+    assert _WORKTREE_SUFFIX_RE.search(path)
 
 
 def test_generate_new_worktree_path_central_mode_falls_back_to_home(worktree_slot_repo, sample_codebase, monkeypatch):
     """Central mode falls back to ~/.devboard when DEVBOARD_HOME is not set."""
     monkeypatch.delenv("DEVBOARD_HOME", raising=False)
-    worktree_slot_repo.get_by_codebase.return_value = []
 
     manager = WorktreePoolManager(worktree_slot_repo=worktree_slot_repo)
 
     with patch("devboard.services.workspace.pool_manager.Path.mkdir"):
         path = manager._generate_new_worktree_path(sample_codebase)
 
-    expected = str(Path.home() / ".devboard" / "worktrees" / f"{sample_codebase.id}_test-repo.worktree-0")
-    assert path == expected
+    expected_parent = Path.home() / ".devboard" / "worktrees"
+    assert Path(path).parent == expected_parent
+    assert Path(path).name.startswith("test-repo.worktree-")
+    assert _WORKTREE_SUFFIX_RE.search(path)
 
 
 # =============================================================================

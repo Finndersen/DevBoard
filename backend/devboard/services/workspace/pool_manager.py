@@ -1,7 +1,7 @@
 """Worktree pool manager for allocating, releasing and managing worktree slots."""
 
 import datetime
-import os
+import uuid
 from pathlib import Path
 
 import logfire
@@ -11,6 +11,7 @@ from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandExecutionError
+from devboard.services.project_directory import get_devboard_home
 from devboard.services.workspace.types import (
     AllSlotsLockedException,
     BranchInUseException,
@@ -48,19 +49,16 @@ class WorktreePoolManager:
         )
 
     def _generate_new_worktree_path(self, codebase: Codebase) -> str:
-        """Generate a unique worktree path based on the configured worktree_directory setting."""
         repo_path = Path(codebase.local_path)
         repo_name = repo_path.name
-        slot_number = len(self.worktree_slot_repo.get_by_codebase(codebase.id))
+        uid = uuid.uuid4().hex[:7]
 
         if self.worktree_location_mode == WorktreeLocationMode.ALONGSIDE:
-            worktree_path = repo_path.parent / f"{repo_name}.worktree-{slot_number}"
+            worktree_path = repo_path.parent / f"{repo_name}.worktree-{uid}"
         else:
-            # Default: central mode — place under DEVBOARD_HOME/worktrees/
-            devboard_home = Path(os.environ.get("DEVBOARD_HOME", str(Path.home() / ".devboard")))
-            central_base = devboard_home / "worktrees"
+            central_base = get_devboard_home() / "worktrees"
             central_base.mkdir(parents=True, exist_ok=True)
-            worktree_path = central_base / f"{codebase.id}_{repo_name}.worktree-{slot_number}"
+            worktree_path = central_base / f"{repo_name}.worktree-{uid}"
 
         return str(worktree_path)
 

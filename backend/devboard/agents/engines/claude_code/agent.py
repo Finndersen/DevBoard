@@ -9,6 +9,7 @@ import logfire
 from claude_agent_sdk import (
     AssistantMessage,
     Message,
+    RateLimitEvent,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -293,6 +294,27 @@ class ClaudeCodeAgent(BaseAgent):
                         if message.subtype == "status" and message.data.get("status") == "compacting":
                             yield SystemEvent(
                                 type=SystemEventType.COMPACTING_CONVERSATION,
+                                timestamp=datetime.datetime.now(datetime.UTC),
+                            )
+                        continue
+
+                    if isinstance(message, RateLimitEvent):
+                        info = message.rate_limit_info
+                        if info.status in ("allowed_warning", "rejected"):
+                            logfire.warning(
+                                "Rate limit event",
+                                status=info.status,
+                                utilization=info.utilization,
+                                rate_limit_type=info.rate_limit_type,
+                            )
+                            yield SystemEvent(
+                                type=SystemEventType.RATE_LIMIT,
+                                data={
+                                    "status": info.status,
+                                    "utilization": info.utilization,
+                                    "resets_at": info.resets_at,
+                                    "rate_limit_type": str(info.rate_limit_type) if info.rate_limit_type else None,
+                                },
                                 timestamp=datetime.datetime.now(datetime.UTC),
                             )
                         continue

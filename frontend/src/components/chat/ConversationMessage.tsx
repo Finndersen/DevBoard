@@ -96,6 +96,16 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
       return `Error: ${(data?.message as string) ?? 'Unknown error'}`
     case 'compacting_conversation':
       return 'Compacting conversation...'
+    case 'rate_limit': {
+      const status = data?.status as string
+      const utilization = data?.utilization as number | undefined
+      const pct = utilization != null ? ` (${Math.round(utilization * 100)}% used)` : ''
+      const limitType = data?.rate_limit_type as string | undefined
+      const typeSuffix = limitType ? ` [${limitType}]` : ''
+      return status === 'rejected'
+        ? `Rate limit reached${pct}${typeSuffix} — request rejected`
+        : `Approaching rate limit${pct}${typeSuffix}`
+    }
     default:
       return null
   }

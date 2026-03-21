@@ -36,7 +36,7 @@ class WorktreeSlot(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     codebase_id: Mapped[int] = mapped_column(ForeignKey("codebases.id"))
-    path: Mapped[str] = mapped_column(String(512))
+    path: Mapped[str] = mapped_column(String(512), unique=True)
     is_main_repo: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Lock state
