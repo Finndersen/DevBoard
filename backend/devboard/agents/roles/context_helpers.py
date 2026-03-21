@@ -34,11 +34,16 @@ def _format_task_metadata(task: Task) -> str:
 
 def _format_codebase_info(task: Task, working_dir: str) -> str:
     """Format codebase information block."""
-    return f"""# Codebase
-- Name: {task.codebase.name}
-- Repository URL: {task.codebase.repository_url or "N/A"}
-- Worktree directory: {working_dir}
-- Description: {task.codebase.description or "N/A"}"""
+    lines = [
+        "# Codebase",
+        f"- Name: {task.codebase.name}",
+        f"- Repository URL: {task.codebase.repository_url or 'N/A'}",
+        f"- Worktree directory: {working_dir}",
+        f"- Description: {task.codebase.description or 'N/A'}",
+    ]
+    if task.codebase.developer_context:
+        lines.append(f"- Developer Context: {task.codebase.developer_context}")
+    return "\n".join(lines)
 
 
 def _format_document_section(title: str, content: str | None) -> str:

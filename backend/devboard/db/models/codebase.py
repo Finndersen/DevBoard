@@ -49,6 +49,7 @@ class Codebase(Base):
     branch_handling: Mapped[str] = mapped_column(String(50), default=BranchHandling.LOCAL_MERGE.value)
     max_worktrees: Mapped[int | None] = mapped_column(default=None)
     setup_command: Mapped[str | None] = mapped_column(String(1024), default=None)
+    developer_context: Mapped[str | None] = mapped_column(Text, default=None)
 
     projects: Mapped[list["Project"]] = relationship(secondary=project_codebase_association, back_populates="codebases")
     tasks: Mapped[list["Task"]] = relationship(back_populates="codebase")

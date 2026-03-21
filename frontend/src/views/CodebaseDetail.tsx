@@ -95,6 +95,12 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
     [updateCodebase, id]
   )
 
+  const saveDeveloperContextField = useCallback(
+    (value: string) =>
+      updateCodebase({ id: id!, codebase: { developer_context: value || null } }),
+    [updateCodebase, id]
+  )
+
   // Merge method state
   const [mergeMethodEditing, setMergeMethodEditing] = useState(false)
   const [mergeMethodSaving, setMergeMethodSaving] = useState(false)
@@ -197,6 +203,10 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
   const setupCommandField = useEditableField(
     codebase?.setup_command || '',
     saveSetupCommandField
+  )
+  const developerContextField = useEditableField(
+    codebase?.developer_context || '',
+    saveDeveloperContextField
   )
 
   // Loading state
@@ -862,6 +872,74 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             {setupCommandField.error && <ErrorMessage message={setupCommandField.error} />}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Shell command to run when a workspace is allocated (e.g., install dependencies). Should be fast and idempotent.
+            </p>
+          </div>
+
+          {/* Developer Context */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <CommandLineIcon className="h-4 w-4" />
+              Developer Context
+            </label>
+            {developerContextField.isEditing ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={developerContextField.editedValue}
+                  onChange={(e) => developerContextField.setEditedValue(e.target.value)}
+                  placeholder="e.g., Fast checks: ruff check . --fix && ruff format . && pyright&#10;Tests: pytest"
+                  rows={5}
+                  className="font-mono text-sm"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={developerContextField.save}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-400"
+                    loading={developerContextField.saving}
+                  >
+                    <CheckIcon className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    onClick={developerContextField.cancelEditing}
+                    variant="secondary"
+                    size="sm"
+                    className="border border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
+                  >
+                    <XMarkIcon className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-start gap-2">
+                  {codebase.developer_context ? (
+                    <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
+                      {codebase.developer_context}
+                    </code>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic flex-1">
+                      No developer context configured
+                    </span>
+                  )}
+                  <Button
+                    onClick={developerContextField.startEditing}
+                    variant="ghost"
+                    size="sm"
+                    className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit developer context"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {developerContextField.error && <ErrorMessage message={developerContextField.error} />}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Context for AI agents about development commands: fast checks (lint/format/typecheck) and test commands.
             </p>
           </div>
         </div>

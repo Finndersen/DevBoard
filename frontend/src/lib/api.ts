@@ -335,6 +335,7 @@ export interface Codebase {
   branch_handling: BranchHandling
   max_worktrees: number | null
   setup_command: string | null
+  developer_context: string | null
 }
 
 export interface CodebaseCreate {
@@ -346,6 +347,7 @@ export interface CodebaseCreate {
   branch_handling?: BranchHandling | null
   max_worktrees?: number | null
   setup_command?: string | null
+  developer_context?: string | null
 }
 
 // Git and Worktree Management

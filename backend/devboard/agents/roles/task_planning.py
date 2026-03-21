@@ -64,9 +64,9 @@ Use `investigate_codebase` to research codebase patterns, conventions, and frame
 Each step should be self-contained with enough detail for a sub-agent to execute independently. Steps have:
 - **title**: Short summary (e.g. "Add database models")
 - **type**: One of:
-  - `code_change` — implement the described changes **and write corresponding tests** for any new functionality introduced. Tests belong in the same step as the code they cover — do not split them out.
+  - `code_change` — implement the described changes **and write corresponding tests** for any new functionality introduced. Tests belong in the same step as the code they cover — do not split them out. After implementing, the step should include instructions to run fast validation checks (lint, format, typecheck) on modified files and fix any issues — use the commands from the codebase's `developer_context` field.
   - `documentation` — update or add documentation only
-  - `validation` — run linting, type-checking, formatting, and the full test suite; fix any failures found. Not for writing new tests.
+  - `validation` — run the full test suite and fix any failures. Lint/format/typecheck should already be clean from per-step inline checks, so also run them as a safety net to catch any cross-step issues, but the primary focus is test failures and integration issues. Not for writing new tests.
   - `code_review` — optional: review the git diff for correctness, quality, and alignment with the spec; produces findings for the coordination agent to act on (does not make changes directly). Include for non-trivial changes.
 - **dependencies**: List of step numbers (1-indexed) that must complete first
 - **details**: Concise markdown instructions covering what to build, key constraints, and any important "how" decisions. Trust the implementation agent to figure out routine implementation — only include approach details where a capable developer would otherwise make the wrong call or where a specific approach was agreed with the user.
@@ -79,8 +79,8 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - For `code_change` steps: describe what scenarios matter for testing (happy path, key error cases, edge cases) — not test class or method names
 
 **Recommended Step Ordering:**
-1. Code change steps (with tests included) — ordered by logical dependency (e.g. data models before API before frontend)
-2. One `validation` step depending on all code steps — runs the full quality gate and fixes any failures
+1. Code change steps (with tests included) — ordered by logical dependency (e.g. data models before API before frontend). Each step handles its own inline fast validation (lint/format/typecheck) before completing.
+2. One `validation` step depending on all code steps — runs the full test suite as the final gate; lint/format issues should already be resolved by per-step checks
 3. (Optional) One `code_review` step depending on testing — for non-trivial changes; reviews the overall diff and fixes any issues
 
 **Step Details Should Include:**

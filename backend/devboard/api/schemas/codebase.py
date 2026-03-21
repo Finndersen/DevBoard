@@ -17,6 +17,7 @@ class CodebaseBase(BaseModel):
     branch_handling: BranchHandling
     max_worktrees: int | None = None
     setup_command: str | None = None
+    developer_context: str | None = None
 
 
 class CodebaseCreate(BaseModel):
@@ -30,6 +31,7 @@ class CodebaseCreate(BaseModel):
     branch_handling: BranchHandling | None = None  # Auto-determined based on repository_url if not provided
     max_worktrees: int | None = None
     setup_command: str | None = None
+    developer_context: str | None = None
 
 
 class CodebaseUpdate(BaseModel):
@@ -44,6 +46,7 @@ class CodebaseUpdate(BaseModel):
     branch_handling: BranchHandling | None = None
     max_worktrees: int | None = None
     setup_command: str | None = None
+    developer_context: str | None = None
 
 
 class CodebaseResponse(CodebaseBase):

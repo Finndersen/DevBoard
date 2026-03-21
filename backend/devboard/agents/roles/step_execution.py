@@ -11,13 +11,18 @@ STEP_TYPE_PREAMBLES = {
     ImplementationStepType.CODE_CHANGE: (
         "You are implementing a specific code change as part of a larger implementation plan. "
         "Focus on making the described changes cleanly and completely. "
-        "Write tests for new functionality but do NOT run them — a later validation step handles that."
+        "Write tests for new functionality but do NOT run them — a later validation step handles that. "
+        "After implementing, run fast validation checks (lint, format, typecheck) on the files you modified and fix any issues before completing the step. "
+        "The relevant commands can be found in the codebase's developer context."
     ),
     ImplementationStepType.DOCUMENTATION: (
         "You are updating documentation as part of a larger implementation plan. Focus on accuracy and completeness."
     ),
     ImplementationStepType.VALIDATION: (
-        "You are running linting, formatting, type-checking, and tests as part of a larger implementation plan. "
+        "You are running the full validation suite as the final gate. "
+        "Run lint/format/typecheck first as a safety net (these should already be clean from individual implementation steps), "
+        "then run the full test suite. "
+        "Focus primarily on test failures and integration issues. "
         "Fix any issues found, re-run to verify fixes, and report results."
     ),
 }
