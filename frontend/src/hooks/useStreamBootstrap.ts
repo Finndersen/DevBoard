@@ -19,10 +19,18 @@ export function useStreamBootstrap() {
         if (executions.length === 0) return
 
         console.log('[StreamBootstrap] Reconnecting', executions.length, 'active executions')
-        const { reconnectStream } = useConversationStreamStore.getState()
+        const { reconnectStream, setMessages } = useConversationStreamStore.getState()
 
         const results = await Promise.allSettled(
-          executions.map(e => reconnectStream(e.conversation_id))
+          executions.map(async e => {
+            try {
+              const messages = await apiClient.getConversationMessages(e.conversation_id)
+              setMessages(e.conversation_id, messages)
+            } catch (err) {
+              console.warn('[StreamBootstrap] Failed to load history for conversation', e.conversation_id, err)
+            }
+            await reconnectStream(e.conversation_id)
+          })
         )
         const failures = results.filter(r => r.status === 'rejected')
         if (failures.length > 0) {
