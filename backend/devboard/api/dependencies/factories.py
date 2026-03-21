@@ -22,7 +22,6 @@ from devboard.db.repositories.implementation_plan import TaskImplementationPlanR
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
 from devboard.services.oauth_service import OAuthService
-from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
@@ -33,7 +32,6 @@ async def create_agent_role_for_conversation(
     agent_config_service: AgentConfigService,
     integration_service: IntegrationService,
     task_service: TaskService,
-    task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
     working_dir: str,
 ) -> AgentRole:
@@ -65,7 +63,6 @@ async def create_agent_role_for_conversation(
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
-                task_git_service=task_git_service,
                 github_integration=github_integration,
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,

@@ -64,15 +64,8 @@ def mock_worktree_git():
 # ── Pre-check tests (in merge_task_feature_branch) ────────────────────────────
 
 
-@pytest.fixture
-def task_git_service():
-    return TaskGitService()
-
-
 @pytest.mark.asyncio
-async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(
-    task_git_service, mock_task, mock_git, mock_worktree_git
-):
+async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(mock_task, mock_git, mock_worktree_git):
     """merge_task_feature_branch returns ERROR when uncommitted changes overlap with feature branch."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
     mock_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/feature_only.py"])
@@ -84,7 +77,7 @@ async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(
     ):
         MockGit.side_effect = [mock_git, mock_worktree_git]
 
-        result = await task_git_service.merge_task_feature_branch(mock_task)
+        result = await TaskGitService.merge_task_feature_branch(mock_task)
 
     assert result == MergeResult(
         outcome=MergeOutcome.ERROR,
@@ -100,9 +93,7 @@ async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(
 
 
 @pytest.mark.asyncio
-async def test_merge_proceeds_when_uncommitted_changes_do_not_overlap(
-    task_git_service, mock_task, mock_git, mock_worktree_git
-):
+async def test_merge_proceeds_when_uncommitted_changes_do_not_overlap(mock_task, mock_git, mock_worktree_git):
     """merge_task_feature_branch proceeds when uncommitted changes don't overlap with feature branch."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
     mock_git.get_changed_file_paths = AsyncMock(return_value=["src/feature_only.py"])
@@ -115,15 +106,13 @@ async def test_merge_proceeds_when_uncommitted_changes_do_not_overlap(
     ):
         MockGit.side_effect = [mock_git, mock_worktree_git]
 
-        result = await task_git_service.merge_task_feature_branch(mock_task)
+        result = await TaskGitService.merge_task_feature_branch(mock_task)
 
     assert result.outcome == MergeOutcome.SUCCESS
 
 
 @pytest.mark.asyncio
-async def test_merge_proceeds_when_base_branch_workdir_is_clean(
-    task_git_service, mock_task, mock_git, mock_worktree_git
-):
+async def test_merge_proceeds_when_base_branch_workdir_is_clean(mock_task, mock_git, mock_worktree_git):
     """merge_task_feature_branch proceeds when base branch workdir has no uncommitted changes."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
     mock_worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=[])
@@ -135,13 +124,13 @@ async def test_merge_proceeds_when_base_branch_workdir_is_clean(
     ):
         MockGit.side_effect = [mock_git, mock_worktree_git]
 
-        result = await task_git_service.merge_task_feature_branch(mock_task)
+        result = await TaskGitService.merge_task_feature_branch(mock_task)
 
     assert result.outcome == MergeOutcome.SUCCESS
 
 
 @pytest.mark.asyncio
-async def test_merge_proceeds_when_base_branch_not_checked_out(task_git_service, mock_task, mock_git):
+async def test_merge_proceeds_when_base_branch_not_checked_out(mock_task, mock_git):
     """merge_task_feature_branch proceeds when base branch is not checked out anywhere."""
     mock_git.get_checked_out_location.return_value = None
 
@@ -149,19 +138,19 @@ async def test_merge_proceeds_when_base_branch_not_checked_out(task_git_service,
         patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git),
         patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git),
     ):
-        result = await task_git_service.merge_task_feature_branch(mock_task)
+        result = await TaskGitService.merge_task_feature_branch(mock_task)
 
     assert result.outcome == MergeOutcome.SUCCESS
     mock_git.has_uncommitted_changes.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_merge_raises_for_remote_base_branch(task_git_service, mock_task):
+async def test_merge_raises_for_remote_base_branch(mock_task):
     """merge_task_feature_branch raises ValueError when base branch is a remote tracking branch."""
     mock_task.base_branch = "origin/main"
 
     with pytest.raises(ValueError, match="requires a local base branch"):
-        await task_git_service.merge_task_feature_branch(mock_task)
+        await TaskGitService.merge_task_feature_branch(mock_task)
 
 
 # ── Worktree stash removal tests ──────────────────────────────────────────────

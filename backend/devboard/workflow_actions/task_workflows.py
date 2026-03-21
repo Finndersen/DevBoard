@@ -7,7 +7,7 @@ from devboard.services.task_git_service import TaskGitService
 from devboard.workflow_actions.base import TaskWorkflowAction
 
 
-async def _get_task_changes_prompt_context(task_git_service: TaskGitService, task: Task) -> str:
+async def _get_task_changes_prompt_context(task: Task) -> str:
     """Build a prompt context string describing the current state of changes on the task branch.
 
     Returns a string with commit history and uncommitted change details that can be
@@ -20,8 +20,8 @@ async def _get_task_changes_prompt_context(task_git_service: TaskGitService, tas
         return "Unable to determine branch state — no worktree slot found for this task."
 
     # Fetch commit history and uncommitted changes
-    commits = await task_git_service.get_task_commit_metadata(task)
-    uncommitted = await task_git_service.get_task_uncommitted_changes(task)
+    commits = await TaskGitService.get_task_commit_metadata(task)
+    uncommitted = await TaskGitService.get_task_uncommitted_changes(task)
 
     parts: list[str] = []
 
@@ -139,7 +139,7 @@ Please briefly review these changes and note if any are relevant to the current 
 
     async def _run_direct_rebase(self) -> str | None:
         """Execute direct rebase for PLANNING state (no file changes expected)."""
-        rebase_result = await self.task_git_service.rebase_task_branch(self.task)
+        rebase_result = await TaskGitService.rebase_task_branch(self.task)
 
         if rebase_result.outcome.value == "conflict":
             conflicted = ", ".join(rebase_result.conflicted_files or [])
@@ -201,7 +201,7 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
         )
 
     async def run(self) -> str | None:
-        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        changes_context = await _get_task_changes_prompt_context(self.task)
         return self._build_prompt(self.task.codebase.merge_method, changes_context)
 
 
@@ -240,7 +240,7 @@ The PR will be created against the base branch and the task will transition to P
         if not connection_result.success:
             raise ValueError(f"GitHub connection failed: {connection_result.message}")
 
-        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        changes_context = await _get_task_changes_prompt_context(self.task)
         return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
 
 
@@ -272,7 +272,7 @@ Once all changes are committed and pushed, use the `merge_pr_and_complete_task` 
         if not connection_result.success:
             raise ValueError(f"GitHub connection failed: {connection_result.message}")
 
-        changes_context = await _get_task_changes_prompt_context(self.task_git_service, self.task)
+        changes_context = await _get_task_changes_prompt_context(self.task)
         return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
 
 

@@ -151,7 +151,6 @@ async def _create_agent_stream(
         agent_config_service=services.agent_config_service,
         integration_service=services.integration_service,
         task_service=services.task_service,
-        task_git_service=services.task_git_service,
         conversation_repo=services.conversation_repo,
         working_dir=working_dir,
     )

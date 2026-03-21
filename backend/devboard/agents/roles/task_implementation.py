@@ -23,7 +23,6 @@ from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
-from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
@@ -129,7 +128,6 @@ class TaskImplementationAgentRole(AgentRole):
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService,
         task_service: TaskService,
-        task_git_service: TaskGitService,
         github_integration: GitHubIntegration,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
@@ -140,7 +138,6 @@ class TaskImplementationAgentRole(AgentRole):
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
         self.task_service = task_service
-        self.task_git_service = task_git_service
         self.github_integration = github_integration
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
@@ -177,7 +174,6 @@ class TaskImplementationAgentRole(AgentRole):
                         self.agent_config_service,
                         self.conversation_repo,
                         self.conversation_id,
-                        self.task_git_service,
                         self._working_dir,
                     ),
                     create_read_implementation_step_details_tool(self.task, self.plan_service),
@@ -209,12 +205,11 @@ class TaskImplementationAgentRole(AgentRole):
                 create_code_review_tool(
                     self.task,
                     self.agent_config_service,
-                    self.task_git_service,
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
                     working_dir=self._working_dir,
                 ),
-                create_rebase_task_branch_tool(self.task, self.task_git_service),
+                create_rebase_task_branch_tool(self.task),
             ]
         )
 

@@ -281,7 +281,6 @@ def create_execute_implementation_step_tool(
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
-    task_git_service: TaskGitService,
     working_dir: str,
 ) -> Tool:
     async def execute_implementation_step(
@@ -328,7 +327,7 @@ def create_execute_implementation_step_tool(
 
         try:
             if step.type == ImplementationStepType.CODE_REVIEW:
-                diff = await task_git_service.get_task_all_changes(task)
+                diff = await TaskGitService.get_task_all_changes(task)
                 if not diff.files:
                     plan_service.set_step_status(
                         step,

@@ -272,7 +272,6 @@ def create_task_codebase_investigation_tool(
 def create_code_review_tool(
     task: Task,
     agent_config_service: AgentConfigService,
-    task_git_service: TaskGitService,
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     working_dir: str,
@@ -282,7 +281,6 @@ def create_code_review_tool(
     Args:
         task: The task being reviewed
         agent_config_service: AgentConfigService for getting configured LLM
-        task_git_service: Service for retrieving the full task diff
         conversation_repo: Repository for creating conversation records
         parent_conversation_id: ID of the invoking agent's conversation
     """
@@ -312,7 +310,7 @@ def create_code_review_tool(
             - `result`: Structured review with Summary and Findings (Critical/Important/Suggestions)
             - `conversation_id`: The conversation identifier for the review session.
         """
-        diff = await task_git_service.get_task_all_changes(task)
+        diff = await TaskGitService.get_task_all_changes(task)
 
         if not diff.files:
             return json.dumps({"result": "No changes to review — the task diff is empty.", "conversation_id": None})

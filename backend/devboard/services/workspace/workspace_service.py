@@ -38,7 +38,6 @@ class WorkspaceService:
     ):
         self.worktree_slot_repo = worktree_slot_repo
         self.conversation_repo = conversation_repo
-        self.task_git_service = TaskGitService()
         self._pool_manager = WorktreePoolManager(worktree_slot_repo, worktree_location_mode=worktree_location_mode)
 
     # Slot utility methods
@@ -148,7 +147,7 @@ class WorkspaceService:
         """
         slot: WorktreeSlot | None = None
         try:
-            await self.task_git_service.verify_task_branch_exists(task)
+            await TaskGitService.verify_task_branch_exists(task)
 
             try:
                 slot = await self._pool_manager.allocate_for_task(task)

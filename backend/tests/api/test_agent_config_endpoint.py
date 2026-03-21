@@ -41,7 +41,6 @@ def mock_execution_context(mock_role, agent_config, mcp_tools=None):
     mock_exec_services.agent_config_service.get_enabled_mcp_tools.return_value = mcp_tools or []
     mock_exec_services.integration_service = Mock()
     mock_exec_services.task_service = Mock()
-    mock_exec_services.task_git_service = Mock()
     mock_exec_services.conversation_repo = Mock()
     mock_exec_services.workspace_service = Mock()
 

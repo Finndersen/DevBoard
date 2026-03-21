@@ -41,7 +41,6 @@ async def _get_commits_for_conflicted_files(
 
 def create_rebase_task_branch_tool(
     task: Task,
-    task_git_service: TaskGitService,
 ) -> Tool:
     """Create an idempotent tool for rebasing a task's branch onto its base branch.
 
@@ -53,7 +52,6 @@ def create_rebase_task_branch_tool(
 
     Args:
         task: The task whose branch should be rebased
-        task_git_service: Service for task git operations
     """
 
     async def rebase_task_branch() -> str:
@@ -75,7 +73,7 @@ def create_rebase_task_branch_tool(
             ModelRetry: If rebase encounters conflicts or validation fails
         """
         try:
-            result = await task_git_service.rebase_task_branch(task)
+            result = await TaskGitService.rebase_task_branch(task)
         except ValueError as e:
             raise ModelRetry(str(e)) from e
 

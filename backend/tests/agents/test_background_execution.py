@@ -20,7 +20,6 @@ def mock_services() -> Mock:
     services.agent_config_service = Mock()
     services.integration_service = Mock()
     services.task_service = Mock()
-    services.task_git_service = Mock()
     services.workspace_service = Mock()
     return services
 
@@ -95,7 +94,6 @@ class TestRunAgentForConversation:
             agent_config_service=mock_services.agent_config_service,
             integration_service=mock_services.integration_service,
             task_service=mock_services.task_service,
-            task_git_service=mock_services.task_git_service,
             conversation_repo=mock_services.conversation_repo,
             working_dir="/projects/test",
         )

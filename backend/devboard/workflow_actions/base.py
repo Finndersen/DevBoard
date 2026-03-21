@@ -11,7 +11,6 @@ from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
-from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_service import TaskService
 
 
@@ -29,7 +28,6 @@ class TaskWorkflowAction(ABC):
         self,
         task: Task,
         task_service: TaskService,
-        task_git_service: TaskGitService,
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
         document_repository: DocumentRepository,
@@ -37,7 +35,6 @@ class TaskWorkflowAction(ABC):
     ):
         self.task = task
         self.task_service = task_service
-        self.task_git_service = task_git_service
         self.conversation_repo = conversation_repo
         self.agent_config_service = agent_config_service
         self.document_repository = document_repository

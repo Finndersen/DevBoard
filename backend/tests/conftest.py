@@ -3,6 +3,7 @@ from collections.abc import Generator, Iterator
 from unittest.mock import AsyncMock, Mock
 
 import logfire
+import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.run import AgentRunResult
@@ -411,3 +412,19 @@ def create_mock_task(
     task.get_current_workspace_dir = Mock(return_value=codebase_path)
 
     return task
+
+
+@pytest.fixture(autouse=True)
+def no_real_shell_commands(monkeypatch):
+    """Prevent real shell/git subprocess calls in tests.
+
+    Tests that need git behaviour should mock GitRepoIntegration at the module
+    level. Any test that reaches the actual shell execution layer has failed to
+    mock properly and should fail loudly.
+    """
+    from devboard.integrations import shell
+
+    async def _raise(*args, **kwargs):
+        raise RuntimeError(f"Real shell command attempted in test (mock GitRepoIntegration): {args}")
+
+    monkeypatch.setattr(shell, "execute_shell_command", _raise)

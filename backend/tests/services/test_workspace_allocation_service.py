@@ -9,6 +9,7 @@ import pytest
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
+from devboard.services.task_git_service import TaskGitService
 from devboard.services.workspace import (
     AllSlotsLockedException,
     BranchInUseException,
@@ -30,13 +31,21 @@ def mock_repos():
 def service(mock_repos):
     """Create service instance with mocked repos."""
     worktree_slot_repo, _, conversation_repo = mock_repos
-    service = WorkspaceService(
+    return WorkspaceService(
         worktree_slot_repo=worktree_slot_repo,
         conversation_repo=conversation_repo,
     )
-    # Mock TaskGitService.verify_task_branch_exists to avoid git operations in tests
-    service.task_git_service.verify_task_branch_exists = AsyncMock(return_value=None)
-    return service
+
+
+@pytest.fixture(autouse=True)
+def patch_verify_task_branch_exists():
+    """Patch TaskGitService.verify_task_branch_exists to avoid git operations in tests."""
+    with patch(
+        "devboard.services.workspace.workspace_service.TaskGitService.verify_task_branch_exists",
+        new_callable=AsyncMock,
+    ) as mock_verify:
+        mock_verify.return_value = None
+        yield mock_verify
 
 
 @pytest.fixture
@@ -524,17 +533,6 @@ async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
     assert result.id == main_slot.id
 
 
-# --- TaskGitService tests ---
-
-
-@pytest.fixture
-def task_git_service(mock_repos):
-    """Create TaskGitService instance with mocked repos."""
-    from devboard.services.task_git_service import TaskGitService
-
-    return TaskGitService()
-
-
 # =============================================================================
 # allocate_workspace context manager tests
 # =============================================================================
@@ -820,7 +818,7 @@ async def test_checkout_task_to_main_repo_no_stash_when_no_changes(service, mock
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
+async def test_rebase_task_branch_with_uncommitted_changes(mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch stashes changes, rebases, and restores stash."""
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
@@ -842,7 +840,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
         mock_git.find_stash_by_message.side_effect = ["stash@{0}", None]
 
         # Execute
-        result = await task_git_service.rebase_task_branch(sample_task)
+        result = await TaskGitService.rebase_task_branch(sample_task)
 
         # Verify result
         assert isinstance(result, RebaseResult)
@@ -862,7 +860,7 @@ async def test_rebase_task_branch_with_uncommitted_changes(task_git_service, moc
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, mock_repos, sample_task, sample_slot):
+async def test_rebase_task_branch_without_uncommitted_changes(mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch with nothing to stash skips stash apply/drop."""
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
 
@@ -882,7 +880,7 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
         mock_git.find_stash_by_message.return_value = None
 
         # Execute
-        result = await task_git_service.rebase_task_branch(sample_task)
+        result = await TaskGitService.rebase_task_branch(sample_task)
 
         # Verify result
         assert isinstance(result, RebaseResult)
@@ -897,9 +895,7 @@ async def test_rebase_task_branch_without_uncommitted_changes(task_git_service, 
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_conflict_returns_conflict_result(
-    task_git_service, mock_repos, sample_task, sample_slot
-):
+async def test_rebase_task_branch_conflict_returns_conflict_result(mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch returns CONFLICT outcome when rebase has conflicts."""
     from devboard.integrations.shell import RebaseConflictError
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
@@ -920,7 +916,7 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
         mock_git.find_stash_by_message.return_value = "stash@{0}"
 
         # Execute
-        result = await task_git_service.rebase_task_branch(sample_task)
+        result = await TaskGitService.rebase_task_branch(sample_task)
 
         # Verify result indicates conflict with pending stash
         assert isinstance(result, RebaseResult)
@@ -933,7 +929,7 @@ async def test_rebase_task_branch_conflict_returns_conflict_result(
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_repos, sample_task, sample_slot):
+async def test_rebase_task_branch_stash_apply_conflict(mock_repos, sample_task, sample_slot):
     """Test rebase_task_branch handles stash apply conflicts."""
     from devboard.integrations.shell import ShellCommandExecutionError
     from devboard.services.task_git_service import RebaseOutcome, RebaseResult
@@ -956,7 +952,7 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
         mock_git.get_conflicted_files.return_value = ["conflicted_file.txt"]
 
         # Execute
-        result = await task_git_service.rebase_task_branch(sample_task)
+        result = await TaskGitService.rebase_task_branch(sample_task)
 
         # Verify result indicates stash conflict
         assert isinstance(result, RebaseResult)
@@ -970,12 +966,12 @@ async def test_rebase_task_branch_stash_apply_conflict(task_git_service, mock_re
 
 
 @pytest.mark.asyncio
-async def test_rebase_task_branch_no_branch_name_raises_error(task_git_service, mock_repos, sample_task):
+async def test_rebase_task_branch_no_branch_name_raises_error(mock_repos, sample_task):
     """Test rebase_task_branch raises ValueError when task has no branch name."""
     sample_task.branch_name = None
 
     with pytest.raises(ValueError, match="has no branch name configured"):
-        await task_git_service.rebase_task_branch(sample_task)
+        await TaskGitService.rebase_task_branch(sample_task)
 
 
 @pytest.mark.asyncio

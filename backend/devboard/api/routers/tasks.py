@@ -18,7 +18,6 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_integration_service,
-    get_task_git_service,
     get_task_implementation_plan_service,
     get_task_service,
     get_workspace_service,
@@ -225,7 +224,6 @@ async def get_task_diff(
     task_id: int,
     view: str,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> TaskDiffResponse:
     """Get git diff for a task.
 
@@ -243,7 +241,6 @@ async def get_task_diff(
         task_id: ID of the task
         view: Required view filter (all|uncommitted|<commit_hash>)
         task: Verified task instance
-        task_git_service: Task git service
 
     Returns:
         TaskDiffResponse with file diffs
@@ -252,7 +249,7 @@ async def get_task_diff(
         HTTPException: 400 if view not provided, 500 if git operation fails
     """
     # Get diff using service - returns StructuredDiff
-    diff = await task_git_service.get_task_diff_by_view(task, view)
+    diff = await TaskGitService.get_task_diff_by_view(task, view)
 
     # Convert StructuredDiff to TaskDiffResponse
     return TaskDiffResponse(
@@ -279,7 +276,6 @@ async def execute_workflow_action(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_service: TaskService = Depends(get_task_service),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> dict[str, Any]:
@@ -307,7 +303,6 @@ async def execute_workflow_action(
     action = action_class(
         task=task,
         task_service=task_service,
-        task_git_service=task_git_service,
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
         document_repository=document_repo,
@@ -344,7 +339,6 @@ async def get_task_branch_info(
     task_id: int,
     task: Task = Depends(get_verified_task),
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> TaskBranchInfo:
     """Get branch information for a task.
 
@@ -361,7 +355,7 @@ async def get_task_branch_info(
     last_used_slot = worktree_slot_repo.get_last_used_slot_for_task(task.id)
 
     # Get commit metadata from main codebase (not worktree)
-    commit_entries = await task_git_service.get_task_commit_metadata(task)
+    commit_entries = await TaskGitService.get_task_commit_metadata(task)
 
     # Check for uncommitted changes only if there's a worktree slot
     has_uncommitted = False
@@ -390,7 +384,6 @@ async def get_task_branch_info(
 async def get_task_git_status(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> TaskGitStatus:
     """Get git status for a task's branch.
 
@@ -406,7 +399,7 @@ async def get_task_git_status(
         HTTPException: 404 if task not found, 400 if operation fails
     """
     try:
-        status = await task_git_service.get_task_git_status(task)
+        status = await TaskGitService.get_task_git_status(task)
         return status
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -417,7 +410,6 @@ async def merge_task_branch(
     task_id: int,
     request: MergeBranchRequest,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> MergeBranchResponse:
     """Merge a task's branch into its base branch.
 
@@ -434,7 +426,7 @@ async def merge_task_branch(
         HTTPException: 404 if task not found, 400 if merge fails
     """
     try:
-        merge_commit = await task_git_service.merge_task_branch(
+        merge_commit = await TaskGitService.merge_task_branch(
             task,
             target_branch=request.target_branch,
             delete_branch=request.delete_branch,
@@ -453,7 +445,6 @@ async def delete_task_branch(
     task_id: int,
     force: bool = False,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> DeleteResponse:
     """Delete a task's git branch.
 
@@ -468,7 +459,7 @@ async def delete_task_branch(
         HTTPException: 404 if task not found, 400 if deletion fails
     """
     try:
-        await task_git_service.delete_task_branch(task, force=force)
+        await TaskGitService.delete_task_branch(task, force=force)
         return DeleteResponse(
             success=True,
             message=f"Successfully deleted branch {task.branch_name}",
@@ -481,7 +472,6 @@ async def delete_task_branch(
 async def abort_task_rebase(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> DeleteResponse:
     """Abort an in-progress rebase for a task.
 
@@ -495,7 +485,7 @@ async def abort_task_rebase(
         HTTPException: 400 if task has no branch, no rebase in progress, or abort fails
     """
     try:
-        await task_git_service.abort_rebase(task)
+        await TaskGitService.abort_rebase(task)
         return DeleteResponse(
             success=True,
             message="Rebase aborted successfully",
@@ -508,7 +498,6 @@ async def abort_task_rebase(
 async def create_task_branch(
     task_id: int,
     task: Task = Depends(get_verified_task),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
 ) -> DeleteResponse:
     """Create (or recreate) the git branch for a task.
 
@@ -522,7 +511,7 @@ async def create_task_branch(
         HTTPException: 400 if branch creation fails
     """
     try:
-        await task_git_service.create_task_branch(task)
+        await TaskGitService.create_task_branch(task)
         return DeleteResponse(
             success=True,
             message=f"Branch {task.branch_name} created successfully",

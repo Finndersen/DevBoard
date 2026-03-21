@@ -24,7 +24,8 @@ class TaskBranchNotFoundException(Exception):
 class TaskGitService:
     """Service for task git operations."""
 
-    async def _fetch_remote_gracefully(self, git: GitRepoIntegration, base_branch: str) -> bool:
+    @classmethod
+    async def _fetch_remote_gracefully(cls, git: GitRepoIntegration, base_branch: str) -> bool:
         """Attempt to fetch the base branch from remote, returning success status.
 
         Returns True if fetch succeeded or branch is local (no fetch needed).
@@ -42,7 +43,8 @@ class TaskGitService:
             logfire.warn(f"Remote fetch failed for base branch '{base_branch}' (proceeding with local state): {e}")
             return False
 
-    async def create_task_branch(self, task: Task) -> str:
+    @classmethod
+    async def create_task_branch(cls, task: Task) -> str:
         """Ensure task's git branch exists, creating it if necessary.
 
         Args:
@@ -56,7 +58,7 @@ class TaskGitService:
         git = GitRepoIntegration(task.codebase.local_path)
 
         if not await git.branch_exists(branch_name):
-            await self._fetch_remote_gracefully(git, task.base_branch)
+            await cls._fetch_remote_gracefully(git, task.base_branch)
             await git.create_branch(branch_name, task.base_branch)
             logfire.info(f"Created branch {branch_name} from {task.base_branch} for task {task.id}")
         else:
@@ -64,7 +66,8 @@ class TaskGitService:
 
         return branch_name
 
-    async def verify_task_branch_exists(self, task: Task) -> None:
+    @classmethod
+    async def verify_task_branch_exists(cls, task: Task) -> None:
         git = GitRepoIntegration(task.codebase.local_path)
         if not await git.branch_exists(task.branch_name):
             raise TaskBranchNotFoundException(
@@ -72,7 +75,8 @@ class TaskGitService:
                 task_id=task.id,
             )
 
-    async def get_task_commit_metadata(self, task: Task) -> list[GitLogEntry]:
+    @classmethod
+    async def get_task_commit_metadata(cls, task: Task) -> list[GitLogEntry]:
         """Get lightweight commit metadata for a task branch.
 
         Returns commit metadata (hash, author, date, message) without file diffs.
@@ -86,7 +90,8 @@ class TaskGitService:
 
         return await git.get_commits_in_range(fork_point, task.branch_name)
 
-    async def get_task_git_status(self, task: Task) -> TaskGitStatus:
+    @classmethod
+    async def get_task_git_status(cls, task: Task) -> TaskGitStatus:
         """Get git status for a task's branch."""
         last_used_slot = task.last_used_worktree_slot
         worktree_slot_path = last_used_slot.path if last_used_slot else None
@@ -119,7 +124,7 @@ class TaskGitService:
                 rebase_in_progress=rebase_in_progress,
             )
 
-        fetch_succeeded = await self._fetch_remote_gracefully(git, task.base_branch)
+        fetch_succeeded = await cls._fetch_remote_gracefully(git, task.base_branch)
 
         comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
 
@@ -148,8 +153,9 @@ class TaskGitService:
             remote_fetch_failed=not fetch_succeeded,
         )
 
+    @classmethod
     async def merge_task_branch(
-        self,
+        cls,
         task: Task,
         target_branch: str | None = None,
         delete_branch: bool = False,
@@ -170,13 +176,15 @@ class TaskGitService:
 
         return merge_commit
 
-    async def delete_task_branch(self, task: Task, force: bool = False) -> None:
+    @classmethod
+    async def delete_task_branch(cls, task: Task, force: bool = False) -> None:
         """Delete a task's git branch."""
         git = GitRepoIntegration(task.codebase.local_path)
         await git.delete_branch(task.branch_name, force=force)
         logfire.info(f"Deleted branch {task.branch_name} for task {task.id}")
 
-    async def get_task_all_changes(self, task: Task) -> StructuredDiff:
+    @classmethod
+    async def get_task_all_changes(cls, task: Task) -> StructuredDiff:
         """Get all changes for a task (from merge base to current state).
 
         If a worktree slot exists, this includes committed changes plus uncommitted changes.
@@ -197,7 +205,8 @@ class TaskGitService:
                 return StructuredDiff(files=[], additions=0, deletions=0)
             return await git.get_structured_diff(commit1=fork_point, commit2=task.branch_name)
 
-    async def get_task_uncommitted_changes(self, task: Task) -> StructuredDiff:
+    @classmethod
+    async def get_task_uncommitted_changes(cls, task: Task) -> StructuredDiff:
         """Get uncommitted changes for a task.
 
         Returns empty diff if no worktree slot exists for the task.
@@ -210,7 +219,8 @@ class TaskGitService:
         await git.stage_untracked_files_intent()
         return await git.get_structured_diff(commit1="HEAD")
 
-    async def get_task_commit_diff(self, task: Task, commit_hash: str) -> CommitDiff:
+    @classmethod
+    async def get_task_commit_diff(cls, task: Task, commit_hash: str) -> CommitDiff:
         """Get diff for a specific commit in the task branch.
 
         Commits are repository-wide, so always uses the main codebase path.
@@ -218,28 +228,31 @@ class TaskGitService:
         git = GitRepoIntegration(task.codebase.local_path)
         return await git.get_structured_commit_diff(commit_hash)
 
-    async def get_task_diff_by_view(self, task: Task, view: TaskDiffView | str) -> StructuredDiff:
+    @classmethod
+    async def get_task_diff_by_view(cls, task: Task, view: TaskDiffView | str) -> StructuredDiff:
         """Get task diff based on view type (all/uncommitted/<commit_hash>).
 
         Raises:
             ValueError: If view is invalid
         """
         if view == TaskDiffView.ALL:
-            return await self.get_task_all_changes(task)
+            return await cls.get_task_all_changes(task)
         elif view == TaskDiffView.UNCOMMITTED:
-            return await self.get_task_uncommitted_changes(task)
+            return await cls.get_task_uncommitted_changes(task)
         else:
-            commit_diff = await self.get_task_commit_diff(task, view)
+            commit_diff = await cls.get_task_commit_diff(task, view)
             return StructuredDiff(
                 files=commit_diff.files,
                 additions=commit_diff.additions,
                 deletions=commit_diff.deletions,
             )
 
-    async def rebase_task_branch(self, task: Task) -> RebaseResult:
+    @classmethod
+    async def rebase_task_branch(cls, task: Task) -> RebaseResult:
         return await TaskRebaseCoordinator.rebase_task_branch(task)
 
-    async def abort_rebase(self, task: Task) -> None:
+    @classmethod
+    async def abort_rebase(cls, task: Task) -> None:
         """Abort an in-progress rebase for a task."""
         last_used_slot = task.last_used_worktree_slot
         repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
@@ -252,7 +265,8 @@ class TaskGitService:
         await git.rebase_abort()
         logfire.info(f"Aborted rebase for task {task.id}")
 
-    async def merge_task_feature_branch(self, task: Task) -> MergeResult:
+    @classmethod
+    async def merge_task_feature_branch(cls, task: Task) -> MergeResult:
         """Merge a task's feature branch into its base branch based on codebase merge method.
 
         Validates, pre-checks, then delegates to the appropriate MergeStrategy.

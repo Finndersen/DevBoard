@@ -41,7 +41,6 @@ from devboard.services.integration_service import IntegrationService
 from devboard.services.mcp_service import MCPService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
-from devboard.services.task_git_service import TaskGitService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
@@ -97,11 +96,6 @@ def get_conversation_service(
         conversation_repo=conversation_repo,
         agent_config_service=agent_config_service,
     )
-
-
-def get_task_git_service() -> TaskGitService:
-    """Get TaskGitService instance."""
-    return TaskGitService()
 
 
 def get_pool_manager(
@@ -188,7 +182,6 @@ class ExecutionServices:
     task_repo: TaskRepository
     agent_config_service: AgentConfigService
     task_service: TaskService
-    task_git_service: TaskGitService
     workspace_service: WorkspaceService
     integration_service: IntegrationService
 
@@ -199,7 +192,6 @@ def get_execution_services(
     task_repo: TaskRepository = Depends(get_task_repository),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     task_service: TaskService = Depends(get_task_service),
-    task_git_service: TaskGitService = Depends(get_task_git_service),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> ExecutionServices:
@@ -214,7 +206,6 @@ def get_execution_services(
         task_repo=task_repo,
         agent_config_service=agent_config_service,
         task_service=task_service,
-        task_git_service=task_git_service,
         workspace_service=workspace_service,
         integration_service=integration_service,
     )

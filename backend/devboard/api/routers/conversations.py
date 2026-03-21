@@ -317,7 +317,6 @@ async def get_agent_config(
         agent_config_service=exec_services.agent_config_service,
         integration_service=exec_services.integration_service,
         task_service=exec_services.task_service,
-        task_git_service=exec_services.task_git_service,
         conversation_repo=exec_services.conversation_repo,
         working_dir=working_dir,
     )
