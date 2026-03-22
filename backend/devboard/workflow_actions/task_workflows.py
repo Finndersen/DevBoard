@@ -201,6 +201,13 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
         )
 
     async def run(self) -> str | None:
+        overlapping = await TaskGitService.get_base_conflicting_uncommitted_files(self.task)
+        if overlapping:
+            file_list = "\n".join(f"  - {f}" for f in sorted(overlapping))
+            raise ValueError(
+                f"Cannot proceed: the main repo has uncommitted changes that conflict with task branch files:\n{file_list}\n"
+                "Please commit or stash these changes before merging."
+            )
         changes_context = await _get_task_changes_prompt_context(self.task)
         return self._build_prompt(self.task.codebase.merge_method, changes_context)
 

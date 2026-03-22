@@ -368,6 +368,7 @@ export interface TaskGitStatus {
   rebase_in_progress: boolean
   has_uncommitted_base_overlap: boolean
   remote_fetch_failed: boolean
+  base_has_conflicting_uncommitted: boolean
 }
 
 export interface WorktreeSlotInfo {

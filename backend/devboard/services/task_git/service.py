@@ -91,6 +91,31 @@ class TaskGitService:
         return await git.get_commits_in_range(fork_point, task.branch_name)
 
     @classmethod
+    async def _get_base_conflicting_uncommitted_files(cls, git: GitRepoIntegration, task: Task) -> list[str]:
+        """Return uncommitted files in the base branch checkout that overlap with task branch changes.
+
+        Mirrors the overlap check in merge_task_feature_branch(). Returns an empty list when:
+        - the base branch is not checked out anywhere, or
+        - the base checkout has no uncommitted changes, or
+        - there are no overlapping files.
+        """
+        checkout_path = await git.get_checked_out_location(task.base_branch)
+        if not checkout_path:
+            return []
+        base_git = GitRepoIntegration(checkout_path)
+        uncommitted_files = await base_git.get_uncommitted_file_paths()
+        if not uncommitted_files:
+            return []
+        feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name)
+        return list(set(uncommitted_files) & set(feature_files))
+
+    @classmethod
+    async def get_base_conflicting_uncommitted_files(cls, task: Task) -> list[str]:
+        """Return uncommitted files in the base branch checkout that overlap with task branch changes."""
+        git = GitRepoIntegration(task.codebase.local_path)
+        return await cls._get_base_conflicting_uncommitted_files(git, task)
+
+    @classmethod
     async def get_task_git_status(cls, task: Task) -> TaskGitStatus:
         """Get git status for a task's branch."""
         last_used_slot = task.last_used_worktree_slot
@@ -137,6 +162,8 @@ class TaskGitService:
                     base_changed_files = await git.get_changed_file_paths(fork_point, task.base_branch)
                     has_uncommitted_base_overlap = bool(set(uncommitted_files) & set(base_changed_files))
 
+        conflicting_files = await cls._get_base_conflicting_uncommitted_files(git, task)
+
         return TaskGitStatus(
             branch_name=task.branch_name,
             branch_exists=True,
@@ -150,6 +177,7 @@ class TaskGitService:
             main_repo_current_branch=main_repo_current_branch,
             rebase_in_progress=rebase_in_progress,
             has_uncommitted_base_overlap=has_uncommitted_base_overlap,
+            base_has_conflicting_uncommitted=bool(conflicting_files),
             remote_fetch_failed=not fetch_succeeded,
         )
 

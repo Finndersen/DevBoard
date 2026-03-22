@@ -29,6 +29,7 @@ const baseGitStatus: TaskGitStatus = {
   rebase_in_progress: false,
   has_uncommitted_base_overlap: false,
   remote_fetch_failed: false,
+  base_has_conflicting_uncommitted: false,
 }
 
 const missingBranchGitStatus: TaskGitStatus = {
@@ -80,6 +81,48 @@ describe('GitBranchStatusModal', () => {
       )
 
       expect(screen.getByRole('button', { name: 'Checkout' })).toBeInTheDocument()
+    })
+  })
+
+  describe('when base_has_conflicting_uncommitted is true', () => {
+    it('shows the conflicting uncommitted changes warning', () => {
+      render(
+        <GitBranchStatusModal
+          isOpen={true}
+          onClose={() => {}}
+          taskId={1}
+          gitStatus={{ ...baseGitStatus, base_has_conflicting_uncommitted: true }}
+        />
+      )
+
+      expect(screen.getByText(/Main repo has uncommitted changes in files modified by this task/)).toBeInTheDocument()
+    })
+
+    it('shows the main repo conflict status badge', () => {
+      render(
+        <GitBranchStatusModal
+          isOpen={true}
+          onClose={() => {}}
+          taskId={1}
+          gitStatus={{ ...baseGitStatus, base_has_conflicting_uncommitted: true }}
+        />
+      )
+
+      expect(screen.getByText('main repo conflict')).toBeInTheDocument()
+    })
+
+    it('does not show the warning when base_has_conflicting_uncommitted is false', () => {
+      render(
+        <GitBranchStatusModal
+          isOpen={true}
+          onClose={() => {}}
+          taskId={1}
+          gitStatus={baseGitStatus}
+        />
+      )
+
+      expect(screen.queryByText(/Main repo has uncommitted changes in files modified by this task/)).not.toBeInTheDocument()
+      expect(screen.queryByText('main repo conflict')).not.toBeInTheDocument()
     })
   })
 

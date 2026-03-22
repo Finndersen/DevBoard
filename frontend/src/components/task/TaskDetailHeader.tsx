@@ -96,7 +96,7 @@ export function TaskDetailHeader({
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
-  const hasBranchWarning = gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap || gitStatus?.remote_fetch_failed
+  const hasBranchWarning = gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap || gitStatus?.remote_fetch_failed || gitStatus?.base_has_conflicting_uncommitted
 
   // Close codebase selector when clicking outside
   useEffect(() => {
@@ -277,7 +277,9 @@ export function TaskDetailHeader({
                       ? 'Uncommitted changes overlap with base branch'
                       : gitStatus.remote_fetch_failed
                         ? 'Remote fetch failed — showing local state'
-                        : gitStatus.branch_name
+                        : gitStatus.base_has_conflicting_uncommitted
+                          ? 'Uncommitted changes in main repo conflict with task branch'
+                          : gitStatus.branch_name
                 }
                 disabled={branchStatusLoading}
               >

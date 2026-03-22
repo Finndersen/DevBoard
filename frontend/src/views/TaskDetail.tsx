@@ -515,7 +515,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Configuration for workflow action buttons
   const getButtonConfigForAction = (actionKey: string) => {
-    const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean }> = {
+    const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean; title?: () => string | undefined }> = {
       'task.create_implementation_plan': {
         loadingMessage: 'Generating Implementation Plan...',
         isDisabled: () => !specificationDoc?.content || specificationDoc.content.trim() === '',
@@ -527,6 +527,10 @@ function TaskDetail({ id }: TaskDetailProps) {
       'task.approve_and_merge': {
         loadingMessage: 'Merging changes...',
         className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+        isDisabled: () => gitStatus?.base_has_conflicting_uncommitted === true,
+        title: () => gitStatus?.base_has_conflicting_uncommitted
+          ? 'Main repo has uncommitted changes conflicting with task branch files — commit or stash them first'
+          : undefined,
       },
       'task.approve_and_create_pr': {
         loadingMessage: 'Creating Pull Request...',
@@ -566,6 +570,7 @@ function TaskDetail({ id }: TaskDetailProps) {
               variant="primary"
               className={config.className}
               disabled={isDisabled}
+              title={config.title?.()}
             >
               {getActionLabel(action.key, gitStatus, prStatus)}
             </Button>

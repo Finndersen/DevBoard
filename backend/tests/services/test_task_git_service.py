@@ -65,6 +65,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/other.py"])
             main_git.list_remotes = AsyncMock(return_value=["origin"])
             main_git.fetch = AsyncMock()
+            main_git.get_checked_out_location = AsyncMock(return_value=None)
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -95,6 +96,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_changed_file_paths = AsyncMock(return_value=["src/base_only.py"])
             main_git.list_remotes = AsyncMock(return_value=["origin"])
             main_git.fetch = AsyncMock()
+            main_git.get_checked_out_location = AsyncMock(return_value=None)
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -123,6 +125,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
             main_git.list_remotes = AsyncMock(return_value=["origin"])
             main_git.fetch = AsyncMock()
+            main_git.get_checked_out_location = AsyncMock(return_value=None)
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -151,6 +154,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_branch_comparison = AsyncMock(return_value=default_comparison)
             main_git.list_remotes = AsyncMock(return_value=["origin"])
             main_git.fetch = AsyncMock()
+            main_git.get_checked_out_location = AsyncMock(return_value=None)
 
             MockGit.return_value = main_git
 
@@ -171,6 +175,7 @@ class TestGetTaskGitStatusUncommittedOverlap:
             main_git.get_fork_point = AsyncMock(return_value=None)
             main_git.list_remotes = AsyncMock(return_value=["origin"])
             main_git.fetch = AsyncMock()
+            main_git.get_checked_out_location = AsyncMock(return_value=None)
 
             worktree_git = Mock()
             worktree_git.is_rebase_in_progress = Mock(return_value=False)
@@ -343,6 +348,7 @@ class TestGetTaskGitStatusFetch:
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock()
             git.get_branch_comparison = AsyncMock(return_value=comparison)
+            git.get_checked_out_location = AsyncMock(return_value=None)
             MockGit.return_value = git
 
             status = await TaskGitService.get_task_git_status(mock_task_no_worktree)
@@ -363,6 +369,7 @@ class TestGetTaskGitStatusFetch:
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock(side_effect=ShellCommandExecutionError("network error"))
             git.get_branch_comparison = AsyncMock(return_value=comparison)
+            git.get_checked_out_location = AsyncMock(return_value=None)
             MockGit.return_value = git
 
             status = await TaskGitService.get_task_git_status(mock_task_no_worktree)
@@ -402,9 +409,138 @@ class TestGetTaskGitStatusFetch:
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock()
             git.get_branch_comparison = AsyncMock(return_value=comparison)
+            git.get_checked_out_location = AsyncMock(return_value=None)
             MockGit.return_value = git
 
             status = await TaskGitService.get_task_git_status(mock_task_no_worktree)
 
         assert status.remote_fetch_failed is False
         git.fetch.assert_not_called()
+
+
+class TestGetTaskGitStatusBaseConflictingUncommitted:
+    """Tests for base_has_conflicting_uncommitted computation in get_task_git_status."""
+
+    def _make_main_git(self, comparison, checkout_path=None):
+        git = Mock()
+        git.has_uncommitted_changes = AsyncMock(return_value=False)
+        git.get_current_branch = AsyncMock(return_value="main")
+        git.branch_exists = AsyncMock(return_value=True)
+        git.get_branch_comparison = AsyncMock(return_value=comparison)
+        git.list_remotes = AsyncMock(return_value=[])
+        git.get_checked_out_location = AsyncMock(return_value=checkout_path)
+        git.get_changed_file_paths = AsyncMock(return_value=[])
+        git.is_rebase_in_progress = Mock(return_value=False)
+        git.get_uncommitted_file_paths = AsyncMock(return_value=[])
+        return git
+
+    @pytest.mark.asyncio
+    async def test_overlap_detected(self, mock_task_no_worktree, default_comparison):
+        """base_has_conflicting_uncommitted is True when base checkout has overlapping uncommitted files."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            main_git = self._make_main_git(default_comparison, checkout_path="/base/checkout")
+            main_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/other.py"])
+
+            base_git = Mock()
+            base_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/shared.py", "src/unrelated.py"])
+
+            def side_effect(path):
+                if str(path) == "/base/checkout":
+                    return base_git
+                return main_git
+
+            MockGit.side_effect = side_effect
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.base_has_conflicting_uncommitted is True
+
+    @pytest.mark.asyncio
+    async def test_no_overlap(self, mock_task_no_worktree, default_comparison):
+        """base_has_conflicting_uncommitted is False when no files overlap."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            main_git = self._make_main_git(default_comparison, checkout_path="/base/checkout")
+            main_git.get_changed_file_paths = AsyncMock(return_value=["src/feature.py"])
+
+            base_git = Mock()
+            base_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/unrelated.py"])
+
+            def side_effect(path):
+                if str(path) == "/base/checkout":
+                    return base_git
+                return main_git
+
+            MockGit.side_effect = side_effect
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.base_has_conflicting_uncommitted is False
+
+    @pytest.mark.asyncio
+    async def test_no_uncommitted_in_base(self, mock_task_no_worktree, default_comparison):
+        """base_has_conflicting_uncommitted is False when base checkout has no uncommitted changes."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            main_git = self._make_main_git(default_comparison, checkout_path="/base/checkout")
+            main_git.get_changed_file_paths = AsyncMock(return_value=["src/feature.py"])
+
+            base_git = Mock()
+            base_git.get_uncommitted_file_paths = AsyncMock(return_value=[])
+
+            def side_effect(path):
+                if str(path) == "/base/checkout":
+                    return base_git
+                return main_git
+
+            MockGit.side_effect = side_effect
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.base_has_conflicting_uncommitted is False
+
+    @pytest.mark.asyncio
+    async def test_base_not_checked_out(self, mock_task_no_worktree, default_comparison):
+        """base_has_conflicting_uncommitted is False when base branch is not checked out anywhere."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            main_git = self._make_main_git(default_comparison, checkout_path=None)
+            MockGit.return_value = main_git
+
+            status = await service.get_task_git_status(mock_task_no_worktree)
+
+        assert status.base_has_conflicting_uncommitted is False
+
+    @pytest.mark.asyncio
+    async def test_overlap_detected_with_worktree(self, mock_task, default_comparison):
+        """base_has_conflicting_uncommitted is True for tasks with an allocated worktree when overlap exists."""
+        service = TaskGitService()
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            main_git = self._make_main_git(default_comparison, checkout_path="/base/checkout")
+            main_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py"])
+
+            worktree_git = self._make_main_git(default_comparison)
+            worktree_git.has_uncommitted_changes = AsyncMock(return_value=False)
+            worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=[])
+
+            base_git = Mock()
+            base_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/shared.py"])
+
+            def side_effect(path):
+                if str(path) == "/base/checkout":
+                    return base_git
+                if str(path) == "/worktrees/slot-1":
+                    return worktree_git
+                return main_git
+
+            MockGit.side_effect = side_effect
+
+            status = await service.get_task_git_status(mock_task)
+
+        assert status.base_has_conflicting_uncommitted is True

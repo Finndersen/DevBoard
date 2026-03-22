@@ -142,3 +142,73 @@ class TestApproveAndMergePrompt:
         assert "appropriate commit(s)" in prompt
         assert "clear commit messages" in prompt
         assert "complete_task_with_local_merge" in prompt
+
+
+def _make_approve_and_merge_action(task) -> ApproveAndMergeAction:
+    return ApproveAndMergeAction(
+        task=task,
+        task_service=Mock(),
+        conversation_repo=Mock(),
+        agent_config_service=Mock(),
+        document_repository=Mock(),
+        integration_service=Mock(),
+    )
+
+
+class TestApproveAndMergeActionRun:
+    @pytest.fixture
+    def mock_task(self):
+        task = Mock()
+        task.id = 1
+        task.branch_name = "feature/test"
+        task.base_branch = "main"
+        task.codebase.merge_method = MergeMethod.SQUASH
+        task.last_used_worktree_slot = None
+        return task
+
+    @pytest.mark.asyncio
+    async def test_raises_value_error_when_overlap_detected(self, mock_task):
+        """run() raises ValueError listing conflicting files when base has overlapping uncommitted changes."""
+        action = _make_approve_and_merge_action(mock_task)
+
+        with (
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.get_base_conflicting_uncommitted_files",
+                new_callable=AsyncMock,
+                return_value=["src/api.py", "src/models.py"],
+            ),
+            pytest.raises(ValueError) as exc_info,
+        ):
+            await action.run()
+
+        error_msg = str(exc_info.value)
+        assert "src/api.py" in error_msg
+        assert "src/models.py" in error_msg
+        assert "commit or stash" in error_msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_returns_prompt_when_no_overlap(self, mock_task):
+        """run() returns a prompt string when there are no conflicting uncommitted changes."""
+        action = _make_approve_and_merge_action(mock_task)
+
+        with (
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.get_base_conflicting_uncommitted_files",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.get_task_commit_metadata",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.get_task_uncommitted_changes",
+                new_callable=AsyncMock,
+                return_value=Mock(files=[], format_summary=Mock(return_value="")),
+            ),
+        ):
+            result = await action.run()
+
+        assert result is not None
+        assert "complete_task_with_local_merge" in result
