@@ -30,7 +30,7 @@ from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import DeleteResponse, ResetConversationResponse
 from devboard.api.schemas.conversation import ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
-from devboard.db.models import Conversation, ParentEntityType, Project, Task, TaskStatus
+from devboard.db.models import Conversation, Project, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_directory import ensure_project_directory
@@ -192,15 +192,7 @@ async def reset_conversation(
     conversation_service: ConversationService = Depends(get_conversation_service),
 ) -> ResetConversationResponse:
     """Reset a conversation by deleting it and creating a new one."""
-    parent_entity = conversation.get_parent_entity()
-    parent_entity_type = conversation.parent_entity_type
-
     new_conversation = conversation_service.reset_conversation(conversation)
-
-    # Update the parent entity's conversation reference (tasks only)
-    if parent_entity_type == ParentEntityType.TASK:
-        parent_entity.conversation_id = new_conversation.id  # type: ignore[union-attr]
-
     return ResetConversationResponse(
         new_conversation_id=new_conversation.id,
         message="Conversation reset successfully.",

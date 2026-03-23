@@ -1,6 +1,6 @@
 """add conversation_id to implementation_steps
 
-Revision ID: p6q7r8s9t0u1
+Revision ID: q7r8s9t0u1v2
 Revises: o5p6q7r8s9t0
 Create Date: 2026-03-21 12:00:00.000000
 
@@ -11,7 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "p6q7r8s9t0u1"
+revision: str = "q7r8s9t0u1v2"
 down_revision: str | Sequence[str] | None = "o5p6q7r8s9t0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

@@ -16,23 +16,21 @@ vi.mock('../../contexts/ViewContext', () => ({
   useViewContext: () => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })
 }))
 
-// Mock WebSocket stream so tests can control what events are yielded
-// Tests push events into wsEventQueue before triggering a send; the mock
-// createWebSocketEventStream will yield them and then return.
-let wsEventQueue: ConversationEvent[] = []
-
-function setWsEvents(events: ConversationEvent[]) {
-  wsEventQueue = [...events]
-}
-
-vi.mock('../../lib/websocketStream', () => ({
-  createWebSocketEventStream: async function* () {
-    for (const event of wsEventQueue) {
-      yield event
-    }
-    wsEventQueue = []
+// Inject events into the store's push handler, simulating WebSocket messages
+function injectWsEvents(conversationId: number, events: ConversationEvent[]): void {
+  const store = useConversationStreamStore.getState()
+  for (const event of events) {
+    store.handleWebSocketEvent(conversationId, event)
   }
-}))
+  // execution_complete terminates the stream
+  store.handleWebSocketEvent(conversationId, {
+    event_type: 'execution_complete',
+    status: 'completed',
+    error: null,
+    timestamp: new Date().toISOString(),
+    conversation_id: conversationId,
+  } as unknown as ConversationEvent)
+}
 
 describe('ConversationChat', () => {
   const mockConversationId = 1
@@ -66,9 +64,6 @@ describe('ConversationChat', () => {
     // Clear the approvalsStore between tests
     useApprovalsStore.setState({ approvals: {} })
 
-    // Reset WebSocket event queue
-    wsEventQueue = []
-
     // Mock scrollIntoView which is not available in jsdom
     Element.prototype.scrollIntoView = vi.fn()
 
@@ -83,6 +78,9 @@ describe('ConversationChat', () => {
       }),
       http.get('*/api/executions/active', () => {
         return HttpResponse.json({ executions: [] })
+      }),
+      http.post('*/api/conversations/1/messages', () => {
+        return HttpResponse.json({ conversation_id: 1 })
       })
     )
   })
@@ -138,17 +136,16 @@ describe('ConversationChat', () => {
   it('sends new message when form is submitted', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'AI response to: New question',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'AI response to: New question',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -183,17 +180,16 @@ describe('ConversationChat', () => {
   it('sends message on Enter key press', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'AI response',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -217,17 +213,16 @@ describe('ConversationChat', () => {
   it('allows multi-line input with Shift+Enter but submits on Enter', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'Got: Line 1\nLine 2\nLine 3',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'Got: Line 1\nLine 2\nLine 3',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -282,19 +277,17 @@ describe('ConversationChat', () => {
   it('shows loading state while sending message', async () => {
     const user = userEvent.setup()
 
-    // Use a delayed WebSocket mock to test loading state
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'AI response',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', async () => {
         await new Promise(resolve => setTimeout(resolve, 200))
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -419,17 +412,16 @@ describe('ConversationChat', () => {
       configurable: true
     })
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'AI response',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -496,35 +488,32 @@ describe('ConversationChat', () => {
   it('handles tool approval workflow for document editing', async () => {
     const user = userEvent.setup()
 
-    // First send: tool call request
-    setWsEvents([
-      {
-        event_type: 'tool_call_request',
-        tool_call_id: 'edit_123',
-        tool_name: 'edit_project_specification',
-        tool_args: {
-          edits: [
-            { find: 'old text', replace: 'new text' }
-          ],
-          reasoning: 'Updating project specification'
-        }
-      } as unknown as ConversationEvent
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'tool_call_request',
+            tool_call_id: 'edit_123',
+            tool_name: 'edit_project_specification',
+            tool_args: {
+              edits: [
+                { find: 'old text', replace: 'new text' }
+              ],
+              reasoning: 'Updating project specification'
+            }
+          } as unknown as ConversationEvent
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       }),
       http.post('*/api/conversations/1/approve-tools', () => {
-        // Set up events for the approval WebSocket stream
-        setWsEvents([
+        setTimeout(() => injectWsEvents(mockConversationId, [
           {
             event_type: 'message',
             text_content: 'Successfully updated the project specification.',
             role: 'agent',
             timestamp: new Date().toISOString()
           }
-        ])
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -568,17 +557,16 @@ describe('ConversationChat', () => {
   it('queues messages while tool approval is pending', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'tool_call_request',
-        tool_call_id: 'edit_123',
-        tool_name: 'edit_project_specification',
-        tool_args: { edits: [], reasoning: 'Test' }
-      } as unknown as ConversationEvent
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'tool_call_request',
+            tool_call_id: 'edit_123',
+            tool_name: 'edit_project_specification',
+            tool_args: { edits: [], reasoning: 'Test' }
+          } as unknown as ConversationEvent
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -654,12 +642,6 @@ describe('ConversationChat', () => {
   it('handles multiple messages without key collisions', async () => {
     const user = userEvent.setup()
 
-    server.use(
-      http.post('*/api/conversations/1/messages', () => {
-        return HttpResponse.json({ conversation_id: 1 })
-      })
-    )
-
     render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
@@ -668,15 +650,20 @@ describe('ConversationChat', () => {
 
     const input = screen.getByPlaceholderText(/ask a question/i)
 
-    // Set events for first message before sending
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'First AI response',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
+    // Override handler for first message send
+    server.use(
+      http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'First AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
+        return HttpResponse.json({ conversation_id: 1 })
+      })
+    )
 
     // Send first message
     await user.type(input, 'First message')
@@ -692,15 +679,20 @@ describe('ConversationChat', () => {
       expect(input).not.toBeDisabled()
     }, { timeout: 3000 })
 
-    // Set events for second message before sending
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'Second AI response',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
+    // Override handler for second message send
+    server.use(
+      http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'Second AI response',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
+        return HttpResponse.json({ conversation_id: 1 })
+      })
+    )
 
     // Send second message - can only send after first completes
     await user.type(input, 'Second message')
@@ -716,21 +708,19 @@ describe('ConversationChat', () => {
     expect(screen.getByText('Second AI response')).toBeInTheDocument()
   })
 
-
   it('converts pending message to confirmed message on first streamed event', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'AI response after first event',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'AI response after first event',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -760,23 +750,22 @@ describe('ConversationChat', () => {
   it('does not show duplicate user message during streaming', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'message',
-        text_content: 'Streaming response part 1',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      },
-      {
-        event_type: 'message',
-        text_content: 'Streaming response part 2',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'message',
+            text_content: 'Streaming response part 1',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          },
+          {
+            event_type: 'message',
+            text_content: 'Streaming response part 2',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -807,28 +796,27 @@ describe('ConversationChat', () => {
   it('handles tool approval with pending message conversion', async () => {
     const user = userEvent.setup()
 
-    setWsEvents([
-      {
-        event_type: 'tool_call_request',
-        tool_call_id: 'test_tool_1',
-        tool_name: 'edit_document',
-        tool_args: { content: 'new' }
-      } as unknown as ConversationEvent
-    ])
-
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'tool_call_request',
+            tool_call_id: 'test_tool_1',
+            tool_name: 'edit_document',
+            tool_args: { content: 'new' }
+          } as unknown as ConversationEvent
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       }),
       http.post('*/api/conversations/1/approve-tools', () => {
-        setWsEvents([
+        setTimeout(() => injectWsEvents(mockConversationId, [
           {
             event_type: 'message',
             text_content: 'Tool execution complete',
             role: 'agent',
             timestamp: new Date().toISOString()
           }
-        ])
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )
@@ -867,33 +855,32 @@ describe('ConversationChat', () => {
     expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
   })
 
-  it('passes eventHandlerRegistry to processConversationStream and invokes SystemEvent handlers', async () => {
+  it('passes event handler registry and invokes SystemEvent handlers', async () => {
     const user = userEvent.setup()
-
-    setWsEvents([
-      {
-        event_type: 'system',
-        type: 'task_updated',
-        data: {
-          task_id: 123,
-          updated_fields: {
-            status: 'planning',
-            conversation_id: 1,
-            implementation_plan_id: 456
-          }
-        },
-        timestamp: new Date().toISOString()
-      } as unknown as ConversationEvent,
-      {
-        event_type: 'message',
-        text_content: 'Task has been updated',
-        role: 'agent',
-        timestamp: new Date().toISOString()
-      }
-    ])
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
+        setTimeout(() => injectWsEvents(mockConversationId, [
+          {
+            event_type: 'system',
+            type: 'task_updated',
+            data: {
+              task_id: 123,
+              updated_fields: {
+                status: 'planning',
+                conversation_id: 1,
+                implementation_plan_id: 456
+              }
+            },
+            timestamp: new Date().toISOString()
+          } as unknown as ConversationEvent,
+          {
+            event_type: 'message',
+            text_content: 'Task has been updated',
+            role: 'agent',
+            timestamp: new Date().toISOString()
+          }
+        ]), 0)
         return HttpResponse.json({ conversation_id: 1 })
       })
     )

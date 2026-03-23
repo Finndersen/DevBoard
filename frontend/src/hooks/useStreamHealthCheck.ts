@@ -5,10 +5,9 @@ import { useConversationStreamStore, reconnectingConversations } from '../stores
 const HEALTH_CHECK_INTERVAL_MS = 15_000
 
 /**
- * Periodically polls backend for active executions and reconnects
- * any streams that are running on the backend but have no active
- * frontend WebSocket connection. Also detects stale frontend streams
- * with no corresponding backend execution and completes them.
+ * Periodically polls backend for active executions and fails any frontend
+ * streams that have no corresponding backend execution (stale streams).
+ * Reconnection is no longer needed since the WebSocket connection is always open.
  */
 export function useStreamHealthCheck() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -18,8 +17,7 @@ export function useStreamHealthCheck() {
 
   useEffect(() => {
     const checkHealth = async () => {
-      const { getAllStreamingConversations, reconnectStream, completeStream } =
-        useConversationStreamStore.getState()
+      const { getAllStreamingConversations, setError } = useConversationStreamStore.getState()
 
       const frontendStreaming = getAllStreamingConversations()
 
@@ -31,22 +29,10 @@ export function useStreamHealthCheck() {
         lastBackendHadExecutions.current = executions.length > 0
         const backendConversationIds = new Set(executions.map(e => e.conversation_id))
 
-        // Reconnect backend executions with no active frontend stream
-        for (const execution of executions) {
-          if (!frontendStreaming.includes(execution.conversation_id)) {
-            console.log('[StreamHealthCheck] Orphaned execution detected, reconnecting:', execution.conversation_id)
-            reconnectStream(execution.conversation_id).catch(err => {
-              console.error('[StreamHealthCheck] Reconnection failed:', execution.conversation_id, err)
-            })
-          }
-        }
-
-        // Complete stale frontend streams with no backend execution
-        // Skip conversations mid-reconnect — they may re-establish momentarily
         for (const conversationId of frontendStreaming) {
           if (!backendConversationIds.has(conversationId) && !reconnectingConversations.has(conversationId)) {
-            console.log('[StreamHealthCheck] Stale frontend stream detected, completing:', conversationId)
-            completeStream(conversationId)
+            console.log('[StreamHealthCheck] Stale frontend stream detected, failing:', conversationId)
+            setError(conversationId, new Error('Agent execution ended unexpectedly'))
           }
         }
       } catch (err) {

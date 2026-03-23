@@ -1,46 +1,30 @@
 import '@testing-library/jest-dom'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
+import { setupServer } from 'msw/node'
+import { handlers } from './mocks/handlers'
 import React from 'react'
 
-// Only setup MSW and browser mocks in browser environment
-if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
-  // Mock localStorage before importing MSW
-  const localStorageMock = {
-    getItem: vi.fn(() => null),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
-    key: vi.fn(() => null),
-    length: 0,
-  }
+// Setup MSW server for API mocking
+export const server = setupServer(...handlers)
 
-  Object.defineProperty(globalThis, 'localStorage', {
-    writable: true,
-    value: localStorageMock,
-  })
+// Establish API mocking before all tests
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' })
+})
 
-  import('msw/node').then(({ setupServer }) => {
-    import('./mocks/handlers').then(({ handlers }) => {
-      const server = setupServer(...handlers)
+// Reset any request handlers that we may add during the tests,
+// so they don't affect other tests
+afterEach(() => {
+  server.resetHandlers()
+})
 
-      // Establish API mocking before all tests
-      beforeAll(() => {
-        server.listen({ onUnhandledRequest: 'error' })
-      })
+// Clean up after the tests are finished
+afterAll(() => {
+  server.close()
+})
 
-      // Reset any request handlers that we may add during the tests,
-      // so they don't affect other tests
-      afterEach(() => {
-        server.resetHandlers()
-      })
-
-      // Clean up after the tests are finished
-      afterAll(() => {
-        server.close()
-      })
-    })
-  })
-
+// Browser-only mocks — skipped in node environment tests
+if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation(query => ({

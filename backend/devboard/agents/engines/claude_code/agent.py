@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import difflib
+import time
 from collections.abc import AsyncGenerator, AsyncIterator
 
 import logfire
@@ -326,7 +327,16 @@ class ClaudeCodeAgent(BaseAgent):
                             last_assistant_text = "\n".join(text_parts)
 
                     # Convert normal Message events to ConversationEvent
-                    for conv_event in convert_claude_message_to_events(message, self._virtual_tools):
+                    t0 = time.monotonic()
+                    conv_events = list(convert_claude_message_to_events(message, self._virtual_tools))
+                    convert_ms = (time.monotonic() - t0) * 1000
+                    if convert_ms > 20:
+                        logfire.warn(
+                            "Slow convert_claude_message_to_events",
+                            convert_ms=f"{convert_ms:.1f}",
+                            message_type=type(message).__name__,
+                        )
+                    for conv_event in conv_events:
                         yield conv_event
 
                 # Check if we need to retry due to API error

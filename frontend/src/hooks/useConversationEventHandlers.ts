@@ -57,11 +57,7 @@ function useEventHandlerRegistry(): EventHandlerRegistry {
  *
  * @example
  * const eventHandlerRegistry = useEventHandlerRegistryForStream()
- * await processConversationStream({
- *   stream: apiClient.streamConversationMessage(...),
- *   onEvent: handleEvent,
- *   eventHandlerRegistry
- * })
+ * store.updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
  */
 export function useEventHandlerRegistryForStream(): EventHandlerRegistry | undefined {
   // Return undefined if not within provider (optional usage)

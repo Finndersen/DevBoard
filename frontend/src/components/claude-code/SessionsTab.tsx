@@ -250,7 +250,7 @@ export default function SessionsTab() {
                 className={`text-sm font-semibold ${textColors.primary} truncate`}
                 title={selectedProject?.project_path ?? selectedProjectPath}
               >
-                {selectedProject?.project_path.split('/').filter(Boolean).pop() ?? selectedProjectPath}
+                {selectedProject?.project_path?.split('/').filter(Boolean).pop() ?? selectedProjectPath}
               </h2>
               <div className="flex items-center gap-3 mt-2">
                 <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnViewActivation } from '../hooks'
 import { useModal } from '../hooks/useModal'
@@ -38,6 +38,7 @@ function getStatusColor(status: TaskStatus) {
 
 export default function TasksList() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
     const param = new URLSearchParams(location.search).get('project_id')
     if (!param) return undefined
@@ -173,10 +174,10 @@ export default function TasksList() {
               {taskGroups[status]?.map((task) => {
                 const pr = status === TaskStatus.PR_OPEN ? prByTaskId.get(task.id) : undefined
                 return (
-                  <Link
+                  <div
                     key={task.id}
-                    to={`/tasks/${task.id}`}
-                    className="block bg-white dark:bg-white/[0.06] rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600"
+                    onClick={() => navigate(`/tasks/${task.id}`)}
+                    className="block bg-white dark:bg-white/[0.06] rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-600 cursor-pointer"
                   >
                     <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
                       {task.title}
@@ -210,7 +211,7 @@ export default function TasksList() {
                         )}
                       </div>
                     )}
-                  </Link>
+                  </div>
                 )
               })}
               {!taskGroups[status]?.length && (

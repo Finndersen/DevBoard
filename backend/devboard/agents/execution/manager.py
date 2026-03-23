@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import time
 from collections.abc import AsyncIterator, Coroutine
 from typing import Any, Literal, cast
 
@@ -144,7 +145,15 @@ async def _drain_events(
     conversation_id: int,
 ) -> None:
     async for event in stream:
+        t0 = time.monotonic()
         await asyncio.to_thread(db.commit)
+        commit_ms = (time.monotonic() - t0) * 1000
+        if commit_ms > 200:
+            logfire.warn(
+                "Slow db.commit in _drain_events",
+                conversation_id=conversation_id,
+                commit_ms=f"{commit_ms:.0f}",
+            )
         await broadcast_queue.put((conversation_id, event))
 
 
@@ -200,7 +209,15 @@ async def _run_agent_for_conversation(
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
 
+        t0 = time.monotonic()
         conversation_parent = conversation.get_parent_entity()
+        parent_ms = (time.monotonic() - t0) * 1000
+        if parent_ms > 50:
+            logfire.warn(
+                "Slow get_parent_entity",
+                conversation_id=conversation_id,
+                parent_ms=f"{parent_ms:.0f}",
+            )
         is_task = isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE
 
         if is_task:

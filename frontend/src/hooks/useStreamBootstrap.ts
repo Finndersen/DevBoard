@@ -3,8 +3,8 @@ import { apiClient } from '../lib/api'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 
 /**
- * On app startup, fetch active executions once and reconnect WebSocket streams
- * for each. This ensures streaming indicators are correct after page load/refresh.
+ * On app startup, fetch active executions once and mark them as streaming,
+ * loading their history. The WebSocket is always open so no reconnection is needed.
  */
 export function useStreamBootstrap() {
   const hasRun = useRef(false)

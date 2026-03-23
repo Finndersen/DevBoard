@@ -1,29 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { enableMapSet } from 'immer'
-import { useConversationStreamStore, reconnectingConversations } from '../conversationStreamStore'
+import { useConversationStreamStore } from '../conversationStreamStore'
 import type { ConversationEvent } from '../../lib/api'
 import { apiClient } from '../../lib/api'
-import type { EventHandlerRegistry } from '../../hooks/useConversationEventHandlers'
-import { createWebSocketEventStream, WebSocketDisconnectedError } from '../../lib/websocketStream'
-
-vi.mock('../../lib/websocketStream', () => {
-  class WebSocketDisconnectedError extends Error {
-    constructor(code: number, reason: string) {
-      super(`WebSocket disconnected unexpectedly (code=${code}, reason=${reason})`)
-      this.name = 'WebSocketDisconnectedError'
-    }
-  }
-  return {
-    WebSocketDisconnectedError,
-    createWebSocketEventStream: vi.fn(),
-  }
-})
 
 vi.mock('../../lib/api', () => ({
   apiClient: {
+    sendConversationMessage: vi.fn().mockResolvedValue(undefined),
     interruptConversation: vi.fn().mockResolvedValue(undefined),
-    hasActiveExecution: vi.fn(),
   },
 }))
 
@@ -205,320 +190,214 @@ describe('conversationStreamStore - addEvent deduplication', () => {
   })
 })
 
-describe('conversationStreamStore - stream cancellation', () => {
+describe('conversationStreamStore - handleWebSocketEvent', () => {
+  const conversationId = 100
+
   beforeEach(() => {
-    // Reset store state before each test
     useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
-  })
-
-  it('should use provided abortController for stream cancellation', async () => {
-    const conversationId = Date.now() + 100
-    const store = useConversationStreamStore.getState()
-
-    // Create an abort controller that we control
-    const abortController = new AbortController()
-
-    // Create a mock stream that will be cancelled
-    let streamAborted = false
-    async function* mockStream(): AsyncGenerator<ConversationEvent> {
-      try {
-        // Yield first event
-        yield {
-          event_type: 'message',
-          role: 'agent',
-          text_content: 'First message',
-          timestamp: '2024-01-01T00:00:00Z'
-        }
-
-        // Wait to be cancelled
-        await new Promise((resolve, reject) => {
-          abortController.signal.addEventListener('abort', () => {
-            streamAborted = true
-            reject(new DOMException('Aborted', 'AbortError'))
-          })
-        })
-
-        // This should never be reached
-        yield {
-          event_type: 'message',
-          role: 'agent',
-          text_content: 'Second message',
-          timestamp: '2024-01-01T00:00:01Z'
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          return
-        }
-        throw error
-      }
-    }
-
-    // Start the stream with our abort controller
-    const streamPromise = store.startStream(
-      conversationId,
-      mockStream(),
-      undefined,
-      abortController
-    )
-
-    // Wait a tick for the stream to start
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    // Verify stream is active
-    expect(store.isConversationStreaming(conversationId)).toBe(true)
-
-    // Stop the stream using the store's stopStream method
-    store.stopStream(conversationId)
-
-    // Wait for stream to complete
-    await streamPromise
-
-    // Verify stream was aborted via our controller
-    expect(streamAborted).toBe(true)
-
-    // Verify stream is no longer active
-    expect(store.isConversationStreaming(conversationId)).toBe(false)
-  })
-
-  it('should create internal abortController when none provided', async () => {
-    const conversationId = Date.now() + 101
-    const store = useConversationStreamStore.getState()
-
-    let eventCount = 0
-    async function* mockStream(): AsyncGenerator<ConversationEvent> {
-      eventCount++
-      yield {
-        event_type: 'message',
-        role: 'agent',
-        text_content: 'Message',
-        timestamp: '2024-01-01T00:00:00Z'
-      }
-    }
-
-    // Start stream without providing an abort controller
-    await store.startStream(
-      conversationId,
-      mockStream()
-    )
-
-    // Verify stream completed and processed the event
-    expect(eventCount).toBe(1)
-
-    // Verify the stream state was created with an abortController
-    // (Even though stream completed, we can verify behavior worked)
-  })
-
-  it('should abort fetch request when stopStream is called with provided controller', async () => {
-    const conversationId = Date.now() + 102
-    const store = useConversationStreamStore.getState()
-
-    const abortController = new AbortController()
-    let signalAborted = false
-
-    // Listen for abort on the signal directly
-    abortController.signal.addEventListener('abort', () => {
-      signalAborted = true
-    })
-
-    async function* mockStream(): AsyncGenerator<ConversationEvent> {
-      yield {
-        event_type: 'message',
-        role: 'agent',
-        text_content: 'Message',
-        timestamp: '2024-01-01T00:00:00Z'
-      }
-      // Simulate long-running stream
-      await new Promise(resolve => setTimeout(resolve, 1000))
-    }
-
-    // Start stream
-    const streamPromise = store.startStream(
-      conversationId,
-      mockStream(),
-      undefined,
-      abortController
-    )
-
-    // Wait for stream to start
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    // Stop the stream
-    store.stopStream(conversationId)
-
-    // Verify the abort signal was triggered
-    expect(signalAborted).toBe(true)
-    expect(abortController.signal.aborted).toBe(true)
-
-    // Wait for stream to finish
-    await streamPromise
-  })
-
-  it('should invoke stream complete handlers when stopStream is called', async () => {
-    const conversationId = Date.now() + 103
-    const store = useConversationStreamStore.getState()
-
-    const abortController = new AbortController()
-    const streamCompleteHandler = vi.fn()
-
-    // Register event handler registry with a stream complete handler
-    const registry: EventHandlerRegistry = {
-      toolResultHandlers: new Set(),
-      systemEventHandlers: new Set(),
-      streamCompleteHandlers: new Set([streamCompleteHandler]),
-    }
-    store.updateEventHandlerRegistry(conversationId, registry)
-
-    async function* mockStream(): AsyncGenerator<ConversationEvent> {
-      yield {
-        event_type: 'message',
-        role: 'agent',
-        text_content: 'Message',
-        timestamp: '2024-01-01T00:00:00Z',
-      }
-      // Simulate long-running stream that waits for abort
-      await new Promise((_, reject) => {
-        abortController.signal.addEventListener('abort', () => {
-          reject(new DOMException('Aborted', 'AbortError'))
-        })
+    // Set up an active stream so events are processed
+    useConversationStreamStore.setState((state) => {
+      state.activeStreams.set(conversationId, {
+        isStreaming: true,
+        error: null,
+        startedAt: Date.now(),
+        pendingToolRequests: [],
+        isQueued: false,
       })
-    }
-
-    // Start stream and set queued state
-    const streamPromise = store.startStream(
-      conversationId,
-      mockStream(),
-      undefined,
-      abortController,
-    )
-
-    await new Promise(resolve => setTimeout(resolve, 10))
-    store.setQueued(conversationId, true)
-
-    // Verify stream is active and queued
-    expect(store.isConversationStreaming(conversationId)).toBe(true)
-    expect(store.getStreamState(conversationId)?.isQueued).toBe(true)
-
-    // Stop the stream (should delegate to completeStream and invoke handlers)
-    store.stopStream(conversationId)
-    await streamPromise
-
-    // Allow microtasks for async handler invocation
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    // Verify stream complete handler was invoked
-    expect(streamCompleteHandler).toHaveBeenCalledTimes(1)
-    expect(store.isConversationStreaming(conversationId)).toBe(false)
-
-    // Clean up registry
-    store.updateEventHandlerRegistry(conversationId, undefined)
-  })
-})
-
-describe('conversationStreamStore - reconnect on disconnect', () => {
-  const mockCreateWebSocketEventStream = vi.mocked(createWebSocketEventStream)
-  const mockHasActiveExecution = vi.mocked(apiClient.hasActiveExecution)
-
-  beforeEach(() => {
-    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
-    reconnectingConversations.clear()
-    vi.useFakeTimers()
-    vi.clearAllMocks()
+    })
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('retries on WebSocketDisconnectedError and completes on success', async () => {
-    const conversationId = 200
+  it('routes normal events to addEvent', () => {
     const store = useConversationStreamStore.getState()
-
-    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
-    const successEvent: ConversationEvent = {
+    const event: ConversationEvent = {
       event_type: 'message',
       role: 'agent',
       text_content: 'Hello',
       timestamp: '2024-01-01T00:00:00Z',
     }
 
-    async function* failStream() {
-      throw disconnectError
-      yield undefined as unknown as ConversationEvent
-    }
-    async function* successStream() {
-      yield successEvent
-    }
+    store.handleWebSocketEvent(conversationId, event)
 
-    mockCreateWebSocketEventStream
-      .mockReturnValueOnce(failStream())
-      .mockReturnValueOnce(successStream())
-    mockHasActiveExecution.mockResolvedValue(true)
-
-    const reconnectPromise = store.reconnectStream(conversationId)
-
-    // Advance past the 1s retry delay (attempt 1)
-    await vi.advanceTimersByTimeAsync(1000)
-    await reconnectPromise
-
-    expect(store.isConversationStreaming(conversationId)).toBe(false)
-    expect(store.getStreamState(conversationId)?.error).toBeNull()
-    expect(getMessages(conversationId)).toEqual([successEvent])
-    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(2)
+    expect(getMessages(conversationId)).toEqual([event])
   })
 
-  it('gives up and sets error state after MAX_RECONNECT_RETRIES disconnects', async () => {
-    const conversationId = 201
+  it('handles execution_complete with status "failed" → setError', () => {
     const store = useConversationStreamStore.getState()
 
-    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
+    store.handleWebSocketEvent(conversationId, {
+      event_type: 'execution_complete',
+      status: 'failed',
+      error: 'Something went wrong',
+    } as unknown as ConversationEvent)
 
-    async function* failStream() {
-      throw disconnectError
-      yield undefined as unknown as ConversationEvent
-    }
-
-    mockCreateWebSocketEventStream.mockImplementation(failStream)
-    mockHasActiveExecution.mockResolvedValue(true)
-
-    const reconnectPromise = store.reconnectStream(conversationId)
-
-    // Advance through all 3 retry delays: 1s, 2s, 4s
-    await vi.advanceTimersByTimeAsync(1000) // attempt 1
-    await vi.advanceTimersByTimeAsync(2000) // attempt 2
-    await vi.advanceTimersByTimeAsync(4000) // attempt 3
-    await reconnectPromise
-
-    // After exhausting retries, error state is set
-    expect(store.isConversationStreaming(conversationId)).toBe(false)
-    expect(store.getStreamState(conversationId)?.error).toBeInstanceOf(Error)
-    // Tried initial attempt + 3 retries = 4 total calls
-    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(4)
+    const streamState = store.getStreamState(conversationId)
+    expect(streamState?.isStreaming).toBe(false)
+    expect(streamState?.error).toBeInstanceOf(Error)
+    expect(streamState?.error?.message).toBe('Something went wrong')
   })
 
-  it('stops retrying and completes stream when execution is no longer active', async () => {
-    const conversationId = 202
+  it('handles execution_complete with status "completed" → completeStream', () => {
     const store = useConversationStreamStore.getState()
 
-    const disconnectError = new WebSocketDisconnectedError(1006, 'Connection reset')
+    store.handleWebSocketEvent(conversationId, {
+      event_type: 'execution_complete',
+      status: 'completed',
+    } as unknown as ConversationEvent)
 
-    async function* failStream() {
-      throw disconnectError
-      yield undefined as unknown as ConversationEvent
+    const streamState = store.getStreamState(conversationId)
+    expect(streamState?.isStreaming).toBe(false)
+    expect(streamState?.error).toBeNull()
+  })
+
+  it('handles stream_error system event → setError', () => {
+    const store = useConversationStreamStore.getState()
+
+    store.handleWebSocketEvent(conversationId, {
+      event_type: 'system',
+      type: 'stream_error',
+      data: { message: 'Stream broke' },
+      timestamp: '2024-01-01T00:00:00Z',
+    } as unknown as ConversationEvent)
+
+    const streamState = store.getStreamState(conversationId)
+    expect(streamState?.isStreaming).toBe(false)
+    expect(streamState?.error).toBeInstanceOf(Error)
+    expect(streamState?.error?.message).toBe('Stream broke')
+  })
+
+  it('handles tool_call_request → adds to pendingToolRequests', () => {
+    const store = useConversationStreamStore.getState()
+    const toolCallRequest: ConversationEvent = {
+      event_type: 'tool_call_request',
+      tool_call_id: 'req-1',
+      tool_name: 'my_tool',
+      tool_args: { key: 'val' },
+      timestamp: '2024-01-01T00:00:00Z',
     }
 
-    mockCreateWebSocketEventStream.mockImplementation(failStream)
-    mockHasActiveExecution.mockResolvedValue(false)
+    store.handleWebSocketEvent(conversationId, toolCallRequest)
 
-    const reconnectPromise = store.reconnectStream(conversationId)
+    const streamState = store.getStreamState(conversationId)
+    expect(streamState?.pendingToolRequests).toHaveLength(1)
+    expect(streamState?.pendingToolRequests[0]).toMatchObject({
+      event_type: 'tool_call_request',
+      tool_call_id: 'req-1',
+      tool_name: 'my_tool',
+    })
+  })
 
-    // Only need to run microtasks — no timer delay since we bail out immediately
-    await vi.runAllTimersAsync()
-    await reconnectPromise
+  it('invokes onFirstEvent callback on the first event', () => {
+    const store = useConversationStreamStore.getState()
+    const onFirstEvent = vi.fn()
 
-    // Stream completed (not errored) because execution was no longer active
-    expect(store.isConversationStreaming(conversationId)).toBe(false)
-    expect(store.getStreamState(conversationId)?.error).toBeUndefined()
-    // Only one connection attempt was made before giving up
-    expect(mockCreateWebSocketEventStream).toHaveBeenCalledTimes(1)
+    // Register the callback via startStream's side-effect path by directly
+    // using the internal callback map exposed through startStream
+    // We call startStream to register the callback then intercept
+    vi.mocked(apiClient.sendConversationMessage).mockResolvedValue(undefined)
+
+    // Use startStream to register the onFirstEvent callback
+    store.startStream(conversationId, 'test', onFirstEvent, undefined)
+
+    const event: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'First!',
+      timestamp: '2024-01-01T00:00:00Z',
+    }
+
+    store.handleWebSocketEvent(conversationId, event)
+
+    expect(onFirstEvent).toHaveBeenCalledTimes(1)
+
+    // Second event should NOT call onFirstEvent again
+    store.handleWebSocketEvent(conversationId, { ...event, text_content: 'Second!' })
+    expect(onFirstEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('auto-initialises stream state when event arrives before startStream sets state', () => {
+    // Remove the active stream to simulate the race condition
+    useConversationStreamStore.setState((state) => {
+      state.activeStreams.delete(conversationId)
+    })
+
+    const store = useConversationStreamStore.getState()
+    const event: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Arrived early',
+      timestamp: '2024-01-01T00:00:00Z',
+    }
+
+    store.handleWebSocketEvent(conversationId, event)
+
+    expect(store.isConversationStreaming(conversationId)).toBe(true)
+    expect(getMessages(conversationId)).toEqual([event])
+  })
+})
+
+describe('conversationStreamStore - startStream', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+    vi.clearAllMocks()
+  })
+
+  it('sends POST via apiClient and sets isStreaming: true', async () => {
+    vi.mocked(apiClient.sendConversationMessage).mockResolvedValue(undefined)
+    const conversationId = 300
+    const store = useConversationStreamStore.getState()
+
+    await store.startStream(conversationId, 'Hello world')
+
+    expect(apiClient.sendConversationMessage).toHaveBeenCalledWith(conversationId, { message: 'Hello world' })
+    // Stream state is set before the POST
+    // After POST returns, state remains (events arrive via WS)
+    expect(store.isConversationStreaming(conversationId)).toBe(true)
+  })
+
+  it('cleans up stream state if POST fails', async () => {
+    const postError = new Error('Network error')
+    vi.mocked(apiClient.sendConversationMessage).mockRejectedValue(postError)
+    const conversationId = 301
+    const store = useConversationStreamStore.getState()
+
+    await expect(store.startStream(conversationId, 'Hello')).rejects.toThrow('Network error')
+
+    expect(store.activeStreams.get(conversationId)).toBeUndefined()
+  })
+})
+
+describe('conversationStreamStore - reconnectStream', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+  })
+
+  it('sets isStreaming: true without making a WS connection', async () => {
+    const conversationId = 400
+    const store = useConversationStreamStore.getState()
+
+    await store.reconnectStream(conversationId)
+
+    expect(store.isConversationStreaming(conversationId)).toBe(true)
+  })
+
+  it('is a no-op when the conversation is already streaming', async () => {
+    const conversationId = 401
+    useConversationStreamStore.setState((state) => {
+      state.activeStreams.set(conversationId, {
+        isStreaming: true,
+        error: null,
+        startedAt: Date.now(),
+        pendingToolRequests: [],
+        isQueued: false,
+      })
+    })
+
+    const store = useConversationStreamStore.getState()
+    const addEventSpy = vi.spyOn(store, 'addEvent')
+
+    await store.reconnectStream(conversationId)
+
+    expect(addEventSpy).not.toHaveBeenCalled()
+    addEventSpy.mockRestore()
   })
 })

@@ -39,7 +39,7 @@ async def create_agent_role_for_conversation(
 
     Non-dependency helper that can be called directly from any context.
     """
-    parent_entity = conversation.get_parent_entity()
+    parent_entity = conversation.get_parent_entity(load_task_context=True)
     parent_conversation_id = conversation.id
     plan_service = TaskImplementationPlanService(TaskImplementationPlanRepository(conversation_repo.db))
     if isinstance(parent_entity, Task):

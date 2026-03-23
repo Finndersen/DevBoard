@@ -104,14 +104,16 @@ class Conversation(Base):
         Index("idx_conversation_external_session_id", "external_session_id"),
     )
 
-    def get_parent_entity(self) -> "Task | Project | Codebase":
+    def get_parent_entity(self, *, load_task_context: bool = False) -> "Task | Project | Codebase":
         """Get the parent entity (Task, Project, or Codebase) for this conversation.
 
         Note: This method performs a database query using the conversation's SQLAlchemy session.
-        The method signature makes it explicit that a database operation is occurring.
 
-        Returns:
-            The parent entity instance (Task, Project, or Codebase)
+        Args:
+            load_task_context: When True and parent is a Task, eagerly loads document
+                relationships (specification, implementation_plan, change_summary,
+                implementation_plan_structured with steps). Only set this when the caller
+                will use these relationships, e.g. when building agent context.
 
         Raises:
             ParentEntityNotFoundError: If entity not found in database
@@ -128,20 +130,22 @@ class Conversation(Base):
             raise RuntimeError(msg)
 
         if self.parent_entity_type == ParentEntityType.TASK:
-            from .implementation_plan import ImplementationPlan
+            if load_task_context:
+                from .implementation_plan import ImplementationPlan
 
-            # Eager load document relationships for agent context building
-            stmt = (
-                select(Task)
-                .options(
-                    joinedload(Task.specification),
-                    joinedload(Task.implementation_plan),
-                    joinedload(Task.change_summary),
-                    joinedload(Task.implementation_plan_structured).joinedload(ImplementationPlan.steps),
+                stmt = (
+                    select(Task)
+                    .options(
+                        joinedload(Task.specification),
+                        joinedload(Task.implementation_plan),
+                        joinedload(Task.change_summary),
+                        joinedload(Task.implementation_plan_structured).joinedload(ImplementationPlan.steps),
+                    )
+                    .where(Task.id == self.parent_entity_id)
                 )
-                .where(Task.id == self.parent_entity_id)
-            )
-            entity = session.execute(stmt).unique().scalar_one_or_none()
+                entity = session.execute(stmt).unique().scalar_one_or_none()
+            else:
+                entity = session.get(Task, self.parent_entity_id)
         elif self.parent_entity_type == ParentEntityType.PROJECT:
             entity = session.get(Project, self.parent_entity_id)
         elif self.parent_entity_type == ParentEntityType.CODEBASE:

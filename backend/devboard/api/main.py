@@ -1,6 +1,7 @@
 """Main FastAPI application."""
 
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +10,6 @@ import logfire
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from devboard.agents.execution.manager import ConversationExecutionManager
@@ -38,36 +38,11 @@ from devboard.config.logfire_config import setup_logfire
 from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
-from devboard.mcp.server import mcp
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
 load_dotenv(Path.home() / ".env", override=False)
-
-
-class SingleSessionMCP:
-    """Wrapper which prevents error of initialising FastMCP's StreamableHTTPSessionManager multiple times during tests."""
-
-    def __init__(self, mcp: FastMCP):
-        self.app = mcp.http_app(path="/mcp", transport="http")
-        self.lifespan_generator = self.app.lifespan(self.app)
-        self.generator_started = False
-
-    async def start_session(self):
-        if self.generator_started:
-            return
-        await self.lifespan_generator.__aenter__()
-        self.generator_started = True
-
-    async def stop_session(self):
-        if not self.generator_started:
-            return
-        await self.lifespan_generator.__aexit__(None, None, None)
-        self.generator_started = False
-
-
-ss_mcp = SingleSessionMCP(mcp)
 
 
 _GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
@@ -76,25 +51,30 @@ _GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
 async def _event_loop_monitor() -> None:
     while True:
         t = time.monotonic()
-        await asyncio.sleep(0.5)
-        actual = time.monotonic() - t
-        if actual > 1.0:
-            logfire.warn(f"Event loop blocked for {(actual - 0.5) * 1000:.0f}ms")
+        await asyncio.sleep(0.1)
+        lag_ms = (time.monotonic() - t - 0.1) * 1000
+        if lag_ms > 1000:
+            logfire.error(f"Event loop blocked for {lag_ms:.0f}ms")
+        elif lag_ms > 200:
+            logfire.warn(f"Event loop lag: {lag_ms:.0f}ms")
 
 
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
     set_execution_manager(ConversationExecutionManager())
-    await ss_mcp.start_session()
     await cleanup_stale_locks_on_startup()
+    # Enable asyncio debug mode to log slow callbacks with their coroutine name/location
+    loop = asyncio.get_running_loop()
+    loop.set_debug(True)
+    loop.slow_callback_duration = 0.05  # warn on anything > 50ms
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
     monitor_task = asyncio.create_task(_event_loop_monitor())
     try:
         yield
     finally:
         monitor_task.cancel()
         await _shutdown_active_executions()
-        await ss_mcp.stop_session()
 
 
 async def _shutdown_active_executions() -> None:
@@ -213,10 +193,6 @@ app.include_router(claude_code.router, prefix="/api/claude-code", tags=["claude-
 app.include_router(github.router, prefix="/api/github", tags=["github"])
 app.include_router(log_entries.router, prefix="/api/log-entries", tags=["log-entries"])
 app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
-
-# Mount MCP server as ASGI application
-# The MCP server handles requests to /mcp/sse (SSE transport) and /mcp/messages (Streamable HTTP)
-app.mount("/mcp", ss_mcp.app)
 
 
 @app.get("/")

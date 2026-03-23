@@ -61,7 +61,7 @@ function getActionLabel(
     return 'Complete task'
   }
 
-  const needsRebase = gitStatus?.has_conflicts && gitStatus.commits_behind > 0
+  const needsRebase = (gitStatus?.has_conflicts || gitStatus?.has_uncommitted_base_overlap) && gitStatus.commits_behind > 0
   if (needsRebase) {
     if (actionKey === 'task.approve_and_merge') return 'Rebase & merge locally'
     if (actionKey === 'task.approve_and_create_pr') return 'Rebase & create PR'

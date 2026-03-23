@@ -1,5 +1,3 @@
-import { createWebSocketEventStream } from './websocketStream'
-
 export enum TaskStatus {
   PLANNING = 'planning',
   IMPLEMENTING = 'implementing',
@@ -953,26 +951,24 @@ export class ApiClient {
     return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`)
   }
 
-  async *streamConversationMessage(
+  async sendConversationMessage(
     conversationId: number | string,
     request: UserPrompt,
-  ): AsyncGenerator<ConversationEvent> {
+  ): Promise<void> {
     await this.request<{ conversation_id: number }>(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
-    yield* createWebSocketEventStream(Number(conversationId))
   }
 
-  async *streamApproveConversationTools(
+  async approveConversationTools(
     conversationId: number | string,
     request: ToolApprovalRequest,
-  ): AsyncGenerator<ConversationEvent> {
-    await this.request<{ conversation_id: number }>(`/api/conversations/${conversationId}/approve-tools`, {
+  ): Promise<void> {
+    await this.request<void>(`/api/conversations/${conversationId}/approve-tools`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
-    yield* createWebSocketEventStream(Number(conversationId))
   }
 
   async interruptConversation(conversationId: number | string): Promise<void> {

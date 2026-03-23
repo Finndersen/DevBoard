@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { ChatBubbleLeftRightIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import NavigationMenu from './NavigationMenu'
 import ViewContainer from './ViewContainer'
@@ -12,6 +12,7 @@ import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
 import { useStreamHealthCheck } from '../../hooks/useStreamHealthCheck'
 import { useURLSync } from '../../hooks/useURLSync'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { webSocketManager } from '../../services/WebSocketManager'
 
 export default function AppShell() {
   const {
@@ -33,6 +34,15 @@ export default function AppShell() {
   )
 
   const unreadCount = unreadConversationIds.length
+
+  // Initialize the always-open WebSocket connection
+  useEffect(() => {
+    webSocketManager.setEventHandler((conversationId, event) => {
+      useConversationStreamStore.getState().handleWebSocketEvent(conversationId, event)
+    })
+    webSocketManager.initialize()
+    return () => webSocketManager.destroy()
+  }, [])
 
   // Bootstrap active streams on app startup
   useStreamBootstrap()
