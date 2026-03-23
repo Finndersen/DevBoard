@@ -2,8 +2,9 @@
 
 from pydantic_ai import Tool
 
-from devboard.agents.roles.base import AgentRole
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.context_helpers import build_task_context
+from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_directory_tree_tool,
@@ -11,7 +12,6 @@ from devboard.agents.tools import (
     create_get_pr_status_tool,
     create_merge_pr_and_complete_task_tool,
 )
-from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.integrations.codebase import CodebaseIntegration
@@ -49,7 +49,7 @@ def build_task_pr_review_context(task: Task, *, working_dir: str) -> str:
     return build_task_context(task, working_dir=working_dir, include_step_outcomes=True)
 
 
-class TaskPRReviewAgentRole(AgentRole):
+class TaskPRReviewAgentRole(TaskAgentRoleBase):
     """Role for managing tasks in PR_OPEN state."""
 
     def __init__(
@@ -58,18 +58,24 @@ class TaskPRReviewAgentRole(AgentRole):
         task_service: TaskService,
         github_integration: GitHubIntegration,
         working_dir: str,
-        conversation_repo: ConversationRepository | None = None,
+        conversation_repo: ConversationRepository,
+        agent_config_service: AgentConfigService,
+        conversation_id: int | None,
     ):
         if not task.github_pr_number:
             raise ValueError("Task does not have a github_pr_number set")
         if not task.codebase.repository_url:
             raise ValueError("Task codebase does not have a repository_url set")
 
-        self.task = task
-        self._task_service = task_service
-        self._github_integration = github_integration
-        self._working_dir = working_dir
-        self._conversation_repo = conversation_repo
+        super().__init__(
+            task=task,
+            task_service=task_service,
+            conversation_repo=conversation_repo,
+            conversation_id=conversation_id,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+        )
+        self.github_integration = github_integration
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for PR review role."""
@@ -79,24 +85,26 @@ class TaskPRReviewAgentRole(AgentRole):
         """Get tools for PR review role.
 
         Returns:
-            List of PR reading tools, codebase exploration tools, task completion tool,
-            and create_task tool.
+            Common task tools plus PR reading tools, codebase exploration tools, and task completion tool.
             Note: Codebase editing tools (Edit/Write) are provided directly by the
             underlying agent (ClaudeCode), not through this role.
         """
-        codebase_integration = CodebaseIntegration(self._working_dir)
+        codebase_integration = CodebaseIntegration(self.working_dir)
 
-        return [
-            create_get_pr_status_tool(self.task, self._github_integration),
-            create_get_pr_feedback_tool(self.task, self._github_integration),
-            create_code_structure_search_tool(codebase_integration),
-            create_directory_tree_tool(codebase_integration),
-            create_merge_pr_and_complete_task_tool(self.task, self._task_service, self._github_integration),
-            create_create_task_tool(self.task.project, self._task_service, self._conversation_repo),
-        ]
+        tools = super().get_tools()
+        tools.extend(
+            [
+                create_get_pr_status_tool(self.task, self.github_integration),
+                create_get_pr_feedback_tool(self.task, self.github_integration),
+                create_code_structure_search_tool(codebase_integration),
+                create_directory_tree_tool(codebase_integration),
+                create_merge_pr_and_complete_task_tool(self.task, self.task_service, self.github_integration),
+            ]
+        )
+        return tools
 
     async def get_context_content(self) -> str:
-        return build_task_pr_review_context(self.task, working_dir=self._working_dir)
+        return build_task_pr_review_context(self.task, working_dir=self.working_dir)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

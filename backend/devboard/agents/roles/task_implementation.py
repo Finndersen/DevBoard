@@ -1,8 +1,8 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.base import AgentRole
 from devboard.agents.roles.context_helpers import build_execution_graph_context, build_task_context
+from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_code_structure_search_tool,
     create_complete_task_with_local_merge_tool,
@@ -16,8 +16,7 @@ from devboard.agents.tools.implementation_plan_tools import (
     create_execute_implementation_step_tool,
     create_read_implementation_step_details_tool,
 )
-from devboard.agents.tools.sub_agent_tools import create_code_review_tool, create_task_codebase_investigation_tool
-from devboard.agents.tools.task_tools import create_create_task_tool
+from devboard.agents.tools.sub_agent_tools import create_code_review_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import ConversationRepository, DocumentRepository
@@ -119,7 +118,7 @@ def _build_system_prompt(has_structured_plan: bool) -> str:
     )
 
 
-class TaskImplementationAgentRole(AgentRole):
+class TaskImplementationAgentRole(TaskAgentRoleBase):
     """Role for task implementation in a codebase."""
 
     def __init__(
@@ -134,15 +133,17 @@ class TaskImplementationAgentRole(AgentRole):
         plan_service: TaskImplementationPlanService,
         working_dir: str,
     ):
-        self.task = task
+        super().__init__(
+            task=task,
+            task_service=task_service,
+            conversation_repo=conversation_repo,
+            conversation_id=conversation_id,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+        )
         self.document_repository = document_repository
-        self.agent_config_service = agent_config_service
-        self.task_service = task_service
         self.github_integration = github_integration
-        self.conversation_repo = conversation_repo
-        self.conversation_id = conversation_id
         self.plan_service = plan_service
-        self._working_dir = working_dir
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
@@ -156,13 +157,17 @@ class TaskImplementationAgentRole(AgentRole):
         if not has_structured_plan and not has_document_plan:
             raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
 
-        codebase_integration = CodebaseIntegration(self._working_dir)
+        codebase_integration = CodebaseIntegration(self.working_dir)
 
-        tools: list[Tool] = [
-            # Tools for task specification document (uses default approval behavior)
-            create_set_document_content_tool(self.task.specification, self.document_repository),
-            create_document_edit_tool(self.task.specification, self.document_repository),
-        ]
+        tools = super().get_tools()
+
+        tools.extend(
+            [
+                # Tools for task specification document (uses default approval behavior)
+                create_set_document_content_tool(self.task.specification, self.document_repository),
+                create_document_edit_tool(self.task.specification, self.document_repository),
+            ]
+        )
 
         # Implementation plan tools: structured plan or Document-based
         if has_structured_plan:
@@ -174,7 +179,7 @@ class TaskImplementationAgentRole(AgentRole):
                         self.agent_config_service,
                         self.conversation_repo,
                         self.conversation_id,
-                        self._working_dir,
+                        self.working_dir,
                     ),
                     create_read_implementation_step_details_tool(self.task, self.plan_service),
                 ]
@@ -195,19 +200,12 @@ class TaskImplementationAgentRole(AgentRole):
             [
                 create_code_structure_search_tool(codebase_integration),
                 create_directory_tree_tool(codebase_integration),
-                create_task_codebase_investigation_tool(
-                    self.task,
-                    self.agent_config_service,
-                    conversation_repo=self.conversation_repo,
-                    parent_conversation_id=self.conversation_id,
-                    working_dir=self._working_dir,
-                ),
                 create_code_review_tool(
                     self.task,
                     self.agent_config_service,
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
-                    working_dir=self._working_dir,
+                    working_dir=self.working_dir,
                 ),
                 create_rebase_task_branch_tool(self.task),
             ]
@@ -223,9 +221,6 @@ class TaskImplementationAgentRole(AgentRole):
             tools.append(create_complete_task_with_local_merge_tool(self.task, self.task_service))
         # For MANUAL branch handling, no completion tools are provided
 
-        # Add create_task tool for creating related tasks
-        tools.append(create_create_task_tool(self.task.project, self.task_service, self.conversation_repo))
-
         return tools
 
     async def get_context_content(self) -> str:
@@ -234,7 +229,7 @@ class TaskImplementationAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, specification, and implementation plan
         """
-        context = build_task_context(self.task, working_dir=self._working_dir)
+        context = build_task_context(self.task, working_dir=self.working_dir)
         execution_graph = build_execution_graph_context(self.task)
         if execution_graph:
             context += "\n\n" + execution_graph

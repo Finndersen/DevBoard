@@ -79,6 +79,8 @@ async def create_agent_role_for_conversation(
                     github_integration=github_integration,
                     working_dir=working_dir,
                     conversation_repo=conversation_repo,
+                    agent_config_service=agent_config_service,
+                    conversation_id=parent_conversation_id,
                 )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e

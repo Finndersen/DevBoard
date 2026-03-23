@@ -1,8 +1,8 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.roles.base import AgentRole
 from devboard.agents.roles.context_helpers import build_task_context
+from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_document_edit_tool,
     create_set_document_content_tool,
@@ -16,8 +16,7 @@ from devboard.agents.tools.implementation_plan_tools import (
     create_remove_implementation_step_tool,
     create_set_implementation_plan_steps_tool,
 )
-from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
-from devboard.agents.tools.task_tools import create_create_task_tool, create_edit_own_task_tool
+from devboard.agents.tools.task_tools import create_edit_own_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
@@ -127,7 +126,7 @@ When modifying an existing plan, use `read_implementation_step_details` to revie
 """
 
 
-class TaskPlanningAgentRole(AgentRole):
+class TaskPlanningAgentRole(TaskAgentRoleBase):
     """Role for task implementation planning."""
 
     def __init__(
@@ -141,13 +140,15 @@ class TaskPlanningAgentRole(AgentRole):
         working_dir: str,
         plan_service: TaskImplementationPlanService | None = None,
     ):
-        self.task = task
+        super().__init__(
+            task=task,
+            task_service=task_service,
+            conversation_repo=conversation_repo,
+            conversation_id=conversation_id,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+        )
         self.document_repository = document_repository
-        self.agent_config_service = agent_config_service
-        self.task_service = task_service
-        self.conversation_repo = conversation_repo
-        self.conversation_id = conversation_id
-        self._working_dir = working_dir
         self.plan_service = plan_service
 
     def get_system_prompt(self) -> str:
@@ -158,13 +159,12 @@ class TaskPlanningAgentRole(AgentRole):
         """Get tools for task planning role.
 
         Returns:
-            List of document editing tools for both specification and implementation plan,
-            plus codebase search tools and investigation tool (if codebase available)
+            Common task tools plus document editing tools for specification and implementation plan.
         """
-        tools: list[Tool] = [
-            # Tool to edit task metadata and/or specification content (always available)
-            create_edit_own_task_tool(self.task, self.task_service, self.document_repository),
-        ]
+        tools = super().get_tools()
+
+        # Tool to edit task metadata and/or specification content (always available)
+        tools.append(create_edit_own_task_tool(self.task, self.task_service, self.document_repository))
 
         # Tool to edit task specification (only if it has content)
         if self.task.specification.content:
@@ -202,20 +202,6 @@ class TaskPlanningAgentRole(AgentRole):
                         )
                     )
 
-        # Add codebase investigation tool
-        tools.append(
-            create_task_codebase_investigation_tool(
-                self.task,
-                self.agent_config_service,
-                conversation_repo=self.conversation_repo,
-                parent_conversation_id=self.conversation_id,
-                working_dir=self._working_dir,
-            )
-        )
-
-        # Add create_task tool
-        tools.append(create_create_task_tool(self.task.project, self.task_service, self.conversation_repo))
-
         return tools
 
     async def get_context_content(self) -> str:
@@ -224,7 +210,7 @@ class TaskPlanningAgentRole(AgentRole):
         Returns:
             Formatted context containing task details, project spec, task spec, and implementation plan
         """
-        return build_task_context(self.task, working_dir=self._working_dir)
+        return build_task_context(self.task, working_dir=self.working_dir)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
