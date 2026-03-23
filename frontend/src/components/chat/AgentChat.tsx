@@ -29,7 +29,7 @@ interface AgentChatProps {
   actionMessage?: string
   initialMessage?: string | null
   onInitialMessageSent?: () => void
-  codebaseLocalPath?: string
+  workingDir?: string
   isDisabled?: boolean
   onConversationReset?: (newConversationId: number) => void
   conversationSelector?: React.ReactNode
@@ -49,7 +49,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   actionMessage = '',
   initialMessage,
   onInitialMessageSent,
-  codebaseLocalPath,
+  workingDir,
   isDisabled = false,
   onConversationReset,
   conversationSelector,
@@ -216,7 +216,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
               actionMessage={actionMessage}
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}
-              codebaseLocalPath={codebaseLocalPath}
+              workingDir={workingDir}
               isDisabled={isDisabled}
               engine={conversation?.engine}
             />

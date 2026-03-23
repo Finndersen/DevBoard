@@ -14,12 +14,12 @@ interface ToolCallDisplayProps {
   toolCall: ToolCall
   toolResult?: ToolResult
   isHighlighted?: boolean
-  codebaseLocalPath?: string
+  workingDir?: string
   sessionId?: string
   previousEventTimestamp?: string | null
 }
 
-function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
+function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, workingDir, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
   const hasResult = toolResult !== undefined
@@ -31,9 +31,9 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
     return getToolDisplayLabel(
       toolCall.tool_name,
       toolCall.tool_args as Record<string, unknown> | null,
-      codebaseLocalPath
+      workingDir
     )
-  }, [toolCall.tool_name, toolCall.tool_args, codebaseLocalPath])
+  }, [toolCall.tool_name, toolCall.tool_args, workingDir])
 
   // Extract agentId from Task tool results (Claude Code native sub-agents)
   const subAgentInfo = useMemo(() => {
@@ -260,17 +260,18 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
           title={subAgentInfo?.description ?? devboardSubAgentInfo!.description}
           subagentType={subAgentInfo?.subagentType ?? devboardSubAgentInfo?.description}
           subtitle={subAgentInfo?.agentId}
+          workingDir={workingDir}
         />
       )}
     </div>
   )
 }
 
-export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, codebaseLocalPath, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
+export default function ToolCallDisplay({ toolCall, toolResult, isHighlighted = false, workingDir, sessionId, previousEventTimestamp }: ToolCallDisplayProps) {
   const CustomDisplay = getCustomToolDisplay(toolCall.tool_name)
   if (CustomDisplay) {
     return <CustomDisplay toolCall={toolCall} toolResult={toolResult} />
   }
 
-  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} codebaseLocalPath={codebaseLocalPath} sessionId={sessionId} previousEventTimestamp={previousEventTimestamp} />
+  return <StandardToolCallDisplay toolCall={toolCall} toolResult={toolResult} isHighlighted={isHighlighted} workingDir={workingDir} sessionId={sessionId} previousEventTimestamp={previousEventTimestamp} />
 }

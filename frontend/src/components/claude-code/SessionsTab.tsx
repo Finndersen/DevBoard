@@ -322,6 +322,7 @@ export default function SessionsTab() {
               linkedSessionId={selectedSession?.linked_session_id ?? null}
               highlightUuids={highlightUuids}
               onActiveTabChange={setViewerActiveTab}
+              workingDir={selectedProject?.path}
               tabBarRight={(() => {
                 const isCombined = selectedSession?.session_role === 'plan' && !!selectedSession?.linked_session_id
                 const showImplTab = isCombined && viewerActiveTab === 'implementation'

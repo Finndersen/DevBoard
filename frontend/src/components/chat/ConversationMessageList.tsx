@@ -12,7 +12,7 @@ interface ConversationMessageListProps {
   onRetryMessage: (messageId: string) => void
   emptyStateMessage: string
   showEmptyState: boolean
-  codebaseLocalPath?: string
+  workingDir?: string
   highlightUuids?: string[]
   sessionId?: string
 }
@@ -57,7 +57,7 @@ function ConversationMessageList({
   onRetryMessage,
   emptyStateMessage,
   showEmptyState,
-  codebaseLocalPath,
+  workingDir,
   highlightUuids,
   sessionId,
 }: ConversationMessageListProps) {
@@ -221,7 +221,7 @@ function ConversationMessageList({
           items={item.items}
           toolResultMap={toolResultMap}
           highlightSet={highlightSet}
-          codebaseLocalPath={codebaseLocalPath}
+          workingDir={workingDir}
           sessionId={sessionId}
         />
       )
@@ -242,7 +242,7 @@ function ConversationMessageList({
           toolResult={toolResult}
           isLatest={isLatest}
           isHighlighted={isHighlighted}
-          codebaseLocalPath={codebaseLocalPath}
+          workingDir={workingDir}
           sessionId={sessionId}
           previousEventTimestamp={item.previousEventTimestamp}
         />
@@ -264,7 +264,7 @@ function ConversationMessageList({
                 toolResult={undefined}
                 isLatest={outerItem.index === lastMessageIndex}
                 isHighlighted={isHighlighted}
-                codebaseLocalPath={codebaseLocalPath}
+                workingDir={workingDir}
                 sessionId={sessionId}
                 previousEventTimestamp={outerItem.previousEventTimestamp}
               />

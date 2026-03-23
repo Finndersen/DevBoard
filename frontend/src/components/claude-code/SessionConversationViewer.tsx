@@ -12,6 +12,7 @@ interface SessionConversationViewerProps {
   highlightUuids?: string[]
   onActiveTabChange?: (tab: TabId) => void
   tabBarRight?: ReactNode
+  workingDir?: string
 }
 
 export type TabId = 'plan' | 'implementation'
@@ -23,6 +24,7 @@ function MessagePane({
   onRetry,
   highlightUuids,
   sessionId,
+  workingDir,
 }: {
   loading: boolean
   error: string | null
@@ -30,6 +32,7 @@ function MessagePane({
   onRetry: () => void
   highlightUuids?: string[]
   sessionId?: string
+  workingDir?: string
 }) {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
 
@@ -94,13 +97,14 @@ function MessagePane({
           showEmptyState={messages.length === 0}
           highlightUuids={highlightUuids}
           sessionId={sessionId}
+          workingDir={workingDir}
         />
       </div>
     </div>
   )
 }
 
-export function SessionConversationViewer({ sessionId, linkedSessionId, highlightUuids, onActiveTabChange, tabBarRight }: SessionConversationViewerProps) {
+export function SessionConversationViewer({ sessionId, linkedSessionId, highlightUuids, onActiveTabChange, tabBarRight, workingDir }: SessionConversationViewerProps) {
   const [planMessages, setPlanMessages] = useState<ConversationEvent[]>([])
   const [implMessages, setImplMessages] = useState<ConversationEvent[]>([])
   const [planLoading, setPlanLoading] = useState(false)
@@ -164,6 +168,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
             onRetry={loadPlanMessages}
             highlightUuids={highlightUuids}
             sessionId={sessionId}
+            workingDir={workingDir}
           />
         </div>
       </div>
@@ -210,6 +215,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
             onRetry={loadPlanMessages}
             highlightUuids={highlightUuids}
             sessionId={sessionId}
+            workingDir={workingDir}
           />
         ) : (
           <MessagePane
@@ -218,6 +224,7 @@ export function SessionConversationViewer({ sessionId, linkedSessionId, highligh
             messages={implMessages}
             onRetry={loadImplMessages}
             sessionId={linkedSessionId}
+            workingDir={workingDir}
           />
         )}
       </div>

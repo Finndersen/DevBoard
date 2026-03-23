@@ -660,7 +660,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 actionMessage={streamingMessage}
                 initialMessage={pendingInitialMessage}
                 onInitialMessageSent={() => setPendingInitialMessage(null)}
-                codebaseLocalPath={selectedCodebase?.local_path}
+                workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
                 isDisabled={task.status === TaskStatus.COMPLETE}
                 onConversationReset={handleConversationReset}
               />
@@ -816,7 +816,7 @@ function TaskDetail({ id }: TaskDetailProps) {
               actionMessage={streamingMessage}
               initialMessage={pendingInitialMessage}
               onInitialMessageSent={() => setPendingInitialMessage(null)}
-              codebaseLocalPath={selectedCodebase?.local_path}
+              workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
               isDisabled={task.status === TaskStatus.COMPLETE}
               onConversationReset={handleConversationReset}
             />

@@ -223,6 +223,16 @@ async def _run_agent_for_conversation(
         if is_task:
             try:
                 async with services.workspace_service.allocate_workspace(conversation_parent) as slot:
+                    await broadcast_queue.put(
+                        (
+                            conversation_id,
+                            SystemEvent(
+                                type=SystemEventType.WORKSPACE_ALLOCATE,
+                                data={"task_id": conversation_parent.id, "slot_id": slot.id},
+                                timestamp=datetime.datetime.now(datetime.UTC),
+                            ),
+                        )
+                    )
                     agent_stream = await _create_agent_stream(
                         services, conversation, message_or_approvals, interrupt_event, working_dir=slot.path
                     )

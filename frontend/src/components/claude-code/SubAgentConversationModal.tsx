@@ -12,6 +12,7 @@ interface SubAgentConversationModalProps {
   title: string
   subagentType?: string
   subtitle?: string
+  workingDir?: string
 }
 
 export default function SubAgentConversationModal({
@@ -21,6 +22,7 @@ export default function SubAgentConversationModal({
   title,
   subagentType,
   subtitle,
+  workingDir,
 }: SubAgentConversationModalProps) {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -85,6 +87,7 @@ export default function SubAgentConversationModal({
               onRetryMessage={() => {}}
               emptyStateMessage="No messages in this sub-agent session"
               showEmptyState={messages.length === 0}
+              workingDir={workingDir}
             />
           </div>
         )}

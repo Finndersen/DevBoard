@@ -25,29 +25,29 @@ export function cleanToolName(toolName: string): string {
 }
 
 /**
- * Convert absolute paths to relative paths based on codebase local path.
+ * Convert absolute paths to relative paths based on working directory.
  * Handles both main repo paths and worktree variant paths.
  *
  * @param absolutePath - The absolute file path
- * @param codebaseLocalPath - The codebase's local_path (e.g., /Users/dev/projects/myrepo)
+ * @param workingDir - The working directory path (e.g., /Users/dev/projects/myrepo or a worktree path)
  * @returns Relative path or original path if no match
  */
-export function relativizePath(absolutePath: string, codebaseLocalPath?: string): string {
+export function relativizePath(absolutePath: string, workingDir?: string): string {
   if (!absolutePath) return absolutePath
 
-  // Try main repo path first: <local_path>/
-  if (codebaseLocalPath) {
-    const mainRepoPrefix = codebaseLocalPath + '/'
-    if (absolutePath.startsWith(mainRepoPrefix)) {
-      return absolutePath.slice(mainRepoPrefix.length)
+  // Try working directory prefix first: <workingDir>/
+  if (workingDir) {
+    const prefix = workingDir + '/'
+    if (absolutePath.startsWith(prefix)) {
+      return absolutePath.slice(prefix.length)
     }
   }
 
   // Try worktree variant — matches both alongside and central modes without needing
-  // external path data. The ".worktree-N/" segment is a reliable split point:
-  //   Alongside: /path/to/DevBoard.worktree-2/src/file.ts  -> src/file.ts
+  // external path data. The ".worktree-<hex>/" segment is a reliable split point:
+  //   Alongside: /path/to/DevBoard.worktree-564afd1/src/file.ts  -> src/file.ts
   //   Central:   ~/.devboard/worktrees/1_DevBoard.worktree-4/src/file.ts  -> src/file.ts
-  const worktreeMatch = absolutePath.match(/^.+\.worktree-\d+\/(.+)$/)
+  const worktreeMatch = absolutePath.match(/^.+\.worktree-[a-f0-9]+\/(.+)$/)
   if (worktreeMatch) {
     return worktreeMatch[1]
   }
@@ -67,13 +67,13 @@ function escapeRegExp(str: string): string {
  *
  * @param toolName - The raw tool name (may include MCP prefixes)
  * @param toolArgs - The tool arguments object (or null)
- * @param codebaseLocalPath - Optional codebase path for relativizing file paths
+ * @param workingDir - Optional working directory path for relativizing file paths
  * @returns An object with toolName and optional details for separate styling
  */
 export function getToolDisplayLabel(
   toolName: string,
   toolArgs: Record<string, unknown> | null,
-  codebaseLocalPath?: string
+  workingDir?: string
 ): ToolDisplayLabel {
   const cleanedName = cleanToolName(toolName)
   const args = toolArgs || {}
@@ -82,7 +82,7 @@ export function getToolDisplayLabel(
     case 'Read': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return { toolName: 'Read', details: relativizePath(filePath, codebaseLocalPath) }
+        return { toolName: 'Read', details: relativizePath(filePath, workingDir) }
       }
       return { toolName: cleanedName }
     }
@@ -90,7 +90,7 @@ export function getToolDisplayLabel(
     case 'Edit': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return { toolName: 'Edit', details: relativizePath(filePath, codebaseLocalPath) }
+        return { toolName: 'Edit', details: relativizePath(filePath, workingDir) }
       }
       return { toolName: cleanedName }
     }
@@ -98,7 +98,7 @@ export function getToolDisplayLabel(
     case 'Write': {
       const filePath = args.file_path as string | undefined
       if (filePath) {
-        return { toolName: 'Write', details: relativizePath(filePath, codebaseLocalPath) }
+        return { toolName: 'Write', details: relativizePath(filePath, workingDir) }
       }
       return { toolName: cleanedName }
     }
@@ -119,7 +119,7 @@ export function getToolDisplayLabel(
       const pattern = args.pattern as string | undefined
       const path = args.path as string | undefined
       if (pattern && path) {
-        return { toolName: 'Grep', details: `"${pattern}" in ${relativizePath(path, codebaseLocalPath)}` }
+        return { toolName: 'Grep', details: `"${pattern}" in ${relativizePath(path, workingDir)}` }
       }
       if (pattern) {
         return { toolName: 'Grep', details: `"${pattern}"` }

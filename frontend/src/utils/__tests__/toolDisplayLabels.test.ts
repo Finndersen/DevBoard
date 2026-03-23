@@ -85,31 +85,52 @@ describe('getToolDisplayLabel', () => {
 })
 
 describe('relativizePath', () => {
-  it('strips main repo prefix when codebaseLocalPath provided', () => {
+  it('strips main repo prefix when workingDir provided', () => {
     expect(
       relativizePath('/Users/dev/projects/DevBoard/backend/file.py', '/Users/dev/projects/DevBoard'),
     ).toBe('backend/file.py')
   })
 
-  it('strips alongside-mode worktree path without codebaseLocalPath', () => {
+  it('strips alongside-mode worktree path without workingDir', () => {
     expect(
       relativizePath('/Users/dev/projects/DevBoard.worktree-2/backend/file.py'),
     ).toBe('backend/file.py')
   })
 
-  it('strips central-mode worktree path without codebaseLocalPath', () => {
+  it('strips central-mode worktree path without workingDir', () => {
     expect(
       relativizePath('/Users/finn.andersen/.devboard/worktrees/1_DevBoard.worktree-4/backend/file.py'),
     ).toBe('backend/file.py')
   })
 
-  it('strips alongside-mode worktree path even when codebaseLocalPath provided', () => {
+  it('strips alongside-mode worktree path even when workingDir provided', () => {
     expect(
       relativizePath(
         '/Users/dev/projects/DevBoard.worktree-2/backend/file.py',
         '/Users/dev/projects/DevBoard',
       ),
     ).toBe('backend/file.py')
+  })
+
+  it('strips hex UUID worktree paths (alongside mode)', () => {
+    expect(
+      relativizePath('/Users/dev/projects/DevBoard.worktree-564afd1/backend/file.py'),
+    ).toBe('backend/file.py')
+  })
+
+  it('strips hex UUID worktree paths (central mode)', () => {
+    expect(
+      relativizePath('/Users/finn/.devboard/worktrees/DevBoard.worktree-564afd1/src/file.ts'),
+    ).toBe('src/file.ts')
+  })
+
+  it('strips worktree path when workingDir is the worktree path (exact match takes priority)', () => {
+    expect(
+      relativizePath(
+        '/Users/finn/.devboard/worktrees/DevBoard.worktree-564afd1/src/file.ts',
+        '/Users/finn/.devboard/worktrees/DevBoard.worktree-564afd1',
+      ),
+    ).toBe('src/file.ts')
   })
 
   it('returns path unchanged when no match', () => {

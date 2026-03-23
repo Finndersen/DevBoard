@@ -8,11 +8,11 @@ interface ToolCallGroupDisplayProps {
   items: Array<{ message: ToolCall; index: number; previousEventTimestamp?: string | null }>
   toolResultMap: Map<string, ToolResult>
   highlightSet: Set<string>
-  codebaseLocalPath?: string
+  workingDir?: string
   sessionId?: string
 }
 
-function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLocalPath, sessionId }: ToolCallGroupDisplayProps) {
+function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, sessionId }: ToolCallGroupDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Auto-expand if any item in the group is highlighted
@@ -162,7 +162,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, codebaseLoca
                   toolCall={message}
                   toolResult={toolResult}
                   isHighlighted={isItemHighlighted}
-                  codebaseLocalPath={codebaseLocalPath}
+                  workingDir={workingDir}
                   sessionId={sessionId}
                   previousEventTimestamp={itemPrevTs}
                 />

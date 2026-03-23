@@ -31,7 +31,7 @@ interface ConversationChatProps {
   actionMessage?: string
   initialMessage?: string | null
   onInitialMessageSent?: () => void
-  codebaseLocalPath?: string
+  workingDir?: string
   isDisabled?: boolean
   engine?: string
 }
@@ -44,7 +44,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   actionMessage = '',
   initialMessage,
   onInitialMessageSent,
-  codebaseLocalPath,
+  workingDir,
   isDisabled = false,
   engine
 }, ref) => {
@@ -197,7 +197,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
           onRetryMessage={handleRetryMessage}
           emptyStateMessage={emptyStateMessage}
           showEmptyState={messages.length === 0 && !pendingMessage && !fetchHistoryError}
-          codebaseLocalPath={codebaseLocalPath}
+          workingDir={workingDir}
         />
 
         {fetchHistoryError && (
