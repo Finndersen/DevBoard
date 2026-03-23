@@ -10,7 +10,11 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.step_execution import StepExecutionAgentRole
-from devboard.agents.tools.sub_agent_tools import build_code_review_prompt, run_sub_agent
+from devboard.agents.tools.sub_agent_tools import (
+    build_code_review_prompt,
+    create_sub_agent_conversation,
+    execute_sub_agent_conversation,
+)
 from devboard.api.schemas.document import DocumentEdit
 from devboard.db.models import ParentEntityType
 from devboard.db.models.implementation_plan import ImplementationStepStatus, ImplementationStepType
@@ -353,14 +357,23 @@ def create_execute_implementation_step_tool(
                     prompt += f"\n\n## Coordinator Notes\n\n{notes}"
                 role_type = AgentRoleType.STEP_EXECUTION
 
-            sub_agent_result = await run_sub_agent(
-                role=role,
+            conversation = create_sub_agent_conversation(
                 role_type=role_type,
-                prompt=prompt,
                 agent_config_service=agent_config_service,
                 conversation_repo=conversation_repo,
                 parent_entity_type=ParentEntityType.TASK,
                 parent_entity_id=task.id,
+                parent_conversation_id=parent_conversation_id,
+            )
+            step.conversation_id = conversation.id
+            plan_service.commit()
+
+            sub_agent_result = await execute_sub_agent_conversation(
+                conversation_id=conversation.id,
+                role=role,
+                prompt=prompt,
+                conversation_repo=conversation_repo,
+                agent_config_service=agent_config_service,
                 working_dir=working_dir,
                 parent_conversation_id=parent_conversation_id,
             )

@@ -20,7 +20,9 @@ from devboard.agents.tools.sub_agent_tools import (
     _active_investigation_sessions,
     _active_sub_agent_conversations,
     create_multi_codebase_investigation_tool,
+    create_sub_agent_conversation,
     create_task_codebase_investigation_tool,
+    execute_sub_agent_conversation,
     run_sub_agent,
 )
 from devboard.db.models.codebase import Codebase
@@ -72,6 +74,7 @@ def mock_conversation_repo():
     mock_conversation.id = 42
     mock_conversation.parent_conversation_id = None
     repo.create.return_value = mock_conversation
+    repo.get_by_id.return_value = mock_conversation
     return repo
 
 
@@ -436,6 +439,231 @@ class TestCreateTaskCodebaseInvestigationTool:
         assert tool.name == "investigate_codebase"
 
 
+class TestCreateSubAgentConversation:
+    """Tests for the create_sub_agent_conversation helper function."""
+
+    @pytest.fixture
+    def mock_conv_repo(self):
+        """Create a mock ConversationRepository."""
+        repo = Mock(spec=ConversationRepository)
+        mock_conversation = Mock()
+        mock_conversation.id = 10
+        mock_conversation.parent_conversation_id = None
+        repo.create.return_value = mock_conversation
+        return repo
+
+    def test_creates_conversation_and_returns_object(self, mock_agent_config_service, mock_conv_repo):
+        """Test that create_sub_agent_conversation creates conversation, commits, and returns object."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        result = create_sub_agent_conversation(
+            role_type=AgentRoleType.CODE_REVIEW,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=5,
+        )
+
+        assert result.id == 10
+        mock_conv_repo.create.assert_called_once()
+        create_kwargs = mock_conv_repo.create.call_args[1]
+        assert create_kwargs["is_active"] is False
+        assert create_kwargs["parent_entity_id"] == 5
+        assert create_kwargs["parent_conversation_id"] is None
+        mock_conv_repo.commit.assert_called_once()
+
+    def test_passes_parent_conversation_id(self, mock_agent_config_service, mock_conv_repo):
+        """Test that parent_conversation_id is passed through to create."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        create_sub_agent_conversation(
+            role_type=AgentRoleType.INVESTIGATION,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=3,
+            parent_conversation_id=99,
+        )
+
+        create_kwargs = mock_conv_repo.create.call_args[1]
+        assert create_kwargs["parent_conversation_id"] == 99
+
+    def test_commits_eagerly(self, mock_agent_config_service, mock_conv_repo):
+        """Test that commit is called immediately after create."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        call_order = []
+        mock_conv_repo.create.side_effect = lambda **kwargs: (
+            call_order.append("create"),
+            Mock(id=1, parent_conversation_id=None),
+        )[1]
+        mock_conv_repo.commit.side_effect = lambda: call_order.append("commit")
+
+        create_sub_agent_conversation(
+            role_type=AgentRoleType.CODE_REVIEW,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=1,
+        )
+
+        assert call_order == ["create", "commit"]
+
+
+class TestExecuteSubAgentConversation:
+    """Tests for the execute_sub_agent_conversation helper function."""
+
+    @pytest.fixture
+    def mock_role(self):
+        from devboard.agents.roles.base import AgentRole
+
+        return Mock(spec=AgentRole)
+
+    @pytest.fixture
+    def mock_conv_repo(self):
+        repo = Mock(spec=ConversationRepository)
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+        mock_conversation.parent_conversation_id = None
+        repo.get_by_id.return_value = mock_conversation
+        return repo
+
+    @pytest.mark.asyncio
+    async def test_executes_and_returns_result(self, mock_role, mock_agent_config_service, mock_conv_repo):
+        """Test successful execution returns SubAgentResult."""
+        final_message = TextMessage(
+            role=MessageRole.AGENT, text_content="Sub-agent result", timestamp=datetime.datetime.now()
+        )
+        mock_execution_service = AsyncMock()
+        mock_execution_service.send_message_or_approval.return_value = [final_message]
+
+        with patch(
+            "devboard.api.dependencies.factories.create_agent_execution_service",
+            return_value=mock_execution_service,
+        ):
+            result = await execute_sub_agent_conversation(
+                conversation_id=42,
+                role=mock_role,
+                prompt="Do something",
+                conversation_repo=mock_conv_repo,
+                agent_config_service=mock_agent_config_service,
+                working_dir="/test/dir",
+            )
+
+        assert result == SubAgentResult(result="Sub-agent result", conversation_id=42)
+        mock_conv_repo.get_by_id.assert_called_once_with(42)
+
+    @pytest.mark.asyncio
+    async def test_session_guard_raises_model_retry_for_concurrent(
+        self, mock_role, mock_agent_config_service, mock_conv_repo
+    ):
+        """Test that concurrent calls with the same conversation_id raise ModelRetry."""
+        _active_sub_agent_conversations.add(42)
+        try:
+            with pytest.raises(ModelRetry, match="conversation_id '42'.*already in use"):
+                await execute_sub_agent_conversation(
+                    conversation_id=42,
+                    role=mock_role,
+                    prompt="Do something",
+                    conversation_repo=mock_conv_repo,
+                    agent_config_service=mock_agent_config_service,
+                    working_dir="/test/dir",
+                )
+        finally:
+            _active_sub_agent_conversations.discard(42)
+
+    @pytest.mark.asyncio
+    async def test_raises_model_retry_for_nonexistent_conversation(
+        self, mock_role, mock_agent_config_service, mock_conv_repo
+    ):
+        """Test that a non-existent conversation_id raises ModelRetry."""
+        mock_conv_repo.get_by_id.return_value = None
+
+        with pytest.raises(ModelRetry, match="not found"):
+            await execute_sub_agent_conversation(
+                conversation_id=999,
+                role=mock_role,
+                prompt="Do something",
+                conversation_repo=mock_conv_repo,
+                agent_config_service=mock_agent_config_service,
+                working_dir="/test/dir",
+            )
+
+    @pytest.mark.asyncio
+    async def test_raises_model_retry_for_wrong_parent_conversation(
+        self, mock_role, mock_agent_config_service, mock_conv_repo
+    ):
+        """Test that wrong parent_conversation_id raises ModelRetry."""
+        wrong_parent_conversation = Mock()
+        wrong_parent_conversation.id = 42
+        wrong_parent_conversation.parent_conversation_id = 999
+        mock_conv_repo.get_by_id.return_value = wrong_parent_conversation
+
+        with pytest.raises(ModelRetry, match="does not belong to this conversation context"):
+            await execute_sub_agent_conversation(
+                conversation_id=42,
+                role=mock_role,
+                prompt="Do something",
+                conversation_repo=mock_conv_repo,
+                agent_config_service=mock_agent_config_service,
+                working_dir="/test/dir",
+                parent_conversation_id=123,
+            )
+
+    @pytest.mark.asyncio
+    async def test_session_id_released_after_success(self, mock_role, mock_agent_config_service, mock_conv_repo):
+        """Test that conversation_id is removed from active set after successful execution."""
+        final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
+        mock_execution_service = AsyncMock()
+        mock_execution_service.send_message_or_approval.return_value = [final_message]
+
+        with patch(
+            "devboard.api.dependencies.factories.create_agent_execution_service",
+            return_value=mock_execution_service,
+        ):
+            await execute_sub_agent_conversation(
+                conversation_id=42,
+                role=mock_role,
+                prompt="Do something",
+                conversation_repo=mock_conv_repo,
+                agent_config_service=mock_agent_config_service,
+                working_dir="/test/dir",
+            )
+
+        assert 42 not in _active_sub_agent_conversations
+
+    @pytest.mark.asyncio
+    async def test_session_id_released_after_failure(self, mock_role, mock_agent_config_service, mock_conv_repo):
+        """Test that conversation_id is removed from active set even when execution fails."""
+        mock_execution_service = AsyncMock()
+        mock_execution_service.send_message_or_approval.side_effect = RuntimeError("Agent failed")
+
+        with patch(
+            "devboard.api.dependencies.factories.create_agent_execution_service",
+            return_value=mock_execution_service,
+        ):
+            with pytest.raises(RuntimeError, match="Agent failed"):
+                await execute_sub_agent_conversation(
+                    conversation_id=42,
+                    role=mock_role,
+                    prompt="Do something",
+                    conversation_repo=mock_conv_repo,
+                    agent_config_service=mock_agent_config_service,
+                    working_dir="/test/dir",
+                )
+
+        assert 42 not in _active_sub_agent_conversations
+
+
 class TestRunSubAgent:
     """Tests for the run_sub_agent helper function."""
 
@@ -507,6 +735,9 @@ class TestRunSubAgent:
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
         mock_execution_service.send_message_or_approval.return_value = [final_message]
+
+        # The created conversation needs parent_conversation_id=123 so execute_sub_agent_conversation passes validation
+        mock_conv_repo.get_by_id.return_value.parent_conversation_id = 123
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",

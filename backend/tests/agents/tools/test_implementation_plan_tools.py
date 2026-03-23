@@ -1,6 +1,6 @@
 """Tests for implementation plan tools."""
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from pydantic_ai import ModelRetry
@@ -13,6 +13,7 @@ from devboard.db.models.implementation_plan import (
     ImplementationPlan,
     ImplementationStep,
     ImplementationStepStatus,
+    ImplementationStepType,
 )
 from devboard.db.models.task import Task
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
@@ -118,3 +119,119 @@ class TestExecuteImplementationStepStatusValidation:
 
         with pytest.raises(ModelRetry, match="expected 'pending' or 'failed'"):
             await execute_step_tool.function(step_number=1)
+
+
+class TestExecuteImplementationStepConversationFlow:
+    """Tests for conversation_id tracking in execute_implementation_step."""
+
+    @pytest.fixture
+    def mock_agent_config_service(self) -> Mock:
+        return Mock()
+
+    @pytest.fixture
+    def mock_conversation_repo(self) -> Mock:
+        return Mock()
+
+    @pytest.fixture
+    def execute_step_tool(
+        self,
+        mock_task: Mock,
+        mock_plan_service: Mock,
+        mock_agent_config_service: Mock,
+        mock_conversation_repo: Mock,
+    ) -> Mock:
+        mock_task.implementation_plan_structured = Mock(spec=ImplementationPlan)
+        return create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conversation_repo,
+            parent_conversation_id=None,
+            task_git_service=Mock(),
+            working_dir="/test/working_dir",
+        )
+
+    def _make_step(self, step_type: ImplementationStepType = ImplementationStepType.CODE_CHANGE) -> Mock:
+        step = Mock(spec=ImplementationStep)
+        step.status = ImplementationStepStatus.PENDING
+        step.step_number = 1
+        step.type = step_type
+        step.title = "Test step"
+        step.details = "Do the thing"
+        return step
+
+    @pytest.mark.asyncio
+    async def test_conversation_id_set_on_step_before_execution(self, execute_step_tool: Mock, mock_plan_service: Mock):
+        """conversation_id is stored on the step and committed before execute_sub_agent_conversation runs."""
+        step = self._make_step()
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 42
+
+        commit_order: list[str] = []
+
+        def record_commit() -> None:
+            commit_order.append("commit")
+
+        mock_plan_service.commit.side_effect = record_commit
+
+        with (
+            patch(
+                "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+                return_value=mock_conversation,
+            ) as mock_create,
+            patch(
+                "devboard.agents.tools.implementation_plan_tools.execute_sub_agent_conversation",
+                new_callable=AsyncMock,
+                return_value=mock_sub_agent_result,
+            ) as mock_execute,
+        ):
+            await execute_step_tool.function(step_number=1)
+
+        mock_create.assert_called_once()
+        assert step.conversation_id == 42
+        mock_plan_service.commit.assert_called()
+        assert commit_order[0] == "commit"
+        mock_execute.assert_called_once()
+        assert mock_execute.call_args.kwargs["conversation_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_execute_sub_agent_conversation_called_with_correct_args(
+        self,
+        execute_step_tool: Mock,
+        mock_plan_service: Mock,
+        mock_conversation_repo: Mock,
+        mock_agent_config_service: Mock,
+    ):
+        """execute_sub_agent_conversation receives conversation_id and correct repo/config."""
+        step = self._make_step()
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 7
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 7
+
+        with (
+            patch(
+                "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+                return_value=mock_conversation,
+            ),
+            patch(
+                "devboard.agents.tools.implementation_plan_tools.execute_sub_agent_conversation",
+                new_callable=AsyncMock,
+                return_value=mock_sub_agent_result,
+            ) as mock_execute,
+        ):
+            await execute_step_tool.function(step_number=1)
+
+        call_kwargs = mock_execute.call_args.kwargs
+        assert call_kwargs["conversation_id"] == 7
+        assert call_kwargs["conversation_repo"] is mock_conversation_repo
+        assert call_kwargs["agent_config_service"] is mock_agent_config_service
+        assert call_kwargs["working_dir"] == "/test/working_dir"

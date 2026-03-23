@@ -14,6 +14,7 @@ class ImplementationStepResponse(BaseModel):
     status: str
     details: str
     outcome: str | None
+    conversation_id: int | None
     started_at: datetime.datetime | None
     completed_at: datetime.datetime | None
 

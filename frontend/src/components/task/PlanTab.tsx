@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { ComponentType } from 'react'
-import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
+import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) {
@@ -82,6 +83,7 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
   const [editingDetails, setEditingDetails] = useState(false)
   const [editedDetails, setEditedDetails] = useState(step.details)
   const [saving, setSaving] = useState(false)
+  const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
 
   const statusConfig = STEP_STATUS_CONFIG[step.status]
   const typeConfig = STEP_TYPE_CONFIG[step.type]
@@ -130,6 +132,16 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
             <typeConfig.icon className="w-3 h-3 mr-1" />
             {typeConfig.label}
           </StatusBadge>
+          {step.conversation_id && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsSubAgentModalOpen(true) }}
+              className="flex-shrink-0 p-0.5 rounded text-blue-500 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              title="View sub-agent conversation"
+            >
+              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -198,6 +210,16 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Sub-agent conversation modal */}
+      {step.conversation_id && (
+        <SubAgentConversationModal
+          isOpen={isSubAgentModalOpen}
+          onClose={() => setIsSubAgentModalOpen(false)}
+          fetchMessages={() => apiClient.getConversationMessages(step.conversation_id!)}
+          title={step.title}
+        />
       )}
     </div>
   )

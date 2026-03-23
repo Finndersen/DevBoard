@@ -11,7 +11,7 @@ from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
 from devboard.db.models import Task
 from devboard.db.models.codebase import Codebase
-from devboard.db.models.conversation import ParentEntityType
+from devboard.db.models.conversation import Conversation, ParentEntityType
 from devboard.db.repositories import ConversationRepository
 from devboard.integrations.types import StructuredDiff
 from devboard.services.task_git.service import TaskGitService
@@ -41,55 +41,64 @@ class CodebaseInvestigationContext:
     working_dir: str  # Allows specifying worktree working dir for the codebase
 
 
-async def run_sub_agent(
-    role: AgentRole,
+def create_sub_agent_conversation(
     role_type: AgentRoleType,
-    prompt: str,
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
     parent_entity_type: ParentEntityType,
     parent_entity_id: int,
+    parent_conversation_id: int | None = None,
+) -> Conversation:
+    """Create a new sub-agent conversation record and commit it eagerly.
+
+    Returns the Conversation object so the caller has the conversation_id immediately,
+    before execution begins.
+    """
+    config = agent_config_service.get_effective_config(role_type)
+    conversation = conversation_repo.create(
+        parent_entity_type=parent_entity_type,
+        parent_entity_id=parent_entity_id,
+        agent_role=role_type,
+        engine=config.engine,
+        model_id=config.model_id,
+        is_active=False,
+        parent_conversation_id=parent_conversation_id,
+    )
+    # Commit eagerly so that ClaudeCodeAgentExecutionService session_id updates don't fail
+    conversation_repo.commit()
+    return conversation
+
+
+async def execute_sub_agent_conversation(
+    conversation_id: int,
+    role: AgentRole,
+    prompt: str,
+    conversation_repo: ConversationRepository,
+    agent_config_service: AgentConfigService,
     working_dir: str,
     parent_conversation_id: int | None = None,
-    conversation_id: int | None = None,
 ) -> SubAgentResult:
-    """Execute a sub-agent with the given role and prompt.
+    """Execute a sub-agent using an existing conversation record.
 
-    Creates a Conversation record for the sub-agent and executes via AgentExecutionService,
-    enabling engine-agnostic message persistence and session resumption.
+    Handles the active-session guard and validates the conversation exists and belongs
+    to the expected parent context. Works for both newly created and resumed conversations.
     """
-    if conversation_id is not None:
-        # Resumption path: validate and guard against concurrent use
-        if conversation_id in _active_sub_agent_conversations:
-            raise ModelRetry(
-                f"conversation_id '{conversation_id}' is already in use by a concurrent investigation. "
-                "Concurrent calls with the same conversation_id are not supported. "
-                "Either wait for the previous investigation to complete before making a follow-up call with this conversation_id, "
-                "or omit conversation_id to start independent parallel investigations."
-            )
-        conversation = conversation_repo.get_by_id(conversation_id)
-        if conversation is None:
-            raise ModelRetry(
-                f"conversation_id '{conversation_id}' not found. Start a new investigation by omitting conversation_id."
-            )
-        if conversation.parent_conversation_id != parent_conversation_id:
-            raise ModelRetry(f"conversation_id '{conversation_id}' does not belong to this conversation context.")
-        _active_sub_agent_conversations.add(conversation_id)
-    else:
-        # New conversation path
-        config = agent_config_service.get_effective_config(role_type)
-        conversation = conversation_repo.create(
-            parent_entity_type=parent_entity_type,
-            parent_entity_id=parent_entity_id,
-            agent_role=role_type,
-            engine=config.engine,
-            model_id=config.model_id,
-            is_active=False,
-            parent_conversation_id=parent_conversation_id,
+    if conversation_id in _active_sub_agent_conversations:
+        raise ModelRetry(
+            f"conversation_id '{conversation_id}' is already in use by a concurrent investigation. "
+            "Concurrent calls with the same conversation_id are not supported. "
+            "Either wait for the previous investigation to complete before making a follow-up call with this conversation_id, "
+            "or omit conversation_id to start independent parallel investigations."
         )
-        # Commit eagerly so that ClaudeCodeAgentExecutionService session_id updates don't fail
-        conversation_repo.commit()
+    conversation = conversation_repo.get_by_id(conversation_id)
+    if conversation is None:
+        raise ModelRetry(
+            f"conversation_id '{conversation_id}' not found. Start a new investigation by omitting conversation_id."
+        )
+    if conversation.parent_conversation_id != parent_conversation_id:
+        raise ModelRetry(f"conversation_id '{conversation_id}' does not belong to this conversation context.")
 
+    _active_sub_agent_conversations.add(conversation_id)
     try:
         # Lazy import to avoid circular dependency:
         # sub_agent_tools → api.dependencies.factories → roles → sub_agent_tools
@@ -110,13 +119,52 @@ async def run_sub_agent(
             None,
         )
         if final_response is None:
-            raise ValueError(f"Expected a TextMessage response from {role_type} agent, but none was found in events")
+            raise ValueError("Expected a TextMessage response from agent, but none was found in events")
 
         conversation_repo.commit()
         return SubAgentResult(result=final_response.text_content, conversation_id=conversation.id)
     finally:
-        if conversation_id is not None:
-            _active_sub_agent_conversations.discard(conversation_id)
+        _active_sub_agent_conversations.discard(conversation_id)
+
+
+async def run_sub_agent(
+    role: AgentRole,
+    role_type: AgentRoleType,
+    prompt: str,
+    agent_config_service: AgentConfigService,
+    conversation_repo: ConversationRepository,
+    parent_entity_type: ParentEntityType,
+    parent_entity_id: int,
+    working_dir: str,
+    parent_conversation_id: int | None = None,
+    conversation_id: int | None = None,
+) -> SubAgentResult:
+    """Execute a sub-agent with the given role and prompt.
+
+    Convenience wrapper that creates a new conversation or resumes an existing one,
+    then executes the sub-agent. Existing callers remain unchanged.
+    """
+    if conversation_id is None:
+        # New conversation path: create conversation first so caller can track conversation_id
+        conversation = create_sub_agent_conversation(
+            role_type=role_type,
+            agent_config_service=agent_config_service,
+            conversation_repo=conversation_repo,
+            parent_entity_type=parent_entity_type,
+            parent_entity_id=parent_entity_id,
+            parent_conversation_id=parent_conversation_id,
+        )
+        conversation_id = conversation.id
+
+    return await execute_sub_agent_conversation(
+        conversation_id=conversation_id,
+        role=role,
+        prompt=prompt,
+        conversation_repo=conversation_repo,
+        agent_config_service=agent_config_service,
+        working_dir=working_dir,
+        parent_conversation_id=parent_conversation_id,
+    )
 
 
 def create_multi_codebase_investigation_tool(

@@ -49,6 +49,7 @@ export interface ImplementationStepResponse {
   status: ImplementationStepStatus
   details: string
   outcome: string | null
+  conversation_id: number | null
   started_at: string | null
   completed_at: string | null
 }
