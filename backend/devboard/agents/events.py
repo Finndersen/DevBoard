@@ -126,6 +126,7 @@ class ThinkingEvent(BaseModel):
 
     event_type: Literal["thinking"] = "thinking"
     duration_seconds: float | None = None
+    thinking_text: str | None = None
     timestamp: datetime.datetime
     uuid: str | None = None
 

@@ -373,6 +373,20 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           return
         }
 
+        // For thinking events, always calculate duration_seconds from previous event timestamp
+        if (event.event_type === 'thinking') {
+          const previousEvent = convMessages.messages.length > 0
+            ? convMessages.messages[convMessages.messages.length - 1]
+            : null
+          if (previousEvent) {
+            (event as { duration_seconds: number | null }).duration_seconds =
+              (new Date(event.timestamp).getTime() - new Date(previousEvent.timestamp).getTime()) / 1000
+          } else {
+            (event as { duration_seconds: number | null }).duration_seconds = null
+          }
+        }
+
+
         convMessages.messages.push(event)
       })
     },

@@ -9,6 +9,27 @@ import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
 
+function ThinkingAnnotation({ durationText, thinkingText }: { durationText: string; thinkingText: string | null }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="py-0.5">
+      <button
+        onClick={() => thinkingText && setExpanded(e => !e)}
+        aria-expanded={thinkingText ? expanded : undefined}
+        className={`text-[11px] text-gray-500 dark:text-gray-600 italic text-left ${thinkingText ? 'cursor-pointer hover:text-gray-400 dark:hover:text-gray-500' : 'cursor-default'}`}
+      >
+        {durationText}{thinkingText && <span className="ml-0.5 not-italic">{expanded ? '▾' : '▸'}</span>}
+      </button>
+      {expanded && thinkingText && (
+        <div className="mt-1 pl-3 border-l border-gray-700/40 max-h-40 overflow-y-auto">
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 whitespace-pre-wrap">{thinkingText}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }: { message: LocalCommand; highlightRing: string; previousEventTimestamp?: string | null }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isShell = message.command_type === 'shell'
@@ -331,23 +352,13 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
     )
   }
 
-  // Thinking events - render as centered purple pill badge
+  // Thinking events - render as subtle muted italic annotation
   if (message.event_type === 'thinking') {
     const durationText = message.duration_seconds != null
-      ? `Thinking · ${formatDuration(message.duration_seconds * 1000)}`
-      : 'Thinking'
+      ? `Thought for ${formatDuration(message.duration_seconds * 1000)}`
+      : 'Thought'
 
-    return (
-      <div className="flex w-full justify-center my-1">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-purple-500/10 border border-purple-500/25 text-purple-400">
-          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <circle cx="12" cy="12" r="10" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
-          </svg>
-          <span>{durationText}</span>
-        </div>
-      </div>
-    )
+    return <ThinkingAnnotation durationText={durationText} thinkingText={message.thinking_text} />
   }
 
   // Fallback for unknown event types

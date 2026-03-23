@@ -190,8 +190,83 @@ describe('conversationStreamStore - addEvent deduplication', () => {
   })
 })
 
+describe('conversationStreamStore - thinking event duration calculation', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+  })
+
+  it('calculates duration_seconds from previous event timestamp when backend sends null', () => {
+    const conversationId = 10
+    const store = useConversationStreamStore.getState()
+
+    const previousEvent: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Hello',
+      timestamp: '2024-01-01T10:00:00.000Z',
+    }
+    store.addEvent(conversationId, previousEvent)
+
+    const thinkingEvent: ConversationEvent = {
+      event_type: 'thinking',
+      duration_seconds: null,
+      thinking_text: null,
+      timestamp: '2024-01-01T10:00:05.000Z',
+    }
+    store.addEvent(conversationId, thinkingEvent)
+
+    const messages = getMessages(conversationId)
+    expect(messages).toHaveLength(2)
+    const stored = messages[1] as { duration_seconds: number | null }
+    expect(stored.duration_seconds).toBeCloseTo(5.0)
+  })
+
+  it('overwrites backend-provided duration_seconds with frontend-calculated value', () => {
+    const conversationId = 11
+    const store = useConversationStreamStore.getState()
+
+    const previousEvent: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Hello',
+      timestamp: '2024-01-01T10:00:00.000Z',
+    }
+    store.addEvent(conversationId, previousEvent)
+
+    const thinkingEvent: ConversationEvent = {
+      event_type: 'thinking',
+      duration_seconds: 99.9,
+      thinking_text: null,
+      timestamp: '2024-01-01T10:00:03.500Z',
+    }
+    store.addEvent(conversationId, thinkingEvent)
+
+    const messages = getMessages(conversationId)
+    const stored = messages[1] as { duration_seconds: number | null }
+    expect(stored.duration_seconds).toBeCloseTo(3.5)
+  })
+
+  it('leaves duration_seconds as null when there is no previous event', () => {
+    const conversationId = 12
+    const store = useConversationStreamStore.getState()
+
+    const thinkingEvent: ConversationEvent = {
+      event_type: 'thinking',
+      duration_seconds: null,
+      thinking_text: null,
+      timestamp: '2024-01-01T10:00:00.000Z',
+    }
+    store.addEvent(conversationId, thinkingEvent)
+
+    const messages = getMessages(conversationId)
+    const stored = messages[0] as { duration_seconds: number | null }
+    expect(stored.duration_seconds).toBeNull()
+  })
+})
+
 describe('conversationStreamStore - handleWebSocketEvent', () => {
   const conversationId = 100
+
 
   beforeEach(() => {
     useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })

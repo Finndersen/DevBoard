@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '../../../test/utils'
 import ConversationMessageComponent from '../ConversationMessage'
 import type { ConversationMessage, ToolCall, ToolResult, ToolCallRequest, SystemEvent, ThinkingEvent } from '../../../lib/api'
@@ -528,57 +529,71 @@ describe('ConversationMessage', () => {
   })
 
   describe('thinking events', () => {
-    it('renders thinking event with duration as purple pill badge', () => {
+    it('renders thinking event with duration as subtle italic annotation', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
         duration_seconds: 4.1,
+        thinking_text: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
 
       render(<ConversationMessageComponent message={thinkingEvent} />)
 
-      const badge = screen.getByText('Thinking · 4.1s').closest('.rounded-full')
-      expect(badge).toBeInTheDocument()
-      expect(badge).toHaveClass('bg-purple-500/10', 'border', 'border-purple-500/25', 'text-purple-400')
+      const span = screen.getByText('Thought for 4.1s')
+      expect(span).toBeInTheDocument()
+      expect(span).toHaveClass('italic')
+      expect(span).toHaveClass('text-gray-500')
     })
 
-    it('renders thinking event without duration showing just "Thinking"', () => {
+    it('renders thinking event without duration showing just "Thought"', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
         duration_seconds: null,
+        thinking_text: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
 
       render(<ConversationMessageComponent message={thinkingEvent} />)
 
-      expect(screen.getByText('Thinking')).toBeInTheDocument()
-      expect(screen.queryByText(/·/)).not.toBeInTheDocument()
+      expect(screen.getByText('Thought')).toBeInTheDocument()
     })
 
-    it('renders thinking badge centered', () => {
+    it('does not render purple pill or centered layout', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
         duration_seconds: 2.5,
+        thinking_text: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
 
       render(<ConversationMessageComponent message={thinkingEvent} />)
 
-      const centeredContainer = screen.getByText('Thinking · 2.5s').closest('.justify-center')
-      expect(centeredContainer).toBeInTheDocument()
+      expect(screen.queryByText(/Thinking/)).not.toBeInTheDocument()
+      expect(document.querySelector('.justify-center')).not.toBeInTheDocument()
+      expect(document.querySelector('.rounded-full')).not.toBeInTheDocument()
+      expect(document.querySelector('.bg-purple-500\\/10')).not.toBeInTheDocument()
     })
 
-    it('renders clock icon inside the thinking badge', () => {
+    it('shows expand toggle and reveals thinking text on click', async () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
-        duration_seconds: 1.0,
+        duration_seconds: 3.0,
+        thinking_text: 'Let me think about this carefully.',
         timestamp: '2024-01-01T10:00:00Z',
       }
 
       render(<ConversationMessageComponent message={thinkingEvent} />)
 
-      const badge = screen.getByText('Thinking · 1.0s').closest('.rounded-full')
-      expect(badge?.querySelector('svg')).toBeInTheDocument()
+      expect(screen.queryByText('Let me think about this carefully.')).not.toBeInTheDocument()
+
+      const button = screen.getByRole('button')
+      expect(button).toHaveTextContent('Thought for 3.0s')
+
+      await userEvent.click(button)
+      expect(screen.getByText('Let me think about this carefully.')).toBeInTheDocument()
+
+      await userEvent.click(button)
+      expect(screen.queryByText('Let me think about this carefully.')).not.toBeInTheDocument()
     })
   })
 

@@ -44,7 +44,8 @@ export const getTimestampClasses = (isUser: boolean) =>
 export const formatTimestamp = (timestamp: string) =>
   new Date(timestamp).toLocaleTimeString([], {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: '2-digit'
   })
 
 export const formatDuration = (durationMs: number) => {
@@ -69,7 +70,7 @@ export const formatDelay = (currentTimestamp: string, previousTimestamp: string 
  * Returns just "HH:MM" if no previous timestamp.
  */
 export const formatEventTiming = (timestamp: string, previousTimestamp: string | null): string => {
-  const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const delay = formatDelay(timestamp, previousTimestamp)
   return delay ? `${time} · ${delay}` : time
 }

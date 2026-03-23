@@ -1218,8 +1218,8 @@ class TestThinkingEventParsing:
         assert te.event_type == "thinking"
         assert te.uuid == "a1"
 
-    def test_thinking_event_duration_calculation(self):
-        """Duration is calculated as thinking message timestamp minus previous event timestamp."""
+    def test_thinking_event_duration_is_always_none(self):
+        """Backend always sends duration_seconds=None; duration is calculated on the frontend."""
         from datetime import datetime
 
         from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage, UserSessionMessage
@@ -1245,7 +1245,7 @@ class TestThinkingEventParsing:
 
         thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
         assert len(thinking_events) == 1
-        assert thinking_events[0].duration_seconds == pytest.approx(4.5, abs=0.001)
+        assert thinking_events[0].duration_seconds is None
 
     def test_thinking_event_no_previous_event_gives_none_duration(self):
         """When thinking is the first event, duration_seconds is None."""

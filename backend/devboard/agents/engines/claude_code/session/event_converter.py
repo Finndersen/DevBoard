@@ -72,12 +72,10 @@ def session_messages_to_events(
 
         for content_block in session_msg.content:
             if content_block["type"] == "thinking":
-                duration: float | None = None
-                if events:
-                    duration = (session_msg.timestamp - events[-1].timestamp).total_seconds()
                 events.append(
                     ThinkingEvent(
-                        duration_seconds=duration,
+                        duration_seconds=None,
+                        thinking_text=content_block.get("thinking"),
                         timestamp=session_msg.timestamp,
                         uuid=session_msg.uuid,
                     )

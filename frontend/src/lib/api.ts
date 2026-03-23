@@ -241,6 +241,7 @@ export interface SystemEvent {
 export interface ThinkingEvent {
   event_type: 'thinking'
   duration_seconds: number | null
+  thinking_text: string | null
   timestamp: string
   uuid?: string
 }

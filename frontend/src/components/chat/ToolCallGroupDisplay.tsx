@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useMemo } from 'react'
 
 import type { ToolCall, ToolResult } from '../../lib/api'
+import { formatDuration } from '../../styles/messageStyles'
 import { cleanToolName } from '../../utils/toolDisplayLabels'
 import ToolCallDisplay from './ToolCallDisplay'
 
@@ -71,6 +72,28 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
     return 'complete'
   }, [items, toolResultMap])
 
+  // Calculate total wall-clock duration when all tools have completed
+  const groupDuration = useMemo(() => {
+    if (status === 'running') return null
+    const firstTimestamp = items[0]?.message.timestamp
+    if (!firstTimestamp) return null
+
+    let lastResultTimestamp: string | null = null
+    for (const { message, index } of items) {
+      const cacheKey = `${message.timestamp}-tool_call-${index}`
+      const result = toolResultMap.get(cacheKey)
+      if (result) {
+        if (!lastResultTimestamp || result.timestamp > lastResultTimestamp) {
+          lastResultTimestamp = result.timestamp
+        }
+      }
+    }
+
+    if (!lastResultTimestamp) return null
+    const durationMs = new Date(lastResultTimestamp).getTime() - new Date(firstTimestamp).getTime()
+    return durationMs >= 0 ? formatDuration(durationMs) : null
+  }, [items, toolResultMap, status])
+
   const isHighlighted = items.some(({ message }) => {
     const uuid = (message as { uuid?: string }).uuid
     return uuid ? highlightSet.has(uuid) : false
@@ -123,7 +146,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
             </svg>
             {/* Summary text */}
             <span className="text-xs font-medium text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap">
-              {summaryText}
+              {summaryText}{groupDuration ? ` · ${groupDuration}` : ''}
             </span>
             {/* Status icon */}
             {statusIcon()}
