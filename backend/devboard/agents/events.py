@@ -156,6 +156,16 @@ class SystemEvent(BaseModel):
     uuid: str | None = None
 
 
+class ExecutionCompleteEvent(BaseModel):
+    """Signals that an agent execution has finished."""
+
+    event_type: Literal["execution_complete"] = "execution_complete"
+    status: Literal["completed", "interrupted", "failed"]
+    error: str | None = None
+    timestamp: datetime.datetime
+    uuid: str | None = None
+
+
 def describe_event(event: "ConversationEvent") -> str:
     """Generate a concise single-line description of a conversation event."""
     if isinstance(event, TextMessage):
@@ -184,12 +194,22 @@ def describe_event(event: "ConversationEvent") -> str:
     elif isinstance(event, ThinkingEvent):
         dur = f"{event.duration_seconds:.1f}s" if event.duration_seconds is not None else "unknown"
         return f"ThinkingEvent(duration={dur})"
+    elif isinstance(event, ExecutionCompleteEvent):
+        return f"ExecutionCompleteEvent(status={event.status})"
     else:
         return f"SystemEvent(type={event.type})"
 
 
 # Union type for all conversation events
 type ConversationEvent = Annotated[
-    TextMessage | ToolCallRequest | ToolCall | ToolResult | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent,
+    TextMessage
+    | ToolCallRequest
+    | ToolCall
+    | ToolResult
+    | SystemEvent
+    | MetaMessage
+    | LocalCommand
+    | ThinkingEvent
+    | ExecutionCompleteEvent,
     Field(discriminator="event_type"),
 ]

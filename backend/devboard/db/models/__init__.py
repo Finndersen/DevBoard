@@ -15,6 +15,7 @@ from .implementation_plan import (
     ImplementationStepStatus,
     ImplementationStepType,
 )
+from .log_entry import LogEntry, LogEntrySource, LogEntryStatus
 from .mcp_server import (
     HttpMCPConfig,
     MCPServerConfig,
@@ -59,6 +60,9 @@ __all__ = [
     "OAuthProviderType",
     "OAuthToken",
     "EntityType",
+    "LogEntry",
+    "LogEntrySource",
+    "LogEntryStatus",
     "ImplementationPlan",
     "ImplementationStep",
     "ImplementationStepStatus",

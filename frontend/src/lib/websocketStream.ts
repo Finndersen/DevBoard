@@ -1,9 +1,9 @@
-import type { ConversationEvent } from './api'
+import type { ConversationEvent, ExecutionCompleteEvent } from './api'
 import { webSocketManager } from '../services/WebSocketManager'
 
 /**
  * Thrown when the WebSocket connection closes unexpectedly
- * (server closed without sending execution_completed).
+ * (shared WS dropped before execution_complete was received).
  * Signals to the consumer that reconnection should be attempted.
  */
 export class WebSocketDisconnectedError extends Error {
@@ -13,26 +13,19 @@ export class WebSocketDisconnectedError extends Error {
   }
 }
 
-interface ExecutionLifecycleEvent {
-  event_type: 'execution_lifecycle'
-  event: 'execution_started' | 'execution_completed'
-  status: 'completed' | 'interrupted' | 'failed' | null
-  error: string | null
-}
-
-type WebSocketRawMessage = ConversationEvent | ExecutionLifecycleEvent
+type WebSocketRawMessage = ConversationEvent | ExecutionCompleteEvent
 
 /**
- * Create an AsyncGenerator that yields ConversationEvents from a WebSocket connection.
+ * Create an AsyncGenerator that yields ConversationEvents from the shared WebSocket connection.
  *
- * Opens a fresh WebSocket connection for a single execution. The server closes
- * the connection after sending execution_completed, which is the normal lifecycle.
+ * Connects to the shared multiplexed WebSocket at /api/ws and filters events for
+ * the specified conversation. The generator terminates when an execution_complete
+ * event is received for this conversation.
  *
- * Handles execution_lifecycle events internally:
- * - execution_started: ignored (no consumer action needed)
- * - execution_completed: terminates the generator. If status is "failed", throws an Error.
+ * Handles execution_complete events internally — not yielded to consumers.
+ * If execution status is "failed", throws an Error after the generator exits.
  *
- * @param conversationId - The conversation to connect to
+ * @param conversationId - The conversation to stream events for
  */
 export async function* createWebSocketEventStream(
   conversationId: number
@@ -40,7 +33,7 @@ export async function* createWebSocketEventStream(
   const buffer: ConversationEvent[] = []
   let resolveWait: (() => void) | null = null
   let done = false
-  let completionStatus: ExecutionLifecycleEvent | null = null
+  let completionEvent: ExecutionCompleteEvent | null = null
   let parseError: Error | null = null
   let serverClosed = false
 
@@ -55,14 +48,11 @@ export async function* createWebSocketEventStream(
       return
     }
 
-    if (parsed.event_type === 'execution_lifecycle') {
-      if ((parsed as ExecutionLifecycleEvent).event === 'execution_completed') {
-        completionStatus = parsed as ExecutionLifecycleEvent
-        done = true
-        resolveWait?.()
-        resolveWait = null
-      }
-      // lifecycle events are not yielded to consumers
+    if (parsed.event_type === 'execution_complete') {
+      completionEvent = parsed as ExecutionCompleteEvent
+      done = true
+      resolveWait?.()
+      resolveWait = null
       return
     }
 
@@ -75,8 +65,7 @@ export async function* createWebSocketEventStream(
   let closeReason = ''
 
   const handleClose = (code: number, reason: string) => {
-    // Server-initiated close is expected after execution_completed.
-    // If we haven't received execution_completed yet, treat as unexpected close.
+    // Shared WS dropped before execution_complete — treat as unexpected disconnect.
     if (!done) {
       serverClosed = true
       closeCode = code
@@ -86,7 +75,6 @@ export async function* createWebSocketEventStream(
     }
   }
 
-  // Open a fresh connection for this execution
   webSocketManager.connect(conversationId)
   webSocketManager.registerMessageHandler(conversationId, handleMessage)
   webSocketManager.registerCloseHandler(conversationId, handleClose)
@@ -117,7 +105,7 @@ export async function* createWebSocketEventStream(
   }
 
   // Propagate execution failure as an error so the stream store shows error state
-  if (completionStatus?.status === 'failed') {
-    throw new Error(`Agent execution failed: ${completionStatus.error || 'Unknown error'}`)
+  if (completionEvent?.status === 'failed') {
+    throw new Error(`Agent execution failed: ${completionEvent.error || 'Unknown error'}`)
   }
 }

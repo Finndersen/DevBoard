@@ -1,290 +1,159 @@
-"""Tests for WebSocket conversation event streaming endpoint."""
+"""Tests for multiplexed WebSocket conversation event streaming endpoint."""
 
 import asyncio
 import datetime
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from devboard.agents.events import MessageRole, TextMessage
-from devboard.agents.execution.types import ConversationExecution, ExecutionLifecycleEventType, ExecutionStatus
-from devboard.api.routers.websocket import _stream_single_execution
-from devboard.db.models import ParentEntityType
-from devboard.db.repositories import ConversationRepository
+from devboard.agents.events import ExecutionCompleteEvent, MessageRole, TextMessage
 
 
-def _get_task_conversation(db_session, test_task):
-    """Helper to get the task's conversation from the test fixture."""
-    conv_repo = ConversationRepository(db_session)
-    conversation = conv_repo.get_active_conversation_for_entity(
-        entity_type=ParentEntityType.TASK,
-        entity_id=test_task.id,
-    )
-    assert conversation is not None
-    return conversation
+class TestMultiplexedWebSocket:
+    """Tests for the multiplexed /api/ws endpoint."""
 
-
-def _make_execution(
-    conversation_id: int = 1,
-    status: ExecutionStatus = ExecutionStatus.RUNNING,
-) -> ConversationExecution:
-    """Create a mock ConversationExecution for testing."""
-    queue: asyncio.Queue = asyncio.Queue()
-    return ConversationExecution(
-        conversation_id=conversation_id,
-        event_queue=queue,
-        interrupt_requested=asyncio.Event(),
-        asyncio_task=Mock(),
-        status=status,
-        started_at=datetime.datetime.now(datetime.UTC),
-    )
-
-
-@contextmanager
-def _patch_websocket_session(db_session):
-    """Patch SessionLocal in websocket module to return the test DB session.
-
-    The websocket handler creates a short-lived SessionLocal() for validation.
-    In tests, we need it to see the test fixture data, so we redirect to the
-    test session (which is NOT closed by the handler since we control its lifecycle).
-    """
-    mock_session_local = Mock(return_value=db_session)
-    with patch("devboard.api.routers.websocket.SessionLocal", mock_session_local):
-        yield
-
-
-class TestWebSocketConnectionLifecycle:
-    """Tests for WebSocket connection establishment and teardown."""
-
-    def test_closes_with_4004_for_nonexistent_conversation(self, client, db_session):
-        """WebSocket should close with code 4004 when conversation not found."""
-        with _patch_websocket_session(db_session):
-            with pytest.raises(WebSocketDisconnect) as exc_info:
-                with client.websocket_connect("/api/conversations/99999/ws") as ws:
-                    ws.receive_json()
-            assert exc_info.value.code == 4004
-
-    def test_connects_successfully_for_valid_conversation(self, client, db_session, test_task):
-        """WebSocket should connect successfully for a valid conversation."""
-        conversation = _get_task_conversation(db_session, test_task)
-
-        with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-                mock_mgr = Mock()
-                mock_get_mgr.return_value = mock_mgr
-                mock_mgr.get_execution.return_value = None
-
-                with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
-                    # Connection should be accepted (no immediate close)
-                    assert ws is not None
-
-
-class TestWebSocketEventStreaming:
-    """Tests for event delivery through WebSocket."""
-
-    def test_sends_execution_started_and_completed_events(self, client, db_session, test_task):
-        """Should send execution_started, then execution_completed lifecycle events."""
-        conversation = _get_task_conversation(db_session, test_task)
-
-        # Mirrors real ExecutionManager: status is set BEFORE sentinel is pushed
-        execution = _make_execution(conversation.id)
-        execution.status = ExecutionStatus.COMPLETED
-        execution.event_queue.put_nowait(None)  # sentinel
-
-        with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-                mock_mgr = Mock()
-                mock_get_mgr.return_value = mock_mgr
-                mock_mgr.get_execution.return_value = execution
-
-                with pytest.raises(WebSocketDisconnect) as exc_info:
-                    with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
-                        # Receive execution_started
-                        started_msg = ws.receive_json()
-                        assert started_msg["event_type"] == "execution_lifecycle"
-                        assert started_msg["event"] == ExecutionLifecycleEventType.EXECUTION_STARTED
-
-                        # Receive execution_completed
-                        completed_msg = ws.receive_json()
-                        assert completed_msg["event_type"] == "execution_lifecycle"
-                        assert completed_msg["event"] == ExecutionLifecycleEventType.EXECUTION_COMPLETED
-                        assert completed_msg["status"] == ExecutionStatus.COMPLETED
-
-                        # Server closes the WebSocket — next receive triggers disconnect
-                        ws.receive_json()
-
-                assert exc_info.value.code == 1000
-
-    def test_sends_conversation_events_before_completion(self, client, db_session, test_task):
-        """Should send ConversationEvent objects before the completion event."""
-        conversation = _get_task_conversation(db_session, test_task)
-
-        execution = _make_execution(conversation.id)
-
-        text_event = TextMessage(
+    def test_connects_and_receives_event(self, client):
+        """WebSocket should deliver tagged events from the broadcast queue."""
+        event = TextMessage(
             event_type="message",
             role=MessageRole.AGENT,
             text_content="Hello from agent",
             timestamp=datetime.datetime.now(datetime.UTC),
         )
-        execution.event_queue.put_nowait(text_event)
-        # Mirrors real ExecutionManager: status is set BEFORE sentinel
-        execution.status = ExecutionStatus.COMPLETED
-        execution.event_queue.put_nowait(None)  # sentinel
 
-        with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-                mock_mgr = Mock()
-                mock_get_mgr.return_value = mock_mgr
-                mock_mgr.get_execution.return_value = execution
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
+        broadcast_queue.put_nowait((42, event))
 
-                with pytest.raises(WebSocketDisconnect) as exc_info:
-                    with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
-                        # execution_started
-                        started_msg = ws.receive_json()
-                        assert started_msg["event_type"] == "execution_lifecycle"
-                        assert started_msg["event"] == "execution_started"
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
 
-                        # conversation event
-                        event_msg = ws.receive_json()
-                        assert event_msg["event_type"] == "message"
-                        assert event_msg["text_content"] == "Hello from agent"
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            with client.websocket_connect("/api/ws") as ws:
+                msg = ws.receive_json()
+                assert msg["event_type"] == "message"
+                assert msg["text_content"] == "Hello from agent"
+                assert msg["conversation_id"] == 42
 
-                        # execution_completed
-                        completed_msg = ws.receive_json()
-                        assert completed_msg["event_type"] == "execution_lifecycle"
-                        assert completed_msg["event"] == "execution_completed"
-                        assert completed_msg["status"] == "completed"
-
-                        # Server closes the WebSocket
-                        ws.receive_json()
-
-                assert exc_info.value.code == 1000
-
-    def test_sends_failed_status_when_execution_fails(self, client, db_session, test_task):
-        """Should include error message in execution_completed when status is FAILED."""
-        conversation = _get_task_conversation(db_session, test_task)
-
-        execution = _make_execution(conversation.id)
-        # Mirrors real ExecutionManager: status and error set BEFORE sentinel
-        execution.status = ExecutionStatus.FAILED
-        execution.error = "Agent crashed"
-        execution.event_queue.put_nowait(None)
-
-        with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-                mock_mgr = Mock()
-                mock_get_mgr.return_value = mock_mgr
-                mock_mgr.get_execution.return_value = execution
-
-                with pytest.raises(WebSocketDisconnect) as exc_info:
-                    with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
-                        ws.receive_json()  # execution_started
-
-                        completed_msg = ws.receive_json()
-                        assert completed_msg["event_type"] == "execution_lifecycle"
-                        assert completed_msg["status"] == "failed"
-                        assert completed_msg["error"] == "Agent crashed"
-
-                        ws.receive_json()  # triggers server close
-
-                assert exc_info.value.code == 1000
-
-    def test_sends_interrupted_status_when_execution_interrupted(self, client, db_session, test_task):
-        """Should send interrupted status in execution_completed when agent was interrupted."""
-        conversation = _get_task_conversation(db_session, test_task)
-
-        execution = _make_execution(conversation.id)
-        # Mirrors real ExecutionManager: status set BEFORE sentinel
-        execution.status = ExecutionStatus.INTERRUPTED
-        execution.event_queue.put_nowait(None)
-
-        with _patch_websocket_session(db_session):
-            with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-                mock_mgr = Mock()
-                mock_get_mgr.return_value = mock_mgr
-                mock_mgr.get_execution.return_value = execution
-
-                with pytest.raises(WebSocketDisconnect) as exc_info:
-                    with client.websocket_connect(f"/api/conversations/{conversation.id}/ws") as ws:
-                        ws.receive_json()  # execution_started
-
-                        completed_msg = ws.receive_json()
-                        assert completed_msg["status"] == "interrupted"
-                        assert completed_msg["error"] is None
-
-                        ws.receive_json()  # triggers server close
-
-                assert exc_info.value.code == 1000
-
-
-class TestWebSocketDisconnectRequeue:
-    """Tests for re-queuing events when WebSocket disconnects mid-stream."""
-
-    @pytest.mark.asyncio
-    async def test_requeues_event_on_websocket_disconnect_during_send(self):
-        """When send_text raises WebSocketDisconnect, the event should be put back on the queue."""
-        execution = _make_execution(conversation_id=1)
-
-        text_event = TextMessage(
-            event_type="message",
-            role=MessageRole.AGENT,
-            text_content="Hello from agent",
+    def test_receives_execution_complete_event_with_conversation_id(self, client):
+        """ExecutionCompleteEvent should be tagged with the correct conversation_id."""
+        event = ExecutionCompleteEvent(
+            status="completed",
+            error=None,
             timestamp=datetime.datetime.now(datetime.UTC),
         )
-        execution.event_queue.put_nowait(text_event)
 
-        mock_websocket = AsyncMock()
-        # First send_text succeeds (execution_started), second raises disconnect (the event send)
-        mock_websocket.send_text.side_effect = [None, WebSocketDisconnect()]
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
+        broadcast_queue.put_nowait((7, event))
 
-        with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-            mock_mgr = Mock()
-            mock_get_mgr.return_value = mock_mgr
-            mock_mgr.get_execution.return_value = execution
-            with pytest.raises(WebSocketDisconnect):
-                await _stream_single_execution(mock_websocket, conversation_id=1)
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
 
-        # The event should have been re-queued
-        assert not execution.event_queue.empty()
-        requeued = execution.event_queue.get_nowait()
-        assert requeued.text_content == "Hello from agent"
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            with client.websocket_connect("/api/ws") as ws:
+                msg = ws.receive_json()
+                assert msg["event_type"] == "execution_complete"
+                assert msg["status"] == "completed"
+                assert msg["error"] is None
+                assert msg["conversation_id"] == 7
+
+    def test_multiplexes_events_from_multiple_conversations(self, client):
+        """Events from different conversations should all arrive tagged with their conversation_id."""
+        event_a = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="From conversation 1",
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+        event_b = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="From conversation 2",
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
+        broadcast_queue.put_nowait((1, event_a))
+        broadcast_queue.put_nowait((2, event_b))
+
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
+
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            with client.websocket_connect("/api/ws") as ws:
+                msg_a = ws.receive_json()
+                assert msg_a["conversation_id"] == 1
+                assert msg_a["text_content"] == "From conversation 1"
+
+                msg_b = ws.receive_json()
+                assert msg_b["conversation_id"] == 2
+                assert msg_b["text_content"] == "From conversation 2"
 
     @pytest.mark.asyncio
-    async def test_remaining_events_preserved_on_disconnect(self):
-        """Events not yet consumed from the queue should remain after a disconnect."""
-        execution = _make_execution(conversation_id=1)
+    async def test_handles_websocket_disconnect_gracefully(self):
+        """WebSocketDisconnect should be caught without propagating."""
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
 
-        events = [
-            TextMessage(
-                event_type="message",
-                role=MessageRole.AGENT,
-                text_content=f"Message {i}",
-                timestamp=datetime.datetime.now(datetime.UTC),
-            )
-            for i in range(3)
-        ]
-        for event in events:
-            execution.event_queue.put_nowait(event)
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
 
         mock_websocket = AsyncMock()
-        # execution_started succeeds, first event succeeds, second event disconnects
-        mock_websocket.send_text.side_effect = [None, None, WebSocketDisconnect()]
+        mock_websocket.accept = AsyncMock()
+        mock_websocket.send_json = AsyncMock(side_effect=WebSocketDisconnect())
 
-        with patch("devboard.api.routers.websocket.get_execution_manager") as mock_get_mgr:
-            mock_mgr = Mock()
-            mock_get_mgr.return_value = mock_mgr
-            mock_mgr.get_execution.return_value = execution
-            with pytest.raises(WebSocketDisconnect):
-                await _stream_single_execution(mock_websocket, conversation_id=1)
+        event = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="Hello",
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+        broadcast_queue.put_nowait((1, event))
 
-        # The failed event (Message 1) should be re-queued at the back,
-        # and Message 2 remains unconsumed at the front
-        remaining = []
-        while not execution.event_queue.empty():
-            remaining.append(execution.event_queue.get_nowait())
-        assert len(remaining) == 2
-        assert remaining[0].text_content == "Message 2"
-        assert remaining[1].text_content == "Message 1"
+        from devboard.api.routers.websocket import multiplexed_websocket
+
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            # Should not raise — WebSocketDisconnect is caught internally
+            await multiplexed_websocket(mock_websocket)
+
+        mock_websocket.accept.assert_called_once()
+
+    def test_failed_execution_complete_includes_error(self, client):
+        """ExecutionCompleteEvent with failed status should include error message."""
+        event = ExecutionCompleteEvent(
+            status="failed",
+            error="Agent crashed unexpectedly",
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
+        broadcast_queue.put_nowait((3, event))
+
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
+
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            with client.websocket_connect("/api/ws") as ws:
+                msg = ws.receive_json()
+                assert msg["event_type"] == "execution_complete"
+                assert msg["status"] == "failed"
+                assert msg["error"] == "Agent crashed unexpectedly"
+                assert msg["conversation_id"] == 3
+
+    def test_interrupted_execution_complete_has_no_error(self, client):
+        """ExecutionCompleteEvent with interrupted status should have no error."""
+        event = ExecutionCompleteEvent(
+            status="interrupted",
+            error=None,
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        broadcast_queue: asyncio.Queue = asyncio.Queue()
+        broadcast_queue.put_nowait((5, event))
+
+        mock_mgr = Mock()
+        mock_mgr.broadcast_queue = broadcast_queue
+
+        with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
+            with client.websocket_connect("/api/ws") as ws:
+                msg = ws.receive_json()
+                assert msg["event_type"] == "execution_complete"
+                assert msg["status"] == "interrupted"
+                assert msg["error"] is None
+                assert msg["conversation_id"] == 5

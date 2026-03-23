@@ -17,3 +17,6 @@ backend/.env
 
 # Data files
 backend/data
+
+# Pytest temp files
+pytest-of-*/

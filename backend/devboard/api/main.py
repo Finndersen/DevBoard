@@ -24,6 +24,7 @@ from devboard.api.routers import (
     documents,
     executions,
     github,
+    log_entries,
     mcp_servers,
     oauth,
     projects,
@@ -72,15 +73,26 @@ ss_mcp = SingleSessionMCP(mcp)
 _GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
 
 
+async def _event_loop_monitor() -> None:
+    while True:
+        t = time.monotonic()
+        await asyncio.sleep(0.5)
+        actual = time.monotonic() - t
+        if actual > 1.0:
+            logfire.warn(f"Event loop blocked for {(actual - 0.5) * 1000:.0f}ms")
+
+
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
     set_execution_manager(ConversationExecutionManager())
     await ss_mcp.start_session()
     await cleanup_stale_locks_on_startup()
+    monitor_task = asyncio.create_task(_event_loop_monitor())
     try:
         yield
     finally:
+        monitor_task.cancel()
         await _shutdown_active_executions()
         await ss_mcp.stop_session()
 
@@ -192,13 +204,14 @@ app.include_router(custom_fields.router, prefix="/api/custom-fields", tags=["cus
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
-app.include_router(websocket.router, prefix="/api/conversations", tags=["websocket"])
+app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])
 app.include_router(tool_approvals.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
 app.include_router(mcp_servers.router, prefix="/api/mcp-servers", tags=["mcp-servers"])
 app.include_router(claude_code.router, prefix="/api/claude-code", tags=["claude-code"])
 app.include_router(github.router, prefix="/api/github", tags=["github"])
+app.include_router(log_entries.router, prefix="/api/log-entries", tags=["log-entries"])
 app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
 
 # Mount MCP server as ASGI application

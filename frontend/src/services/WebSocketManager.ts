@@ -3,55 +3,24 @@ import type { ConversationEvent } from '../lib/api'
 /**
  * Singleton WebSocket Manager
  *
- * Manages per-execution WebSocket connections. Each execution gets a fresh
- * connection that the server closes after sending execution_completed.
- * No auto-reconnection — server-initiated close is the expected lifecycle.
+ * Manages a single shared WebSocket connection to /api/ws.
+ * All conversation executions share this one connection.
+ * Each message includes a conversation_id to route events to the correct handlers.
  */
 class WebSocketManager {
-  private connections: Map<number, WebSocket> = new Map()
+  private ws: WebSocket | null = null
   private messageHandlers: Map<number, Set<(data: string) => void>> = new Map()
   private closeHandlers: Map<number, Set<(code: number, reason: string) => void>> = new Map()
+  private activeConversations: Set<number> = new Set()
 
   /**
-   * Open a fresh WebSocket connection for a conversation execution.
-   * Closes any existing connection for the same conversation first.
+   * Mark a conversation as active and open the shared connection if not already open.
    */
   connect(conversationId: number): void {
-    // Close any existing connection before opening a new one
-    this.closeConnection(conversationId)
-
-    const wsUrl = this.getWebSocketURL(conversationId)
-    const ws = new WebSocket(wsUrl)
-
-    ws.onopen = () => {
-      console.log(`WebSocketManager: Connected to conversation ${conversationId}`)
+    this.activeConversations.add(conversationId)
+    if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+      this.openSharedConnection()
     }
-
-    ws.onmessage = (event) => {
-      this.routeMessage(conversationId, event.data)
-    }
-
-    ws.onerror = (error) => {
-      console.error(`WebSocketManager: Error in conversation ${conversationId}:`, error)
-    }
-
-    ws.onclose = (event) => {
-      console.log(`WebSocketManager: Connection closed for conversation ${conversationId} (code=${event.code}, reason=${event.reason})`)
-      this.connections.delete(conversationId)
-      // Notify close handlers (e.g., websocketStream needs to know)
-      const handlers = this.closeHandlers.get(conversationId)
-      if (handlers) {
-        handlers.forEach((handler) => {
-          try {
-            handler(event.code, event.reason)
-          } catch (error) {
-            console.error(`WebSocketManager: Close handler error for conversation ${conversationId}:`, error)
-          }
-        })
-      }
-    }
-
-    this.connections.set(conversationId, ws)
   }
 
   /**
@@ -89,31 +58,83 @@ class WebSocketManager {
   }
 
   /**
-   * Close a specific connection. Does not trigger reconnection.
+   * Remove a conversation's handlers and close the shared connection if no conversations remain active.
    */
   closeConnection(conversationId: number): void {
-    const ws = this.connections.get(conversationId)
-    if (ws) {
-      ws.close()
-      this.connections.delete(conversationId)
-    }
+    this.activeConversations.delete(conversationId)
     this.messageHandlers.delete(conversationId)
     this.closeHandlers.delete(conversationId)
+    if (this.activeConversations.size === 0 && this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
   }
 
   /**
-   * Close all connections.
+   * Close all connections and clear all state.
    */
   closeAllConnections(): void {
-    this.connections.forEach((ws) => ws.close())
-    this.connections.clear()
+    this.ws?.close()
+    this.ws = null
+    this.activeConversations.clear()
     this.messageHandlers.clear()
     this.closeHandlers.clear()
   }
 
   /**
-   * Route incoming WebSocket message to all registered handlers.
+   * Get connection status for a conversation.
    */
+  getConnectionStatus(conversationId: number): 'connected' | 'connecting' | 'disconnected' {
+    if (!this.activeConversations.has(conversationId) || !this.ws) return 'disconnected'
+    switch (this.ws.readyState) {
+      case WebSocket.OPEN:
+        return 'connected'
+      case WebSocket.CONNECTING:
+        return 'connecting'
+      default:
+        return 'disconnected'
+    }
+  }
+
+  private openSharedConnection(): void {
+    const wsUrl = this.getWebSocketURL()
+    this.ws = new WebSocket(wsUrl)
+
+    this.ws.onopen = () => {
+      console.log('WebSocketManager: Shared connection opened')
+    }
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string) as { conversation_id: number }
+        this.routeMessage(data.conversation_id, event.data as string)
+      } catch (error) {
+        console.error('WebSocketManager: Failed to parse message:', error)
+      }
+    }
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocketManager: Shared connection error:', error)
+    }
+
+    this.ws.onclose = (event) => {
+      console.log(`WebSocketManager: Shared connection closed (code=${event.code}, reason=${event.reason})`)
+      this.ws = null
+      this.activeConversations.forEach((conversationId) => {
+        const handlers = this.closeHandlers.get(conversationId)
+        if (handlers) {
+          handlers.forEach((handler) => {
+            try {
+              handler(event.code, event.reason)
+            } catch (error) {
+              console.error(`WebSocketManager: Close handler error for conversation ${conversationId}:`, error)
+            }
+          })
+        }
+      })
+    }
+  }
+
   private routeMessage(conversationId: number, data: string): void {
     const handlers = this.messageHandlers.get(conversationId)
     if (!handlers || handlers.size === 0) return
@@ -126,35 +147,15 @@ class WebSocketManager {
     })
   }
 
-  /**
-   * Get WebSocket URL for a conversation.
-   */
-  private getWebSocketURL(conversationId: number): string {
+  private getWebSocketURL(): string {
     const baseURL = import.meta.env.VITE_API_BASE_URL || ''
     if (baseURL) {
       const protocol = baseURL.startsWith('https') ? 'wss' : 'ws'
       const host = baseURL.replace(/^https?:\/\//, '')
-      return `${protocol}://${host}/api/conversations/${conversationId}/ws`
+      return `${protocol}://${host}/api/ws`
     }
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    return `${protocol}://${window.location.host}/api/conversations/${conversationId}/ws`
-  }
-
-  /**
-   * Get connection status for a conversation.
-   */
-  getConnectionStatus(conversationId: number): 'connected' | 'connecting' | 'disconnected' {
-    const ws = this.connections.get(conversationId)
-    if (!ws) return 'disconnected'
-
-    switch (ws.readyState) {
-      case WebSocket.OPEN:
-        return 'connected'
-      case WebSocket.CONNECTING:
-        return 'connecting'
-      default:
-        return 'disconnected'
-    }
+    return `${protocol}://${window.location.host}/api/ws`
   }
 }
 

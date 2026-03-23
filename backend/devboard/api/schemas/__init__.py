@@ -34,6 +34,7 @@ from .integration import (
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
 )
+from .log_entry import LogEntryCreate, LogEntryResponse, LogEntryUpdate
 from .mcp import (
     MCPServerDetailResponse,
     MCPToolInfo,
@@ -109,6 +110,10 @@ __all__ = [
     "DocumentCreate",
     "DocumentResponse",
     "DocumentUpdate",
+    # LogEntry
+    "LogEntryCreate",
+    "LogEntryResponse",
+    "LogEntryUpdate",
     # Integration
     "AgentConfigurationResponse",
     "AgentEngineInfo",

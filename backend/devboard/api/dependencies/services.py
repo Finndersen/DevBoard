@@ -13,6 +13,7 @@ from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_custom_field_repository,
     get_document_repository,
+    get_log_entry_repository,
     get_mcp_server_repository,
     get_oauth_repository,
     get_project_repository,
@@ -27,6 +28,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    LogEntryRepository,
     MCPServerRepository,
     OAuthRepository,
     ProjectRepository,
@@ -38,6 +40,7 @@ from devboard.services.codebase_investigation import CodebaseInvestigationServic
 from devboard.services.config_service import ConfigService
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
+from devboard.services.log_entry_service import LogEntryService
 from devboard.services.mcp_service import MCPService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
@@ -156,6 +159,14 @@ def get_project_service(
         document_repo=document_repo,
         project_repo=project_repo,
     )
+
+
+def get_log_entry_service(
+    log_entry_repo: LogEntryRepository = Depends(get_log_entry_repository),
+    task_repo: TaskRepository = Depends(get_task_repository),
+) -> LogEntryService:
+    """Get LogEntryService instance."""
+    return LogEntryService(log_entry_repo=log_entry_repo, task_repo=task_repo)
 
 
 def get_oauth_service(

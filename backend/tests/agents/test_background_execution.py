@@ -76,13 +76,13 @@ class TestRunAgentForConversation:
             mock_create_role.return_value = mock_role
             mock_create_exec.return_value = _make_mock_exec_service(empty_stream)
 
-            event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
+            broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
             from devboard.agents.execution.manager import _run_agent_for_conversation
 
             await _run_agent_for_conversation(
-                event_queue,
+                broadcast_queue,
                 interrupt_event,
                 conversation_id=1,
                 message_or_approvals="Hello",
@@ -107,8 +107,8 @@ class TestRunAgentForConversation:
         )
 
     @pytest.mark.asyncio
-    async def test_events_pushed_to_queue(self, mock_services, mock_conversation):
-        """Verify events from the agent stream are pushed to the event queue."""
+    async def test_events_pushed_to_broadcast_queue(self, mock_services, mock_conversation):
+        """Verify events from the agent stream are pushed to the broadcast queue with conversation_id."""
         event = TextMessage(
             role=MessageRole.AGENT,
             text_content="Hello",
@@ -137,20 +137,21 @@ class TestRunAgentForConversation:
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(mock_stream)
 
-            event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
+            broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
             from devboard.agents.execution.manager import _run_agent_for_conversation
 
             await _run_agent_for_conversation(
-                event_queue,
+                broadcast_queue,
                 interrupt_event,
                 conversation_id=1,
                 message_or_approvals="Hello",
             )
 
-        assert event_queue.qsize() == 1
-        queued = event_queue.get_nowait()
+        assert broadcast_queue.qsize() == 1
+        conv_id, queued = broadcast_queue.get_nowait()
+        assert conv_id == 1
         assert queued == event
 
     @pytest.mark.asyncio
@@ -180,13 +181,13 @@ class TestRunAgentForConversation:
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(empty_stream)
 
-            event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
+            broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
             from devboard.agents.execution.manager import _run_agent_for_conversation
 
             await _run_agent_for_conversation(
-                event_queue,
+                broadcast_queue,
                 interrupt_event,
                 conversation_id=1,
                 message_or_approvals="Hello",
@@ -223,14 +224,14 @@ class TestRunAgentForConversation:
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(failing_stream)
 
-            event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
+            broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
             from devboard.agents.execution.manager import _run_agent_for_conversation
 
             with pytest.raises(RuntimeError, match="Agent failed"):
                 await _run_agent_for_conversation(
-                    event_queue,
+                    broadcast_queue,
                     interrupt_event,
                     conversation_id=1,
                     message_or_approvals="Hello",
@@ -258,14 +259,14 @@ class TestRunAgentForConversation:
 
             mock_services.conversation_repo.get_by_id.return_value = None
 
-            event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
+            broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
             interrupt_event = asyncio.Event()
 
             from devboard.agents.execution.manager import _run_agent_for_conversation
 
             with pytest.raises(ValueError, match="Conversation 99 not found"):
                 await _run_agent_for_conversation(
-                    event_queue,
+                    broadcast_queue,
                     interrupt_event,
                     conversation_id=99,
                     message_or_approvals="Hello",

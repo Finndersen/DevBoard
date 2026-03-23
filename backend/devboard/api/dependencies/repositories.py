@@ -12,6 +12,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    LogEntryRepository,
     MCPServerRepository,
     OAuthRepository,
     ProjectRepository,
@@ -86,3 +87,8 @@ def get_task_implementation_plan_repository(db: Session = Depends(get_db)) -> Ta
 def get_claude_project_cache_repository(db: Session = Depends(get_db)) -> ClaudeProjectCacheRepository:
     """Get ClaudeProjectCacheRepository instance."""
     return ClaudeProjectCacheRepository(db)
+
+
+def get_log_entry_repository(db: Session = Depends(get_db)) -> LogEntryRepository:
+    """Get LogEntryRepository instance."""
+    return LogEntryRepository(db)

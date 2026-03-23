@@ -9,6 +9,7 @@ from .conversation import ConversationRepository
 from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
 from .implementation_plan import TaskImplementationPlanRepository
+from .log_entry import LogEntryRepository
 from .mcp_server import MCPServerRepository
 from .oauth import OAuthRepository
 from .project import ProjectRepository
@@ -18,6 +19,7 @@ from .worktree_slot import WorktreeSlotRepository
 __all__ = [
     "AgentRoleConfigRepository",
     "BaseRepository",
+    "LogEntryRepository",
     "ClaudeProjectCacheRepository",
     "CodebaseRepository",
     "ConfigurationRepository",

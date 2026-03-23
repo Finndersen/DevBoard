@@ -3,12 +3,12 @@
 import asyncio
 import datetime
 from collections.abc import AsyncIterator, Coroutine
-from typing import Any
+from typing import Any, Literal, cast
 
 import logfire
 from opentelemetry import context as otel_context
 
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
@@ -25,7 +25,7 @@ from devboard.services.workspace.types import AllSlotsLockedException, BranchInU
 class ConversationExecutionManager:
     """Manages all active agent executions.
 
-    Tracks background task lifecycle, event queues, and interrupt signaling.
+    Tracks background task lifecycle and interrupt signaling.
     Keyed by conversation_id — at most one execution per conversation at a time.
 
     Created and registered during FastAPI lifespan startup via the execution registry.
@@ -33,12 +33,12 @@ class ConversationExecutionManager:
 
     def __init__(self) -> None:
         self._executions: dict[int, ConversationExecution] = {}
+        self.broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]] = asyncio.Queue()
 
     async def _run_wrapper(
         self,
         conversation_id: int,
         coro: Coroutine[Any, Any, None],
-        event_queue: asyncio.Queue[ConversationEvent | None],
     ) -> None:
         """Run the coroutine and handle lifecycle transitions."""
         execution = self._executions.get(conversation_id)
@@ -63,8 +63,16 @@ class ConversationExecutionManager:
                     logfire.exception(f"Execution failed for conversation {conversation_id}: {e}")
                 finally:
                     execution.completed_at = datetime.datetime.now(datetime.UTC)
-                    # Push sentinel to signal completion to WebSocket consumers
-                    await event_queue.put(None)
+                    await self.broadcast_queue.put(
+                        (
+                            conversation_id,
+                            ExecutionCompleteEvent(
+                                status=cast(Literal["completed", "interrupted", "failed"], execution.status),
+                                error=execution.error,
+                                timestamp=datetime.datetime.now(datetime.UTC),
+                            ),
+                        )
+                    )
                     self._executions.pop(conversation_id, None)
         finally:
             otel_context.detach(token)
@@ -94,17 +102,18 @@ class ConversationExecutionManager:
         if existing and existing.status == ExecutionStatus.RUNNING:
             raise ConversationBusyError(conversation_id)
 
-        event_queue: asyncio.Queue[ConversationEvent | None] = asyncio.Queue()
         interrupt_event = asyncio.Event()
 
         coro = _run_agent_for_conversation(
-            event_queue, interrupt_event, conversation_id=conversation_id, message_or_approvals=message_or_approvals
+            self.broadcast_queue,
+            interrupt_event,
+            conversation_id=conversation_id,
+            message_or_approvals=message_or_approvals,
         )
-        task = asyncio.create_task(self._run_wrapper(conversation_id, coro, event_queue))
+        task = asyncio.create_task(self._run_wrapper(conversation_id, coro))
 
         execution = ConversationExecution(
             conversation_id=conversation_id,
-            event_queue=event_queue,
             interrupt_requested=interrupt_event,
             asyncio_task=task,
             status=ExecutionStatus.RUNNING,
@@ -131,11 +140,12 @@ class ConversationExecutionManager:
 async def _drain_events(
     stream: AsyncIterator[ConversationEvent],
     db,
-    event_queue: asyncio.Queue[ConversationEvent | None],
+    broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
+    conversation_id: int,
 ) -> None:
     async for event in stream:
         await asyncio.to_thread(db.commit)
-        await event_queue.put(event)
+        await broadcast_queue.put((conversation_id, event))
 
 
 async def _create_agent_stream(
@@ -166,17 +176,18 @@ async def _create_agent_stream(
 
 
 async def _run_agent_for_conversation(
-    event_queue: asyncio.Queue[ConversationEvent | None],
+    broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
     interrupt_event: asyncio.Event,
     *,
     conversation_id: int,
     message_or_approvals: str | ToolApprovals,
 ) -> None:
-    """Run agent execution for a conversation and push events to the queue.
+    """Run agent execution for a conversation and push events to the broadcast queue.
 
     Opens its own DB session, constructs services, runs the agent, and pushes
-    ConversationEvent objects to the event_queue. The queue sentinel (None) is
-    pushed by the ConversationExecutionManager wrapper after this returns.
+    (conversation_id, ConversationEvent) tuples to the broadcast_queue.
+    The ExecutionCompleteEvent is pushed by ConversationExecutionManager._run_wrapper
+    after this returns.
 
     For task conversations, workspace allocation happens first so that the
     role is created with a valid working directory.
@@ -199,48 +210,63 @@ async def _run_agent_for_conversation(
                         services, conversation, message_or_approvals, interrupt_event, working_dir=slot.path
                     )
                     await _drain_events(
-                        services.workspace_service.prepare_workspace(conversation_parent, slot), db, event_queue
+                        services.workspace_service.prepare_workspace(conversation_parent, slot),
+                        db,
+                        broadcast_queue,
+                        conversation_id,
                     )
-                    await _drain_events(agent_stream, db, event_queue)
+                    await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             except BranchInUseException as e:
-                await event_queue.put(
-                    SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={"error_code": "BRANCH_IN_USE", "message": str(e)},
-                        timestamp=datetime.datetime.now(datetime.UTC),
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={"error_code": "BRANCH_IN_USE", "message": str(e)},
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
                     )
                 )
             except TaskBranchNotFoundException as e:
-                await event_queue.put(
-                    SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "BRANCH_NOT_FOUND",
-                            "message": f"Task branch '{e.branch_name}' does not exist. It may have been deleted or is not available on this machine. Please recreate the branch or fetch it from a remote.",
-                        },
-                        timestamp=datetime.datetime.now(datetime.UTC),
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "BRANCH_NOT_FOUND",
+                                "message": f"Task branch '{e.branch_name}' does not exist. It may have been deleted or is not available on this machine. Please recreate the branch or fetch it from a remote.",
+                            },
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
                     )
                 )
             except AllSlotsLockedException:
-                await event_queue.put(
-                    SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "SLOTS_EXHAUSTED",
-                            "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
-                        },
-                        timestamp=datetime.datetime.now(datetime.UTC),
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "SLOTS_EXHAUSTED",
+                                "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
+                            },
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
                     )
                 )
             except SetupCommandError as e:
-                await event_queue.put(
-                    SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "SETUP_COMMAND_FAILED",
-                            "message": f"Workspace setup command failed: {e.message}",
-                        },
-                        timestamp=datetime.datetime.now(datetime.UTC),
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "SETUP_COMMAND_FAILED",
+                                "message": f"Workspace setup command failed: {e.message}",
+                            },
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
                     )
                 )
         else:
@@ -254,7 +280,7 @@ async def _run_agent_for_conversation(
             agent_stream = await _create_agent_stream(
                 services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
             )
-            await _drain_events(agent_stream, db, event_queue)
+            await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
 
     finally:
         await asyncio.to_thread(db.commit)

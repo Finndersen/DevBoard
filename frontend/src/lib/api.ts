@@ -172,7 +172,7 @@ export interface DocumentResponse {
 // New agent conversation interfaces matching backend schemas
 export type MessageRole = 'user' | 'agent'
 
-export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking'
+export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'execution_complete'
 
 export type MetaMessageType = 'compact_summary' | 'skill_content'
 
@@ -246,8 +246,16 @@ export interface ThinkingEvent {
   uuid?: string
 }
 
+export interface ExecutionCompleteEvent {
+  event_type: 'execution_complete'
+  status: 'completed' | 'interrupted' | 'failed'
+  error: string | null
+  timestamp: string
+  conversation_id: number
+}
+
 // Union type for all conversation events
-export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent
+export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent | ExecutionCompleteEvent
 
 export interface UserPrompt {
   message: string

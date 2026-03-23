@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from devboard.agents.events import MessageRole, TextMessage
+from devboard.agents.events import ExecutionCompleteEvent, MessageRole, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
@@ -37,7 +37,7 @@ async def _event_pushing_coro(q, ie, *, conversation_id, message_or_approvals) -
         text_content="hello",
         timestamp=datetime.datetime.now(datetime.UTC),
     )
-    await q.put(event)
+    await q.put((conversation_id, event))
 
 
 class TestStartAgentExecution:
@@ -121,24 +121,53 @@ class TestExecutionLifecycle:
         assert execution.completed_at is not None
 
     @pytest.mark.asyncio
-    async def test_sentinel_pushed_to_queue_on_completion(self, manager):
+    async def test_execution_complete_event_pushed_on_completion(self, manager):
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
 
-        sentinel = await asyncio.wait_for(execution.event_queue.get(), timeout=1.0)
-        assert sentinel is None
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conversation_id == 1
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.status == "completed"
+        assert event.error is None
 
     @pytest.mark.asyncio
-    async def test_events_then_sentinel_in_queue(self, manager):
+    async def test_events_then_execution_complete_in_broadcast_queue(self, manager):
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_event_pushing_coro):
             execution = manager.start_agent_execution(1, "Hello")
         await execution.asyncio_task
 
-        event = await asyncio.wait_for(execution.event_queue.get(), timeout=1.0)
-        assert event is not None
-        sentinel = await asyncio.wait_for(execution.event_queue.get(), timeout=1.0)
-        assert sentinel is None
+        conv_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conv_id == 1
+        assert isinstance(event, TextMessage)
+
+        conv_id, complete_event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conv_id == 1
+        assert isinstance(complete_event, ExecutionCompleteEvent)
+
+    @pytest.mark.asyncio
+    async def test_execution_complete_event_includes_error_on_failure(self, manager):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_error_raising_coro):
+            execution = manager.start_agent_execution(1, "Hello")
+        await execution.asyncio_task
+
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conversation_id == 1
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.status == "failed"
+        assert event.error == "something went wrong"
+
+    @pytest.mark.asyncio
+    async def test_execution_complete_event_interrupted_status(self, manager):
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_interrupt_raising_coro):
+            execution = manager.start_agent_execution(1, "Hello")
+        await execution.asyncio_task
+
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conversation_id == 1
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.status == "interrupted"
 
 
 class TestInterrupt:
