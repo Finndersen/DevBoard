@@ -19,6 +19,7 @@ from devboard.integrations.shell import execute_shell_command
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.services.workspace.types import (
+    AllocationResult,
     AllSlotsLockedException,
     BranchInUseException,
     SetupCommandError,
@@ -51,13 +52,19 @@ class WorkspaceService:
         slot_git = GitRepoIntegration(slot.path)
         current_branch = await slot_git.get_current_branch()
 
-        if current_branch != branch_name:
-            logfire.info(f"Checking out branch {branch_name} in slot {slot.id}")
-            await slot_git.checkout_branch(branch_name)
-            return True
+        if current_branch == branch_name:
+            logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
+            return False
 
-        logfire.info(f"Slot {slot.id} already on branch {branch_name}, skipping checkout")
-        return False
+        # During a rebase, HEAD is detached but the branch is still associated with this worktree
+        in_progress_branch = await slot_git.get_in_progress_operation_branch()
+        if in_progress_branch == branch_name:
+            logfire.info(f"Slot {slot.id} has in-progress git operation on branch {branch_name}, skipping checkout")
+            return False
+
+        logfire.info(f"Checking out branch {branch_name} in slot {slot.id}")
+        await slot_git.checkout_branch(branch_name)
+        return True
 
     def _check_worktree_valid(self, slot: WorktreeSlot) -> bool:
         """Check if a worktree exists and is valid."""
@@ -136,10 +143,11 @@ class WorkspaceService:
         logfire.info(f"Setup command completed successfully for task {task.id}")
 
     @asynccontextmanager
-    async def allocate_workspace(self, task: Task) -> AsyncIterator[WorktreeSlot]:
+    async def allocate_workspace(self, task: Task) -> AsyncIterator[AllocationResult]:
         """Allocate a workspace slot for a task (fast, DB/metadata only).
 
-        Yields the locked slot. Releases it on exit.
+        Yields an AllocationResult with the locked slot and whether it was reused.
+        Releases the slot on exit.
 
         Raises:
             BranchInUseException: If the task's branch is locked by another task.
@@ -150,7 +158,7 @@ class WorkspaceService:
             await TaskGitService.verify_task_branch_exists(task)
 
             try:
-                slot = await self._pool_manager.allocate_for_task(task)
+                allocation = await self._pool_manager.allocate_for_task(task)
                 self.worktree_slot_repo.commit()
             except BranchInUseException:
                 raise
@@ -158,10 +166,12 @@ class WorkspaceService:
                 if not self._check_can_create_worktree(task.codebase):
                     raise
                 logfire.info(f"All slots locked, creating new slot for task {task.id}")
-                slot = await self._pool_manager.create_and_lock_slot(task)
+                new_slot = await self._pool_manager.create_and_lock_slot(task)
                 self.worktree_slot_repo.commit()
+                allocation = AllocationResult(slot=new_slot, reused=False)
 
-            yield slot
+            slot = allocation.slot
+            yield allocation
         finally:
             if slot:
                 self._pool_manager.release_slot(slot)

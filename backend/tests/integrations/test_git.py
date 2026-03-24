@@ -1056,3 +1056,102 @@ class TestFetch:
             await git.fetch(branch="main", timeout=10.0)
 
         mock_cmd.assert_called_once_with(["fetch", "origin", "main"], timeout=10.0)
+
+
+class TestGetInProgressOperationBranch:
+    """Tests for get_in_progress_operation_branch method."""
+
+    @pytest.mark.asyncio
+    async def test_rebase_merge_head_name_returns_branch(self, tmp_path):
+        """rebase-merge/head-name present returns the stripped branch name."""
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        git_dir = repo_path / ".git"
+        git_dir.mkdir()
+        rebase_merge_dir = git_dir / "rebase-merge"
+        rebase_merge_dir.mkdir()
+        (rebase_merge_dir / "head-name").write_text("refs/heads/feature/my-branch\n")
+
+        git = GitRepoIntegration(repo_path)
+
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ".git"
+            result = await git.get_in_progress_operation_branch()
+
+        assert result == "feature/my-branch"
+        mock_cmd.assert_called_once_with(["rev-parse", "--git-dir"])
+
+    @pytest.mark.asyncio
+    async def test_rebase_apply_head_name_returns_branch(self, tmp_path):
+        """rebase-apply/head-name present returns the stripped branch name."""
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        git_dir = repo_path / ".git"
+        git_dir.mkdir()
+        rebase_apply_dir = git_dir / "rebase-apply"
+        rebase_apply_dir.mkdir()
+        (rebase_apply_dir / "head-name").write_text("refs/heads/bugfix/issue-42\n")
+
+        git = GitRepoIntegration(repo_path)
+
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ".git"
+            result = await git.get_in_progress_operation_branch()
+
+        assert result == "bugfix/issue-42"
+
+    @pytest.mark.asyncio
+    async def test_no_rebase_files_returns_none(self, tmp_path):
+        """No rebase state files present returns None."""
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        (repo_path / ".git").mkdir()
+
+        git = GitRepoIntegration(repo_path)
+
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ".git"
+            result = await git.get_in_progress_operation_branch()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_ref_without_refs_heads_prefix_returned_as_is(self, tmp_path):
+        """A ref that doesn't start with refs/heads/ is returned unchanged."""
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        git_dir = repo_path / ".git"
+        git_dir.mkdir()
+        rebase_merge_dir = git_dir / "rebase-merge"
+        rebase_merge_dir.mkdir()
+        (rebase_merge_dir / "head-name").write_text("some-other-ref\n")
+
+        git = GitRepoIntegration(repo_path)
+
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ".git"
+            result = await git.get_in_progress_operation_branch()
+
+        assert result == "some-other-ref"
+
+    @pytest.mark.asyncio
+    async def test_rebase_merge_takes_precedence_over_rebase_apply(self, tmp_path):
+        """rebase-merge/head-name is checked before rebase-apply/head-name."""
+        repo_path = tmp_path / "test_repo"
+        repo_path.mkdir()
+        git_dir = repo_path / ".git"
+        git_dir.mkdir()
+        rebase_merge_dir = git_dir / "rebase-merge"
+        rebase_merge_dir.mkdir()
+        (rebase_merge_dir / "head-name").write_text("refs/heads/merge-branch\n")
+        rebase_apply_dir = git_dir / "rebase-apply"
+        rebase_apply_dir.mkdir()
+        (rebase_apply_dir / "head-name").write_text("refs/heads/apply-branch\n")
+
+        git = GitRepoIntegration(repo_path)
+
+        with patch.object(git, "run_git_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = ".git"
+            result = await git.get_in_progress_operation_branch()
+
+        assert result == "merge-branch"

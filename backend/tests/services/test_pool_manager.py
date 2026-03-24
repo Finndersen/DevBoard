@@ -11,7 +11,7 @@ from devboard.config.integration_configs import WorktreeLocationMode
 from devboard.db.models import Codebase, Task, WorktreeSlot
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.services.workspace.pool_manager import WorktreePoolManager
-from devboard.services.workspace.types import BranchInUseException
+from devboard.services.workspace.types import AllocationResult, BranchInUseException
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ async def test_allocate_reacquires_stale_lock_for_same_task(pool_manager, worktr
 
         result = await pool_manager.allocate_for_task(sample_task)
 
-    assert result is slot
+    assert result == AllocationResult(slot=slot, reused=True)
     worktree_slot_repo.lock_slot.assert_called_once_with(slot, sample_task)
 
 
@@ -122,7 +122,7 @@ async def test_allocate_uses_unlocked_slot_with_branch_already_checked_out(
 
         result = await pool_manager.allocate_for_task(sample_task)
 
-    assert result is slot
+    assert result == AllocationResult(slot=slot, reused=True)
     worktree_slot_repo.lock_slot.assert_called_once_with(slot, sample_task)
 
 

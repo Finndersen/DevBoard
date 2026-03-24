@@ -222,22 +222,23 @@ async def _run_agent_for_conversation(
 
         if is_task:
             try:
-                async with services.workspace_service.allocate_workspace(conversation_parent) as slot:
-                    await broadcast_queue.put(
-                        (
-                            conversation_id,
-                            SystemEvent(
-                                type=SystemEventType.WORKSPACE_ALLOCATE,
-                                data={"task_id": conversation_parent.id, "slot_id": slot.id},
-                                timestamp=datetime.datetime.now(datetime.UTC),
-                            ),
+                async with services.workspace_service.allocate_workspace(conversation_parent) as allocation:
+                    if not allocation.reused:
+                        await broadcast_queue.put(
+                            (
+                                conversation_id,
+                                SystemEvent(
+                                    type=SystemEventType.WORKSPACE_ALLOCATE,
+                                    data={"task_id": conversation_parent.id, "slot_id": allocation.slot.id},
+                                    timestamp=datetime.datetime.now(datetime.UTC),
+                                ),
+                            )
                         )
-                    )
                     agent_stream = await _create_agent_stream(
-                        services, conversation, message_or_approvals, interrupt_event, working_dir=slot.path
+                        services, conversation, message_or_approvals, interrupt_event, working_dir=allocation.slot.path
                     )
                     await _drain_events(
-                        services.workspace_service.prepare_workspace(conversation_parent, slot),
+                        services.workspace_service.prepare_workspace(conversation_parent, allocation.slot),
                         db,
                         broadcast_queue,
                         conversation_id,
@@ -291,6 +292,21 @@ async def _run_agent_for_conversation(
                             data={
                                 "error_code": "SETUP_COMMAND_FAILED",
                                 "message": f"Workspace setup command failed: {e.message}",
+                            },
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
+                    )
+                )
+            except Exception as e:
+                logfire.exception(f"Workspace preparation failed for conversation {conversation_id}: {e}")
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "WORKSPACE_ERROR",
+                                "message": f"Workspace preparation failed: {e}",
                             },
                             timestamp=datetime.datetime.now(datetime.UTC),
                         ),

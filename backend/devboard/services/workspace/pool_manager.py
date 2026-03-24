@@ -13,6 +13,7 @@ from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.shell import ShellCommandExecutionError
 from devboard.services.project_directory import get_devboard_home
 from devboard.services.workspace.types import (
+    AllocationResult,
     AllSlotsLockedException,
     BranchInUseException,
     LastUsedByTaskInfo,
@@ -106,7 +107,7 @@ class WorktreePoolManager:
 
         return released_count
 
-    async def allocate_for_task(self, task: Task) -> WorktreeSlot:
+    async def allocate_for_task(self, task: Task) -> AllocationResult:
         """Find an appropriate slot and lock it for a task.
 
         Implements smart allocation with priority:
@@ -145,14 +146,14 @@ class WorktreePoolManager:
                         logfire.info(
                             f"Using slot {slot.id} for task {task.id} - branch {task.branch_name} already checked out there"
                         )
-                        return self.worktree_slot_repo.lock_slot(slot, task)
+                        return AllocationResult(slot=self.worktree_slot_repo.lock_slot(slot, task), reused=True)
                     else:
                         if slot.last_used_by_task_id == task.id:
                             logfire.warn(
                                 f"Re-acquiring stale lock on slot {slot.id} for task {task.id} "
                                 f"(branch {task.branch_name} already checked out there)"
                             )
-                            return self.worktree_slot_repo.lock_slot(slot, task)
+                            return AllocationResult(slot=self.worktree_slot_repo.lock_slot(slot, task), reused=True)
                         raise BranchInUseException(
                             f"Branch '{task.branch_name}' is already in use by task {slot.last_used_by_task_id}"
                         )
@@ -185,7 +186,7 @@ class WorktreePoolManager:
 
         if sticky_slot:
             logfire.info(f"Using sticky slot {sticky_slot.id} for task {task.id}")
-            return self.worktree_slot_repo.lock_slot(sticky_slot, task)
+            return AllocationResult(slot=self.worktree_slot_repo.lock_slot(sticky_slot, task), reused=True)
 
         if not candidate_slots:
             raise AllSlotsLockedException("All worktree slots are currently in use")
@@ -203,7 +204,7 @@ class WorktreePoolManager:
             raise AllSlotsLockedException("All available slots have uncommitted changes")
 
         logfire.info(f"Using LRU slot {best_slot.id} for task {task.id}")
-        return self.worktree_slot_repo.lock_slot(best_slot, task)
+        return AllocationResult(slot=self.worktree_slot_repo.lock_slot(best_slot, task), reused=False)
 
     async def create_and_lock_slot(self, task: Task) -> WorktreeSlot:
         """Create a new worktree slot record and lock it for a task.

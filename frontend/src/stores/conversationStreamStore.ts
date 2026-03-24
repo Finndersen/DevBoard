@@ -101,6 +101,16 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       if (rawEvent.event_type === 'execution_complete') {
         const completeEvent = rawEvent as unknown as ExecutionCompleteEvent
         if (completeEvent.status === 'failed') {
+          const errorEvent: SystemEvent = {
+            event_type: 'system',
+            type: 'stream_error',
+            data: {
+              error_code: 'EXECUTION_FAILED',
+              message: completeEvent.error || 'Agent execution failed',
+            },
+            timestamp: new Date().toISOString(),
+          }
+          get().addEvent(conversationId, errorEvent)
           get().setError(conversationId, new Error(completeEvent.error || 'Agent execution failed'))
         } else {
           // Synthesize error results for tool calls that never received a result

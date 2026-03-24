@@ -562,6 +562,28 @@ class GitRepoIntegration:
         """
         return await self.run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
 
+    async def get_in_progress_operation_branch(self) -> str | None:
+        """Get the branch associated with an in-progress rebase operation.
+
+        During a rebase, HEAD is detached so get_current_branch() returns 'HEAD'.
+        This method checks for rebase state files to recover the original branch name.
+
+        Returns:
+            Branch name if a rebase is in progress, None otherwise
+        """
+        git_dir_str = await self.run_git_command(["rev-parse", "--git-dir"])
+        git_dir = self._repo_path / git_dir_str
+
+        for candidate in ["rebase-merge/head-name", "rebase-apply/head-name"]:
+            head_name_file = git_dir / candidate
+            if head_name_file.exists():
+                ref = head_name_file.read_text().strip()
+                if ref.startswith("refs/heads/"):
+                    return ref[len("refs/heads/") :]
+                return ref
+
+        return None
+
     async def get_branch_head(self, branch: str) -> str | None:
         """Get the HEAD commit hash for a branch.
 

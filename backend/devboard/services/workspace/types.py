@@ -1,7 +1,12 @@
 """Data classes and exceptions for workspace allocation."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from devboard.db.models import WorktreeSlot
 
 
 class SetupCommandError(Exception):
@@ -63,6 +68,12 @@ class PoolStatus:
     codebase_path: str
     slots: list[SlotInfo]
     stats: PoolStats
+
+
+@dataclass
+class AllocationResult:
+    slot: WorktreeSlot
+    reused: bool
 
 
 class AllSlotsLockedException(Exception):
