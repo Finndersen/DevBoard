@@ -1,6 +1,7 @@
 """Logfire configuration for DevBoard application."""
 
 import os
+from pathlib import Path
 from typing import cast
 
 import logfire
@@ -41,6 +42,10 @@ def scrubbing_callback(m: logfire.ScrubMatch):
 def setup_logfire(app: FastAPI) -> None:
     """Setup Logfire configuration. Call this once at application startup."""
 
+    if os.getenv("DISABLE_LOGFIRE", "").lower() in ("1", "true", "yes"):
+        logfire.configure(send_to_logfire=False, console=False)
+        return
+
     # Check if Logfire token is available in environment
     token = os.getenv("LOGFIRE_TOKEN")
     environment = os.getenv("ENVIRONMENT", "development")
@@ -51,13 +56,15 @@ def setup_logfire(app: FastAPI) -> None:
     if environment == "development":
         console_options = ConsoleOptions(verbose=True, min_log_level=log_level)
 
+    credentials_file = Path(__file__).parents[2] / ".logfire" / "logfire_credentials.json"
+    send_to_logfire = bool(token) or credentials_file.exists()
+
     # Configure Logfire with hardcoded sensible defaults
     logfire.configure(
         service_name="devboard",
         environment=environment,
         console=console_options,
-        # Only send to Logfire if we have a token (production/staging) or in development with explicit token
-        send_to_logfire=bool(token),
+        send_to_logfire=send_to_logfire,
         scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback),
     )
 

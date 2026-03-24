@@ -1,5 +1,6 @@
 """Filesystem integration for codebase file operations."""
 
+import asyncio
 from pathlib import Path
 
 import logfire
@@ -70,8 +71,11 @@ class CodebaseIntegration:
         if start_line is not None and end_line is not None and start_line > end_line:
             raise ValueError(f"start_line ({start_line}) must be <= end_line ({end_line})")
 
-        with open(full_path, encoding="utf-8") as f:
-            lines = f.readlines()
+        def _read_lines() -> list[str]:
+            with open(full_path, encoding="utf-8") as f:
+                return f.readlines()
+
+        lines = await asyncio.to_thread(_read_lines)
 
         # Determine the range to read
         total_lines = len(lines)
@@ -117,16 +121,18 @@ class CodebaseIntegration:
         if not dir_path.is_dir():
             raise ValueError(f"Path is not a directory: {directory}")
 
-        entries = []
-        pattern = pattern or "*"
-        # Use rglob for recursive pattern matching
-        for p in dir_path.rglob(pattern):
-            if p.is_file():
-                entries.append(str(p.relative_to(dir_path)))
-            elif p.is_dir() and include_directories:
-                entries.append(str(p.relative_to(dir_path)) + "/")
+        _pattern = pattern or "*"
 
-        return sorted(entries)
+        def _list_entries() -> list[str]:
+            entries = []
+            for p in dir_path.rglob(_pattern):
+                if p.is_file():
+                    entries.append(str(p.relative_to(dir_path)))
+                elif p.is_dir() and include_directories:
+                    entries.append(str(p.relative_to(dir_path)) + "/")
+            return sorted(entries)
+
+        return await asyncio.to_thread(_list_entries)
 
     async def search_file_content(
         self,
@@ -349,7 +355,7 @@ class CodebaseIntegration:
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        stat = full_path.stat()
+        stat = await asyncio.to_thread(full_path.stat)
         return FileInfo(
             path=file_path,
             size=stat.st_size,

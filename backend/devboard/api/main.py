@@ -8,9 +8,9 @@ from pathlib import Path
 
 import logfire
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.registry import get_execution_manager, set_execution_manager
@@ -139,19 +139,33 @@ async def cleanup_stale_locks_on_startup():
         db.close()
 
 
-class RequestLifecycleMiddleware(BaseHTTPMiddleware):
+class RequestLifecycleMiddleware:
     """Log when requests arrive and complete with elapsed time."""
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        method = request.method
-        path = request.url.path
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope["method"]
+        path = scope["path"]
         pool = engine.pool.status()
         logfire.info(f"Request started: {method} {path} [db_pool: {pool}]")
         start = time.monotonic()
-        response = await call_next(request)
+        status_code: int | None = None
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
         elapsed_ms = (time.monotonic() - start) * 1000
-        logfire.info(f"Request finished: {method} {path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
-        return response
+        logfire.info(f"Request finished: {method} {path} status={status_code} elapsed={elapsed_ms:.0f}ms")
 
 
 app = FastAPI(
