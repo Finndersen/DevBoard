@@ -117,7 +117,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
         tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded) } }}
-        className={`group rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`relative group rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
@@ -163,15 +163,10 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
               </button>
             )}
           </div>
-          {/* Timing badge: HH:MM · +Xs (hover-reveal) · exec_duration (always) */}
-          {(timingText || execDurationText) && (
-            <div className="flex-shrink-0 text-[10px] text-gray-600 whitespace-nowrap flex items-center">
-              {timingText && (
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-                  {timingText}{execDurationText ? ' · ' : ''}
-                </span>
-              )}
-              {execDurationText && <span>{execDurationText}</span>}
+          {/* Exec duration (always visible) */}
+          {execDurationText && (
+            <div className="flex-shrink-0 text-[10px] text-gray-600 whitespace-nowrap">
+              {execDurationText}
             </div>
           )}
           {/* Expand/Collapse Chevron */}
@@ -185,6 +180,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
           </svg>
         </div>
 
+          {/* Timing overlay pill (hover-reveal) */}
+          {timingText && (
+            <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              {timingText}
+            </span>
+          )}
           {/* Expanded Details */}
           {isExpanded && (
             <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>

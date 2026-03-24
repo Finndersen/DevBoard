@@ -56,23 +56,23 @@ export const formatDuration = (durationMs: number) => {
 }
 
 /**
- * Returns "+Xs" or "+Xms" delay string between two timestamps, or null if no previous timestamp.
+ * Returns "Xs" or "Xms" delay string between two timestamps, or null if no previous timestamp.
  */
 export const formatDelay = (currentTimestamp: string, previousTimestamp: string | null): string | null => {
   if (!previousTimestamp) return null
   const diffMs = new Date(currentTimestamp).getTime() - new Date(previousTimestamp).getTime()
   if (diffMs < 0) return null
-  return `+${formatDuration(diffMs)}`
+  return formatDuration(diffMs)
 }
 
 /**
- * Returns "HH:MM · +Xs" for display alongside message events.
- * Returns just "HH:MM" if no previous timestamp.
+ * Returns "HH:MM:SS (Xs)" for display alongside message events.
+ * Returns just "HH:MM:SS" if no previous timestamp.
  */
 export const formatEventTiming = (timestamp: string, previousTimestamp: string | null): string => {
   const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const delay = formatDelay(timestamp, previousTimestamp)
-  return delay ? `${time} · ${delay}` : time
+  return delay ? `${time} (${delay})` : time
 }
 
 export const getStatusIcon = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {

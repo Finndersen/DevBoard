@@ -146,13 +146,13 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
             </svg>
             {/* Summary text */}
             <span className="text-xs font-medium text-gray-900 dark:text-gray-200 truncate overflow-hidden text-ellipsis whitespace-nowrap">
-              {summaryText}{groupDuration ? ` · ${groupDuration}` : ''}
+              {summaryText}
             </span>
             {/* Status icon */}
             {statusIcon()}
             {/* Count badge */}
             <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-              {items.length} tool calls
+              {items.length} tool calls{groupDuration ? ` · ${groupDuration}` : ''}
               {status !== 'running' && resultCounts.failed > 0 && (
                 <> · <span className="text-red-600 dark:text-red-400">({resultCounts.failed} failed)</span></>
               )}

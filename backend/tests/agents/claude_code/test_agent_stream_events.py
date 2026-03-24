@@ -1314,7 +1314,6 @@ class TestStreamEventsThinkingBlock:
 
         assert len(events) == 1
         assert isinstance(events[0], ThinkingEvent)
-        assert events[0].duration_seconds is None
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
@@ -1342,7 +1341,6 @@ class TestStreamEventsThinkingBlock:
 
         assert len(events) == 2
         assert isinstance(events[0], ThinkingEvent)
-        assert events[0].duration_seconds is None
         assert isinstance(events[1], TextMessage)
         assert events[1].text_content == "Here is my answer."
         assert events[1].role == MessageRole.AGENT

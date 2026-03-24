@@ -1179,11 +1179,11 @@ describe('ToolCallDisplay', () => {
       // The hover-reveal span should be initially hidden
       const hoverEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
       expect(hoverEl).toBeInTheDocument()
-      // Should contain the delay
-      expect(hoverEl?.textContent).toContain('+10.0s')
+      // Should contain the delay — format is "HH:MM:SS (10.0s)"
+      expect(hoverEl?.textContent).toContain('10.0s')
     })
 
-    it('execution duration is positioned after the hover-reveal timing', () => {
+    it('execution duration is visible in header and timing is a separate overlay', () => {
       const { container } = render(
         <ToolCallDisplay
           toolCall={mockToolCall}
@@ -1192,15 +1192,14 @@ describe('ToolCallDisplay', () => {
         />
       )
 
-      const timingBadge = container.querySelector('[class*="text-\\[10px\\]"]')
-      expect(timingBadge).toBeInTheDocument()
+      // Exec duration is always visible in the header (not hidden)
+      const execDurationEl = container.querySelector('.flex-shrink-0.text-\\[10px\\]')
+      expect(execDurationEl).toBeInTheDocument()
+      expect(execDurationEl).not.toHaveClass('opacity-0')
 
-      // The execution duration span should be the last child (after the hover-reveal span)
-      const children = Array.from(timingBadge?.children ?? [])
-      expect(children.length).toBeGreaterThanOrEqual(1)
-      const lastChild = children[children.length - 1]
-      // Last child should be the execution duration (not hidden)
-      expect(lastChild).not.toHaveClass('opacity-0')
+      // Timing overlay is separately positioned, initially hidden
+      const hoverEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(hoverEl).toBeInTheDocument()
     })
 
     it('adds group class to tool call card container', () => {

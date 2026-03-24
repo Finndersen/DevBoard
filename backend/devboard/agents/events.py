@@ -125,7 +125,6 @@ class ThinkingEvent(BaseModel):
     """Agent thinking activity indicator."""
 
     event_type: Literal["thinking"] = "thinking"
-    duration_seconds: float | None = None
     thinking_text: str | None = None
     timestamp: datetime.datetime
     uuid: str | None = None
@@ -193,8 +192,7 @@ def describe_event(event: "ConversationEvent") -> str:
     elif isinstance(event, MetaMessage):
         return f"MetaMessage(type={event.meta_type})"
     elif isinstance(event, ThinkingEvent):
-        dur = f"{event.duration_seconds:.1f}s" if event.duration_seconds is not None else "unknown"
-        return f"ThinkingEvent(duration={dur})"
+        return "ThinkingEvent()"
     elif isinstance(event, ExecutionCompleteEvent):
         return f"ExecutionCompleteEvent(status={event.status})"
     else:

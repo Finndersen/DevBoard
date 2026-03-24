@@ -69,10 +69,9 @@ function makeToolResult(toolCallId: string, id: string): ToolResult {
   }
 }
 
-function makeThinkingEvent(id: string, durationSeconds: number | null = 2.5): ThinkingEvent {
+function makeThinkingEvent(id: string): ThinkingEvent {
   return {
     event_type: 'thinking',
-    duration_seconds: durationSeconds,
     timestamp: `2024-01-01T10:00:${id}Z`,
   }
 }

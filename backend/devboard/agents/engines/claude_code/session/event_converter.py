@@ -74,7 +74,6 @@ def session_messages_to_events(
             if content_block["type"] == "thinking":
                 events.append(
                     ThinkingEvent(
-                        duration_seconds=None,
                         thinking_text=content_block.get("thinking"),
                         timestamp=session_msg.timestamp,
                         uuid=session_msg.uuid,

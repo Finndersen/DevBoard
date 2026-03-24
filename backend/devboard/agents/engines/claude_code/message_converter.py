@@ -77,9 +77,7 @@ def convert_claude_message_to_events(
             elif isinstance(content_block, TextBlock):
                 yield from parse_claude_message_text(content_block.text, virtual_tools)
             elif isinstance(content_block, ThinkingBlock):
-                yield ThinkingEvent(
-                    duration_seconds=None, thinking_text=content_block.thinking, timestamp=timestamp, uuid=None
-                )
+                yield ThinkingEvent(thinking_text=content_block.thinking, timestamp=timestamp, uuid=None)
     elif isinstance(message, UserMessage):
         if isinstance(message.content, list):
             for content_block in message.content:

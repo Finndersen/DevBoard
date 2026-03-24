@@ -1218,56 +1218,6 @@ class TestThinkingEventParsing:
         assert te.event_type == "thinking"
         assert te.uuid == "a1"
 
-    def test_thinking_event_duration_is_always_none(self):
-        """Backend always sends duration_seconds=None; duration is calculated on the frontend."""
-        from datetime import datetime
-
-        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage, UserSessionMessage
-        from devboard.agents.events import ThinkingEvent
-
-        user_msg = UserSessionMessage(
-            uuid="u1",
-            timestamp=datetime(2025, 10, 8, 15, 10, 0, tzinfo=UTC),
-            line_num=1,
-            is_sidechain=False,
-            content=[{"type": "text", "text": "Start"}],
-        )
-        # Thinking message arrives 4.5 seconds after the user message
-        asst_msg = AssistantSessionMessage(
-            uuid="a1",
-            timestamp=datetime(2025, 10, 8, 15, 10, 4, 500000, tzinfo=UTC),
-            line_num=2,
-            is_sidechain=False,
-            content=[{"type": "thinking", "thinking": "Reasoning..."}],
-        )
-
-        events = session_messages_to_events([user_msg, asst_msg])
-
-        thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
-        assert len(thinking_events) == 1
-        assert thinking_events[0].duration_seconds is None
-
-    def test_thinking_event_no_previous_event_gives_none_duration(self):
-        """When thinking is the first event, duration_seconds is None."""
-        from datetime import datetime
-
-        from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage
-        from devboard.agents.events import ThinkingEvent
-
-        asst_msg = AssistantSessionMessage(
-            uuid="a1",
-            timestamp=datetime(2025, 10, 8, 15, 10, 4, tzinfo=UTC),
-            line_num=1,
-            is_sidechain=False,
-            content=[{"type": "thinking", "thinking": "Initial thought..."}],
-        )
-
-        events = session_messages_to_events([asst_msg])
-
-        thinking_events = [e for e in events if isinstance(e, ThinkingEvent)]
-        assert len(thinking_events) == 1
-        assert thinking_events[0].duration_seconds is None
-
     def test_thinking_event_serialization_round_trip(self):
         """ThinkingEvent serializes and deserializes correctly via ConversationEvent union."""
         import datetime
@@ -1275,19 +1225,17 @@ class TestThinkingEventParsing:
         from devboard.agents.events import ThinkingEvent
 
         original = ThinkingEvent(
-            duration_seconds=3.7,
+            thinking_text="Let me reason...",
             timestamp=datetime.datetime(2025, 10, 8, 15, 10, 4, tzinfo=datetime.UTC),
             uuid="msg-abc",
         )
 
         data = original.model_dump()
         assert data["event_type"] == "thinking"
-        assert data["duration_seconds"] == pytest.approx(3.7)
         assert data["uuid"] == "msg-abc"
 
         restored = ThinkingEvent.model_validate(data)
         assert restored.event_type == "thinking"
-        assert restored.duration_seconds == pytest.approx(3.7)
         assert restored.uuid == "msg-abc"
 
     def test_thinking_block_alongside_text_and_tool(self):

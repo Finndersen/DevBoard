@@ -529,15 +529,15 @@ describe('ConversationMessage', () => {
   })
 
   describe('thinking events', () => {
-    it('renders thinking event with duration as subtle italic annotation', () => {
+    it('renders thinking event with duration derived from previousEventTimestamp', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
-        duration_seconds: 4.1,
+
         thinking_text: null,
-        timestamp: '2024-01-01T10:00:00Z',
+        timestamp: '2024-01-01T10:00:04.100Z',
       }
 
-      render(<ConversationMessageComponent message={thinkingEvent} />)
+      render(<ConversationMessageComponent message={thinkingEvent} previousEventTimestamp="2024-01-01T10:00:00Z" />)
 
       const span = screen.getByText('Thought for 4.1s')
       expect(span).toBeInTheDocument()
@@ -545,10 +545,10 @@ describe('ConversationMessage', () => {
       expect(span).toHaveClass('text-gray-500')
     })
 
-    it('renders thinking event without duration showing just "Thought"', () => {
+    it('renders thinking event without previousEventTimestamp showing just "Thought"', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
-        duration_seconds: null,
+
         thinking_text: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -561,7 +561,7 @@ describe('ConversationMessage', () => {
     it('does not render purple pill or centered layout', () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
-        duration_seconds: 2.5,
+
         thinking_text: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -577,12 +577,12 @@ describe('ConversationMessage', () => {
     it('shows expand toggle and reveals thinking text on click', async () => {
       const thinkingEvent: ThinkingEvent = {
         event_type: 'thinking',
-        duration_seconds: 3.0,
+
         thinking_text: 'Let me think about this carefully.',
-        timestamp: '2024-01-01T10:00:00Z',
+        timestamp: '2024-01-01T10:00:03.000Z',
       }
 
-      render(<ConversationMessageComponent message={thinkingEvent} />)
+      render(<ConversationMessageComponent message={thinkingEvent} previousEventTimestamp="2024-01-01T10:00:00Z" />)
 
       expect(screen.queryByText('Let me think about this carefully.')).not.toBeInTheDocument()
 
@@ -620,8 +620,8 @@ describe('ConversationMessage', () => {
       // Timing badge exists and is initially hidden
       const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
       expect(timingEl).toBeInTheDocument()
-      // Should contain delay text (+5s)
-      expect(timingEl?.textContent).toContain('+5.0s')
+      // Should contain delay text (5s) — format is "HH:MM:SS (5.0s)"
+      expect(timingEl?.textContent).toContain('5.0s')
     })
 
     it('agent message has group class and timing badge', () => {
@@ -644,7 +644,7 @@ describe('ConversationMessage', () => {
 
       const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
       expect(timingEl).toBeInTheDocument()
-      expect(timingEl?.textContent).toContain('+10.0s')
+      expect(timingEl?.textContent).toContain('10.0s')
     })
 
     it('user message without previousEventTimestamp shows only HH:MM', () => {

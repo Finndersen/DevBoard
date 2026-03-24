@@ -287,6 +287,9 @@ export default function ConversationsPanel() {
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
                       </span>
                     )}
+                    {!isActive && needsAttention && (
+                      <span className="inline-flex rounded-full h-2 w-2 bg-blue-500 shrink-0" />
+                    )}
                   </div>
                   {/* Row 2: Role + timestamp */}
                   <div className="text-xs mt-0.5 ml-6">

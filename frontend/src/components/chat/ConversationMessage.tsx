@@ -3,7 +3,7 @@ import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType, L
 import {
   getUserMessageClasses,
   formatEventTiming,
-  formatDuration,
+  formatDelay,
 } from '../../styles/messageStyles'
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
@@ -48,7 +48,7 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
     <div className="flex w-full min-w-0">
       <button
         onClick={hasOutput ? () => setIsExpanded(!isExpanded) : undefined}
-        className={`group rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
+        className={`relative group rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -62,11 +62,8 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
               </svg>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-gray-600 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-              {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
-            </span>
-            {hasOutput && (
+          {hasOutput && (
+            <div className="flex-shrink-0">
               <svg
                 className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
                 fill="none"
@@ -75,9 +72,12 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+        </span>
 
         {isExpanded && hasOutput && (
           <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>
@@ -166,7 +166,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     if (isUser) {
       return (
-        <div className={`${getUserMessageClasses()} ${highlightRing} flex group`}>
+        <div className={`${getUserMessageClasses()} ${highlightRing} relative flex group`}>
           <div className="w-0.5 flex-shrink-0 rounded-full bg-blue-400 dark:bg-blue-500 mr-3" />
           <div className="flex-1 min-w-0">
             <div className="relative">
@@ -198,26 +198,20 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               </div>
             )}
           </div>
-          <div className="flex-shrink-0 self-start ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-[10px] text-gray-600 whitespace-nowrap leading-5">
-              {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
-            </span>
-          </div>
+          <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+          </span>
         </div>
       )
     }
 
     // Agent message — plain text, no bubble
     return (
-      <div className={`w-full text-sm ${highlightRing} group flex items-start gap-2`}>
-        <div className="flex-1 min-w-0">
-          <Markdown>{message.text_content}</Markdown>
-        </div>
-        <div className="flex-shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="text-[10px] text-gray-600 whitespace-nowrap leading-5">
-            {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
-          </span>
-        </div>
+      <div className={`relative w-full text-sm ${highlightRing} group`}>
+        <Markdown>{message.text_content}</Markdown>
+        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+        </span>
       </div>
     )
   }
@@ -354,9 +348,8 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // Thinking events - render as subtle muted italic annotation
   if (message.event_type === 'thinking') {
-    const durationText = message.duration_seconds != null
-      ? `Thought for ${formatDuration(message.duration_seconds * 1000)}`
-      : 'Thought'
+    const delayText = formatDelay(message.timestamp, previousEventTimestamp ?? null)
+    const durationText = delayText ? `Thought for ${delayText}` : 'Thought'
 
     return <ThinkingAnnotation durationText={durationText} thinkingText={message.thinking_text} />
   }
