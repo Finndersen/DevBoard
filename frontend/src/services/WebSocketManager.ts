@@ -64,7 +64,9 @@ class WebSocketManager {
     }
 
     this.ws.onerror = (error) => {
-      console.error('WebSocketManager: Connection error:', error)
+      if (!this.destroyed) {
+        console.error('WebSocketManager: Connection error:', error)
+      }
     }
 
     this.ws.onclose = (event) => {

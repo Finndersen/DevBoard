@@ -1,5 +1,6 @@
 """WebSocket router for real-time conversation event streaming."""
 
+import asyncio
 import time
 
 import logfire
@@ -24,9 +25,29 @@ async def multiplexed_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
     manager = get_execution_manager()
 
+    # Receives the disconnect frame (or any client message). Races against
+    # broadcast_queue.get() so we exit cleanly when the client disconnects
+    # even when the queue is empty and no events are being published.
+    receive_task = asyncio.create_task(websocket.receive())
     try:
         while True:
-            conversation_id, event = await manager.broadcast_queue.get()
+            get_task = asyncio.create_task(manager.broadcast_queue.get())
+            done, _ = await asyncio.wait(
+                {get_task, receive_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if receive_task in done:
+                # Client disconnected or sent an unexpected message — exit.
+                get_task.cancel()
+                try:
+                    # If get_task completed (item already dequeued), put it back.
+                    manager.broadcast_queue.put_nowait(await get_task)
+                except (asyncio.CancelledError, asyncio.QueueFull):
+                    pass
+                return
+
+            conversation_id, event = get_task.result()
             t0 = time.monotonic()
             event_data = event.model_dump(mode="json")
             dump_ms = (time.monotonic() - t0) * 1000
@@ -41,3 +62,9 @@ async def multiplexed_websocket(websocket: WebSocket) -> None:
             await websocket.send_json(event_data)
     except WebSocketDisconnect:
         pass
+    finally:
+        receive_task.cancel()
+        try:
+            await receive_task
+        except (asyncio.CancelledError, Exception):
+            pass

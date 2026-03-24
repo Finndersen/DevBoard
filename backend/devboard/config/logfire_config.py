@@ -43,7 +43,17 @@ def setup_logfire(app: FastAPI) -> None:
     """Setup Logfire configuration. Call this once at application startup."""
 
     if os.getenv("DISABLE_LOGFIRE", "").lower() in ("1", "true", "yes"):
-        logfire.configure(send_to_logfire=False, console=False)
+        # Keep console output for local visibility, but skip cloud export and all
+        # instrumentation hooks — used to isolate whether logfire's background
+        # exporter or instrumentation callbacks are causing event loop blocking.
+        environment = os.getenv("ENVIRONMENT", "development")
+        log_level: LevelName = cast(
+            LevelName, os.getenv("LOG_LEVEL", "info" if environment == "production" else "debug")
+        )
+        console_options: ConsoleOptions | bool = (
+            ConsoleOptions(verbose=True, min_log_level=log_level) if environment == "development" else False
+        )
+        logfire.configure(send_to_logfire=False, console=console_options)
         return
 
     # Check if Logfire token is available in environment
