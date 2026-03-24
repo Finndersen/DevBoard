@@ -26,16 +26,14 @@ We are working to develop an application as described in @docs/INDEX.md
 - Do not use `db_session.commit()` unless transaction management is explicitly required (should be handled automatically by request lifecycle)
 
 ## Testing
-- **Structure**: Tests mirror source (`devboard/agents/base_agent.py` → `tests/agents/test_base_agent.py`)
-- **Fixtures**: Use available fixtures in `backend/devboard/tests/conftest.py`
-- **Async Tests**: Use `@pytest.mark.asyncio` decorator
-- **API Testing**: Use TestClient with mocked dependencies
-- NEVER patch Service classes or methods doing testing, only lower level dependencies such as data-layer repositories or filesystem/git/external integrations
-- Run tests using `uv run --frozen --active pytest <args>` to force using already-resolved dependencies
+- Tests mirror source structure (`devboard/agents/base_agent.py` → `tests/agents/test_base_agent.py`)
+- Use fixtures from `backend/devboard/tests/conftest.py`, `@pytest.mark.asyncio`, TestClient with mocked dependencies
+- Only mock data-layer repositories or external integrations — never Service classes or methods
+- Run: `uv run --frozen --active pytest -q --tb=short 2>&1` (never filter with grep)
 
 ## Development Process
-- Run `make format` to automatically reformat code and remove unused imports instead of manually editing
-- Run `make lint` to check for linting errors after making changes
+- `make format` — reformat code and remove unused imports
+- `make lint` — check for linting errors
 
 ## Patterns
 - Use logfire for logging instead of standard logging module
@@ -57,7 +55,10 @@ We are working to develop an application as described in @docs/INDEX.md
 - **State**: Use `useState` for simple state, `useReducer` for complex logic, never mutate directly
 
 ## Testing
-- **Framework**: Vitest + React Testing Library + MSW (API mocking)
-- **Structure**: Colocated tests in `__tests__/` directories
-- **Command**: Use `pnpm test *`, NOT `timeout XXX pnpm test *`
-- **Patterns**: User-centric queries, renderHook for custom hooks, MSW for API mocking
+- Vitest + React Testing Library + MSW; colocated in `__tests__/` directories
+- User-centric queries, `renderHook` for custom hooks, MSW for API mocking
+- Never filter output with grep
+
+## Scripts
+- `pnpm dev` / `pnpm build` / `pnpm lint`
+- `pnpm test:run 2>&1` — all tests | `pnpm test <file>` — specific file | `pnpm test:coverage`
