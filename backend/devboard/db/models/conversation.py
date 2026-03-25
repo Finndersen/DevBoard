@@ -129,6 +129,7 @@ class Conversation(Base):
             msg = "Conversation must be attached to a session to get parent entity"
             raise RuntimeError(msg)
 
+        entity: Task | Project | Codebase | None
         if self.parent_entity_type == ParentEntityType.TASK:
             if load_task_context:
                 from .implementation_plan import ImplementationPlan

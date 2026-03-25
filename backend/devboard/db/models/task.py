@@ -2,12 +2,13 @@
 
 import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy import JSON, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+from .enums import EntityType
 
 if TYPE_CHECKING:
     from .codebase import Codebase
@@ -30,6 +31,7 @@ class Task(Base):
     """Represents a single, self-contained piece of work within a project."""
 
     __tablename__ = "tasks"
+    entity_type: ClassVar[EntityType] = EntityType.TASK
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))

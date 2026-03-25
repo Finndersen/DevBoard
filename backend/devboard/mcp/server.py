@@ -12,7 +12,6 @@ from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
     create_multi_codebase_investigation_tool,
 )
-from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import CodebaseRepository, ConversationRepository, ProjectRepository, TaskRepository
 from devboard.mcp.dependencies import create_agent_config_service, get_mcp_db_session
 
@@ -184,9 +183,8 @@ async def investigate_codebase(codebase_name: str, query: str) -> str:
                 [codebase_context],
                 agent_config_service,
                 conversation_repo=conversation_repo,
+                parent_entity=codebase,
                 parent_conversation_id=None,
-                parent_entity_type=ParentEntityType.CODEBASE,
-                parent_entity_id=codebase.id,
             )
 
             # Run the investigation (with codebase name since it's now required)

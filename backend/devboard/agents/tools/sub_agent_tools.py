@@ -9,9 +9,9 @@ from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
-from devboard.db.models import Task
+from devboard.db.models import ParentEntity, Task
 from devboard.db.models.codebase import Codebase
-from devboard.db.models.conversation import Conversation, ParentEntityType
+from devboard.db.models.conversation import Conversation
 from devboard.db.repositories import ConversationRepository
 from devboard.integrations.types import StructuredDiff
 from devboard.services.task_git.service import TaskGitService
@@ -45,19 +45,21 @@ def create_sub_agent_conversation(
     role_type: AgentRoleType,
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
-    parent_entity_type: ParentEntityType,
-    parent_entity_id: int,
+    parent_entity: ParentEntity,
     parent_conversation_id: int | None = None,
 ) -> Conversation:
     """Create a new sub-agent conversation record and commit it eagerly.
 
     Returns the Conversation object so the caller has the conversation_id immediately,
     before execution begins.
+
+    ## NOTE: This is very similar to ConversationService.create_initial_conversation_for_parent_entity() which is annoying, but
+    agent_config_service and conversation_repo are also needed elsewhere where this is called, so couldnt just be replaced by ConversationService
     """
     config = agent_config_service.get_effective_config(role_type)
     conversation = conversation_repo.create(
-        parent_entity_type=parent_entity_type,
-        parent_entity_id=parent_entity_id,
+        parent_entity_type=parent_entity.entity_type,
+        parent_entity_id=parent_entity.id,
         agent_role=role_type,
         engine=config.engine,
         model_id=config.model_id,
@@ -70,7 +72,7 @@ def create_sub_agent_conversation(
 
 
 async def execute_sub_agent_conversation(
-    conversation_id: int,
+    conversation: Conversation,
     role: AgentRole,
     prompt: str,
     conversation_repo: ConversationRepository,
@@ -80,25 +82,20 @@ async def execute_sub_agent_conversation(
 ) -> SubAgentResult:
     """Execute a sub-agent using an existing conversation record.
 
-    Handles the active-session guard and validates the conversation exists and belongs
-    to the expected parent context. Works for both newly created and resumed conversations.
+    Handles the active-session guard and validates the conversation belongs to the
+    expected parent context. Works for both newly created and resumed conversations.
     """
-    if conversation_id in _active_sub_agent_conversations:
+    if conversation.id in _active_sub_agent_conversations:
         raise ModelRetry(
-            f"conversation_id '{conversation_id}' is already in use by a concurrent investigation. "
+            f"conversation_id '{conversation.id}' is already in use by a concurrent investigation. "
             "Concurrent calls with the same conversation_id are not supported. "
             "Either wait for the previous investigation to complete before making a follow-up call with this conversation_id, "
             "or omit conversation_id to start independent parallel investigations."
         )
-    conversation = conversation_repo.get_by_id(conversation_id)
-    if conversation is None:
-        raise ModelRetry(
-            f"conversation_id '{conversation_id}' not found. Start a new investigation by omitting conversation_id."
-        )
     if conversation.parent_conversation_id != parent_conversation_id:
-        raise ModelRetry(f"conversation_id '{conversation_id}' does not belong to this conversation context.")
+        raise ModelRetry(f"conversation_id '{conversation.id}' does not belong to this conversation context.")
 
-    _active_sub_agent_conversations.add(conversation_id)
+    _active_sub_agent_conversations.add(conversation.id)
     try:
         # Lazy import to avoid circular dependency:
         # sub_agent_tools → api.dependencies.factories → roles → sub_agent_tools
@@ -124,7 +121,7 @@ async def execute_sub_agent_conversation(
         conversation_repo.commit()
         return SubAgentResult(result=final_response.text_content, conversation_id=conversation.id)
     finally:
-        _active_sub_agent_conversations.discard(conversation_id)
+        _active_sub_agent_conversations.discard(conversation.id)
 
 
 async def run_sub_agent(
@@ -133,8 +130,7 @@ async def run_sub_agent(
     prompt: str,
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
-    parent_entity_type: ParentEntityType,
-    parent_entity_id: int,
+    parent_entity: ParentEntity,
     working_dir: str,
     parent_conversation_id: int | None = None,
     conversation_id: int | None = None,
@@ -142,22 +138,23 @@ async def run_sub_agent(
     """Execute a sub-agent with the given role and prompt.
 
     Convenience wrapper that creates a new conversation or resumes an existing one,
-    then executes the sub-agent. Existing callers remain unchanged.
+    then executes the sub-agent.
     """
     if conversation_id is None:
-        # New conversation path: create conversation first so caller can track conversation_id
         conversation = create_sub_agent_conversation(
             role_type=role_type,
             agent_config_service=agent_config_service,
             conversation_repo=conversation_repo,
-            parent_entity_type=parent_entity_type,
-            parent_entity_id=parent_entity_id,
+            parent_entity=parent_entity,
             parent_conversation_id=parent_conversation_id,
         )
-        conversation_id = conversation.id
+    else:
+        conversation = conversation_repo.get_by_id(conversation_id)
+        if conversation is None:
+            raise ModelRetry(f"conversation_id '{conversation_id}' not found.")
 
     return await execute_sub_agent_conversation(
-        conversation_id=conversation_id,
+        conversation=conversation,
         role=role,
         prompt=prompt,
         conversation_repo=conversation_repo,
@@ -171,9 +168,8 @@ def create_multi_codebase_investigation_tool(
     codebases: list[CodebaseInvestigationContext],
     agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository,
+    parent_entity: ParentEntity,
     parent_conversation_id: int | None,
-    parent_entity_type: ParentEntityType,
-    parent_entity_id: int,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
 
@@ -194,9 +190,8 @@ def create_multi_codebase_investigation_tool(
         codebases: List of CodebaseInvestigationContext instances. Must contain at least one codebase.
         agent_config_service: AgentConfigService for getting configured LLM
         conversation_repo: Repository for creating/loading conversation records
+        parent_entity: Parent entity (Task, Project, or Codebase) for sub-conversation records
         parent_conversation_id: ID of the invoking agent's conversation
-        parent_entity_type: Entity type for sub-conversation records
-        parent_entity_id: Entity ID for sub-conversation records
 
     Raises:
         ValueError: If codebases list is empty
@@ -227,9 +222,7 @@ def create_multi_codebase_investigation_tool(
         - Be specific about what you want to know and what level of detail is required.
         - Make your query targeted about one specific topic. You may call this tool multiple times in parallel for
           **independent** investigations (each with no `conversation_id`, or with **different** `conversation_id` values).
-        - **IMPORTANT**: Do NOT make concurrent calls with the same `conversation_id`. Concurrent calls sharing a `conversation_id`
-          will fail. When continuing a previous investigation session, calls must be sequential — wait for the previous
-          call to return before making a follow-up call with this `conversation_id`.
+        - **IMPORTANT**: Do NOT make concurrent calls with the same `conversation_id`, this will fail.
         - Provide as much context as possible (e.g. reference specific file paths, class/function names) to help the investigation agent
           focus its analysis and provide more accurate and targeted answers.
         - Indicate specific directories or files to focus on if possible.
@@ -256,8 +249,7 @@ def create_multi_codebase_investigation_tool(
             prompt=prompt,
             agent_config_service=agent_config_service,
             conversation_repo=conversation_repo,
-            parent_entity_type=parent_entity_type,
-            parent_entity_id=parent_entity_id,
+            parent_entity=parent_entity,
             working_dir=codebase_config.working_dir,
             parent_conversation_id=parent_conversation_id,
             conversation_id=conversation_id,
@@ -311,9 +303,8 @@ def create_task_codebase_investigation_tool(
         codebase_contexts,
         agent_config_service,
         conversation_repo=conversation_repo,
+        parent_entity=task,
         parent_conversation_id=parent_conversation_id,
-        parent_entity_type=ParentEntityType.TASK,
-        parent_entity_id=task.id,
     )
 
 
@@ -372,8 +363,7 @@ def create_code_review_tool(
             prompt=prompt,
             agent_config_service=agent_config_service,
             conversation_repo=conversation_repo,
-            parent_entity_type=ParentEntityType.TASK,
-            parent_entity_id=task.id,
+            parent_entity=task,
             working_dir=working_dir,
             parent_conversation_id=parent_conversation_id,
         )

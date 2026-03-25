@@ -17,7 +17,6 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Project, Task
-from devboard.db.models.conversation import ParentEntityType
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 
@@ -155,9 +154,8 @@ class ProjectQAAgentRole(AgentRole):
                     ],
                     self.agent_config_service,
                     conversation_repo=self.conversation_repo,
+                    parent_entity=self.project,
                     parent_conversation_id=self.conversation_id,
-                    parent_entity_type=ParentEntityType.PROJECT,
-                    parent_entity_id=self.project.id,
                 )
             )
 

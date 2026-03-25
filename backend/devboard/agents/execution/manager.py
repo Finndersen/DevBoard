@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 
 import logfire
 from opentelemetry import context as otel_context
+from sqlalchemy.orm import Session
 
 from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
@@ -17,7 +18,7 @@ from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
-from devboard.db.models import Codebase, Project, Task, TaskStatus
+from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.task_git.service import TaskBranchNotFoundException
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
@@ -140,7 +141,7 @@ class ConversationExecutionManager:
 
 async def _drain_events(
     stream: AsyncIterator[ConversationEvent],
-    db,
+    db: Session,
     broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
     conversation_id: int,
 ) -> None:
@@ -159,7 +160,7 @@ async def _drain_events(
 
 async def _create_agent_stream(
     services: ExecutionServices,
-    conversation,
+    conversation: Conversation,
     message_or_approvals: str | ToolApprovals,
     interrupt_event: asyncio.Event,
     working_dir: str,
@@ -218,9 +219,7 @@ async def _run_agent_for_conversation(
                 conversation_id=conversation_id,
                 parent_ms=f"{parent_ms:.0f}",
             )
-        is_task = isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE
-
-        if is_task:
+        if isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE:
             try:
                 async with services.workspace_service.allocate_workspace(conversation_parent) as allocation:
                     if not allocation.reused:

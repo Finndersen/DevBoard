@@ -16,7 +16,6 @@ from devboard.agents.tools.sub_agent_tools import (
     execute_sub_agent_conversation,
 )
 from devboard.api.schemas.document import DocumentEdit
-from devboard.db.models import ParentEntityType
 from devboard.db.models.implementation_plan import ImplementationStepStatus, ImplementationStepType
 from devboard.db.models.task import Task
 from devboard.db.repositories.conversation import ConversationRepository
@@ -295,17 +294,18 @@ def create_execute_implementation_step_tool(
         """Execute a specific implementation step by delegating to a step execution sub-agent.
 
         The step must be in 'pending' or 'failed' status and all its dependency steps must be 'complete'.
-        Failed steps can be retried by calling this tool again.
-        The sub-agent will receive the step's details as instructions along with relevant context.
+        Failed or interrupted steps resume the existing conversation so the sub-agent retains full
+        prior context. Use `notes` to describe what has changed since the last run or what to do
+        differently.
 
         Args:
             step_number: The step number to execute
-            force_run: If True, skip status and dependency validation. Use only to
-                recover plans stuck in an inconsistent state (e.g. step left in
-                'running' after a crash, or a failed dependency you want to bypass).
-            notes: Optional context/notes to provide to the execution agent — e.g. a
-                change in approach or considerations based on outcomes of previous steps.
-                Appended to the sub-agent prompt.
+            force_run: If True, skip status and dependency validation. Use to recover plans stuck
+                in an inconsistent state (e.g. step left in 'running' after a crash), bypass a
+                failed dependency, or re-run a 'complete' step (e.g. soft failure where the agent
+                reported it could not complete, or re-doing a code review after making changes).
+            notes: Optional guidance for the execution agent. When re-running a step, describe
+                what has changed since the last attempt or what to do differently.
 
         Returns:
             JSON string with the step execution outcome and conversation_id
@@ -327,16 +327,50 @@ def create_execute_implementation_step_tool(
             except DependencyNotResolvedError as e:
                 raise ModelRetry(str(e)) from e
 
-        plan_service.set_step_status(step, ImplementationStepStatus.RUNNING)
+        plan_service.set_step_status(step, status=ImplementationStepStatus.RUNNING)
 
         try:
+            role_type = (
+                AgentRoleType.CODE_REVIEW
+                if step.type == ImplementationStepType.CODE_REVIEW
+                else AgentRoleType.STEP_EXECUTION
+            )
+
+            # --- Conversation handling ---
+            if step.conversation_id is not None:
+                resuming = True
+                conversation = conversation_repo.get_by_id(step.conversation_id)
+                if conversation is None:
+                    raise ValueError(f"Conversation {step.conversation_id} for step {step_number} not found.")
+            else:
+                resuming = False
+                conversation = create_sub_agent_conversation(
+                    role_type=role_type,
+                    agent_config_service=agent_config_service,
+                    conversation_repo=conversation_repo,
+                    parent_entity=task,
+                    parent_conversation_id=parent_conversation_id,
+                )
+                plan_service.set_step_conversation(step, conversation.id)
+
+            # --- Agent role ---
             if step.type == ImplementationStepType.CODE_REVIEW:
+                role = CodeReviewAgentRole(task=task, working_dir=working_dir)
+            else:
+                role = StepExecutionAgentRole(task=task, step=step, working_dir=working_dir)
+
+            # --- Prompt ---
+            if resuming:
+                prompt = "Resume and complete the step."
+                if notes:
+                    prompt += f"\n\n## Coordinator Notes\n\n{notes}"
+            elif step.type == ImplementationStepType.CODE_REVIEW:
                 diff = await TaskGitService.get_task_all_changes(task)
                 if not diff.files:
                     plan_service.set_step_status(
                         step,
-                        ImplementationStepStatus.COMPLETE,
-                        "No changes to review — the task diff is empty.",
+                        status=ImplementationStepStatus.COMPLETE,
+                        outcome="No changes to review — the task diff is empty.",
                     )
                     return json.dumps(
                         {
@@ -345,31 +379,15 @@ def create_execute_implementation_step_tool(
                             "step_type": step.type,
                         }
                     )
-
-                role = CodeReviewAgentRole(task=task, working_dir=working_dir)
                 additional_context = "\n\n".join(filter(None, [step.details or None, notes]))
                 prompt = build_code_review_prompt(diff=diff, additional_context=additional_context or None)
-                role_type = AgentRoleType.CODE_REVIEW
             else:
-                role = StepExecutionAgentRole(task=task, step=step, working_dir=working_dir)
-                prompt = f"## Step {step.step_number}: {step.title}\n\n{step.details}"
+                prompt = f"## Current Step {step.step_number}: {step.title}\n\n{step.details}"
                 if notes:
                     prompt += f"\n\n## Coordinator Notes\n\n{notes}"
-                role_type = AgentRoleType.STEP_EXECUTION
-
-            conversation = create_sub_agent_conversation(
-                role_type=role_type,
-                agent_config_service=agent_config_service,
-                conversation_repo=conversation_repo,
-                parent_entity_type=ParentEntityType.TASK,
-                parent_entity_id=task.id,
-                parent_conversation_id=parent_conversation_id,
-            )
-            step.conversation_id = conversation.id
-            plan_service.commit()
 
             sub_agent_result = await execute_sub_agent_conversation(
-                conversation_id=conversation.id,
+                conversation=conversation,
                 role=role,
                 prompt=prompt,
                 conversation_repo=conversation_repo,
@@ -378,7 +396,9 @@ def create_execute_implementation_step_tool(
                 parent_conversation_id=parent_conversation_id,
             )
 
-            plan_service.set_step_status(step, ImplementationStepStatus.COMPLETE, sub_agent_result.result)
+            plan_service.set_step_status(
+                step, status=ImplementationStepStatus.COMPLETE, outcome=sub_agent_result.result
+            )
 
             return json.dumps(
                 {
@@ -389,7 +409,7 @@ def create_execute_implementation_step_tool(
             )
 
         except Exception as e:
-            plan_service.set_step_status(step, ImplementationStepStatus.FAILED, str(e))
+            plan_service.set_step_status(step, status=ImplementationStepStatus.FAILED, outcome=str(e))
             raise ModelRetry(f"Step {step_number} failed: {e}") from e
 
     return Tool(

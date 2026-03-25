@@ -1,7 +1,7 @@
 """Project-related database models."""
 
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -10,6 +10,7 @@ from .base import (
     Base,
     project_codebase_association,
 )
+from .enums import EntityType
 
 if TYPE_CHECKING:
     from .codebase import Codebase
@@ -21,6 +22,7 @@ class Project(Base):
     """Represents a high-level project, which can have associated tasks and codebases."""
 
     __tablename__ = "projects"
+    entity_type: ClassVar[EntityType] = EntityType.PROJECT
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))

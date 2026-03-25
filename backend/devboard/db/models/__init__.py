@@ -35,6 +35,8 @@ from .project import Project
 from .task import Task, TaskStatus
 from .worktree_slot import WorktreeSlot
 
+ParentEntity = Task | Project | Codebase
+
 __all__ = [
     "AgentRoleConfig",
     "Base",
@@ -67,6 +69,7 @@ __all__ = [
     "ImplementationStep",
     "ImplementationStepStatus",
     "ImplementationStepType",
+    "ParentEntity",
     "ParentEntityType",
     "PendingOAuthAuthorization",
     "Project",
