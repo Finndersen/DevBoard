@@ -6,9 +6,9 @@ from collections.abc import AsyncIterator
 from pydantic_ai import Tool
 
 from devboard.agents.events import ConversationEvent
-from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
+from devboard.db.models.language_model import LanguageModelDB
 
 CUSTOM_INSTRUCTIONS_SEPARATOR = "\n\n## Additional Instructions\n\n"
 
@@ -30,7 +30,7 @@ class BaseAgent(ABC):
     def __init__(
         self,
         role: AgentRole,
-        model: LanguageModel | None,
+        model: LanguageModelDB | None,
         additional_tools: list[Tool] | None = None,
         custom_instructions: str | None = None,
     ):

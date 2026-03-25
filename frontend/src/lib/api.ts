@@ -514,6 +514,40 @@ export interface IntegrationTestResponse {
   details?: Record<string, unknown>
 }
 
+export type ModelProvider = 'openai' | 'anthropic' | 'google'
+export type ModelType = 'fast' | 'standard' | 'advanced'
+
+export interface LanguageModelRecord {
+  id: number
+  provider: ModelProvider
+  name: string
+  model_type: ModelType
+  full_name: string | null
+  bedrock_id: string | null
+  context_window: number | null
+  model_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateLanguageModelRequest {
+  provider: ModelProvider
+  name: string
+  model_type: ModelType
+  full_name?: string | null
+  bedrock_id?: string | null
+  context_window?: number | null
+}
+
+export interface UpdateLanguageModelRequest {
+  provider?: ModelProvider | null
+  name?: string | null
+  model_type?: ModelType | null
+  full_name?: string | null
+  bedrock_id?: string | null
+  context_window?: number | null
+}
+
 export interface ModelInfo {
   id: string
   provider: string
@@ -1073,6 +1107,29 @@ export class ApiClient {
     return this.request<{ message: string; success: boolean }>(`/api/custom-fields/${fieldId}`, {
       method: 'DELETE',
     })
+  }
+
+  // Language Models
+  async getLanguageModels(): Promise<LanguageModelRecord[]> {
+    return this.request<LanguageModelRecord[]>('/api/language-models/')
+  }
+
+  async createLanguageModel(data: CreateLanguageModelRequest): Promise<LanguageModelRecord> {
+    return this.request<LanguageModelRecord>('/api/language-models/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateLanguageModel(id: number, data: UpdateLanguageModelRequest): Promise<LanguageModelRecord> {
+    return this.request<LanguageModelRecord>(`/api/language-models/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteLanguageModel(id: number): Promise<void> {
+    return this.request<void>(`/api/language-models/${id}`, { method: 'DELETE' })
   }
 
   // Configuration Management

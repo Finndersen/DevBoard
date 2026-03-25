@@ -15,6 +15,7 @@ from .implementation_plan import (
     ImplementationStepStatus,
     ImplementationStepType,
 )
+from .language_model import LanguageModelDB
 from .log_entry import LogEntry, LogEntrySource, LogEntryStatus
 from .mcp_server import (
     HttpMCPConfig,
@@ -66,6 +67,7 @@ __all__ = [
     "LogEntrySource",
     "LogEntryStatus",
     "ImplementationPlan",
+    "LanguageModelDB",
     "ImplementationStep",
     "ImplementationStepStatus",
     "ImplementationStepType",

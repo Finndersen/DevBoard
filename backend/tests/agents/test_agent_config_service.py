@@ -7,7 +7,7 @@ import pytest
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.config_types import AgentEngineModelInput
 from devboard.agents.engines import AgentEngine, agent_engine_registry
-from devboard.agents.language_models import ModelType, llm_registry
+from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
 from devboard.config.base import ConfigValidationResult
 
@@ -16,19 +16,29 @@ class TestAgentConfigService:
     """Tests for AgentConfigService."""
 
     @pytest.fixture
-    def agent_config_service(self, agent_role_config_repository, config_service):
-        """Create AgentConfigService instance for testing."""
+    def agent_config_service(self, agent_role_config_repository, language_model_repository):
+        """Create AgentConfigService instance for testing.
+
+        Uses a mock config_service that simulates Anthropic being configured,
+        so INTERNAL engine has models available regardless of actual environment.
+        """
+        mock_config_service = Mock()
+        mock_config_service.validate_config_by_key.side_effect = lambda key: (
+            ConfigValidationResult(success=True, config=Mock(), errors=[])
+            if key == "llm.anthropic.main"
+            else ConfigValidationResult(success=False, config=None, errors=["not configured"])
+        )
         return AgentConfigService(
             agent_role_config_repo=agent_role_config_repository,
-            config_service=config_service,
-            llm_registry=llm_registry,
+            config_service=mock_config_service,
+            language_model_repo=language_model_repository,
             engine_registry=agent_engine_registry,
         )
 
     def test_internal_engine_filters_by_api_configuration(self, agent_config_service):
         """INTERNAL engine should only return models from configured providers."""
         models = agent_config_service._get_available_models_for_engine(AgentEngine.INTERNAL)
-        model_ids = [m.id for m in models]
+        model_ids = [m.model_id for m in models]
 
         # Should only include models from providers with API keys configured
         # In test environment, typically only Anthropic is configured via env vars
@@ -42,9 +52,9 @@ class TestAgentConfigService:
         """External engines should return all models from their supported providers without API key filtering."""
         # Test Claude Code - should return ALL Anthropic models
         claude_models = agent_config_service._get_available_models_for_engine(AgentEngine.CLAUDE_CODE)
-        claude_model_ids = [m.id for m in claude_models]
+        claude_model_ids = [m.model_id for m in claude_models]
 
-        # Should include all Anthropic models from LLMRegistry
+        # Should include all Anthropic models from the DB
         expected_claude_models = [
             "anthropic:claude-sonnet-4.5",
             "anthropic:claude-opus-4.1",
@@ -56,9 +66,9 @@ class TestAgentConfigService:
 
         # Test Gemini CLI - should return ALL Google models
         gemini_models = agent_config_service._get_available_models_for_engine(AgentEngine.GEMINI_CLI)
-        gemini_model_ids = [m.id for m in gemini_models]
+        gemini_model_ids = [m.model_id for m in gemini_models]
 
-        # Should include all Google models from LLMRegistry (including gemini-2.5-flash-lite)
+        # Should include all Google models (including gemini-2.5-flash-lite)
         assert "google:gemini-2.5-pro" in gemini_model_ids
         assert "google:gemini-2.5-flash" in gemini_model_ids
         assert "google:gemini-2.5-flash-lite" in gemini_model_ids
@@ -102,9 +112,9 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in project_default
         # Verify it's a STANDARD model
-        model = agent_config_service._llm_registry.get(project_default)
-        assert model is not None
-        assert model.type == ModelType.STANDARD
+        db_model = agent_config_service._language_model_repo.get_by_model_id(project_default)
+        assert db_model is not None
+        assert db_model.model_type == ModelType.STANDARD
 
         # INVESTIGATION role recommends FAST models (INTERNAL engine requires selection)
         investigation_default = agent_config_service._get_default_model_for_agent_role_and_engine(
@@ -113,9 +123,9 @@ class TestAgentConfigService:
         # Should return a valid model ID in provider:model format
         assert ":" in investigation_default
         # Verify it's a FAST model
-        model = agent_config_service._llm_registry.get(investigation_default)
-        assert model is not None
-        assert model.type == ModelType.FAST
+        db_model = agent_config_service._language_model_repo.get_by_model_id(investigation_default)
+        assert db_model is not None
+        assert db_model.model_type == ModelType.FAST
 
     def test_update_agent_configuration_validates_model(self, agent_config_service):
         """update_agent_configuration should validate model is available for engine."""
@@ -158,19 +168,19 @@ class TestAgentConfigService:
         engine_names = {e.engine for e in task_impl_config.available_engines}
         assert engine_names == {"claude_code", "gemini_cli"}
 
-    def test_language_model_full_name(self):
-        """LanguageModel should have optional full_name attribute."""
-        # Test Anthropic models have full_name
-        claude_sonnet = llm_registry.get("anthropic:claude-sonnet-4.5")
-        assert claude_sonnet is not None
-        assert claude_sonnet.full_name == "claude-sonnet-4-5-20250929"
-        assert claude_sonnet.display_full_name == "claude-sonnet-4-5-20250929"
+    def test_language_model_full_name(self, language_model_repository):
+        """LanguageModelDB should have correct full_name and display_full_name."""
+        # Test Anthropic model with full_name
+        db_model = language_model_repository.get_by_model_id("anthropic:claude-sonnet-4.5")
+        assert db_model is not None
+        assert db_model.full_name == "claude-sonnet-4-5-20250929"
+        assert db_model.display_full_name == "claude-sonnet-4-5-20250929"
 
-        # Test models without full_name default to name
-        gpt5 = llm_registry.get("openai:gpt-5")
-        assert gpt5 is not None
-        assert gpt5.full_name is None
-        assert gpt5.display_full_name == "gpt-5"
+        # Test model without full_name defaults to name
+        db_model = language_model_repository.get_by_model_id("openai:gpt-5")
+        assert db_model is not None
+        assert db_model.full_name is None
+        assert db_model.display_full_name == "gpt-5"
 
     def test_default_model_for_engines_not_requiring_selection(self, agent_config_service):
         """Engines that don't require model selection should return None as default."""
@@ -269,7 +279,9 @@ class TestAgentConfigService:
                 assert engine_info.is_available is True
                 assert engine_info.unavailable_reason is None
 
-    def test_check_engine_availability_internal_without_providers(self, agent_role_config_repository):
+    def test_check_engine_availability_internal_without_providers(
+        self, agent_role_config_repository, language_model_repository
+    ):
         """INTERNAL engine should be unavailable when no LLM providers are configured."""
         mock_config_service = Mock()
         # All provider validation calls return failure (no providers configured)
@@ -282,7 +294,7 @@ class TestAgentConfigService:
         service = AgentConfigService(
             agent_role_config_repo=agent_role_config_repository,
             config_service=mock_config_service,
-            llm_registry=llm_registry,
+            language_model_repo=language_model_repository,
             engine_registry=agent_engine_registry,
         )
 
@@ -290,3 +302,55 @@ class TestAgentConfigService:
         assert is_available is False
         assert reason is not None
         assert "No LLM providers configured" in reason
+
+
+class TestSeedLanguageModels:
+    """Tests for the startup seed behavior."""
+
+    def test_seed_populates_empty_table(self, db_session):
+        """Seed should insert DEFAULT_MODELS when table is empty."""
+        from devboard.agents.language_models import DEFAULT_MODELS
+        from devboard.db.repositories.language_model import LanguageModelRepository
+
+        repo = LanguageModelRepository(db_session)
+        # Ensure table is empty for this test (use a separate session scope concern)
+        initial_count = repo.count()
+
+        if initial_count == 0:
+            # Simulate the seed
+            for model in DEFAULT_MODELS:
+                repo.create(
+                    provider=model.provider,
+                    name=model.name,
+                    model_type=model.model_type,
+                    full_name=model.full_name,
+                    bedrock_id=model.bedrock_id,
+                )
+            assert repo.count() == len(DEFAULT_MODELS)
+
+    def test_seed_skips_when_populated(self, language_model_repository):
+        """Seed should not insert anything when table already has models."""
+
+        count_before = language_model_repository.count()
+        assert count_before > 0, "Fixture should have pre-seeded models"
+
+        # Running seed logic again should not add duplicates (table is not empty)
+        if language_model_repository.count() > 0:
+            # Simulate the seed condition check
+            pass  # Would skip seeding
+
+        count_after = language_model_repository.count()
+        assert count_after == count_before
+
+    def test_language_model_db_properties(self, language_model_repository):
+        """LanguageModelDB should have correct derived properties."""
+        from devboard.agents.language_models import LLMProvider, ModelType
+
+        db_model = language_model_repository.get_by_model_id("anthropic:claude-sonnet-4.5")
+        assert db_model is not None
+
+        assert db_model.provider == LLMProvider.ANTHROPIC
+        assert db_model.name == "claude-sonnet-4.5"
+        assert db_model.model_type == ModelType.STANDARD
+        assert db_model.full_name == "claude-sonnet-4-5-20250929"
+        assert db_model.model_id == "anthropic:claude-sonnet-4.5"

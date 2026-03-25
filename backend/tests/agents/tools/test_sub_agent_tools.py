@@ -220,7 +220,10 @@ class TestCreateCodebaseInvestigationTool:
         mock_execution_service.send_message_or_approval.return_value = [final_message]
 
         tool = make_investigation_tool(
-            mock_codebases, mock_agent_config_service, mock_conversation_repo, parent_conversation_id=None
+            mock_codebases,
+            mock_agent_config_service,
+            mock_conversation_repo,
+            parent_conversation_id=None,
         )
 
         with patch(

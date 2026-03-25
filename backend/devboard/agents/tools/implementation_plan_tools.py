@@ -285,6 +285,7 @@ def create_execute_implementation_step_tool(
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     working_dir: str,
+    task_git_service: TaskGitService | None = None,
 ) -> Tool:
     async def execute_implementation_step(
         step_number: int,
@@ -365,7 +366,7 @@ def create_execute_implementation_step_tool(
                 if notes:
                     prompt += f"\n\n## Coordinator Notes\n\n{notes}"
             elif step.type == ImplementationStepType.CODE_REVIEW:
-                diff = await TaskGitService.get_task_all_changes(task)
+                diff = await (task_git_service or TaskGitService).get_task_all_changes(task)
                 if not diff.files:
                     plan_service.set_step_status(
                         step,

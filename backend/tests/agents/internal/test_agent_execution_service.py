@@ -75,7 +75,14 @@ class TestPydanticAIAgentExecutionService:
         )
 
     @pytest.fixture
-    def service(self, mock_role, conversation_repo, conversation, history_service, mock_agent_config_service):
+    def service(
+        self,
+        mock_role,
+        conversation_repo,
+        conversation,
+        history_service,
+        mock_agent_config_service,
+    ):
         """Create PydanticAIAgentExecutionService instance."""
         return PydanticAIAgentExecutionService(
             conversation=conversation,

@@ -6,8 +6,9 @@ import pytest
 
 from devboard.agents.config_types import AgentEngineModelConfig
 from devboard.agents.engines import AgentEngine
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.db.models import Conversation, ParentEntityType
+from devboard.db.models.language_model import LanguageModelDB
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import (
     MAX_PROJECT_CONVERSATIONS,
@@ -24,7 +25,7 @@ def mock_conversation_repo():
 @pytest.fixture
 def mock_agent_config_service():
     mock_service = Mock()
-    mock_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.STANDARD)
+    mock_model = LanguageModelDB(provider=LLMProvider.OPENAI, name="gpt-4", model_type=ModelType.STANDARD)
     default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model=mock_model)
     mock_service.get_effective_config.return_value = default_config
     return mock_service

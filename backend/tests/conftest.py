@@ -15,17 +15,19 @@ from sqlalchemy.pool import StaticPool
 from devboard.agents.config_types import AgentEngineModelConfig
 from devboard.agents.engines import AgentEngine
 from devboard.agents.events import MessageRole, TextMessage
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.api.main import app
 from devboard.db.database import get_db
 from devboard.db.models import Base, Codebase, Document, Project, Task
 from devboard.db.models.document import DocumentType
+from devboard.db.models.language_model import LanguageModelDB
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
     ConfigurationRepository,
     ConversationRepository,
     DocumentRepository,
+    LanguageModelRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -103,12 +105,21 @@ def _test_client() -> Iterator[TestClient]:
 
 
 @fixture
-def client(db_session, _test_client) -> Iterator[TestClient]:
+def client(db_session, language_model_repository, _test_client) -> Iterator[TestClient]:
     """FastAPI test client with database setup.
 
     Uses the session-scoped TestClient but sets up per-test database overrides
-    to maintain test isolation.
+    to maintain test isolation. Seeds language models and a fake OpenAI provider
+    config so AgentConfigService can resolve models from the test DB.
     """
+    import json
+
+    from devboard.db.models.configuration import Configuration
+
+    # Seed a fake OpenAI API key so _get_all_available_internal_models() finds models
+    fake_openai_config = Configuration(key="llm.openai.main", value_json=json.dumps({"api_key": "test-key"}))
+    db_session.add(fake_openai_config)
+    db_session.flush()
 
     def override_get_db():
         return db_session
@@ -155,6 +166,24 @@ def conversation_repository(db_session):
 def agent_role_config_repository(db_session):
     """AgentRoleConfigRepository instance for testing."""
     return AgentRoleConfigRepository(db_session)
+
+
+@fixture
+def language_model_repository(db_session):
+    """LanguageModelRepository instance for testing, pre-seeded with default models."""
+    from devboard.agents.language_models import DEFAULT_MODELS
+
+    repo = LanguageModelRepository(db_session)
+    if repo.count() == 0:
+        for model in DEFAULT_MODELS:
+            repo.create(
+                provider=model.provider,
+                name=model.name,
+                model_type=model.model_type,
+                full_name=model.full_name,
+                bedrock_id=model.bedrock_id,
+            )
+    return repo
 
 
 # Test data fixtures
@@ -273,8 +302,12 @@ def integration_service(configuration_repository):
 def mock_agent_config_service():
     """Mock AgentConfigService to avoid database dependencies."""
     mock_service = Mock()
-    # Return an AgentEngineModelConfig with a resolved LanguageModel
-    mock_model = LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4", type=ModelType.STANDARD)
+    # Return an AgentEngineModelConfig with a resolved LanguageModelDB
+    mock_model = Mock(spec=LanguageModelDB)
+    mock_model.provider = LLMProvider.OPENAI
+    mock_model.name = "gpt-4"
+    mock_model.model_type = ModelType.STANDARD
+    mock_model.model_id = "openai:gpt-4"
     default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model=mock_model)
     mock_service.get_effective_config.return_value = default_config
     # Mock methods for custom instructions and MCP tools

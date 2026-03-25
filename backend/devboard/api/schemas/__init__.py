@@ -34,6 +34,11 @@ from .integration import (
     UpdateAgentModelRequest,
     UpdateConversationModelRequest,
 )
+from .language_model import (
+    CreateLanguageModelRequest,
+    LanguageModelResponse,
+    UpdateLanguageModelRequest,
+)
 from .log_entry import LogEntryCreate, LogEntryResponse, LogEntryUpdate
 from .mcp import (
     MCPServerDetailResponse,
@@ -110,6 +115,10 @@ __all__ = [
     "DocumentCreate",
     "DocumentResponse",
     "DocumentUpdate",
+    # Language Model
+    "CreateLanguageModelRequest",
+    "LanguageModelResponse",
+    "UpdateLanguageModelRequest",
     # LogEntry
     "LogEntryCreate",
     "LogEntryResponse",

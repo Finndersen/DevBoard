@@ -13,8 +13,9 @@ from devboard.agents.engines.claude_code.message_converter import (
     parse_claude_message_text,
 )
 from devboard.agents.events import MessageRole, TextMessage, ToolCallRequest
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
+from devboard.db.models.language_model import LanguageModelDB
 
 
 def create_mock_result(text_content: str, session_id: str = "test-session") -> ResultMessage:
@@ -56,10 +57,10 @@ def mock_edit_tool():
 @pytest.fixture
 def test_agent(mock_edit_tool):
     """Create a test agent with a mock tool."""
-    model = LanguageModel(
+    model = LanguageModelDB(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.STANDARD,
+        model_type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     )
     role = MockAgentRole(tools=[mock_edit_tool])

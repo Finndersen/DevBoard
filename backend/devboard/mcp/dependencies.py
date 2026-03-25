@@ -17,9 +17,8 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
-from devboard.agents.language_models import llm_registry
 from devboard.db.database import SessionLocal
-from devboard.db.repositories import AgentRoleConfigRepository, ConfigurationRepository
+from devboard.db.repositories import AgentRoleConfigRepository, ConfigurationRepository, LanguageModelRepository
 from devboard.services.config_service import ConfigService
 
 
@@ -59,14 +58,15 @@ def create_agent_config_service(db: Session) -> AgentConfigService:
         db: Database session
 
     Returns:
-        AgentConfigService instance with LLM and engine registries
+        AgentConfigService instance with language model repository and engine registry
     """
     config_repo = ConfigurationRepository(db)
     config_service = ConfigService(config_repo)
     agent_role_config_repo = AgentRoleConfigRepository(db)
+    language_model_repo = LanguageModelRepository(db)
     return AgentConfigService(
         agent_role_config_repo=agent_role_config_repo,
         config_service=config_service,
-        llm_registry=llm_registry,
+        language_model_repo=language_model_repo,
         engine_registry=agent_engine_registry,
     )

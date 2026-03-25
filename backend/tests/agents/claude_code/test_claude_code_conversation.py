@@ -76,7 +76,14 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         )
 
     @pytest.fixture
-    def execution_service(self, mock_role, conversation_repo, conversation, history_service, mock_agent_config_service):
+    def execution_service(
+        self,
+        mock_role,
+        conversation_repo,
+        conversation,
+        history_service,
+        mock_agent_config_service,
+    ):
         """Create ClaudeCodeAgentExecutionService instance."""
         return ClaudeCodeAgentExecutionService(
             conversation=conversation,

@@ -171,7 +171,6 @@ def create_agent_execution_service(
         oauth_service: Optional OAuthService for OAuth-authenticated MCP servers
         interrupt_event: Optional asyncio.Event for graceful interrupt signaling
 
-
     Returns:
         AgentExecutionService instance (PydanticAI or ClaudeCode)
 

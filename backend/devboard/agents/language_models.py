@@ -1,8 +1,7 @@
-from dataclasses import dataclass
 from enum import StrEnum
+from typing import NamedTuple
 
 from devboard.agents.roles import AgentRoleType
-from devboard.core.registry import Registry
 
 
 class ModelType(StrEnum):
@@ -21,117 +20,71 @@ class LLMProvider(StrEnum):
     GOOGLE = "google"
 
 
-@dataclass(frozen=True)
-class LanguageModel:
+class ModelSeedData(NamedTuple):
+    """Seed data for populating the language_models table on first startup."""
+
     provider: LLMProvider
     name: str
-    type: ModelType
-    full_name: str | None = None  # Full model identifier for external engines (e.g., claude-sonnet-4-5-20250929)
-    bedrock_id: str | None = (
-        None  # Bedrock model inference profile (e.g., eu.anthropic.claude-sonnet-4-5-20250929-v1:0)
-    )
-
-    @property
-    def id(self) -> str:
-        return f"{self.provider}:{self.name}"
-
-    @property
-    def display_full_name(self) -> str:
-        """Get the full name for display or configuration, defaults to name if not provided."""
-        return self.full_name if self.full_name else self.name
+    model_type: ModelType
+    full_name: str | None = None
+    bedrock_id: str | None = None
+    context_window: int | None = None
 
 
-ALL_MODELS = [
+# Default models used to seed the database on first startup
+DEFAULT_MODELS: list[ModelSeedData] = [
     # OpenAI Models
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5", type=ModelType.STANDARD),
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-4.1", type=ModelType.STANDARD),
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5-mini", type=ModelType.FAST),
-    LanguageModel(provider=LLMProvider.OPENAI, name="gpt-5-nano", type=ModelType.FAST),
+    ModelSeedData(provider=LLMProvider.OPENAI, name="gpt-5", model_type=ModelType.STANDARD),
+    ModelSeedData(provider=LLMProvider.OPENAI, name="gpt-4.1", model_type=ModelType.STANDARD, context_window=1_047_576),
+    ModelSeedData(provider=LLMProvider.OPENAI, name="gpt-5-mini", model_type=ModelType.FAST),
+    ModelSeedData(provider=LLMProvider.OPENAI, name="gpt-5-nano", model_type=ModelType.FAST),
     # Anthropic Models (with full names for Claude Code)
-    LanguageModel(
+    ModelSeedData(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4.5",
-        type=ModelType.STANDARD,
+        model_type=ModelType.STANDARD,
         full_name="claude-sonnet-4-5-20250929",
+        context_window=200_000,
     ),
-    LanguageModel(
+    ModelSeedData(
         provider=LLMProvider.ANTHROPIC,
         name="claude-opus-4.1",
-        type=ModelType.ADVANCED,
+        model_type=ModelType.ADVANCED,
         full_name="claude-opus-4-1-20250805",
+        context_window=200_000,
     ),
-    LanguageModel(
+    ModelSeedData(
         provider=LLMProvider.ANTHROPIC,
         name="claude-opus-4",
-        type=ModelType.ADVANCED,
+        model_type=ModelType.ADVANCED,
         full_name="claude-opus-4-20250514",
+        context_window=200_000,
     ),
-    LanguageModel(
+    ModelSeedData(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.STANDARD,
+        model_type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
+        context_window=200_000,
     ),
-    LanguageModel(
+    ModelSeedData(
         provider=LLMProvider.ANTHROPIC,
         name="claude-haiku-4-5",
-        type=ModelType.FAST,
+        model_type=ModelType.FAST,
         full_name="claude-haiku-4-5-20251001",
+        context_window=200_000,
     ),
     # Google Models
-    LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-pro", type=ModelType.STANDARD),
-    LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-flash", type=ModelType.FAST),
-    LanguageModel(provider=LLMProvider.GOOGLE, name="gemini-2.5-flash-lite", type=ModelType.FAST),
+    ModelSeedData(
+        provider=LLMProvider.GOOGLE, name="gemini-2.5-pro", model_type=ModelType.STANDARD, context_window=1_048_576
+    ),
+    ModelSeedData(
+        provider=LLMProvider.GOOGLE, name="gemini-2.5-flash", model_type=ModelType.FAST, context_window=1_048_576
+    ),
+    ModelSeedData(
+        provider=LLMProvider.GOOGLE, name="gemini-2.5-flash-lite", model_type=ModelType.FAST, context_window=1_048_576
+    ),
 ]
-
-
-class LLMRegistry(Registry[LanguageModel]):
-    """Registry for managing language model definitions and queries."""
-
-    def __init__(self, models: list[LanguageModel]) -> None:
-        """Initialize registry with language models."""
-        super().__init__(models, key_attr="id")
-
-    def get_models_by_type(self, model_type: ModelType) -> list[LanguageModel]:
-        """Get all models of a specific type.
-
-        Args:
-            model_type: The model type to filter by
-
-        Returns:
-            List of LanguageModel instances matching the type
-        """
-        return [model for model in self.list_values() if model.type == model_type]
-
-    def get_models_for_provider(self, provider: LLMProvider) -> list[LanguageModel]:
-        """Get all models for a specific provider.
-
-        Args:
-            provider: The LLM provider to filter by
-
-        Returns:
-            List of LanguageModel instances for the provider
-        """
-        return [model for model in self.list_values() if model.provider == provider]
-
-    def get_all_models(self) -> list[LanguageModel]:
-        """Get all available language models.
-
-        Returns:
-            List of all LanguageModel instances
-        """
-        return self.list_values()
-
-    def get_recommended_model_type_for_agent(self, agent_role: AgentRoleType) -> ModelType:
-        """Get the recommended model type for an agent role.
-
-        Args:
-            agent_role: The agent role to get recommendation for
-
-        Returns:
-            Recommended ModelType for the agent
-        """
-        return RECOMMENDED_AGENT_MODEL_TYPES[agent_role]
 
 
 # Recommended model types for different agent roles
@@ -144,5 +97,3 @@ RECOMMENDED_AGENT_MODEL_TYPES = {
     AgentRoleType.INVESTIGATION: ModelType.FAST,
     AgentRoleType.STEP_EXECUTION: ModelType.STANDARD,
 }
-# Global default LLM registry instance
-llm_registry = LLMRegistry(ALL_MODELS)

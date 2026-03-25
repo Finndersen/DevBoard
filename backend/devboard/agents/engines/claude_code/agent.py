@@ -41,11 +41,12 @@ from devboard.agents.events import (
     ToolCall,
     ToolResult,
 )
-from devboard.agents.language_models import LanguageModel, LLMProvider
+from devboard.agents.language_models import LLMProvider
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
+from devboard.db.models.language_model import LanguageModelDB
 
 # Maximum number of retry attempts for invalid responses
 MAX_RETRY_ATTEMPTS = 3
@@ -111,7 +112,7 @@ class ClaudeCodeAgent(BaseAgent):
     def __init__(
         self,
         role: AgentRole,
-        model: LanguageModel | None,
+        model: LanguageModelDB | None,
         session_id: str | None = None,
         working_dir: str | None = None,
         additional_tools: list[Tool] | None = None,

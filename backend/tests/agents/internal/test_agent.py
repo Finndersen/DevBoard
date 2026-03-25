@@ -1,13 +1,15 @@
 """Tests for InternalAgent with Role-based architecture."""
 
+from unittest.mock import patch
+
 import pytest
-from pydantic_ai import Agent, Tool
-from pydantic_ai.tools import ToolFuncEither
+from pydantic_ai import Tool
 
 from devboard.agents.base_agent import SHARED_PROMPT_SUFFIX
 from devboard.agents.engines.internal import InternalAgent
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
+from devboard.db.models.language_model import LanguageModelDB
 
 
 class MockAgentRole(AgentRole):
@@ -16,7 +18,7 @@ class MockAgentRole(AgentRole):
     def get_system_prompt(self) -> str:
         return "Test system prompt for mock role"
 
-    def get_tools(self) -> list[Tool | ToolFuncEither]:
+    def get_tools(self) -> list[Tool]:
         return []
 
     async def get_context_content(self) -> str:
@@ -34,10 +36,10 @@ class TestInternalAgent:
     @pytest.fixture
     def mock_model(self):
         """Create a mock language model."""
-        return LanguageModel(
+        return LanguageModelDB(
             provider=LLMProvider.OPENAI,
             name="gpt-4",
-            type=ModelType.STANDARD,
+            model_type=ModelType.STANDARD,
         )
 
     @pytest.fixture
@@ -71,7 +73,8 @@ class TestInternalAgent:
 
     def test_agent_creates_pydantic_agent(self, agent):
         """Test that agent can create PydanticAI agent."""
-        pydantic_agent = agent._create_agent()
-
-        # Should be a PydanticAI Agent instance
-        assert isinstance(pydantic_agent, Agent)
+        with patch("devboard.agents.engines.internal.agent.Agent") as mock_agent_cls:
+            agent._create_agent()
+            mock_agent_cls.assert_called_once()
+            call_kwargs = mock_agent_cls.call_args
+            assert call_kwargs[0][0] == "openai:gpt-4"

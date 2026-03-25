@@ -6,13 +6,13 @@ from fastapi import Depends
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
-from devboard.agents.language_models import llm_registry
 from devboard.api.dependencies.repositories import (
     get_agent_role_config_repository,
     get_configuration_repository,
     get_conversation_repository,
     get_custom_field_repository,
     get_document_repository,
+    get_language_model_repository,
     get_log_entry_repository,
     get_mcp_server_repository,
     get_oauth_repository,
@@ -28,6 +28,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    LanguageModelRepository,
     LogEntryRepository,
     MCPServerRepository,
     OAuthRepository,
@@ -40,6 +41,7 @@ from devboard.services.codebase_investigation import CodebaseInvestigationServic
 from devboard.services.config_service import ConfigService
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
+from devboard.services.language_model_service import LanguageModelService
 from devboard.services.log_entry_service import LogEntryService
 from devboard.services.mcp_service import MCPService
 from devboard.services.oauth_service import OAuthService
@@ -68,14 +70,22 @@ def get_integration_service(
 def get_agent_config_service(
     agent_role_config_repo: AgentRoleConfigRepository = Depends(get_agent_role_config_repository),
     config_service: ConfigService = Depends(get_config_service),
+    language_model_repo: LanguageModelRepository = Depends(get_language_model_repository),
 ) -> AgentConfigService:
     """Get AgentConfigService instance."""
     return AgentConfigService(
         agent_role_config_repo=agent_role_config_repo,
         config_service=config_service,
-        llm_registry=llm_registry,
+        language_model_repo=language_model_repo,
         engine_registry=agent_engine_registry,
     )
+
+
+def get_language_model_service(
+    language_model_repo: LanguageModelRepository = Depends(get_language_model_repository),
+) -> LanguageModelService:
+    """Get LanguageModelService instance."""
+    return LanguageModelService(language_model_repo)
 
 
 def get_template_service() -> TemplateService:

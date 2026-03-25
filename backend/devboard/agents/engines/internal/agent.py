@@ -45,11 +45,11 @@ from devboard.agents.events import (
     ToolCallRequest,
     ToolResult,
 )
-from devboard.agents.language_models import LanguageModel
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
+from devboard.db.models.language_model import LanguageModelDB
 
 
 class InternalAgent(BaseAgent):
@@ -62,7 +62,7 @@ class InternalAgent(BaseAgent):
     def __init__(
         self,
         role: AgentRole,
-        model: LanguageModel,
+        model: LanguageModelDB,
         conversation_history: list[ModelMessage] | None = None,
         additional_tools: list[Tool] | None = None,
         custom_instructions: str | None = None,
@@ -97,7 +97,7 @@ class InternalAgent(BaseAgent):
         """
         assert self.model is not None, "InternalAgent requires a non-None model"
         # Replace google with google-gla for compatibility with PydanticAI
-        return self.model.id.replace("google", "google-gla")
+        return self.model.model_id.replace("google", "google-gla")
 
     async def build_system_and_context_messages(self) -> ModelRequest:
         """Build initial system and context messages from role.

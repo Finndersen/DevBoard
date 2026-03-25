@@ -9,6 +9,7 @@ from .conversation import ConversationRepository
 from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
 from .implementation_plan import TaskImplementationPlanRepository
+from .language_model import LanguageModelRepository
 from .log_entry import LogEntryRepository
 from .mcp_server import MCPServerRepository
 from .oauth import OAuthRepository
@@ -27,6 +28,7 @@ __all__ = [
     "ConversationRepository",
     "DocumentRepository",
     "TaskImplementationPlanRepository",
+    "LanguageModelRepository",
     "MCPServerRepository",
     "OAuthRepository",
     "ProjectRepository",

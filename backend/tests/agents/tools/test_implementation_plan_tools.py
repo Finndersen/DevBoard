@@ -148,6 +148,7 @@ class TestExecuteImplementationStepConversationFlow:
             conversation_repo=mock_conversation_repo,
             parent_conversation_id=None,
             working_dir="/test/working_dir",
+            task_git_service=Mock(),
         )
 
     def _make_step(

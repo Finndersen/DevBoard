@@ -11,7 +11,6 @@ from devboard.agents.engines.internal.conversation_history import convert_messag
 from devboard.agents.events import ConversationEvent
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
-from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
 from devboard.db.models.messages import MessageType
@@ -96,13 +95,17 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
         Returns:
             InternalAgent instance configured with role, model, and history
         """
-        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
-        if not model:
+        db_model = (
+            self._agent_config_service.get_model_by_id(self.conversation.model_id)
+            if self.conversation.model_id
+            else None
+        )
+        if not db_model:
             raise ValueError(f"Model '{self.conversation.model_id}' not found in registry")
 
         return InternalAgent(
             role=self.role,
-            model=model,
+            model=db_model,
             conversation_history=conversation_history,
             additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),

@@ -8,14 +8,15 @@ from devboard.agents.engines.agent_engines import (
     AgentEngineRegistry,
 )
 from devboard.agents.language_models import (
-    LanguageModel,
+    RECOMMENDED_AGENT_MODEL_TYPES,
     LLMProvider,
-    LLMRegistry,
 )
 from devboard.agents.roles import AgentRoleType
 from devboard.api.schemas.agents import MCPToolSummary
 from devboard.db.models import MCPTool
+from devboard.db.models.language_model import LanguageModelDB
 from devboard.db.repositories import AgentRoleConfigRepository
+from devboard.db.repositories.language_model import LanguageModelRepository
 from devboard.services.config_service import ConfigService
 
 
@@ -60,7 +61,7 @@ class AgentConfigService:
         self,
         agent_role_config_repo: AgentRoleConfigRepository,
         config_service: ConfigService,
-        llm_registry: LLMRegistry,
+        language_model_repo: LanguageModelRepository,
         engine_registry: AgentEngineRegistry,
     ) -> None:
         """Initialize AgentConfigService.
@@ -68,12 +69,12 @@ class AgentConfigService:
         Args:
             agent_role_config_repo: Repository for agent role configuration
             config_service: Service for accessing LLM provider configuration
-            llm_registry: Registry for LLM/model information
+            language_model_repo: Repository for language model data
             engine_registry: Registry for agent engine information
         """
         self._agent_role_config_repo = agent_role_config_repo
         self._config_service = config_service
-        self._llm_registry = llm_registry
+        self._language_model_repo = language_model_repo
         self._engine_registry = engine_registry
 
     def get_agent_configuration(self, agent_role: AgentRoleType) -> AgentConfiguration:
@@ -142,10 +143,10 @@ class AgentConfigService:
             # Convert to ModelInfo objects
             model_infos = [
                 ModelInfo(
-                    id=m.id,
+                    id=m.model_id,
                     provider=m.provider,
                     name=m.name,
-                    model_type=m.type,
+                    model_type=m.model_type,
                 )
                 for m in engine_models
             ]
@@ -202,7 +203,7 @@ class AgentConfigService:
         else:
             # If model_id is provided, validate it's available for the engine
             available_models = self._get_available_models_for_engine(config.engine)
-            if not any(m.id == config.model_id for m in available_models):
+            if not any(m.model_id == config.model_id for m in available_models):
                 raise ValueError(
                     f"Model '{config.model_id}' not available for engine '{config.engine.value}'. "
                     f"Ensure the provider is configured."
@@ -293,15 +294,16 @@ class AgentConfigService:
             else self._get_default_model_for_agent_role_and_engine(agent_role, effective_engine)
         )
 
-        # Resolve LanguageModel from registry
-        resolved_model = self._llm_registry.get(effective_model_id) if effective_model_id else None
+        resolved_model: LanguageModelDB | None = None
+        if effective_model_id:
+            resolved_model = self._language_model_repo.get_by_model_id(effective_model_id)
 
         return AgentEngineModelConfig(
             engine=effective_engine,
             model=resolved_model,
         )
 
-    def _get_available_models_for_engine(self, engine: AgentEngine) -> list[LanguageModel]:
+    def _get_available_models_for_engine(self, engine: AgentEngine) -> list[LanguageModelDB]:
         """Get models available for a specific engine.
 
         For INTERNAL engine:
@@ -330,12 +332,12 @@ class AgentConfigService:
             # (no API key filtering - these engines manage auth themselves)
             if engine_def.available_provider is None:
                 # Engine supports all providers (unlikely for external engines)
-                return self._llm_registry.get_all_models()
+                return self._language_model_repo.get_all()
             else:
                 # Return models from the specific provider
-                return self._llm_registry.get_models_for_provider(engine_def.available_provider)
+                return self._language_model_repo.get_by_provider(engine_def.available_provider)
 
-    def _get_all_available_internal_models(self) -> list[LanguageModel]:
+    def _get_all_available_internal_models(self) -> list[LanguageModelDB]:
         """Get all models from configured providers for the internal engine.
 
         Returns:
@@ -349,7 +351,7 @@ class AgentConfigService:
                 working_providers.add(provider_type)
 
         # Return models from working providers
-        return [model for model in self._llm_registry.get_all_models() if model.provider in working_providers]
+        return [m for m in self._language_model_repo.get_all() if m.provider in working_providers]
 
     def _check_engine_availability(self, engine: AgentEngine) -> tuple[bool, str | None]:
         """Check if an engine is available for use.
@@ -365,6 +367,9 @@ class AgentConfigService:
             if not available_models:
                 return False, "No LLM providers configured. Add an API key in Settings."
         return True, None
+
+    def get_model_by_id(self, model_id: str) -> LanguageModelDB | None:
+        return self._language_model_repo.get_by_model_id(model_id)
 
     def _get_default_model_for_agent_role_and_engine(
         self, agent_role: AgentRoleType, engine: AgentEngine
@@ -401,12 +406,12 @@ class AgentConfigService:
             )
 
         # Get recommended model type for this agent role
-        recommended_type = self._llm_registry.get_recommended_model_type_for_agent(agent_role)
+        recommended_type = RECOMMENDED_AGENT_MODEL_TYPES[agent_role]
 
         # Try to find a model of the recommended type
         for model in available:
-            if model.type == recommended_type:
-                return model.id
+            if model.model_type == recommended_type:
+                return model.model_id
 
         # If no model of recommended type found, return first available model
-        return available[0].id
+        return available[0].model_id

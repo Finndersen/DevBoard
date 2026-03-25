@@ -14,6 +14,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.registry import get_execution_manager, set_execution_manager
+from devboard.agents.language_models import DEFAULT_MODELS
 from devboard.api.routers import (
     agents,
     claude_code,
@@ -24,6 +25,7 @@ from devboard.api.routers import (
     documents,
     executions,
     github,
+    language_models,
     log_entries,
     mcp_servers,
     oauth,
@@ -37,6 +39,7 @@ from devboard.api.routers import (
 from devboard.config.logfire_config import setup_logfire
 from devboard.db.database import SessionLocal, engine
 from devboard.db.repositories.codebase import CodebaseRepository
+from devboard.db.repositories.language_model import LanguageModelRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.services.workspace.pool_manager import WorktreePoolManager
 
@@ -63,6 +66,7 @@ async def _event_loop_monitor() -> None:
 async def combined_lifespan(app: FastAPI):
     """Run both lifespans."""
     set_execution_manager(ConversationExecutionManager())
+    seed_language_models()
     await cleanup_stale_locks_on_startup()
     # Enable asyncio debug mode to log slow callbacks with their coroutine name/location
     loop = asyncio.get_running_loop()
@@ -97,6 +101,39 @@ async def _shutdown_active_executions() -> None:
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+
+
+def seed_language_models() -> None:
+    """Seed the language_models table with default models if it is empty.
+
+    Idempotent — only runs when the table is empty. This ensures that the
+    default model catalog is available without requiring manual data entry,
+    while allowing user customisation once populated.
+    """
+    db = SessionLocal()
+    try:
+        repo = LanguageModelRepository(db)
+        if repo.count() == 0:
+            for model in DEFAULT_MODELS:
+                repo.create(
+                    provider=model.provider,
+                    name=model.name,
+                    model_type=model.model_type,
+                    full_name=model.full_name,
+                    bedrock_id=model.bedrock_id,
+                    context_window=model.context_window,
+                )
+            db.commit()
+            logfire.info(f"Startup: Seeded {len(DEFAULT_MODELS)} default language model(s)")
+        else:
+            logfire.info("Startup: Language models table already populated, skipping seed")
+    except Exception as e:
+        # Fail-soft: log and continue startup rather than blocking the application.
+        # Models can be added manually via the API if seeding fails.
+        logfire.error(f"Error seeding language models: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 async def cleanup_stale_locks_on_startup():
@@ -207,6 +244,7 @@ app.include_router(claude_code.router, prefix="/api/claude-code", tags=["claude-
 app.include_router(github.router, prefix="/api/github", tags=["github"])
 app.include_router(log_entries.router, prefix="/api/log-entries", tags=["log-entries"])
 app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
+app.include_router(language_models.router, prefix="/api/language-models", tags=["language-models"])
 
 
 @app.get("/")

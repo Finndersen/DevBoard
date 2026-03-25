@@ -4,10 +4,11 @@ This module contains type definitions that are used across the agent system,
 separated to avoid circular import issues.
 """
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from devboard.agents.engines import AgentEngine
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
+from devboard.db.models.language_model import LanguageModelDB
 
 
 class AgentEngineModelInput(BaseModel):
@@ -40,12 +41,12 @@ class AgentEngineModelConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     engine: AgentEngine
-    model: LanguageModel | None
+    model: LanguageModelDB | None = Field(exclude=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def model_id(self) -> str | None:
-        return self.model.id if self.model else None
+        return self.model.model_id if self.model else None
 
 
 class ModelInfo(BaseModel):

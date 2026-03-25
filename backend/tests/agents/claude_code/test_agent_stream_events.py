@@ -21,9 +21,10 @@ from pydantic_ai import Tool
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent, _should_retry_error_result
 from devboard.agents.engines.claude_code.session import AssistantSessionMessage
 from devboard.agents.events import MessageRole, TextMessage, ThinkingEvent, ToolCall, ToolCallRequest, ToolResult
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
+from devboard.db.models.language_model import LanguageModelDB
 
 
 class MockAgentRole(AgentRole):
@@ -152,12 +153,12 @@ def create_mock_session_message_with_tool_call(tool_call_json: str) -> Assistant
 
 
 @pytest.fixture
-def mock_model() -> LanguageModel:
+def mock_model() -> LanguageModelDB:
     """Create a mock language model."""
-    return LanguageModel(
+    return LanguageModelDB(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.STANDARD,
+        model_type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     )
 
@@ -183,14 +184,14 @@ def mock_function_tool() -> Tool:
 
 
 @pytest.fixture
-def agent_with_virtual_tool(mock_model: LanguageModel, mock_virtual_tool: Tool) -> ClaudeCodeAgent:
+def agent_with_virtual_tool(mock_model: LanguageModelDB, mock_virtual_tool: Tool) -> ClaudeCodeAgent:
     """Create an agent with a virtual tool."""
     role = MockAgentRole(tools=[mock_virtual_tool])
     return ClaudeCodeAgent(role=role, model=mock_model)
 
 
 @pytest.fixture
-def agent_with_function_tool(mock_model: LanguageModel, mock_function_tool: Tool) -> ClaudeCodeAgent:
+def agent_with_function_tool(mock_model: LanguageModelDB, mock_function_tool: Tool) -> ClaudeCodeAgent:
     """Create an agent with a function tool."""
     role = MockAgentRole(tools=[mock_function_tool])
     return ClaudeCodeAgent(role=role, model=mock_model)
@@ -198,7 +199,7 @@ def agent_with_function_tool(mock_model: LanguageModel, mock_function_tool: Tool
 
 @pytest.fixture
 def agent_with_both_tools(
-    mock_model: LanguageModel, mock_virtual_tool: Tool, mock_function_tool: Tool
+    mock_model: LanguageModelDB, mock_virtual_tool: Tool, mock_function_tool: Tool
 ) -> ClaudeCodeAgent:
     """Create an agent with both virtual and function tools."""
     role = MockAgentRole(tools=[mock_virtual_tool, mock_function_tool])

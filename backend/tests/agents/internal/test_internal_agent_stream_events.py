@@ -18,9 +18,10 @@ from pydantic_ai.tools import DeferredToolRequests
 
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.events import MessageRole, TextMessage, ToolCall, ToolCallRequest, ToolResult
-from devboard.agents.language_models import LanguageModel, LLMProvider, ModelType
+from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
+from devboard.db.models.language_model import LanguageModelDB
 
 
 class MockAgentRole(AgentRole):
@@ -101,12 +102,12 @@ def setup_mock_pydantic_agent(mock_agent_class, events_to_yield):
 
 
 @pytest.fixture
-def mock_model() -> LanguageModel:
+def mock_model() -> LanguageModelDB:
     """Create a mock language model."""
-    return LanguageModel(
+    return LanguageModelDB(
         provider=LLMProvider.ANTHROPIC,
         name="claude-sonnet-4",
-        type=ModelType.STANDARD,
+        model_type=ModelType.STANDARD,
         full_name="claude-sonnet-4-20250514",
     )
 
@@ -132,14 +133,14 @@ def mock_approval_tool() -> Tool:
 
 
 @pytest.fixture
-def agent_with_function_tool(mock_model: LanguageModel, mock_function_tool: Tool) -> InternalAgent:
+def agent_with_function_tool(mock_model: LanguageModelDB, mock_function_tool: Tool) -> InternalAgent:
     """Create an agent with a function tool."""
     role = MockAgentRole(tools=[mock_function_tool])
     return InternalAgent(role=role, model=mock_model)
 
 
 @pytest.fixture
-def agent_with_approval_tool(mock_model: LanguageModel, mock_approval_tool: Tool) -> InternalAgent:
+def agent_with_approval_tool(mock_model: LanguageModelDB, mock_approval_tool: Tool) -> InternalAgent:
     """Create an agent with an approval-required tool."""
     role = MockAgentRole(tools=[mock_approval_tool])
     return InternalAgent(role=role, model=mock_model)

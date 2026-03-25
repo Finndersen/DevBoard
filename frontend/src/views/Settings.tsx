@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { CogIcon, Cog6ToothIcon, LinkIcon, CpuChipIcon, TagIcon } from '@heroicons/react/24/outline'
+import { CogIcon, Cog6ToothIcon, LinkIcon, CpuChipIcon, TagIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import ViewHeader from '../components/layout/ViewHeader'
 import { ConfigurationForm } from '../components/configuration/ConfigurationForm'
 import { ConfigurationList } from '../components/configuration/ConfigurationList'
 import { AgentRoleList } from '../components/configuration/AgentRoleList'
 import { AgentRoleConfigPanel } from '../components/configuration/AgentRoleConfigPanel'
 import { CustomFieldSettings } from '../components/settings/CustomFieldSettings'
+import { LanguageModelSettings } from '../components/settings/LanguageModelSettings'
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
 import { Card } from '../components/ui'
@@ -21,11 +22,11 @@ export default function Settings() {
   // Get tab from URL query params, default to 'integrations'
   const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as 'integrations' | 'agents' | 'custom-fields' | 'general'
-    return ['integrations', 'agents', 'custom-fields', 'general'].includes(tab) ? tab : 'integrations'
+    const tab = params.get('tab') as 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general'
+    return ['integrations', 'models', 'agents', 'custom-fields', 'general'].includes(tab) ? tab : 'integrations'
   }, [location.search])
 
-  const [activeTab, setActiveTab] = useState<'integrations' | 'agents' | 'custom-fields' | 'general'>(getTabFromUrl())
+  const [activeTab, setActiveTab] = useState<'integrations' | 'models' | 'agents' | 'custom-fields' | 'general'>(getTabFromUrl())
   
   const integrationConfigs = [
     { key: 'integration.github.main', title: 'GitHub', type: 'github' },
@@ -131,7 +132,7 @@ export default function Settings() {
   }
 
   // Update URL when tab changes
-  const handleTabChange = (newTab: 'integrations' | 'agents' | 'custom-fields' | 'general') => {
+  const handleTabChange = (newTab: 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general') => {
     setActiveTab(newTab)
     const params = new URLSearchParams(location.search)
     params.set('tab', newTab)
@@ -181,6 +182,7 @@ export default function Settings() {
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
+            { id: 'models' as const, name: 'Models', icon: SparklesIcon },
             { id: 'agents' as const, name: 'Agents', icon: CpuChipIcon },
             { id: 'custom-fields' as const, name: 'Task Custom Fields', icon: TagIcon },
             { id: 'general' as const, name: 'General', icon: CogIcon },
@@ -261,6 +263,10 @@ export default function Settings() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'models' && (
+        <LanguageModelSettings />
       )}
 
       {activeTab === 'agents' && (

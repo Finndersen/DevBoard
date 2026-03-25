@@ -10,7 +10,6 @@ from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
-from devboard.agents.language_models import llm_registry
 from devboard.api.schemas.agent_conversation import ToolApprovals
 
 
@@ -93,11 +92,15 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
 
     def _get_agent(self, extra_tools: list[Tool] | None = None) -> ClaudeCodeAgent:
         """Create agent with session_id and optional extra tools."""
-        model = llm_registry.get(self.conversation.model_id) if self.conversation.model_id else None
+        db_model = (
+            self._agent_config_service.get_model_by_id(self.conversation.model_id)
+            if self.conversation.model_id
+            else None
+        )
 
         return ClaudeCodeAgent(
             role=self.role,
-            model=model,
+            model=db_model,
             session_id=self.conversation.external_session_id,
             working_dir=self.working_dir,
             additional_tools=extra_tools or [],
