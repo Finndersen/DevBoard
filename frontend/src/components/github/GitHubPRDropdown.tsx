@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowPathIcon, ArrowTopRightOnSquareIcon, ChatBubbleLeftIcon, DocumentTextIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { useOpenPRs } from '../../hooks/useGitHubPRs'
 import { useUIStore } from '../../stores/uiStore'
-import type { OpenPRItem } from '../../lib/api'
+import type { OpenPRItem, OpenPRsResponse } from '../../lib/api'
 import { StatusIndicator, ReviewBadge } from './PRStatusComponents'
 
 function getRepoShortName(fullName: string): string {
@@ -31,8 +30,13 @@ function PRIcon({ className }: { className?: string }) {
   )
 }
 
-export default function GitHubPRDropdown() {
-  const { data, loading, refetch } = useOpenPRs()
+interface GitHubPRDropdownProps {
+  data: OpenPRsResponse | null
+  loading: boolean
+  refetch: (forceRefresh?: boolean) => void
+}
+
+export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDropdownProps) {
   const navigateTo = useUIStore(s => s.navigateTo)
   const [isOpen, setIsOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -42,7 +46,7 @@ export default function GitHubPRDropdown() {
 
   const handleRefresh = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    refetch()
+    refetch(true)
   }, [refetch])
 
   const handleOpenTask = (e: React.MouseEvent, pr: OpenPRItem) => {

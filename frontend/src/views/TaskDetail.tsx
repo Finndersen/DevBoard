@@ -133,7 +133,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   const handleRefreshPrStatus = useCallback(() => {
     if (!task?.id) return
     setPrStatusLoading(true)
-    apiClient.getTaskPRStatus(task.id)
+    apiClient.getTaskPRStatus(task.id, true)
       .then(setPrStatus)
       .catch(() => setPrStatus(null))
       .finally(() => setPrStatusLoading(false))

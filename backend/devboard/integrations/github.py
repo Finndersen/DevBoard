@@ -2,11 +2,12 @@
 
 import asyncio
 import re
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 import httpx
 import logfire
@@ -22,7 +23,7 @@ from github.Branch import Branch
 from github.Commit import Commit
 from github.CommitCombinedStatus import CommitCombinedStatus
 from github.Issue import Issue
-from github.PullRequest import PullRequest
+from github.PullRequest import PullRequest as GithubPullRequest
 from github.PullRequestComment import PullRequestComment
 from github.PullRequestReview import PullRequestReview
 from github.Repository import Repository
@@ -153,8 +154,8 @@ class PRFeedback:
 
 
 @dataclass
-class OpenPullRequest:
-    """A user's open pull request fetched via GraphQL."""
+class PullRequest:
+    """A pull request fetched via GitHub GraphQL."""
 
     number: int
     title: str
@@ -171,7 +172,7 @@ class OpenPullRequest:
 class GitHubPR:
     """Wrapper around PyGithub PullRequest with enhanced methods."""
 
-    def __init__(self, pr: PullRequest, repo: "GitHubRepository"):
+    def __init__(self, pr: GithubPullRequest, repo: "GitHubRepository"):
         """Initialize with a PyGithub PullRequest object and its repository.
 
         Args:
@@ -182,7 +183,7 @@ class GitHubPR:
         self._repo = repo
 
     @property
-    def pr(self) -> PullRequest:
+    def pr(self) -> GithubPullRequest:
         """The underlying PyGithub PullRequest object."""
         return self._pr
 
@@ -457,11 +458,11 @@ class GitHubRepository:
         """List branches in the repository."""
         return await _github_api_call(lambda: list(self._repo.get_branches()), label="list_branches")
 
-    async def list_open_pulls(self) -> list[PullRequest]:
+    async def list_open_pulls(self) -> list[GithubPullRequest]:
         """List all open pull requests for this repository."""
         return await _github_api_call(lambda: list(self._repo.get_pulls(state="open")), label="list_open_pulls")
 
-    async def find_pull_request_for_branch(self, head_branch: str) -> PullRequest | None:
+    async def find_pull_request_for_branch(self, head_branch: str) -> GithubPullRequest | None:
         """Find an existing open PR for the given head branch.
 
         Args:
@@ -473,7 +474,7 @@ class GitHubRepository:
         # PyGithub expects head in format "owner:branch" for cross-repo PRs
         head = f"{self._repo.owner.login}:{head_branch}"
 
-        def _find_pr() -> PullRequest | None:
+        def _find_pr() -> GithubPullRequest | None:
             for pr in self._repo.get_pulls(state="open", head=head):
                 return pr
             return None
@@ -486,7 +487,7 @@ class GitHubRepository:
         body: str,
         head: str,
         base: str = "main",
-    ) -> PullRequest:
+    ) -> GithubPullRequest:
         """Create a new pull request."""
         return await _github_api_call(self._repo.create_pull, title=title, body=body, head=head, base=base)
 
@@ -501,6 +502,17 @@ class GitHubRepository:
             return commit.get_combined_status()
 
         return await _github_api_call(_get_combined_status)
+
+
+PR_CACHE_MAX_AGE = 60.0  # seconds
+
+
+@dataclass
+class PRCacheEntry:
+    """Cache entry for a single PR status."""
+
+    data: "PullRequest"
+    fetched_at: float = field(default_factory=time.time)
 
 
 def _extract_ci_status(node: dict[str, Any]) -> str | None:
@@ -519,6 +531,15 @@ class GitHubIntegration(BaseIntegration):
 
     integration_type = "github"
     configuration_schema = GitHubIntegrationConfig
+
+    # Class-level PR status cache (persists across per-request instances)
+    _pr_cache: ClassVar[dict[str, PRCacheEntry]] = {}
+    _last_batch_fetch_at: ClassVar[float] = 0.0
+
+    @staticmethod
+    def _cache_key(repo_full_name: str, pr_number: int) -> str:
+        """Build cache key from repo full name and PR number."""
+        return f"{repo_full_name}:{pr_number}"
 
     @staticmethod
     def parse_repo_url(url: str) -> tuple[str, str]:
@@ -619,8 +640,22 @@ class GitHubIntegration(BaseIntegration):
 
         return data
 
-    async def get_user_open_pull_requests(self, updated_since_days: int = 30) -> list[OpenPullRequest]:
-        """Fetch all open PRs authored by the authenticated user via GraphQL."""
+    async def get_user_open_pull_requests(
+        self, updated_since_days: int = 30, force_refresh: bool = False
+    ) -> list[PullRequest]:
+        """Fetch all open PRs authored by the authenticated user via GraphQL.
+
+        Returns cached data if a fresh batch has been fetched (< PR_CACHE_MAX_AGE seconds old) unless
+        force_refresh is True. Individual PR cache updates are reflected automatically via state filtering.
+        """
+        now = time.time()
+        if (
+            not force_refresh
+            and GitHubIntegration._last_batch_fetch_at
+            and now - GitHubIntegration._last_batch_fetch_at < PR_CACHE_MAX_AGE
+        ):
+            return [e.data for e in GitHubIntegration._pr_cache.values() if e.data.state == "OPEN"]
+
         cutoff = (datetime.now(tz=UTC) - timedelta(days=updated_since_days)).strftime("%Y-%m-%d")
         search_query = f"type:pr state:open author:@me draft:false updated:>={cutoff}"
         query = """
@@ -654,8 +689,9 @@ class GitHubIntegration(BaseIntegration):
         """
         data = await self._graphql_request(query, {"q": search_query})
         nodes = data["data"]["search"]["nodes"]
-        return [
-            OpenPullRequest(
+        fetched_at = time.time()
+        results = [
+            PullRequest(
                 number=node["number"],
                 title=node["title"],
                 html_url=node["url"],
@@ -669,9 +705,27 @@ class GitHubIntegration(BaseIntegration):
             for node in nodes
             if node
         ]
+        # Replace per-PR cache entirely with fresh batch data, evicting closed/merged PRs
+        GitHubIntegration._pr_cache = {
+            self._cache_key(pr.repo_full_name, pr.number): PRCacheEntry(data=pr, fetched_at=fetched_at)
+            for pr in results
+        }
+        GitHubIntegration._last_batch_fetch_at = fetched_at
+        return results
 
-    async def get_pull_request_status(self, owner: str, repo: str, pr_number: int) -> OpenPullRequest:
-        """Fetch status of a single PR via GraphQL."""
+    async def get_pull_request_status(
+        self, owner: str, repo: str, pr_number: int, force_refresh: bool = False
+    ) -> PullRequest:
+        """Fetch status of a single PR via GraphQL.
+
+        Returns cached data if fresh (< PR_CACHE_MAX_AGE seconds old) unless force_refresh is True.
+        """
+        key = self._cache_key(f"{owner}/{repo}", pr_number)
+        if not force_refresh:
+            entry = GitHubIntegration._pr_cache.get(key)
+            if entry and time.time() - entry.fetched_at < PR_CACHE_MAX_AGE:
+                return entry.data
+
         query = """
         query($owner: String!, $name: String!, $number: Int!) {
           repository(owner: $owner, name: $name) {
@@ -706,7 +760,7 @@ class GitHubIntegration(BaseIntegration):
         node = repository.get("pullRequest")
         if not node:
             raise IntegrationError(f"Pull request #{pr_number} not found in {owner}/{repo}")
-        return OpenPullRequest(
+        result = PullRequest(
             number=node["number"],
             title=node["title"],
             html_url=node["url"],
@@ -718,6 +772,8 @@ class GitHubIntegration(BaseIntegration):
             ci_status=_extract_ci_status(node),
             comment_count=node.get("totalCommentsCount", 0),
         )
+        GitHubIntegration._pr_cache[key] = PRCacheEntry(data=result, fetched_at=time.time())
+        return result
 
     async def search_issues(self, query: str, owner: str | None = None, repo: str | None = None) -> list[Issue]:
         """Search issues across GitHub."""

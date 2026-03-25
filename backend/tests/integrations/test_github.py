@@ -1,5 +1,6 @@
 """Tests for GitHub integration methods."""
 
+import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -11,12 +12,14 @@ from github.PullRequestReview import PullRequestReview
 from devboard.config.integration_configs import GitHubIntegrationConfig
 from devboard.integrations.base import IntegrationError, ResourceNotFoundError
 from devboard.integrations.github import (
+    PR_CACHE_MAX_AGE,
     CommentThread,
     GitHubIntegration,
     GitHubPR,
     GitHubRepository,
-    OpenPullRequest,
+    PRCacheEntry,
     PRFeedback,
+    PullRequest,
     ReviewComment,
     ReviewWithComments,
 )
@@ -653,7 +656,7 @@ class TestGitHubPRGetFeedback:
         assert thread.replies[2].id == 3  # Late reply
 
 
-class TestGetUserOpenPullRequests:
+class TestGetUserPullRequests:
     """Tests for GitHubIntegration.get_user_open_pull_requests()."""
 
     @pytest.fixture
@@ -710,7 +713,7 @@ class TestGetUserOpenPullRequests:
             result = await github_integration.get_user_open_pull_requests()
 
         assert result == [
-            OpenPullRequest(
+            PullRequest(
                 number=42,
                 title="Fix the thing",
                 html_url="https://github.com/owner/repo/pull/42",
@@ -721,7 +724,7 @@ class TestGetUserOpenPullRequests:
                 ci_status="SUCCESS",
                 comment_count=5,
             ),
-            OpenPullRequest(
+            PullRequest(
                 number=7,
                 title="Add feature",
                 html_url="https://github.com/owner/other/pull/7",
@@ -820,3 +823,235 @@ class TestGetUserOpenPullRequests:
 
         call_kwargs = mock_client.post.call_args
         assert call_kwargs[0][0] == "https://github.example.com/api/graphql"
+
+
+def _make_graphql_response_for_single_pr(
+    number: int = 42,
+    repo: str = "owner/repo",
+    title: str = "Test PR",
+) -> dict:
+    """Build a minimal GraphQL response for get_pull_request_status."""
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "number": number,
+                    "title": title,
+                    "url": f"https://github.com/{repo}/pull/{number}",
+                    "updatedAt": "2026-03-01T12:00:00Z",
+                    "state": "OPEN",
+                    "mergeStateStatus": "CLEAN",
+                    "mergeQueueEntry": None,
+                    "reviewDecision": None,
+                    "totalCommentsCount": 0,
+                    "commits": {"nodes": []},
+                    "repository": {"nameWithOwner": repo},
+                }
+            }
+        }
+    }
+
+
+def _make_graphql_response_for_batch(prs: list[dict]) -> dict:
+    """Build a minimal GraphQL response for get_user_open_pull_requests."""
+    return {"data": {"search": {"nodes": prs}}}
+
+
+def _make_batch_pr_node(number: int = 42, repo: str = "owner/repo", title: str = "Test PR") -> dict:
+    return {
+        "number": number,
+        "title": title,
+        "url": f"https://github.com/{repo}/pull/{number}",
+        "updatedAt": "2026-03-01T12:00:00Z",
+        "mergeable": "MERGEABLE",
+        "mergeStateStatus": "CLEAN",
+        "mergeQueueEntry": None,
+        "reviewDecision": None,
+        "totalCommentsCount": 0,
+        "commits": {"nodes": []},
+        "repository": {"nameWithOwner": repo},
+    }
+
+
+@pytest.fixture(autouse=True)
+def clear_pr_cache():
+    """Clear class-level PR cache before and after each test to prevent pollution."""
+    GitHubIntegration._pr_cache.clear()
+    GitHubIntegration._last_batch_fetch_at = 0.0
+    yield
+    GitHubIntegration._pr_cache.clear()
+    GitHubIntegration._last_batch_fetch_at = 0.0
+
+
+class TestGetPullRequestStatusCache:
+    """Tests for caching behaviour in get_pull_request_status."""
+
+    @pytest.fixture
+    def github_integration(self) -> GitHubIntegration:
+        config = GitHubIntegrationConfig(api_token="ghp_test_token", base_url="https://api.github.com")
+        with patch("devboard.integrations.github.Github"):
+            return GitHubIntegration(config)
+
+    def _mock_client_context(self, mock_client: AsyncMock) -> tuple:
+        """Helper to configure AsyncClient mock."""
+        return mock_client
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_github_api(self, github_integration: GitHubIntegration):
+        """Second call within cache window should not call GitHub API."""
+        response = _make_graphql_response_for_single_pr()
+        mock_response = Mock()
+        mock_response.json.return_value = response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result1 = await github_integration.get_pull_request_status("owner", "repo", 42)
+            result2 = await github_integration.get_pull_request_status("owner", "repo", 42)
+
+        assert result1 == result2
+        assert mock_client.post.call_count == 1  # Only fetched once
+
+    @pytest.mark.asyncio
+    async def test_cache_miss_after_expiry_refetches(self, github_integration: GitHubIntegration):
+        """After cache entry expires, a fresh fetch should occur."""
+        response = _make_graphql_response_for_single_pr()
+        mock_response = Mock()
+        mock_response.json.return_value = response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await github_integration.get_pull_request_status("owner", "repo", 42)
+
+            # Manually expire the cache entry
+            key = GitHubIntegration._cache_key("owner/repo", 42)
+            GitHubIntegration._pr_cache[key] = PRCacheEntry(
+                data=GitHubIntegration._pr_cache[key].data,
+                fetched_at=time.time() - PR_CACHE_MAX_AGE - 1,
+            )
+
+            await github_integration.get_pull_request_status("owner", "repo", 42)
+
+        assert mock_client.post.call_count == 2  # Fetched twice
+
+    @pytest.mark.asyncio
+    async def test_force_refresh_bypasses_cache(self, github_integration: GitHubIntegration):
+        """force_refresh=True should always fetch from GitHub regardless of cache."""
+        response = _make_graphql_response_for_single_pr()
+        mock_response = Mock()
+        mock_response.json.return_value = response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await github_integration.get_pull_request_status("owner", "repo", 42)
+            await github_integration.get_pull_request_status("owner", "repo", 42, force_refresh=True)
+
+        assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_batch_fetch_warms_single_pr_cache(self, github_integration: GitHubIntegration):
+        """get_user_open_pull_requests should populate cache used by get_pull_request_status."""
+        batch_response = _make_graphql_response_for_batch([_make_batch_pr_node(42, "owner/repo")])
+        mock_response = Mock()
+        mock_response.json.return_value = batch_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            # Warm cache via batch fetch
+            await github_integration.get_user_open_pull_requests()
+
+            # Single PR fetch should hit the cache populated by batch
+            await github_integration.get_pull_request_status("owner", "repo", 42)
+
+        assert mock_client.post.call_count == 1  # Only the batch call, single PR hit cache
+
+
+class TestGetUserPullRequestsCache:
+    """Tests for caching behaviour in get_user_open_pull_requests."""
+
+    @pytest.fixture
+    def github_integration(self) -> GitHubIntegration:
+        config = GitHubIntegrationConfig(api_token="ghp_test_token", base_url="https://api.github.com")
+        with patch("devboard.integrations.github.Github"):
+            return GitHubIntegration(config)
+
+    @pytest.mark.asyncio
+    async def test_batch_cache_hit_skips_github_api(self, github_integration: GitHubIntegration):
+        """Second batch call within cache window should return cached result."""
+        batch_response = _make_graphql_response_for_batch([_make_batch_pr_node(1), _make_batch_pr_node(2)])
+        mock_response = Mock()
+        mock_response.json.return_value = batch_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result1 = await github_integration.get_user_open_pull_requests()
+            result2 = await github_integration.get_user_open_pull_requests()
+
+        assert result1 == result2
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_batch_cache_miss_after_expiry(self, github_integration: GitHubIntegration):
+        """After batch cache expires, a fresh fetch should occur."""
+        batch_response = _make_graphql_response_for_batch([_make_batch_pr_node(1)])
+        mock_response = Mock()
+        mock_response.json.return_value = batch_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await github_integration.get_user_open_pull_requests()
+
+            # Expire batch cache
+            GitHubIntegration._last_batch_fetch_at = time.time() - PR_CACHE_MAX_AGE - 1
+
+            await github_integration.get_user_open_pull_requests()
+
+        assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_force_refresh_bypasses_batch_cache(self, github_integration: GitHubIntegration):
+        """force_refresh=True should bypass the batch cache."""
+        batch_response = _make_graphql_response_for_batch([_make_batch_pr_node(1)])
+        mock_response = Mock()
+        mock_response.json.return_value = batch_response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await github_integration.get_user_open_pull_requests()
+            await github_integration.get_user_open_pull_requests(force_refresh=True)
+
+        assert mock_client.post.call_count == 2

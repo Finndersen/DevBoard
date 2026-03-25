@@ -7,7 +7,7 @@ from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.github import (
     CommentThread,
     GitHubIntegration,
-    OpenPullRequest,
+    PullRequest,
     ReviewComment,
     ReviewWithComments,
 )
@@ -247,8 +247,8 @@ def create_get_pr_feedback_tool(task: Task, github_integration: GitHubIntegratio
     return Tool(function=get_pr_feedback, name="get_pr_feedback")
 
 
-def format_pr_status_from_graphql(status: OpenPullRequest) -> str:
-    """Format OpenPullRequest as a readable markdown string."""
+def format_pr_status_from_graphql(status: PullRequest) -> str:
+    """Format PullRequest as a readable markdown string."""
     lines = [
         f"**PR #{status.number}:** {status.title}",
         f"**State:** {status.state}",

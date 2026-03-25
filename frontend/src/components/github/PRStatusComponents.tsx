@@ -56,6 +56,26 @@ export function StatusIndicator({ mergeableState, ciStatus }: { mergeableState: 
   )
 }
 
+export interface ReviewInfo {
+  icon: string
+  colorClass: string
+  tooltip: string
+}
+
+export function getReviewInfo(decision: string | null): ReviewInfo | null {
+  if (!decision) return null
+  switch (decision.toUpperCase()) {
+    case 'APPROVED':
+      return { icon: '✔', colorClass: 'text-green-500', tooltip: 'Approved' }
+    case 'CHANGES_REQUESTED':
+      return { icon: '✎', colorClass: 'text-red-500', tooltip: 'Changes requested' }
+    case 'REVIEW_REQUIRED':
+      return { icon: '◷', colorClass: 'text-yellow-500', tooltip: 'Review required' }
+    default:
+      return null
+  }
+}
+
 export function ReviewBadge({ decision }: { decision: string | null }) {
   if (!decision) return null
   switch (decision) {

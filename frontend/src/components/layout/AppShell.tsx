@@ -13,6 +13,7 @@ import { useStreamHealthCheck } from '../../hooks/useStreamHealthCheck'
 import { useURLSync } from '../../hooks/useURLSync'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { webSocketManager } from '../../services/WebSocketManager'
+import { usePRStatusPolling } from '../../hooks/usePRStatusPolling'
 
 export default function AppShell() {
   const {
@@ -56,6 +57,9 @@ export default function AppShell() {
   // Enable global keyboard shortcuts
   useKeyboardShortcuts()
 
+  // Periodic polling to keep backend PR cache warm
+  const { data: prData, loading: prLoading, refetch: refetchPRs } = usePRStatusPolling()
+
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-row">
       {/* Left: Navigation Sidebar */}
@@ -98,7 +102,7 @@ export default function AppShell() {
 
           <div className="flex-1" />
           <div className="flex items-center gap-2 px-4">
-            <GitHubPRDropdown />
+            <GitHubPRDropdown data={prData} loading={prLoading} refetch={refetchPRs} />
             <NotificationsPanel />
           </div>
         </div>

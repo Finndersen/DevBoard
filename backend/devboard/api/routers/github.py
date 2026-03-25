@@ -3,7 +3,7 @@
 import asyncio
 
 import logfire
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.api.dependencies.repositories import get_codebase_repository, get_task_repository
 from devboard.api.dependencies.services import get_integration_service
@@ -24,6 +24,7 @@ router = APIRouter()
 
 @router.get("/open-prs", response_model=OpenPRsResponse)
 async def get_open_prs(
+    force_refresh: bool = Query(False),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     integration_service: IntegrationService = Depends(get_integration_service),
@@ -37,7 +38,7 @@ async def get_open_prs(
 
     # Fetch all user's open PRs in a single GraphQL call
     try:
-        all_user_prs = await github.get_user_open_pull_requests()
+        all_user_prs = await github.get_user_open_pull_requests(force_refresh=force_refresh)
     except Exception as e:
         logfire.error(f"Error fetching user open PRs: {e}")
         return OpenPRsResponse(prs=[], errors=[str(e)])

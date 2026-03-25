@@ -8,7 +8,7 @@ from pydantic_ai import ModelRetry
 
 from devboard.agents.tools.github_tools import create_get_pr_status_tool, create_github_pr_tool
 from devboard.db.models.task import Task
-from devboard.integrations.github import GitHubIntegration, GitHubRepository, OpenPullRequest, PullRequest
+from devboard.integrations.github import GitHubIntegration, GitHubRepository, PullRequest
 from devboard.integrations.types import BranchComparison
 from devboard.services.task_service import TaskService
 
@@ -128,7 +128,7 @@ class TestGetPRStatusTool:
         github_integration = Mock(spec=GitHubIntegration)
         github_integration.parse_repo_url = Mock(return_value=("owner", "repo"))
         github_integration.get_pull_request_status = AsyncMock(
-            return_value=OpenPullRequest(
+            return_value=PullRequest(
                 number=42,
                 title="Fix bug",
                 html_url="https://github.com/owner/repo/pull/42",

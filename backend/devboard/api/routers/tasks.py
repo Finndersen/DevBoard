@@ -556,6 +556,7 @@ async def checkout_task_to_main(
 @router.get("/{task_id}/pr-status", response_model=GitHubPRStatusResponse)
 async def get_task_pr_status(
     task_id: int,
+    force_refresh: bool = Query(False),
     task: Task = Depends(get_verified_task),
     task_service: TaskService = Depends(get_task_service),
     integration_service: IntegrationService = Depends(get_integration_service),
@@ -588,7 +589,7 @@ async def get_task_pr_status(
         raise HTTPException(status_code=400, detail=f"Invalid repository URL: {e}") from e
 
     try:
-        pr = await github.get_pull_request_status(owner, repo, task.github_pr_number)
+        pr = await github.get_pull_request_status(owner, repo, task.github_pr_number, force_refresh=force_refresh)
     except IntegrationError as e:
         error_msg = str(e)
         if "not found" in error_msg:
@@ -606,6 +607,7 @@ async def get_task_pr_status(
         review_decision=pr.review_decision,
         ci_status=pr.ci_status,
         comment_count=pr.comment_count,
+        repo_full_name=f"{owner}/{repo}",
     )
 
 

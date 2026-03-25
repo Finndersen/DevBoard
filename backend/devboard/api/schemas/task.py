@@ -189,6 +189,7 @@ class GitHubPRStatusResponse(BaseModel):
     review_decision: str | None
     ci_status: str | None
     comment_count: int
+    repo_full_name: str
 
 
 class PRFeedbackCommentResponse(BaseModel):

@@ -3,21 +3,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import GitHubPRDropdown from '../GitHubPRDropdown'
 import type { OpenPRsResponse } from '../../../lib/api'
 
-// Mock the hooks and API client
 const mockRefetch = vi.fn()
 const mockNavigateTo = vi.fn()
-
-vi.mock('../../../hooks/useGitHubPRs', () => ({
-  useOpenPRs: vi.fn()
-}))
 
 vi.mock('../../../stores/uiStore', () => ({
   useUIStore: vi.fn((selector: (state: { navigateTo: typeof mockNavigateTo }) => unknown) =>
     selector({ navigateTo: mockNavigateTo })
   )
 }))
-
-import { useOpenPRs } from '../../../hooks/useGitHubPRs'
 
 const mockPRsResponse: OpenPRsResponse = {
   prs: [
@@ -57,27 +50,26 @@ function openDropdown() {
   fireEvent.click(screen.getByLabelText('Pull Requests'))
 }
 
+const defaultProps = {
+  data: mockPRsResponse,
+  loading: false,
+  refetch: mockRefetch,
+}
+
 describe('GitHubPRDropdown', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useOpenPRs).mockReturnValue({
-      data: mockPRsResponse,
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-      setData: vi.fn(),
-    })
   })
 
   it('renders trigger button with badge count', () => {
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
 
     const badge = screen.getByText('2')
     expect(badge).toBeInTheDocument()
   })
 
   it('shows PR list when dropdown is opened', () => {
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
 
     openDropdown()
 
@@ -88,15 +80,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows loading state when data is loading', () => {
-    vi.mocked(useOpenPRs).mockReturnValue({
-      data: null,
-      loading: true,
-      error: null,
-      refetch: mockRefetch,
-      setData: vi.fn(),
-    })
-
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown data={null} loading={true} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -104,15 +88,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows empty state when no PRs exist', () => {
-    vi.mocked(useOpenPRs).mockReturnValue({
-      data: { prs: [], errors: [] },
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-      setData: vi.fn(),
-    })
-
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown data={{ prs: [], errors: [] }} loading={false} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -120,15 +96,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows error warning icon in header', () => {
-    vi.mocked(useOpenPRs).mockReturnValue({
-      data: { prs: [], errors: ['GitHub API error'] },
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-      setData: vi.fn(),
-    })
-
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown data={{ prs: [], errors: ['GitHub API error'] }} loading={false} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -136,20 +104,20 @@ describe('GitHubPRDropdown', () => {
     expect(warningIcon).toBeInTheDocument()
   })
 
-  it('refresh button calls refetch', () => {
-    render(<GitHubPRDropdown />)
+  it('refresh button calls refetch with force refresh', () => {
+    render(<GitHubPRDropdown {...defaultProps} />)
 
     openDropdown()
 
     const refreshButton = screen.getByTitle('Refresh PRs')
     fireEvent.click(refreshButton)
-    expect(mockRefetch).toHaveBeenCalledOnce()
+    expect(mockRefetch).toHaveBeenCalledWith(true)
   })
 
   it('open in GitHub button opens PR URL in new tab', () => {
     const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null)
 
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
 
     openDropdown()
 
@@ -161,7 +129,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('open task button calls navigateTo for PR with task association', () => {
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
 
     openDropdown()
 
@@ -178,7 +146,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows review badges and comment count', () => {
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
     openDropdown()
 
     expect(screen.getByText('Approved')).toBeInTheDocument()
@@ -188,7 +156,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows combined status indicator with correct tooltips', () => {
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown {...defaultProps} />)
     openDropdown()
 
     // First PR: CLEAN + SUCCESS -> "Ready to merge"
@@ -203,33 +171,27 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows queued indicator for PR in merge queue', () => {
-    vi.mocked(useOpenPRs).mockReturnValue({
-      data: {
-        prs: [
-          {
-            pr_number: 3,
-            title: 'Queued PR',
-            repo_full_name: 'owner/DevBoard',
-            codebase_id: 10,
-            pr_url: 'https://github.com/owner/DevBoard/pull/3',
-            mergeable_state: 'QUEUED',
-            task_id: null,
-            task_title: null,
-            review_decision: 'APPROVED',
-            ci_status: 'SUCCESS',
-            comment_count: 0,
-            updated_at: '2026-03-01T12:00:00Z',
-          },
-        ],
-        errors: [],
-      },
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-      setData: vi.fn(),
-    })
+    const queuedData: OpenPRsResponse = {
+      prs: [
+        {
+          pr_number: 3,
+          title: 'Queued PR',
+          repo_full_name: 'owner/DevBoard',
+          codebase_id: 10,
+          pr_url: 'https://github.com/owner/DevBoard/pull/3',
+          mergeable_state: 'QUEUED',
+          task_id: null,
+          task_title: null,
+          review_decision: 'APPROVED',
+          ci_status: 'SUCCESS',
+          comment_count: 0,
+          updated_at: '2026-03-01T12:00:00Z',
+        },
+      ],
+      errors: [],
+    }
 
-    render(<GitHubPRDropdown />)
+    render(<GitHubPRDropdown data={queuedData} loading={false} refetch={mockRefetch} />)
     openDropdown()
 
     const queuedIndicator = screen.getByTitle('Queued for merge')

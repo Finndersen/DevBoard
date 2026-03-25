@@ -9,7 +9,7 @@ from devboard.db.models import Codebase, Configuration
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import CodebaseRepository, ConfigurationRepository
 from devboard.integrations.base import IntegrationConfigurationError, IntegrationError
-from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, OpenPullRequest, PRStatus
+from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, PRStatus, PullRequest
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def codebase_with_repo(db_session, tmp_path):
     return codebase
 
 
-def _mock_github_with_prs(prs: list[OpenPullRequest]) -> Mock:
+def _mock_github_with_prs(prs: list[PullRequest]) -> Mock:
     """Create a mock GitHubIntegration with get_user_open_pull_requests configured."""
     mock_github = Mock()
     mock_github.get_user_open_pull_requests = AsyncMock(return_value=prs)
@@ -74,7 +74,7 @@ class TestGetOpenPRs:
         """Returns open PRs authored by the current user."""
         mock_github = _mock_github_with_prs(
             [
-                OpenPullRequest(
+                PullRequest(
                     number=1,
                     title="Fix bug",
                     html_url="https://github.com/owner/repo/pull/1",
@@ -85,7 +85,7 @@ class TestGetOpenPRs:
                     ci_status="SUCCESS",
                     comment_count=3,
                 ),
-                OpenPullRequest(
+                PullRequest(
                     number=2,
                     title="Add feature",
                     html_url="https://github.com/owner/repo/pull/2",
@@ -134,7 +134,7 @@ class TestGetOpenPRs:
         """PRs from configured codebases get codebase_id, others get null."""
         mock_github = _mock_github_with_prs(
             [
-                OpenPullRequest(
+                PullRequest(
                     number=1,
                     title="Our repo PR",
                     html_url="https://github.com/owner/repo/pull/1",
@@ -145,7 +145,7 @@ class TestGetOpenPRs:
                     ci_status="SUCCESS",
                     comment_count=3,
                 ),
-                OpenPullRequest(
+                PullRequest(
                     number=5,
                     title="Other repo PR",
                     html_url="https://github.com/other/project/pull/5",
@@ -200,7 +200,7 @@ class TestGetOpenPRs:
 
         mock_github = _mock_github_with_prs(
             [
-                OpenPullRequest(
+                PullRequest(
                     number=1,
                     title="Fix bug",
                     html_url="https://github.com/owner/repo/pull/1",

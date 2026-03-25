@@ -11,9 +11,11 @@ import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useUIStore } from '../../stores/uiStore'
 import type { ViewType } from '../../stores/uiStore'
-import type { ConversationResponse } from '../../lib/api'
+import type { ConversationResponse, GitHubPRStatusResponse } from '../../lib/api'
+import { apiClient } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
+import { getStatusInfo, getReviewInfo } from '../github/PRStatusComponents'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',
@@ -121,10 +123,56 @@ export default function ConversationsPanel() {
     })
   }, [conversations, streamingConversationIds])
 
+  // PR status cache: taskId -> status (null = error/not found)
+  const [prStatusMap, setPrStatusMap] = useState<Map<number, GitHubPRStatusResponse | null>>(new Map())
+
   // Track "needs attention" conversations (previously streaming, now completed)
   const [needsAttentionIds, setNeedsAttentionIds] = useState<Set<number>>(new Set())
   const [pulsingIds, setPulsingIds] = useState<Set<number>>(new Set())
   const prevStreamingIdsRef = useRef<Set<number>>(new Set())
+
+  // Fetch PR status for all task_pr_review conversations
+  const prReviewTaskIdsKey = useMemo(() => {
+    if (!conversations) return ''
+    return conversations
+      .filter(c => c.agent_role === 'task_pr_review')
+      .map(c => c.parent_entity_id)
+      .sort((a, b) => a - b)
+      .join(',')
+  }, [conversations])
+
+  useEffect(() => {
+    if (!conversations || !prReviewTaskIdsKey) return
+    const prReviewConversations = conversations.filter(c => c.agent_role === 'task_pr_review')
+    if (prReviewConversations.length === 0) return
+
+    // Deduplicate by taskId
+    const seenTaskIds = new Set<number>()
+    const uniqueConversations = prReviewConversations.filter(c => {
+      if (seenTaskIds.has(c.parent_entity_id)) return false
+      seenTaskIds.add(c.parent_entity_id)
+      return true
+    })
+
+    Promise.allSettled(
+      uniqueConversations.map(c =>
+        apiClient.getTaskPRStatus(c.parent_entity_id).then(status => ({ taskId: c.parent_entity_id, status }))
+      )
+    ).then(results => {
+      setPrStatusMap(prev => {
+        const next = new Map(prev)
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            next.set(result.value.taskId, result.value.status)
+          } else {
+            // Keep existing cached value on error (new entries remain absent from map)
+          }
+        }
+        return next
+      })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prReviewTaskIdsKey])
 
   useEffect(() => {
     const prevIds = prevStreamingIdsRef.current
@@ -253,6 +301,10 @@ export default function ConversationsPanel() {
                 (item.parent_entity_type.toUpperCase() !== 'PROJECT' || item.id === activeConversationIdFromUrl)
               )
               const hasDraft = draftKeys.has(`${item.parent_entity_type.toLowerCase()}:${item.parent_entity_id}`)
+              const isPRReview = item.agent_role === 'task_pr_review'
+              const prStatus = isPRReview ? prStatusMap.get(item.parent_entity_id) ?? null : null
+              const ciInfo = prStatus ? getStatusInfo(prStatus.mergeable_state, prStatus.ci_status) : null
+              const reviewInfo = prStatus ? getReviewInfo(prStatus.review_decision) : null
               const isTaskConversation = item.parent_entity_type.toUpperCase() === 'TASK'
               const primaryLabel = !isTaskConversation && item.title ? item.title : item.parent_entity_name
               const secondaryLabel = isTaskConversation ? item.project_name : item.parent_entity_name
@@ -278,6 +330,16 @@ export default function ConversationsPanel() {
                     <span className={`text-sm truncate flex-1 ${textColors.primary}`}>
                       {primaryLabel}
                     </span>
+                    {ciInfo && (
+                      <span className={`shrink-0 text-xs font-bold leading-none ${ciInfo.colorClass}`} title={ciInfo.tooltip}>
+                        {ciInfo.icon}
+                      </span>
+                    )}
+                    {reviewInfo && (
+                      <span className={`shrink-0 text-xs font-bold leading-none ${reviewInfo.colorClass}`} title={reviewInfo.tooltip}>
+                        {reviewInfo.icon}
+                      </span>
+                    )}
                     {hasDraft && (
                       <span className="shrink-0 text-xs" title="Has draft">✏️</span>
                     )}

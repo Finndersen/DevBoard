@@ -86,6 +86,7 @@ export interface GitHubPRStatusResponse {
   review_decision: string | null
   ci_status: string | null
   comment_count: number
+  repo_full_name: string
 }
 
 export interface PRFeedbackComment {
@@ -1203,8 +1204,9 @@ export class ApiClient {
     return this.request<TaskGitStatus>(`/api/tasks/${taskId}/git-status`)
   }
 
-  async getTaskPRStatus(taskId: number | string): Promise<GitHubPRStatusResponse> {
-    return this.request<GitHubPRStatusResponse>(`/api/tasks/${taskId}/pr-status`)
+  async getTaskPRStatus(taskId: number | string, forceRefresh?: boolean): Promise<GitHubPRStatusResponse> {
+    const url = forceRefresh ? `/api/tasks/${taskId}/pr-status?force_refresh=true` : `/api/tasks/${taskId}/pr-status`
+    return this.request<GitHubPRStatusResponse>(url)
   }
 
   async getTaskPRFeedback(taskId: number | string): Promise<PRFeedbackResponse> {
@@ -1345,8 +1347,9 @@ export class ApiClient {
   }
 
   // GitHub PR Status
-  async getOpenPRs(): Promise<OpenPRsResponse> {
-    return this.request<OpenPRsResponse>('/api/github/open-prs')
+  async getOpenPRs(forceRefresh?: boolean): Promise<OpenPRsResponse> {
+    const url = forceRefresh ? '/api/github/open-prs?force_refresh=true' : '/api/github/open-prs'
+    return this.request<OpenPRsResponse>(url)
   }
 
   async getPRDetail(codebaseId: number, prNumber: number): Promise<PRDetailResponse> {
