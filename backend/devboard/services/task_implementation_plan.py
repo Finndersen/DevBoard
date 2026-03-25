@@ -140,6 +140,12 @@ class TaskImplementationPlanService:
         self.plan_repo.commit()
         return step
 
+    def set_step_conversation(self, step: ImplementationStep, conversation_id: int) -> None:
+        """Set the conversation ID for a step and commit."""
+        step.conversation_id = conversation_id
+        self.plan_repo.update_step(step)
+        self.plan_repo.commit()
+
     def check_dependencies_resolved(self, plan: ImplementationPlan, step: ImplementationStep) -> None:
         """Validate all dependency steps are complete or skipped.
 
