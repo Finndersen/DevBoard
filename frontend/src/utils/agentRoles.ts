@@ -1,18 +1,18 @@
 /**
- * Format agent role string into a human-readable display name.
+ * Format agent role string into a concise human-readable display name.
  *
  * Examples:
- * - "project" -> "Project Agent"
- * - "task_planning" -> "Task Planning Agent"
- * - "task_implementation" -> "Task Implementation Agent"
- * - "task_pr_review" -> "Task Pr Review Agent"
- * - "investigation" -> "Investigation Agent"
+ * - "project" -> "Project"
+ * - "task_planning" -> "Planning"
+ * - "task_implementation" -> "Implementation"
+ * - "task_pr_review" -> "PR Review"
+ * - "investigation" -> "Investigation"
  */
 export function formatAgentRoleDisplayName(agentRole: string): string {
-  const words = agentRole
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+  const role = agentRole.startsWith('task_') ? agentRole.slice('task_'.length) : agentRole
 
-  return `${words} Agent`
+  return role
+    .split('_')
+    .map(word => word === 'pr' ? 'PR' : word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
 }

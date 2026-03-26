@@ -146,6 +146,15 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
                 title
               )}
             </h3>
+            {conversationId && (
+              <button
+                onClick={inspectorModal.open}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                title="Agent Inspector"
+              >
+                <MagnifyingGlassCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            )}
             {conversationId && <RunningIndicator conversationId={conversationId} />}
           </div>
           {(conversationSelector || onNewConversation) && (
@@ -165,15 +174,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             </div>
           )}
           <div className="flex items-center space-x-3">
-            {conversationId && (
-              <button
-                onClick={inspectorModal.open}
-                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                title="Agent Inspector"
-              >
-                <MagnifyingGlassCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              </button>
-            )}
             {conversation?.external_session_id && (
               <button
                 onClick={sessionIdModal.open}
