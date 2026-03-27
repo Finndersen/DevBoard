@@ -37,6 +37,16 @@ def mock_sdk_client():
 class TestClaudeClient:
     """Test suite for ClaudeClient."""
 
+    def test_init_sandbox_enabled_by_default(self):
+        """Test that sandboxing is enabled by default with allowUnsandboxedCommands=False."""
+        agent = ClaudeClient()
+        assert agent.options.sandbox == {"enabled": True, "allowUnsandboxedCommands": False}
+
+    def test_init_sandbox_disabled(self):
+        """Test that passing sandbox_enabled=False sets sandbox to None."""
+        agent = ClaudeClient(sandbox_enabled=False)
+        assert agent.options.sandbox is None
+
     def test_init_without_session(self):
         """Test agent initialization without session ID."""
         agent = ClaudeClient()

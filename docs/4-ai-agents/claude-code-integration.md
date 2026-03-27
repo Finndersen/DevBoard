@@ -227,6 +227,25 @@ See [Claude Code Session Viewer](../2-features/claude-code-session-viewer.md) fo
 - `ClaudeCodeSessionService` (`session/service.py`): Low-level JSONL file reading and todo list loading
 - `ConversationRepository.get_task_info_by_session_ids()`: Batch-fetches task associations for a set of session IDs in one query
 
+## Sandboxing
+
+Claude Code agents run bash commands inside an OS-level sandbox by default (Seatbelt on macOS, bubblewrap on Linux), providing filesystem and network isolation from the rest of the system.
+
+**Enabled by default**: `ClaudeClient` is constructed with `sandbox_enabled=True`, which passes `sandbox={"enabled": True, "allowUnsandboxedCommands": False}` to `ClaudeAgentOptions`.
+
+**Default behaviour**:
+- Write access is limited to the agent's working directory; reads are unrestricted
+- All commands must run within the sandbox — there is no escape hatch (`allowUnsandboxedCommands=False`)
+
+**Why it matters**: DevBoard runs agents with `bypassPermissions` to avoid interactive approval prompts for every tool call. This means the sandbox is the **primary isolation layer** protecting the host system from unintended or malicious bash commands.
+
+**Customisation**: Sandbox behaviour can be tuned through standard Claude Code settings files (`.claude/settings.json` in the project or `~/.claude/settings.json` globally). See the [official Claude Code sandboxing docs](https://code.claude.com/docs/en/sandboxing) for the full settings reference.
+
+Key settings you may want to adjust:
+- `sandbox.excludedCommands` — commands that always bypass the sandbox
+- `sandbox.filesystem.allowWrite` — additional filesystem paths to allow writes
+- `sandbox.network.allowedDomains` — network domains the sandbox permits directly
+
 ## Files
 
 **Core**:

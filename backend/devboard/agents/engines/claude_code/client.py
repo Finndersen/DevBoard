@@ -16,7 +16,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from claude_agent_sdk.types import McpSdkServerConfig, PermissionMode, SystemPromptPreset
+from claude_agent_sdk.types import McpSdkServerConfig, SandboxSettings, SystemPromptPreset
 from mcp.types import ToolAnnotations
 from pydantic_ai import Tool
 
@@ -98,8 +98,8 @@ class ClaudeClient:
         allowed_builtin_tools: list[str] | None = None,
         model: str | None = None,
         cwd: str | None = None,
-        plan_mode: bool = False,
         load_settings: bool = True,
+        sandbox_enabled: bool = True,
     ):
         """Initialize Claude Code client.
 
@@ -112,6 +112,7 @@ class ClaudeClient:
             model: Optional model to use (e.g., "claude-sonnet-4-5-20250929")
             cwd: Optional working directory for Claude Code operations
             load_settings: Whether to load local, project and user-level .settings.json and CLAUDE.md files
+            sandbox_enabled: Whether to enable OS-level sandboxing for bash commands (default: True)
         """
         self.session_id = session_id
         self._tools = tools or []
@@ -146,14 +147,6 @@ class ClaudeClient:
             region_prefix = env_vars.get("AWS_REGION", "us-west-1").split("-")[0]
             model = f"{region_prefix}.anthropic.{model}-v1:0"
 
-        # Initialize ClaudeAgentOptions directly
-        permission_mode: PermissionMode
-        if plan_mode:
-            permission_mode = "plan"
-        else:
-            # disallowed_tools deny rules still apply. This enables execution of all enabled MCP server tools
-            permission_mode = "bypassPermissions"
-
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
@@ -162,10 +155,12 @@ class ClaudeClient:
             model=model,
             cwd=cwd,
             mcp_servers=mcp_servers,  # type: ignore[arg-type]
-            permission_mode=permission_mode,
+            # disallowed_tools deny rules still apply. This enables execution of all enabled MCP server tools
+            permission_mode="bypassPermissions",
             setting_sources=["local", "project", "user"] if load_settings else None,
             env=env_vars,
             stderr=lambda line: logfire.warning("Claude CLI stderr: {line}", line=line),
+            sandbox=SandboxSettings(enabled=True, allowUnsandboxedCommands=False) if sandbox_enabled else None,  # type: ignore[misc]
         )
 
     def _build_system_prompt(

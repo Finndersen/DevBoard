@@ -68,6 +68,10 @@ DevBoard implements a **local client-server architecture** optimized for develop
 - **Unified Conversations**: Polymorphic conversation architecture supporting all entity types
 - **Browser-Style Tabs**: Multi-task interface with persistent state
 
+### Sandboxing
+
+Bash commands executed by Claude Code agents run in an OS-level sandbox by default, providing filesystem and network isolation to reduce risk from prompt injection and unintended modifications. See [Claude Code Integration](docs/4-ai-agents/claude-code-integration.md) for details on configuration and customisation.
+
 ## Getting Started
 
 ### Prerequisites
