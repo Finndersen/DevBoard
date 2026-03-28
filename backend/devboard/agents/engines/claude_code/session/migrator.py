@@ -8,6 +8,7 @@ from pathlib import Path
 import logfire
 
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
+from devboard.agents.engines.claude_code.utils import CLAUDE_PROJECTS_DIR
 from devboard.integrations.shell import execute_shell_command
 
 
@@ -15,7 +16,7 @@ class ClaudeCodeSessionMigrator:
     """Migrates Claude Code session files to a new working directory."""
 
     def __init__(self):
-        self.claude_projects_dir = Path.home() / ".claude" / "projects"
+        self.claude_projects_dir = CLAUDE_PROJECTS_DIR
 
     @staticmethod
     def encode_path_for_claude_projects(path: str) -> str:
@@ -39,6 +40,9 @@ class ClaudeCodeSessionMigrator:
 
     async def migrate_session_to_directory(self, session_id: str, new_working_dir: str) -> Path | None:
         """Migrate a session file to a new working directory."""
+        # Resolve symlinks so the encoded path matches what Claude Code CLI produces internally
+        new_working_dir = str(Path(new_working_dir).resolve())
+
         old_session_file = find_session_file(session_id, self.claude_projects_dir)
         old_project_dir = old_session_file.parent
 

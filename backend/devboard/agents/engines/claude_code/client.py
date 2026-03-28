@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TypedDict
 
 import logfire
@@ -153,7 +154,7 @@ class ClaudeClient:
             allowed_tools=all_allowed_tools,
             disallowed_tools=disallowed_tools,
             model=model,
-            cwd=cwd,
+            cwd=str(Path(cwd).resolve()) if cwd else None,
             mcp_servers=mcp_servers,  # type: ignore[arg-type]
             # disallowed_tools deny rules still apply. This enables execution of all enabled MCP server tools
             permission_mode="bypassPermissions",
