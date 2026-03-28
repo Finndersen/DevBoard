@@ -3,14 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../../../test/utils'
 import SubAgentConversationModal from '../SubAgentConversationModal'
-import { apiClient } from '../../../lib/api'
 import type { ConversationEvent } from '../../../lib/api'
-
-vi.mock('../../../lib/api', () => ({
-  apiClient: {
-    getClaudeCodeSubAgentMessages: vi.fn(),
-  },
-}))
 
 vi.mock('../../chat/ConversationMessageList', () => ({
   default: ({ messages, showEmptyState, emptyStateMessage }: { messages: ConversationEvent[]; showEmptyState: boolean; emptyStateMessage: string }) => (
@@ -50,8 +43,7 @@ describe('SubAgentConversationModal', () => {
       <SubAgentConversationModal
         isOpen={false}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={() => Promise.resolve([])}
         title="Test sub-agent"
       />
     )
@@ -60,20 +52,19 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('fetches and displays messages when opened', async () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockResolvedValue(mockMessages)
+    const fetchMessages = vi.fn().mockResolvedValue(mockMessages)
 
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={fetchMessages}
         title="Investigate auth module"
       />
     )
 
     await waitFor(() => {
-      expect(apiClient.getClaudeCodeSubAgentMessages).toHaveBeenCalledWith('session-123', 'ac2a274')
+      expect(fetchMessages).toHaveBeenCalledTimes(1)
     })
 
     await waitFor(() => {
@@ -82,14 +73,13 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('shows loading spinner while fetching', () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
+    const fetchMessages = vi.fn().mockReturnValue(new Promise(() => {}))
 
     const { container } = render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={fetchMessages}
         title="Loading test"
       />
     )
@@ -98,14 +88,13 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('shows error with retry button on fetch failure', async () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockRejectedValue(new Error('Network error'))
+    const fetchMessages = vi.fn().mockRejectedValue(new Error('Network error'))
 
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={fetchMessages}
         title="Error test"
       />
     )
@@ -118,7 +107,7 @@ describe('SubAgentConversationModal', () => {
 
   it('retries fetch when retry button is clicked', async () => {
     const user = userEvent.setup()
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages)
+    const fetchMessages = vi.fn()
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(mockMessages)
 
@@ -126,8 +115,7 @@ describe('SubAgentConversationModal', () => {
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={fetchMessages}
         title="Retry test"
       />
     )
@@ -139,19 +127,18 @@ describe('SubAgentConversationModal', () => {
     await user.click(screen.getByText('Retry'))
 
     await waitFor(() => {
-      expect(apiClient.getClaudeCodeSubAgentMessages).toHaveBeenCalledTimes(2)
+      expect(fetchMessages).toHaveBeenCalledTimes(2)
     })
   })
 
   it('shows empty state when no messages returned', async () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockResolvedValue([])
+    const fetchMessages = vi.fn().mockResolvedValue([])
 
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={fetchMessages}
         title="Empty test"
       />
     )
@@ -162,14 +149,11 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('displays "Sub Agent:" prefix in the modal header', () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
-
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={() => new Promise(() => {})}
         title="Investigate auth module"
       />
     )
@@ -178,14 +162,11 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('displays sub-agent type badge when subagentType is provided', () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
-
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={() => new Promise(() => {})}
         title="Investigate auth module"
         subagentType="Explore"
       />
@@ -195,14 +176,11 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('does not display sub-agent type badge when subagentType is not provided', () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
-
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={() => new Promise(() => {})}
         title="Test title"
       />
     )
@@ -212,15 +190,13 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('displays agent ID in the modal header', () => {
-    vi.mocked(apiClient.getClaudeCodeSubAgentMessages).mockReturnValue(new Promise(() => {}))
-
     render(
       <SubAgentConversationModal
         isOpen={true}
         onClose={() => {}}
-        sessionId="session-123"
-        agentId="ac2a274"
+        fetchMessages={() => new Promise(() => {})}
         title="Test title"
+        subtitle="ac2a274"
       />
     )
 

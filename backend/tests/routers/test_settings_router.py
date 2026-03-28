@@ -9,6 +9,19 @@ from devboard.db.repositories import ConfigurationRepository
 from devboard.integrations.base import IntegrationConnectionResult
 
 
+@pytest.fixture(autouse=True)
+def clear_integration_env_vars(monkeypatch):
+    """Remove integration-related env vars to prevent accidental real API calls.
+
+    ConfigService reads os.environ at construction time, so any GITHUB_*, JIRA_*,
+    or SLACK_* env vars present in the test environment would cause integration
+    config to resolve successfully and trigger live API calls.
+    """
+    for key in list(__import__("os").environ.keys()):
+        if key.startswith(("GITHUB_", "JIRA_", "SLACK_")):
+            monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture
 def github_config_data():
     """Valid GitHub integration configuration."""

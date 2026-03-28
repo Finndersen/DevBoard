@@ -426,6 +426,7 @@ def test_bootstrap_main_repo_slot(service, mock_repos, sample_codebase):
     # Setup: No existing slots
     worktree_slot_repo.find_one.return_value = None  # No slot found
     worktree_slot_repo.get_by_path.return_value = None  # No slot at main repo path
+    worktree_slot_repo.get_main_slot_for_codebase.side_effect = ValueError("No main slot")
 
     # Mock slot creation
     new_slot = MagicMock(spec=WorktreeSlot)
@@ -499,6 +500,8 @@ async def test_allocate_for_task_bootstraps_main_repo_when_max_worktrees_zero(
 
     # Setup: No existing slots initially
     worktree_slot_repo.get_by_path.return_value = None
+    worktree_slot_repo.get_main_slot_for_codebase.side_effect = ValueError("No main slot")
+    worktree_slot_repo.get_all_locked.return_value = []
 
     # Setup: Mock bootstrap to create main repo slot
     main_slot = MagicMock(spec=WorktreeSlot)

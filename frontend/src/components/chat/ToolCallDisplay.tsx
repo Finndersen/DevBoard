@@ -230,7 +230,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
                             )}
                             {d.conversation_id != null && (
                               <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono select-text">
-                                conversation: {d.conversation_id as number}
+                                Conversation: {d.conversation_id as number}
                               </span>
                             )}
                           </>
