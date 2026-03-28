@@ -61,4 +61,5 @@ We are working to develop an application as described in @docs/INDEX.md
 
 ## Scripts
 - `pnpm dev` / `pnpm build` / `pnpm lint`
-- `pnpm test:run 2>&1` — all tests | `pnpm test <file>` — specific file | `pnpm test:coverage`
+- `NO_COLOR=1 pnpm test:run 2>&1` — all tests (no ANSI color codes) | `NO_COLOR=1 pnpm test <file>` — specific file | `pnpm test:coverage`
+- Console output from app code is suppressed globally via `onConsoleLog: () => false` in `vitest.config.ts`
