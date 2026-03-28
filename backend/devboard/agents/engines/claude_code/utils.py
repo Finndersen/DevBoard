@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import logfire
@@ -20,14 +21,20 @@ BUILTIN_TOOLS_MCP_NAME = "devboard"
 
 _LEGACY_MCP_PREFIXES = ("mcp__devboard__", "mcp__builtin_tools__")
 
+# Claude config directory — defaults to ~/.claude, overridable via CLAUDE_CONFIG_DIR env var
+CLAUDE_CONFIG_DIR: Path = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+CLAUDE_PROJECTS_DIR: Path = CLAUDE_CONFIG_DIR / "projects"
+CLAUDE_TODOS_DIR: Path = CLAUDE_CONFIG_DIR / "todos"
+CLAUDE_SETTINGS_PATH: Path = CLAUDE_CONFIG_DIR / "settings.json"
+
 
 def load_env_from_settings() -> dict[str, str]:
-    """Load environment variables from ~/.claude/settings.json.
+    """Load environment variables from the Claude settings.json file.
 
     Returns:
         Dictionary of environment variables, or empty dict if not found
     """
-    settings_path = Path.home() / ".claude" / "settings.json"
+    settings_path = CLAUDE_SETTINGS_PATH
 
     if not settings_path.exists():
         return {}

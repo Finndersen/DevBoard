@@ -12,6 +12,7 @@ from devboard.agents.engines.claude_code.session.event_converter import session_
 from devboard.agents.engines.claude_code.session.file_locator import find_session_file
 from devboard.agents.engines.claude_code.session.migrator import ClaudeCodeSessionMigrator
 from devboard.agents.engines.claude_code.session.service import ClaudeCodeSessionService
+from devboard.agents.engines.claude_code.utils import CLAUDE_PROJECTS_DIR
 from devboard.agents.events import ConversationEvent
 from devboard.db.repositories.claude_project import ClaudeProjectCacheRepository
 from devboard.integrations.shell import execute_shell_command
@@ -69,7 +70,7 @@ class ClaudeSessionManager:
     def __init__(self, project_cache: ClaudeProjectCacheRepository) -> None:
         self._project_cache = project_cache
         self._session_service = ClaudeCodeSessionService()
-        self.claude_projects_dir = Path.home() / ".claude" / "projects"
+        self.claude_projects_dir = CLAUDE_PROJECTS_DIR
 
     def list_projects(self) -> list[ClaudeCodeProjectInfo]:
         """List all Claude Code projects ordered by last activity descending."""

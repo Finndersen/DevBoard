@@ -1,7 +1,5 @@
 """Service for reading and parsing Claude Code session history."""
 
-from pathlib import Path
-
 from devboard.agents.engines.claude_code.session.file_locator import (
     find_all_session_todo_files,
     find_main_session_todo_file,
@@ -16,6 +14,7 @@ from devboard.agents.engines.claude_code.session.parser import (
     load_session_messages_from_file,
 )
 from devboard.agents.engines.claude_code.session.todo_parser import load_todo_list_from_file
+from devboard.agents.engines.claude_code.utils import CLAUDE_PROJECTS_DIR, CLAUDE_TODOS_DIR
 from devboard.api.schemas.claude_code_todo import TodoItem
 
 
@@ -23,8 +22,8 @@ class ClaudeCodeSessionService:
     """Service for reading and parsing Claude Code session history."""
 
     def __init__(self):
-        self.claude_projects_dir = Path.home() / ".claude" / "projects"
-        self.claude_todos_dir = Path.home() / ".claude" / "todos"
+        self.claude_projects_dir = CLAUDE_PROJECTS_DIR
+        self.claude_todos_dir = CLAUDE_TODOS_DIR
 
     def get_last_session_message(self, session_id: str) -> SessionMessage | None:
         session_file = find_session_file(session_id, self.claude_projects_dir)
