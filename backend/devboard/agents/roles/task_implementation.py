@@ -53,8 +53,8 @@ Then execute in order:
 
 2. CODE REVIEW (if a `code_review` step is in the plan)
    - After executing the `code_review` step, read its findings from the step outcome
-   - Use your own judgement on which issues to address — not every suggestion needs to be acted on
-   - Make any agreed fixes directly using your own tools, then continue
+   - Address all raised issues - Use your own judgement on each suggestion to either state why is invalid/not necessary, or make changes to resolve it
+   - Make any required changes either directly or via sub-agent if substantial
 
 3. TEST & VERIFY
    - Run relevant tests to validate the changes

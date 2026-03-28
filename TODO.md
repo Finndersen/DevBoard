@@ -33,7 +33,22 @@
 - Use dynamic Claude code sub-agent configs instead of "native"? only real benefit is session organisation though...
 - Add PR status cache layer that can be used in different places, e.g. show PR status in task detail / conversation list and agent context if available. allow manual refresh and auto-refresh after stale time
 - UI fixes: notificatio ndot for unread conversations, fix Thinking indicators, total duration for group tool calls. apply consistent stylign class instead of repeating
-- For Approve and Merge workflwo action - auto-detect if potential conflicts (file overlap), and disable the action (or adjust prompting to agent)
+- Dedicated PR details tab section, with CI status etc and comments/reviews
+- Auto-resolve CI failures and conflicts (with toggle)
+- Custom Claudecode settings like "Read anywhere", permissions mode settings
+- Show Claude MCP status
+- Conversation last activity time not being updated/moved to top when running
+- Auto-add codebase main repo dir to sandbox allow list
+- PUt the implementation plan step order graph in the message prompt instead of system prompt
+- Do not allow sending message when claude code session file not found. also that warning does not disappear when startign implemetnation (and new conversation) for example
+- add error indicator when branch not found, block actions
+- history not retrieved for active agent streams
+- include Model name in assistant message events
+- verify claude session file exists at expected dir  before running agent (dont just check if session file is found anywhere in ~/.claude/projects/, but determine actual expected session dir based on working dir). return appropraite error if it doesnt (otherwise sdk will just fail with unuseful error message)
+- should ClaudeCodeSessionService be merged into ClaudeSessionManager?
+- Investigate and remove any agent role system prompt, context content or tool list that may change dynamically during the lifecycle of the agent - since it breaks prompt caching of the LLM. make sure there aer no timestamps or dynamic content in there. task details, specification doc and implementation plan can change during planning phase and are dynamically rendered in context content, so would break caching.. maybe its acceptable to break it a limited number of times? or for planning agent, dont have it in context content, and will agent know what spec/plan is based on the tool calls it made to set them, or would we need to provide extra read spec/plan tools? 
+- remove support for old document-based task implementation plans (Except for viewing them for old tasks)
+
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
