@@ -36,3 +36,10 @@ class ImplementationStepUpdate(BaseModel):
     type: str | None = None
     dependencies: list[int] | None = None
     details: str | None = None
+
+
+class ImplementationStepCreate(BaseModel):
+    title: str
+    type: str
+    details: str
+    dependencies: list[int] = []

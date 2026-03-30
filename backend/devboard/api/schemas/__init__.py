@@ -18,6 +18,7 @@ from .custom_field import CustomFieldCreate, CustomFieldResponse, CustomFieldUpd
 from .document import DocumentCreate, DocumentEdit, DocumentResponse, DocumentUpdate
 from .implementation_plan import (
     ImplementationPlanResponse,
+    ImplementationStepCreate,
     ImplementationStepResponse,
     ImplementationStepUpdate,
 )
@@ -148,6 +149,7 @@ __all__ = [
     "DocumentEdit",
     # Implementation Plan
     "ImplementationPlanResponse",
+    "ImplementationStepCreate",
     "ImplementationStepResponse",
     "ImplementationStepUpdate",
     "FileDiff",

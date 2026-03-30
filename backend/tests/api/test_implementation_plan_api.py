@@ -109,3 +109,48 @@ class TestImplementationPlanAPI:
 
         data = response.json()
         assert data["implementation_plan_id"] is None
+
+    def test_create_implementation_step(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={"title": "Code review", "type": "code_review", "details": "Review the git diff.", "dependencies": []},
+        )
+        assert response.status_code == 201
+
+        data = response.json()
+        assert data["title"] == "Code review"
+        assert data["type"] == "code_review"
+        assert data["details"] == "Review the git diff."
+        assert data["dependencies"] == []
+        assert data["step_number"] == 3
+        assert data["status"] == "pending"
+
+    def test_create_implementation_step_with_dependencies(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={
+                "title": "Code review",
+                "type": "code_review",
+                "details": "Review the git diff.",
+                "dependencies": [1, 2],
+            },
+        )
+        assert response.status_code == 201
+
+        data = response.json()
+        assert data["dependencies"] == [1, 2]
+        assert data["step_number"] == 3
+
+    def test_create_implementation_step_no_plan(self, client: TestClient, test_task):
+        response = client.post(
+            f"/api/tasks/{test_task.id}/implementation-plan/steps",
+            json={"title": "Code review", "type": "code_review", "details": "Review the git diff."},
+        )
+        assert response.status_code == 404
+
+    def test_create_implementation_step_invalid_dependency(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={"title": "Code review", "type": "code_review", "details": "Review.", "dependencies": [99]},
+        )
+        assert response.status_code == 400

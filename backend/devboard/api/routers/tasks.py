@@ -29,6 +29,7 @@ from devboard.api.schemas import (
     FileDiff,
     GitHubPRStatusResponse,
     ImplementationPlanResponse,
+    ImplementationStepCreate,
     ImplementationStepResponse,
     ImplementationStepUpdate,
     MergeBranchRequest,
@@ -740,6 +741,49 @@ async def update_implementation_step(
         # Return 404 for missing step, 400 for other validation errors
         status_code = 404 if "not found" in str(e) else 400
         raise HTTPException(status_code=status_code, detail=str(e)) from e
+    plan_service.commit()
+
+    return ImplementationStepResponse(
+        id=step.id,
+        step_number=step.step_number,
+        title=step.title,
+        type=step.type,
+        dependencies=step.dependencies or [],
+        status=step.status,
+        details=step.details,
+        outcome=step.outcome,
+        conversation_id=step.conversation_id,
+        started_at=step.started_at,
+        completed_at=step.completed_at,
+    )
+
+
+@router.post(
+    "/{task_id}/implementation-plan/steps",
+    response_model=ImplementationStepResponse,
+    status_code=201,
+)
+async def create_implementation_step(
+    task_id: int,
+    step_create: ImplementationStepCreate,
+    task: Task = Depends(get_verified_task),
+    plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+) -> ImplementationStepResponse:
+    """Add a new step to a task's implementation plan."""
+    plan = plan_service.get_plan_by_task_id(task_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="No implementation plan found for this task")
+
+    try:
+        step = plan_service.add_step(
+            plan,
+            title=step_create.title,
+            type=step_create.type,
+            details=step_create.details,
+            dependencies=step_create.dependencies,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     plan_service.commit()
 
     return ImplementationStepResponse(

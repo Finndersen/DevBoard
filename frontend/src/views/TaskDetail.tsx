@@ -761,6 +761,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 {activeTab === 'plan' && (
                   <PlanTab
                     taskId={task.id}
+                    taskStatus={task.status}
                     implementationPlan={implementationPlan}
                     onPlanUpdated={refetchImplementationPlan2}
                     implementationPlanDoc={implementationPlanDoc}
@@ -899,6 +900,7 @@ function TaskDetail({ id }: TaskDetailProps) {
               {activeTab === 'plan' && (
                 <PlanTab
                   taskId={task.id}
+                  taskStatus={task.status}
                   implementationPlan={implementationPlan}
                   onPlanUpdated={refetchImplementationPlan2}
                   implementationPlanDoc={implementationPlanDoc}

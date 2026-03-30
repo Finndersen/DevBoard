@@ -67,6 +67,13 @@ export interface ImplementationStepUpdate {
   details?: string
 }
 
+export interface ImplementationStepCreate {
+  title: string
+  type: ImplementationStepType
+  details: string
+  dependencies?: number[]
+}
+
 export interface TaskListItem {
   id: number
   title: string
@@ -1434,6 +1441,19 @@ export class ApiClient {
       `/api/tasks/${taskId}/implementation-plan/steps/${stepNumber}`,
       {
         method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    )
+  }
+
+  async addImplementationStep(
+    taskId: number | string,
+    data: ImplementationStepCreate,
+  ): Promise<ImplementationStepResponse> {
+    return this.request<ImplementationStepResponse>(
+      `/api/tasks/${taskId}/implementation-plan/steps`,
+      {
+        method: 'POST',
         body: JSON.stringify(data),
       },
     )

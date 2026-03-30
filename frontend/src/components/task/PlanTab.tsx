@@ -5,7 +5,8 @@ import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
 import { textColors, borderColors, surfaces, hoverColors, statusColors } from '../../styles/designSystem'
-import { apiClient } from '../../lib/api'
+import { apiClient, TaskStatus } from '../../lib/api'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
 import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
 
@@ -228,10 +229,37 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
 interface StructuredPlanViewProps {
   plan: ImplementationPlanResponse
   taskId: number
+  taskStatus: TaskStatus
   onPlanUpdated: () => void
 }
 
-function StructuredPlanView({ plan, taskId, onPlanUpdated }: StructuredPlanViewProps) {
+function StructuredPlanView({ plan, taskId, taskStatus, onPlanUpdated }: StructuredPlanViewProps) {
+  const [addingCodeReview, setAddingCodeReview] = useState(false)
+  const { addNotification } = useNotificationStore()
+
+  const showAddCodeReviewButton =
+    taskStatus === TaskStatus.PLANNING &&
+    plan.steps.length > 0 &&
+    !plan.steps.some((s) => s.type === 'code_review')
+
+  const handleAddCodeReview = useCallback(async () => {
+    setAddingCodeReview(true)
+    try {
+      await apiClient.addImplementationStep(taskId, {
+        title: 'Code review',
+        type: 'code_review',
+        details: 'Review the git diff for correctness, quality, and alignment with the spec.',
+        dependencies: plan.steps.map((s) => s.step_number),
+      })
+      onPlanUpdated()
+    } catch (error) {
+      console.error('Failed to add code review step:', error)
+      addNotification({ type: 'system_error', message: 'Failed to add code review step' })
+    } finally {
+      setAddingCodeReview(false)
+    }
+  }, [taskId, plan.steps, onPlanUpdated, addNotification])
+
   return (
     <div className="h-full flex flex-col overflow-y-auto space-y-4">
       {/* Plan Overview */}
@@ -268,6 +296,18 @@ function StructuredPlanView({ plan, taskId, onPlanUpdated }: StructuredPlanViewP
             <p className={`${textColors.secondary} italic text-sm`}>No steps defined yet.</p>
           )}
         </div>
+
+        {showAddCodeReviewButton && (
+          <button
+            type="button"
+            onClick={handleAddCodeReview}
+            disabled={addingCodeReview}
+            className="mt-2 w-full border border-dashed border-gray-300 dark:border-white/[0.15] rounded-lg py-2 text-sm text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-white/[0.25] hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            <span className="text-base leading-none">+</span>
+            {addingCodeReview ? 'Adding...' : 'Add Code Review Step'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -275,6 +315,7 @@ function StructuredPlanView({ plan, taskId, onPlanUpdated }: StructuredPlanViewP
 
 interface PlanTabProps {
   taskId: number
+  taskStatus: TaskStatus
   implementationPlan: ImplementationPlanResponse | null | undefined
   onPlanUpdated: () => void
   // Legacy props for Document-based plans
@@ -282,13 +323,14 @@ interface PlanTabProps {
   planField?: ReturnType<typeof useEditableField<string>>
 }
 
-export function PlanTab({ taskId, implementationPlan, onPlanUpdated, implementationPlanDoc, planField }: PlanTabProps) {
+export function PlanTab({ taskId, taskStatus, implementationPlan, onPlanUpdated, implementationPlanDoc, planField }: PlanTabProps) {
   // Structured plan takes priority
   if (implementationPlan) {
     return (
       <StructuredPlanView
         plan={implementationPlan}
         taskId={taskId}
+        taskStatus={taskStatus}
         onPlanUpdated={onPlanUpdated}
       />
     )
