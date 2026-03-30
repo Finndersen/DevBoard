@@ -784,17 +784,21 @@ class GitRepoIntegration:
             paths.update(f for f in output.strip().split("\n") if f)
         return sorted(paths)
 
-    async def get_changed_file_paths(self, commit_a: str, commit_b: str) -> list[str]:
+    async def get_changed_file_paths(self, commit_a: str, commit_b: str, from_merge_base: bool = False) -> list[str]:
         """Get file paths changed between two commits.
 
         Args:
             commit_a: Starting commit reference
             commit_b: Ending commit reference
+            from_merge_base: If True, diffs commit_b against the merge base of commit_a and
+                commit_b, returning only files changed on commit_b's branch since divergence.
+                If False, diffs the two tips directly.
 
         Returns:
             List of file paths changed between the two commits
         """
-        output = await self.run_git_command(["diff", "--name-only", commit_a, commit_b], raise_on_error=False)
+        ref_args = [f"{commit_a}...{commit_b}"] if from_merge_base else [commit_a, commit_b]
+        output = await self.run_git_command(["diff", "--name-only", *ref_args], raise_on_error=False)
         return [f for f in output.strip().split("\n") if f]
 
     async def get_conflicted_files(self) -> list[str]:

@@ -505,6 +505,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     } catch (error) {
       console.error('Failed to execute workflow action:', error)
       setStreamingMessage('')
+      addNotification({
+        type: 'system_error',
+        priority: 'high',
+        entityType: 'task',
+        entityId: task.id.toString(),
+        entityTitle: task.title ?? null,
+        conversationId: null,
+        message: error instanceof Error ? error.message : 'Failed to execute workflow action',
+        actions: [],
+      })
       await refetch()
     }
   }

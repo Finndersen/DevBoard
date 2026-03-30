@@ -48,6 +48,8 @@
 - Investigate and remove any agent role system prompt, context content or tool list that may change dynamically during the lifecycle of the agent - since it breaks prompt caching of the LLM. make sure there aer no timestamps or dynamic content in there. task details, specification doc and implementation plan can change during planning phase and are dynamically rendered in context content, so would break caching.. maybe its acceptable to break it a limited number of times? or for planning agent, dont have it in context content, and will agent know what spec/plan is based on the tool calls it made to set them, or would we need to provide extra read spec/plan tools? 
 - remove support for old document-based task implementation plans (Except for viewing them for old tasks)
 - Draft message (pencil) icon showing for all conversations for a project when only one actually has a draft
+- Refresh task branch status after doing rebase action
+- add ability to cancel/interrupt a running impementation plan step execution.
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

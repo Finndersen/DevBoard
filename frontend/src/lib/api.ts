@@ -859,7 +859,14 @@ export class ApiClient {
     })
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+      let detail: string | undefined
+      try {
+        const body = await response.json()
+        detail = typeof body?.detail === 'string' ? body.detail : undefined
+      } catch {
+        // ignore JSON parse failure
+      }
+      throw new Error(detail ?? `API request failed: ${response.status} ${response.statusText}`)
     }
 
     if (response.status === 204 || response.headers.get('content-length') === '0') {

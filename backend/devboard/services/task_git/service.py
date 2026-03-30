@@ -106,7 +106,7 @@ class TaskGitService:
         uncommitted_files = await base_git.get_uncommitted_file_paths()
         if not uncommitted_files:
             return []
-        feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name)
+        feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name, from_merge_base=True)
         return list(set(uncommitted_files) & set(feature_files))
 
     @classmethod
@@ -331,7 +331,9 @@ class TaskGitService:
             base_git = GitRepoIntegration(checkout_path)
             uncommitted_files = await base_git.get_uncommitted_file_paths()
             if uncommitted_files:
-                feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name)
+                feature_files = await git.get_changed_file_paths(
+                    task.base_branch, task.branch_name, from_merge_base=True
+                )
                 overlapping = set(uncommitted_files) & set(feature_files)
                 if overlapping:
                     file_list = "\n".join(f"  - {f}" for f in sorted(overlapping))
