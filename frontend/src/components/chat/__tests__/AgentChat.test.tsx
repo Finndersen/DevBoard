@@ -96,7 +96,7 @@ describe('AgentChat', () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Qa Agent')).toBeInTheDocument()
+      expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
     expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('AgentChat', () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Qa Agent')).toBeInTheDocument()
+      expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
     // Find and click the clear chat button
@@ -151,7 +151,7 @@ describe('AgentChat', () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Qa Agent')).toBeInTheDocument()
+      expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
     // Should show info button
@@ -163,7 +163,7 @@ describe('AgentChat', () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Qa Agent')).toBeInTheDocument()
+      expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
     // Wait for model selector to finish loading
@@ -198,7 +198,7 @@ describe('AgentChat', () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Investigation Agent')).toBeInTheDocument()
+      expect(screen.getByText('Investigation')).toBeInTheDocument()
     })
   })
 })

@@ -110,7 +110,7 @@ describe('TaskDetail', () => {
     expect(screen.getByText('Implementation Plan')).toBeInTheDocument()
     // Agent title is now dynamically loaded based on conversation's agent_role
     await waitFor(() => {
-      expect(screen.getByText('Task Planning Agent')).toBeInTheDocument()
+      expect(screen.getByText('Planning')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 

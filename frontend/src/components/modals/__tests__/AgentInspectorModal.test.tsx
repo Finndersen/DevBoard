@@ -210,7 +210,7 @@ describe('AgentInspectorModal', () => {
     render(<AgentInspectorModal isOpen={true} onClose={() => {}} conversationId={42} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Task Planning Agent')).toBeInTheDocument()
+      expect(screen.getByText('Planning')).toBeInTheDocument()
     })
   })
 })
