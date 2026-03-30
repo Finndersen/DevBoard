@@ -1,8 +1,8 @@
 """Tests for codebases router."""
 
-import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -19,39 +19,14 @@ def temp_dir():
 
 
 @pytest.fixture
-def temp_git_dir():
-    """Create a temporary git repository for testing."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Initialize git repo
-        subprocess.run(["git", "init"], cwd=temp_dir, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@example.com"],
-            cwd=temp_dir,
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "Test User"],
-            cwd=temp_dir,
-            check=True,
-            capture_output=True,
-        )
-
-        # Create a test file and commit it
-        test_file = Path(temp_dir) / "README.md"
-        test_file.write_text("# Test Repository")
-        subprocess.run(["git", "add", "README.md"], cwd=temp_dir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=temp_dir, check=True, capture_output=True)
-
-        # Add a remote origin
-        subprocess.run(
-            ["git", "remote", "add", "origin", "https://github.com/test/repo.git"],
-            cwd=temp_dir,
-            check=True,
-            capture_output=True,
-        )
-
-        yield temp_dir
+def mock_git_repo():
+    """Mock GitRepoIntegration for a valid git repo with a remote."""
+    with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+        mock_instance = mock_cls.return_value
+        mock_instance.detect_git_remote_url = AsyncMock(return_value="https://github.com/test/repo.git")
+        mock_instance.has_commits = AsyncMock(return_value=True)
+        mock_instance.get_default_branch = AsyncMock(return_value="main")
+        yield mock_cls
 
 
 @pytest.fixture
@@ -95,11 +70,11 @@ class TestCodebasesRouter:
         assert response.status_code == 400
         assert "no commits" in response.json()["detail"]
 
-    def test_create_codebase_with_git(self, client, temp_git_dir):
+    def test_create_codebase_with_git(self, client, temp_dir, mock_git_repo):
         """Test creating a new codebase from a git directory."""
         codebase_data = {
             "name": "Git Test Codebase",
-            "local_path": temp_git_dir,
+            "local_path": temp_dir,
             "description": "A test codebase with git repository",
         }
 
@@ -113,11 +88,11 @@ class TestCodebasesRouter:
         assert result["repository_url"] == "https://github.com/test/repo.git"  # Auto-detected
         assert "id" in result
 
-    def test_create_codebase_creates_main_repo_slot(self, client, db_session, temp_git_dir):
+    def test_create_codebase_creates_main_repo_slot(self, client, db_session, temp_dir, mock_git_repo):
         """Test that creating a codebase also creates a main repo worktree slot."""
         codebase_data = {
             "name": "Git Test Codebase",
-            "local_path": temp_git_dir,
+            "local_path": temp_dir,
             "description": "A test codebase with git repository",
         }
 
@@ -134,7 +109,7 @@ class TestCodebasesRouter:
         assert len(slots) == 1
         main_slot = slots[0]
         assert main_slot.is_main_repo is True
-        assert main_slot.path == temp_git_dir
+        assert main_slot.path == temp_dir
         assert main_slot.codebase_id == codebase_id
 
     def test_create_codebase_invalid_path(self, client):

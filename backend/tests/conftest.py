@@ -79,6 +79,8 @@ def db_session(db_connection: Connection, db_tables) -> Generator[Session, None,
     """
     Provides a SQLAlchemy DB session that automatically rolls back changes after each test.
     """
+    from devboard.db.repositories.configuration import ConfigurationRepository
+
     # Use savepoint/nested transaction for proper test isolation in SQLite
     nested_trans = db_connection.begin_nested()
 
@@ -91,6 +93,8 @@ def db_session(db_connection: Connection, db_tables) -> Generator[Session, None,
         # Close session and rollback the savepoint
         session.close()
         nested_trans.rollback()
+        # Clear the class-level config cache so rolled-back entries don't leak into subsequent tests
+        ConfigurationRepository._cache.clear()
 
 
 @fixture(scope="session")
@@ -189,35 +193,21 @@ def language_model_repository(db_session):
 # Test data fixtures
 @fixture
 def test_codebase(db_session, tmp_path):
-    """Create a test codebase for tasks."""
-    import subprocess
-
+    """Create a test codebase DB record with a real directory for tests."""
     from devboard.db.models.codebase import Codebase
     from devboard.db.repositories import CodebaseRepository
 
-    # Create a real directory with git repo for testing
     codebase_path = tmp_path / "test-codebase"
-    codebase_path.mkdir(parents=True, exist_ok=True)
-
-    # Initialize git repo with main branch
-    subprocess.run(["git", "init", "-b", "main"], cwd=str(codebase_path), check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=str(codebase_path), check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=str(codebase_path), check=True, capture_output=True)
-
-    # Create an initial commit
-    (codebase_path / "README.md").write_text("# Test Codebase")
-    subprocess.run(["git", "add", "."], cwd=str(codebase_path), check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=str(codebase_path), check=True, capture_output=True)
+    codebase_path.mkdir()
 
     codebase_repo = CodebaseRepository(db_session)
-    codebase = Codebase(
-        name="Test Codebase",
-        description="A test codebase",
-        local_path=str(codebase_path),
+    codebase = codebase_repo.create(
+        Codebase(
+            name="Test Codebase",
+            description="A test codebase",
+            local_path=str(codebase_path),
+        )
     )
-    codebase = codebase_repo.create(codebase)
     db_session.commit()
     return codebase
 

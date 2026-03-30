@@ -27,19 +27,9 @@ def github_config(db_session):
 
 @pytest.fixture
 def codebase_with_repo(db_session, tmp_path):
-    """Create a codebase with a repository URL."""
-    import subprocess
-
+    """Create a codebase DB record with a repository URL."""
     codebase_path = tmp_path / "test-repo"
-    codebase_path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", "-b", "main"], cwd=str(codebase_path), check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=str(codebase_path), check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=str(codebase_path), check=True, capture_output=True)
-    (codebase_path / "README.md").write_text("# Test")
-    subprocess.run(["git", "add", "."], cwd=str(codebase_path), check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=str(codebase_path), check=True, capture_output=True)
+    codebase_path.mkdir()
 
     codebase_repo = CodebaseRepository(db_session)
     codebase = Codebase(

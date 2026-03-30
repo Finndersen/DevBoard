@@ -1,5 +1,7 @@
 """Tests for projects router."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
@@ -344,6 +346,13 @@ class TestProjectCustomFieldsRouter:
 
 class TestProjectTasksRouter:
     """Test project tasks router endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def mock_git(self):
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as mock_cls:
+            mock_instance = mock_cls.return_value
+            mock_instance.branch_exists = AsyncMock(return_value=True)
+            yield mock_cls
 
     def test_list_project_tasks_empty(self, client, db_session, test_project_data):
         """Test listing project tasks when none exist."""
