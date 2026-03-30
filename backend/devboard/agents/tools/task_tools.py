@@ -20,7 +20,6 @@ from devboard.db.models import (
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
-from devboard.workflow_actions.task_workflows import CreateImplementationPlanAction
 
 MAX_TASKS_LIMIT = 20
 
@@ -292,10 +291,16 @@ def _build_create_task_json_schema(
             "description": "Optional working branch name (auto-generated from title if not provided)",
             "default": None,
         },
-        "auto_plan": {
-            "type": "boolean",
-            "description": "Automatically begin creating the implementation plan after task creation. Only enable when the task specification is complete and ready for implementation planning. Requires specification_content to be provided.",
-            "default": False,
+        "initial_prompt": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": (
+                "Optional prompt sent to the task's planning agent conversation immediately after creation, "
+                "launching autonomous agent execution. Use this to kick off any workflow: "
+                "provide just a prompt to let the agent investigate and write the spec; "
+                "provide both specification_content and a prompt like 'The spec is complete. Create the implementation plan.' "
+                "to immediately begin planning; or omit to create the task for manual interaction later."
+            ),
+            "default": None,
         },
     }
 
@@ -548,7 +553,7 @@ def create_create_task_tool(
     Args:
         project: The project to create tasks in
         task_service: Service for task creation
-        conversation_repo: Optional repository for conversation access (required for auto_plan)
+        conversation_repo: Optional repository for conversation access (required for initial_prompt)
     """
     # Build codebase name -> Codebase mapping for lookup
     codebase_map: dict[str, Codebase] = {cb.name: cb for cb in project.codebases} if project.codebases else {}
@@ -561,18 +566,16 @@ def create_create_task_tool(
         base_branch: str | None = None,
         branch_name: str | None = None,
         custom_fields: dict[str, Any] | None = None,
-        auto_plan: bool = False,
+        initial_prompt: str | None = None,
     ) -> str:
         """Create a new task within the current project.
 
         Use this tool to create a new task for tracking work to be done.
+        Optionally provide initial_prompt to immediately launch agent execution on the task's planning conversation.
         """
-        # Fail fast: validate auto_plan requirements before creating task
-        if auto_plan:
-            if not specification_content:
-                raise ModelRetry("auto_plan requires specification_content to be provided")
-            if conversation_repo is None:
-                raise ModelRetry("auto_plan is not supported in this context")
+        # Fail fast: validate initial_prompt requirements before creating task
+        if initial_prompt is not None and conversation_repo is None:
+            raise ModelRetry("initial_prompt is not supported in this context")
 
         # Look up codebase from the pre-built map
         codebase = codebase_map.get(codebase_name)
@@ -597,20 +600,14 @@ def create_create_task_tool(
 
         active_conversation_id = None
 
-        if auto_plan:
-            if not CreateImplementationPlanAction.is_available(task):
-                raise ModelRetry(
-                    "Cannot auto-plan: task is not eligible for implementation plan creation. "
-                    "Ensure the task has a specification and no existing plan."
-                )
-
+        if initial_prompt is not None:
             assert conversation_repo is not None  # Already validated above
             try:
                 conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
-                get_execution_manager().start_agent_execution(conversation.id, CreateImplementationPlanAction.PROMPT)
+                get_execution_manager().start_agent_execution(conversation.id, initial_prompt)
                 active_conversation_id = conversation.id
             except Exception as e:
-                raise ModelRetry(f"Failed to start auto-plan execution: {e}") from e
+                raise ModelRetry(f"Failed to start agent execution: {e}") from e
 
         result: dict[str, Any] = {
             "task_id": task.id,
@@ -629,6 +626,13 @@ def create_create_task_tool(
     return Tool.from_schema(
         function=create_task,
         name="create_task",
-        description="Create a new task within the current project. Use this tool to create a new task for tracking work to be done.",
+        description=(
+            "Create a new task within the current project. "
+            "Patterns: (1) provide specification_content + initial_prompt (e.g. 'The spec is complete. Create the implementation plan.') "
+            "to create with spec and immediately begin planning; "
+            "(2) provide specification_content only — task created with spec for manual review; "
+            "(3) provide initial_prompt only with a task description — the planning agent will investigate, write the spec, and handle the workflow; "
+            "(4) provide just title + codebase_name — minimal task shell for later manual work."
+        ),
         json_schema=json_schema,
     )

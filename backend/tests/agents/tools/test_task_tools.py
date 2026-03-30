@@ -10,7 +10,6 @@ from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.services.task_service import TaskService
-from devboard.workflow_actions.task_workflows import CreateImplementationPlanAction
 
 
 @pytest.fixture
@@ -66,33 +65,12 @@ def mock_conversation_repo():
     return repo
 
 
-class TestCreateTaskAutoplan:
-    """Tests for create_task tool auto_plan parameter."""
+class TestCreateTaskInitialPrompt:
+    """Tests for create_task tool initial_prompt parameter."""
 
     @pytest.mark.asyncio
-    async def test_auto_plan_without_specification_raises_model_retry(
-        self, mock_project, mock_task_service, mock_conversation_repo
-    ):
-        """auto_plan=True without specification_content raises ModelRetry before creating task."""
-        tool = create_create_task_tool(
-            project=mock_project,
-            task_service=mock_task_service,
-            conversation_repo=mock_conversation_repo,
-        )
-
-        with pytest.raises(ModelRetry) as exc_info:
-            await tool.function(
-                title="New Task",
-                codebase_name="backend",
-                auto_plan=True,
-            )
-
-        assert "auto_plan requires specification_content" in str(exc_info.value)
-        mock_task_service.create_task.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_auto_plan_without_conversation_repo_raises_model_retry(self, mock_project, mock_task_service):
-        """auto_plan=True without conversation_repo raises ModelRetry before creating task."""
+    async def test_initial_prompt_without_conversation_repo_raises_model_retry(self, mock_project, mock_task_service):
+        """initial_prompt without conversation_repo raises ModelRetry before creating task."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
@@ -103,70 +81,72 @@ class TestCreateTaskAutoplan:
             await tool.function(
                 title="New Task",
                 codebase_name="backend",
-                specification_content="Some spec",
-                auto_plan=True,
+                initial_prompt="Investigate and write the spec",
             )
 
-        assert "auto_plan is not supported in this context" in str(exc_info.value)
+        assert "initial_prompt is not supported in this context" in str(exc_info.value)
         mock_task_service.create_task.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_auto_plan_starts_execution_and_returns_conversation_id(
+    async def test_initial_prompt_starts_execution_with_given_prompt(
         self, mock_project, mock_task_service, mock_conversation_repo, mock_task
     ):
-        """auto_plan=True with valid spec starts execution and returns active_conversation_id."""
+        """initial_prompt starts execution with the provided prompt string."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
             conversation_repo=mock_conversation_repo,
         )
 
-        with (
-            patch(
-                "devboard.workflow_actions.task_workflows.CreateImplementationPlanAction.is_available",
-                return_value=True,
-            ),
-            patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr,
-            patch(
-                "devboard.services.task_service.TaskGitService.create_task_branch",
-                AsyncMock(return_value="new-task"),
-            ),
-        ):
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
             mock_exec_manager = Mock()
             mock_get_mgr.return_value = mock_exec_manager
+            await tool.function(
+                title="New Task",
+                codebase_name="backend",
+                initial_prompt="Investigate and write the spec",
+            )
+
+        mock_exec_manager.start_agent_execution.assert_called_once_with(
+            99,
+            "Investigate and write the spec",
+        )
+
+    @pytest.mark.asyncio
+    async def test_initial_prompt_returns_conversation_id(
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_task
+    ):
+        """initial_prompt causes active_conversation_id to be included in response."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            conversation_repo=mock_conversation_repo,
+        )
+
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_get_mgr.return_value = Mock()
             result = await tool.function(
                 title="New Task",
                 codebase_name="backend",
-                specification_content="Detailed spec content",
-                auto_plan=True,
+                initial_prompt="The spec is complete. Create the implementation plan.",
             )
 
         result_data = json.loads(result)
         assert result_data["task_id"] == mock_task.id
         assert result_data["active_conversation_id"] == 99
-        mock_exec_manager.start_agent_execution.assert_called_once_with(
-            99,
-            CreateImplementationPlanAction.PROMPT,
-        )
 
     @pytest.mark.asyncio
-    async def test_auto_plan_false_does_not_start_execution(
+    async def test_initial_prompt_none_does_not_start_execution(
         self, mock_project, mock_task_service, mock_conversation_repo
     ):
-        """auto_plan=False (default) does not start any execution."""
+        """initial_prompt=None (default) does not start any execution."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
             conversation_repo=mock_conversation_repo,
         )
 
-        with (
-            patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr,
-            patch(
-                "devboard.services.task_service.TaskGitService.create_task_branch",
-                AsyncMock(return_value="new-task"),
-            ),
-        ):
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
             mock_exec_manager = Mock()
             mock_get_mgr.return_value = mock_exec_manager
             result = await tool.function(
@@ -179,38 +159,55 @@ class TestCreateTaskAutoplan:
         mock_exec_manager.start_agent_execution.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_auto_plan_raises_when_task_not_eligible(
+    async def test_initial_prompt_without_specification_content_works(
         self, mock_project, mock_task_service, mock_conversation_repo
     ):
-        """auto_plan=True raises ModelRetry when CreateImplementationPlanAction.is_available returns False."""
+        """initial_prompt does not require specification_content."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
             conversation_repo=mock_conversation_repo,
         )
 
-        with (
-            patch(
-                "devboard.workflow_actions.task_workflows.CreateImplementationPlanAction.is_available",
-                return_value=False,
-            ),
-            patch(
-                "devboard.services.task_service.TaskGitService.create_task_branch",
-                AsyncMock(return_value="new-task"),
-            ),
-            pytest.raises(ModelRetry) as exc_info,
-        ):
-            await tool.function(
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_get_mgr.return_value = Mock()
+            # Should not raise
+            result = await tool.function(
                 title="New Task",
                 codebase_name="backend",
-                specification_content="Some spec",
-                auto_plan=True,
+                initial_prompt="Investigate the codebase and write the spec",
             )
 
-        assert "Cannot auto-plan" in str(exc_info.value)
+        result_data = json.loads(result)
+        assert result_data["task_id"] == 42
+        assert result_data["active_conversation_id"] == 99
 
-    def test_auto_plan_field_in_json_schema(self, mock_project, mock_task_service):
-        """auto_plan field appears in the JSON schema with correct type and default."""
+    @pytest.mark.asyncio
+    async def test_initial_prompt_with_specification_content_works(
+        self, mock_project, mock_task_service, mock_conversation_repo
+    ):
+        """initial_prompt and specification_content can be provided together."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            conversation_repo=mock_conversation_repo,
+        )
+
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_get_mgr.return_value = Mock()
+            result = await tool.function(
+                title="New Task",
+                codebase_name="backend",
+                specification_content="Detailed spec content",
+                initial_prompt="The spec is complete. Create the implementation plan.",
+            )
+
+        result_data = json.loads(result)
+        assert result_data["task_id"] == 42
+        assert result_data["active_conversation_id"] == 99
+
+    def test_initial_prompt_field_in_json_schema(self, mock_project, mock_task_service):
+        """initial_prompt field appears in the JSON schema with correct type and default."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
@@ -218,11 +215,12 @@ class TestCreateTaskAutoplan:
         schema = tool.tool_def.parameters_json_schema
         props = schema["properties"]
 
-        assert "auto_plan" in props
-        auto_plan_schema = props["auto_plan"]
-        assert auto_plan_schema["type"] == "boolean"
-        assert auto_plan_schema["default"] is False
-        assert "specification_content" in auto_plan_schema["description"]
+        assert "initial_prompt" in props
+        assert "auto_plan" not in props
+        initial_prompt_schema = props["initial_prompt"]
+        assert initial_prompt_schema["default"] is None
+        assert {"type": "string"} in initial_prompt_schema["anyOf"]
+        assert {"type": "null"} in initial_prompt_schema["anyOf"]
 
 
 class TestCreateTaskBranchCreation:
