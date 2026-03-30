@@ -18,7 +18,7 @@ import { TaskStatus } from '../../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, borderColors, surfaces } from '../../styles/designSystem'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
@@ -238,7 +238,7 @@ export function TaskDetailHeader({
                 </button>
 
                 {showCodebaseSelector && (
-                  <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg shadow-lg z-10">
+                  <div className={`absolute top-full left-0 mt-1 w-64 ${surfaces.raised} border ${borderColors.default} rounded-lg shadow-lg z-10`}>
                     <div className="max-h-64 overflow-y-auto">
                       {codebases && codebases.map((codebase: Codebase) => (
                         <button

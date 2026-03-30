@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from 'react'
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { ToolApprovalDecision } from '../../../lib/api'
 import { standardFeedbackTextareaClasses } from '../../../styles/inputStyles'
+import { surfaces, borderColors } from '../../../styles/designSystem'
 
 interface ApprovalActionsProps {
   toolCallId: string
@@ -103,7 +104,7 @@ export default function ApprovalActions({
       </div>
 
       {/* Footer with Actions */}
-      <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-gray-800">
+      <div className={`flex items-center justify-between p-6 border-t ${borderColors.default} ${surfaces.sunken}`}>
         <div className="text-xs text-gray-500 dark:text-gray-400">
           {showDenyFeedback ? (
             <div>

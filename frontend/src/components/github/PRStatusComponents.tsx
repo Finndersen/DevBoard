@@ -1,3 +1,5 @@
+import { statusColors } from '../../styles/designSystem'
+
 export interface StatusInfo {
   icon: string
   colorClass: string
@@ -80,11 +82,11 @@ export function ReviewBadge({ decision }: { decision: string | null }) {
   if (!decision) return null
   switch (decision) {
     case 'APPROVED':
-      return <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" title="Approved">Approved</span>
+      return <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusColors.success.bg} ${statusColors.success.text}`} title="Approved">Approved</span>
     case 'CHANGES_REQUESTED':
-      return <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="Changes requested">Changes</span>
+      return <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusColors.error.bg} ${statusColors.error.text}`} title="Changes requested">Changes</span>
     case 'REVIEW_REQUIRED':
-      return <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400" title="Review required">Review needed</span>
+      return <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusColors.warning.bg} ${statusColors.warning.text}`} title="Review required">Review needed</span>
     default:
       return null
   }

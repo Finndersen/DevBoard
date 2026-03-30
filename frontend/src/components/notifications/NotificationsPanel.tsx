@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { BellIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { surfaces, borderColors, textColors, hoverColors } from '../../styles/designSystem'
 import { useAllApprovals, useApprovalActions } from '../../stores/approvalsStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import DocumentDiffModal from '../documents/DocumentDiffModal'
@@ -142,10 +143,10 @@ export default function NotificationsPanel() {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-white/[0.08] z-50">
+          <div className={`absolute right-0 mt-2 w-96 ${surfaces.raised} rounded-lg shadow-lg border ${borderColors.default} z-50`}>
             {/* Header */}
-            <div className="p-4 border-b border-gray-200 dark:border-white/[0.08] flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <div className={`p-4 border-b ${borderColors.default} flex items-center justify-between`}>
+              <h3 className={`text-lg font-semibold ${textColors.primary}`}>
                 Notifications ({totalCount})
               </h3>
               <div className="flex items-center space-x-2">
@@ -170,7 +171,7 @@ export default function NotificationsPanel() {
               {pendingKeys.length === 0 && filteredNotifications.length === 0 ? (
                 <div className="p-8 text-center">
                   <BellIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  <p className={`mt-2 text-sm ${textColors.secondary}`}>
                     No notifications
                   </p>
                 </div>
@@ -183,21 +184,21 @@ export default function NotificationsPanel() {
                       <button
                         key={`${key}-${approval.tool_call_id}`}
                         onClick={() => handleApprovalClick(key, approval)}
-                        className="w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
+                        className={`w-full p-4 text-left ${hoverColors.subtle} transition-colors`}
                       >
                         <div className="flex items-start space-x-3">
                           <div className="flex-shrink-0 mt-1">
                             <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            <p className={`text-sm font-medium ${textColors.primary}`}>
                               {getDisplayName(key)}
                             </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className={`text-sm ${textColors.secondary}`}>
                               {getDocumentTypeDisplay(getDocumentTypeFromToolName(approval.tool_name))} - {approval.tool_name}
                             </p>
                             {getReasoningFromToolArgs(approval) && (
-                              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-2">
+                              <p className={`text-xs ${textColors.muted} mt-1 line-clamp-2`}>
                                 {getReasoningFromToolArgs(approval)}
                               </p>
                             )}
@@ -219,14 +220,14 @@ export default function NotificationsPanel() {
                         </div>
                         <div className="flex-1 min-w-0">
                           {notification.entityTitle && (
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            <p className={`text-sm font-medium ${textColors.primary}`}>
                               {notification.entityTitle}
                             </p>
                           )}
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <p className={`text-sm ${textColors.secondary}`}>
                             {notification.message}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                          <p className={`text-xs ${textColors.muted} mt-1`}>
                             {new Date(notification.timestamp).toLocaleString()}
                           </p>
 

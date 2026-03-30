@@ -1,3 +1,5 @@
+import { borderColors } from '../../styles/designSystem'
+
 interface Tab {
   id: string
   label: string
@@ -11,7 +13,7 @@ interface InViewTabsProps {
 
 export default function InViewTabs({ tabs, activeTab, onTabChange }: InViewTabsProps) {
   return (
-    <div className="border-b border-gray-200 dark:border-white/[0.08]">
+    <div className={`border-b ${borderColors.default}`}>
       <nav className="flex space-x-4" aria-label="Tabs">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab

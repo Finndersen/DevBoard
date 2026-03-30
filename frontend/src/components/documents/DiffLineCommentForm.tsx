@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react'
 import { useDiffReview } from '../../contexts/DiffReviewContext'
+import { surfaces, borderColors } from '../../styles/designSystem'
 
 interface DiffLineCommentFormProps {
   filePath: string
@@ -109,7 +110,7 @@ export default function DiffLineCommentForm({
   }, [handleSend, handleCancel])
 
   return (
-    <div className="bg-gray-50 dark:bg-white/[0.05] border-t border-b border-gray-200 dark:border-white/[0.08] p-3">
+    <div className={`${surfaces.sunken} border-t border-b ${borderColors.default} p-3`}>
       <div className="space-y-2">
         <textarea
           ref={textareaRef}

@@ -1,6 +1,7 @@
 import { ArrowPathIcon, CheckCircleIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import type { TaskDiffResponse, TaskBranchInfo } from '../../lib/api'
+import { borderColors } from '../../styles/designSystem'
 import type { CodeReviewStatus } from '../../views/hooks/useCodeReviewStatus'
 import { DiffReviewProvider, type CommentSubmitHandler } from '../../contexts/DiffReviewContext'
 import GitDiffViewer from './GitDiffViewer'
@@ -99,7 +100,7 @@ function AllFilesDiffViewerContent({
   return (
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header with stats, view selector, and refresh */}
-      <div className="space-y-3 mb-4 pb-4 border-b border-gray-200 dark:border-white/[0.08]">
+      <div className={`space-y-3 mb-4 pb-4 border-b ${borderColors.default}`}>
         {/* Stats row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">

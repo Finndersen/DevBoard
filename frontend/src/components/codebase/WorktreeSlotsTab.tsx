@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { TrashIcon } from '@heroicons/react/24/outline'
 import { apiClient, type WorktreePoolStatus, type WorktreeSlot } from '../../lib/api'
 import { Card, StatusBadge, ConfirmDialog } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors } from '../../styles/designSystem'
 import { useUIStore } from '../../stores/uiStore'
 
 interface WorktreeSlotsTabProps {
@@ -255,8 +255,8 @@ export default function WorktreeSlotsTab({ codebaseId }: WorktreeSlotsTabProps) 
 
       {/* Delete error */}
       {deleteError && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
-          <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+        <div className={`${statusColors.error.bg} border ${statusColors.error.border} rounded-md p-3`}>
+          <p className={`text-sm ${statusColors.error.text}`}>{deleteError}</p>
         </div>
       )}
 

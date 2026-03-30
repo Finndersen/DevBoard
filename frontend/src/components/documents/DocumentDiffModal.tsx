@@ -11,6 +11,7 @@ import AgentReasoning from '../chat/AgentReasoning'
 import DocumentEditViewer from './DocumentEditViewer'
 import DocumentContentViewer from './DocumentContentViewer'
 import ApprovalActions from '../approvals/common/ApprovalActions'
+import { textColors } from '../../styles/designSystem'
 
 interface DocumentDiffModalProps {
   approval: PendingApproval
@@ -48,14 +49,14 @@ export default function DocumentDiffModal({
         {/* Document Viewer - Edit or Set Content */}
         {isSetTool && content ? (
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+            <h3 className={`text-sm font-medium ${textColors.secondary} mb-4`}>
               Document Content:
             </h3>
             <DocumentContentViewer content={content} />
           </div>
         ) : (
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+            <h3 className={`text-sm font-medium ${textColors.secondary} mb-4`}>
               Proposed Changes:
             </h3>
             <DocumentEditViewer approval={approval} />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { ChatBubbleLeftRightIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import NavigationMenu from './NavigationMenu'
 import ViewContainer from './ViewContainer'
 import NotificationsPanel from '../notifications/NotificationsPanel'
@@ -68,11 +69,11 @@ export default function AppShell() {
       {/* Right column (conversations panel + main content share the top strip) */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Top strip */}
-        <div className="h-16 flex items-center border-b border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-800 flex-shrink-0">
+        <div className={`h-16 flex items-center border-b ${borderColors.default} ${surfaces.raised} flex-shrink-0`}>
           {/* Conversations toggle — fixed w-80 when expanded, auto when collapsed */}
           <button
             onClick={toggleConversationsPanel}
-            className="h-full w-80 flex items-center gap-2 px-3 border-r border-gray-200 dark:border-white/[0.08] hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors shrink-0"
+            className={`h-full w-80 flex items-center gap-2 px-3 border-r ${borderColors.default} ${hoverColors.subtle} transition-colors shrink-0`}
             aria-label={conversationsPanelCollapsed ? 'Expand conversations' : 'Collapse conversations'}
           >
             <ChatBubbleLeftRightIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 shrink-0" />

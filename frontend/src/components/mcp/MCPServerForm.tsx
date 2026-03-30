@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Modal, Button, Input } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors, borderColors } from '../../styles/designSystem'
 import { standardInputClasses } from '../../styles/inputStyles'
 import { apiClient } from '../../lib/api'
 import type {
@@ -184,8 +184,8 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <div className={`p-3 ${statusColors.error.bg} border ${statusColors.error.border} rounded-md`}>
+            <p className={`text-sm ${statusColors.error.text}`}>{error}</p>
           </div>
         )}
 
@@ -284,7 +284,7 @@ export function MCPServerForm({ server, onSubmit, onClose }: MCPServerFormProps)
             )}
 
             {formData.auth_type === 'oauth' && (
-              <div className="space-y-3 p-3 border border-gray-200 dark:border-white/[0.08] rounded-md">
+              <div className={`space-y-3 p-3 border ${borderColors.default} rounded-md`}>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   OAuth will be initiated when you verify the server. Leave fields blank for automatic discovery and registration.
                 </p>

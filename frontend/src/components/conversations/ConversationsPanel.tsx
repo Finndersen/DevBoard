@@ -13,7 +13,7 @@ import { useUIStore } from '../../stores/uiStore'
 import type { ViewType } from '../../stores/uiStore'
 import type { ConversationResponse, GitHubPRStatusResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
-import { textColors } from '../../styles/designSystem'
+import { textColors, surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
 import { getStatusInfo, getReviewInfo } from '../github/PRStatusComponents'
 
@@ -261,7 +261,7 @@ export default function ConversationsPanel() {
   }
 
   return (
-    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 bg-white dark:bg-gray-800 ${conversationsPanelCollapsed ? '' : 'border-r border-gray-200 dark:border-white/[0.08]'} flex flex-col overflow-hidden transition-all duration-300`}>
+    <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 ${surfaces.raised} ${conversationsPanelCollapsed ? '' : `border-r ${borderColors.default}`} flex flex-col overflow-hidden transition-all duration-300`}>
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
         {loading && !conversations && (
@@ -322,7 +322,7 @@ export default function ConversationsPanel() {
                 <button
                   key={item.id}
                   onClick={() => handleClick(item)}
-                  className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors ${borderStyle} ${isPulsing ? 'animate-attention-pulse' : ''}`}
+                  className={`w-full text-left px-3 py-2.5 ${hoverColors.subtle} transition-colors ${borderStyle} ${isPulsing ? 'animate-attention-pulse' : ''}`}
                 >
                   {/* Row 1: Icon + name + draft indicator + activity dot */}
                   <div className="flex items-center gap-2 min-w-0">

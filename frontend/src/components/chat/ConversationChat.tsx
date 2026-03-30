@@ -13,6 +13,8 @@ import { useConversationHistory } from './hooks/useConversationHistory'
 import { useAutoScroll } from './hooks/useAutoScroll'
 import { useMessageQueueing } from './hooks/useMessageQueueing'
 import { useViewContext } from '../../contexts/ViewContext'
+import Alert from '../ui/Alert'
+import { surfaces, statusColors } from '../../styles/designSystem'
 
 /**
  * Handle exposed by ConversationChat ref for external message submission.
@@ -201,14 +203,14 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
         />
 
         {fetchHistoryError && (
-          <div className="mt-2 p-2.5 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-sm text-red-800 dark:text-red-200">{fetchHistoryError}</p>
+          <div className="mt-2">
+            <Alert variant="error">{fetchHistoryError}</Alert>
           </div>
         )}
 
         {approvalError && pendingApprovals.length > 0 && (
-          <div className="mt-2 p-2.5 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-sm text-red-800 dark:text-red-200">{approvalError}</p>
+          <div className="mt-2">
+            <Alert variant="error">{approvalError}</Alert>
           </div>
         )}
 
@@ -224,7 +226,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
         {isStreaming && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-white/[0.05] rounded-lg px-3 py-1.5 text-sm">
+            <div className={`${surfaces.sunken} rounded-lg px-3 py-1.5 text-sm`}>
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -236,14 +238,14 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
         {isRunningAction && actionMessage && (
           <div className="flex justify-start">
-            <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-3 py-2">
+            <div className={`${statusColors.info.bg} border ${statusColors.info.border} rounded-lg px-3 py-2`}>
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                   <div className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
-                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">{actionMessage}</span>
+                <span className={`text-sm ${statusColors.info.text} font-medium`}>{actionMessage}</span>
               </div>
             </div>
           </div>

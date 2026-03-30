@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { surfaces, textColors } from '../../styles/designSystem'
 
 interface ModalProps {
   isOpen: boolean
@@ -25,10 +26,10 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'md
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className={`bg-white dark:bg-gray-800 rounded-lg ${maxWidthClasses[maxWidth]} w-full p-6 max-h-[90vh] flex flex-col`}>
+    <div className={`fixed inset-0 ${surfaces.overlay} flex items-center justify-center p-4 z-50`}>
+      <div className={`${surfaces.raised} rounded-lg ${maxWidthClasses[maxWidth]} w-full p-6 max-h-[90vh] flex flex-col`}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex-1 min-w-0">
+          <h3 className={`text-lg font-medium ${textColors.primary} flex-1 min-w-0`}>
             {title}
           </h3>
           <button

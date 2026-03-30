@@ -15,17 +15,19 @@ Three-tier component architecture: primitive UI components, feature-specific com
 Standard primitives with consistent theming and variants:
 
 - **Button** (`Button.tsx`): Variants (primary, secondary, outline, ghost), sizes (sm, md, lg), loading/disabled states, icon support
-- **Card** (`Card.tsx`): Flexible container with padding options, hover effects, click handlers
+- **Card** (`Card.tsx`): Flexible container with padding options, hover effects, click handlers — uses `Surface variant="raised"` internally
 - **Input** (`Input.tsx`): Form input with labels, error states, left/right icons, accessibility
 - **Textarea** (`Textarea.tsx`): Multi-line input matching Input theming
 - **Modal** (`Modal.tsx`): Sizes (sm, md, lg, xl), escape/click-outside handling, focus trap, ARIA attributes
-- **StatusBadge** (`StatusBadge.tsx`): Semantic colors (default, success, warning, error, info)
+- **StatusBadge** (`StatusBadge.tsx`): Semantic colors (default, success, warning, error, info) — uses `statusColors` tokens
+- **Alert** (`Alert.tsx`): Semantic status message boxes — variants: `error`, `warning`, `info`, `success`. Optional `title` prop and icon. Uses `statusColors` tokens for bg/text/border. Replaces raw colored `div` patterns for status messages.
+- **Surface** (`Surface.tsx`): Container primitive with variants `raised` (cards, modals — `bg-white dark:bg-gray-800` + border + rounded) and `sunken` (inset sections — `bg-gray-50 dark:bg-white/[0.05]`). Props: `padding`, `rounded`, `border`, `as`, `onClick`, `className`. Used internally by `Card`.
 - **Markdown** (`Markdown.tsx`): Markdown rendering with syntax highlighting for code blocks and Mermaid diagram rendering
 - **CodeBlock** (`CodeBlock.tsx`): Syntax-highlighted code blocks using react-syntax-highlighter with theme support
 - **MermaidDiagram** (`MermaidDiagram.tsx`): Renders Mermaid diagrams with dark mode support, error handling, and click-to-expand functionality
 - **MermaidDiagramModal** (`MermaidDiagramModal.tsx`): Modal for expanded Mermaid diagram view with source code and copy functionality
 - **ErrorBoundary** (`ErrorBoundary.tsx`): React error boundary with fallback UI
-- **ErrorMessage** (`ErrorMessage.tsx`): Standardized error display with retry actions
+- **ErrorMessage** (`ErrorMessage.tsx`): Standardized error display with retry actions — thin wrapper around `Alert variant="error"`
 
 ## Layout Components
 

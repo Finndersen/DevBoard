@@ -5,7 +5,7 @@ import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useDataStore } from '../stores/dataStore'
 import { Card, Input, Textarea, ErrorMessage, Button } from '../components/ui'
-import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
+import { loadingSpinner, layouts, textColors, borderColors, surfaces } from '../styles/designSystem'
 import InViewTabs from '../components/common/InViewTabs'
 import WorktreeSlotsTab from '../components/codebase/WorktreeSlotsTab'
 
@@ -243,7 +243,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
     <div className="max-w-4xl mx-auto flex flex-col h-full gap-6">
       {/* Header */}
       <div className="space-y-2 shrink-0">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Codebase Details</h1>
+        <h1 className={`text-2xl font-bold ${textColors.primary}`}>Codebase Details</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           View and manage codebase information
         </p>
@@ -302,7 +302,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               </div>
             ) : (
               <div className="flex items-center gap-2 group">
-                <span className="text-gray-900 dark:text-white">{codebase.name}</span>
+                <span className={textColors.primary}>{codebase.name}</span>
                 <Button
                   onClick={nameField.startEditing}
                   variant="ghost"
@@ -356,7 +356,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             ) : (
               <div className="group">
                 <div className="flex items-start gap-2">
-                  <p className="text-gray-900 dark:text-white flex-1 whitespace-pre-wrap">
+                  <p className={`${textColors.primary} flex-1 whitespace-pre-wrap`}>
                     {codebase.description || (
                       <span className="text-gray-400 italic">No description</span>
                     )}
@@ -420,7 +420,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             ) : (
               <div className="group">
                 <div className="flex items-center gap-2">
-                  <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                  <code className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1`}>
                     {codebase.local_path}
                   </code>
                   <Button
@@ -562,7 +562,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             ) : (
               <div className="group">
                 <div className="flex items-center gap-2">
-                  <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                  <code className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1`}>
                     {codebase.default_branch}
                   </code>
                   <Button
@@ -595,7 +595,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
                   value={codebase.branch_handling}
                   onChange={(e) => saveBranchHandling(e.target.value as BranchHandling)}
                   disabled={branchHandlingSaving}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className={`w-full px-3 py-2 text-sm border ${borderColors.input} rounded-md ${surfaces.raised} ${textColors.primary} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 >
                   {BRANCH_HANDLING_OPTIONS.map((option) => (
                     <option
@@ -624,7 +624,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             ) : (
               <div className="group">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                  <span className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1`}>
                     {BRANCH_HANDLING_OPTIONS.find((o) => o.value === codebase.branch_handling)?.label || codebase.branch_handling}
                     <span className="text-gray-500 dark:text-gray-400 ml-2">
                       ({BRANCH_HANDLING_OPTIONS.find((o) => o.value === codebase.branch_handling)?.description})
@@ -666,7 +666,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
                     value={codebase.merge_method}
                     onChange={(e) => saveMergeMethod(e.target.value as MergeMethod)}
                     disabled={mergeMethodSaving}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full px-3 py-2 text-sm border ${borderColors.input} rounded-md ${surfaces.raised} ${textColors.primary} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   >
                     {MERGE_METHOD_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -690,7 +690,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               ) : (
                 <div className="group">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                    <span className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1`}>
                       {MERGE_METHOD_OPTIONS.find((o) => o.value === codebase.merge_method)?.label || codebase.merge_method}
                       <span className="text-gray-500 dark:text-gray-400 ml-2">
                         ({MERGE_METHOD_OPTIONS.find((o) => o.value === codebase.merge_method)?.description})
@@ -768,7 +768,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
             ) : (
               <div className="group">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1">
+                  <span className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1`}>
                     {codebase.max_worktrees === null ? (
                       <>
                         <span className="font-medium">Unlimited</span>
@@ -849,7 +849,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               <div className="group">
                 <div className="flex items-start gap-2">
                   {codebase.setup_command ? (
-                    <code className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
+                    <code className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono`}>
                       {codebase.setup_command}
                     </code>
                   ) : (
@@ -917,7 +917,7 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
               <div className="group">
                 <div className="flex items-start gap-2">
                   {codebase.developer_context ? (
-                    <pre className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono">
+                    <pre className={`text-sm ${textColors.primary} bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded flex-1 whitespace-pre-wrap font-mono`}>
                       {codebase.developer_context}
                     </pre>
                   ) : (

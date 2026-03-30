@@ -12,7 +12,7 @@ import { useIsNarrowContainer } from '../hooks/useMediaQuery'
 import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { Button, Card, ErrorMessage } from '../components/ui'
-import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
+import { loadingSpinner, layouts, textColors, borderColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
@@ -697,7 +697,7 @@ function TaskDetail({ id }: TaskDetailProps) {
           >
             <Card padding="none" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
               {/* Card Header with Tabs */}
-              <div className="border-b border-gray-200 dark:border-white/[0.08]">
+              <div className={`border-b ${borderColors.default}`}>
                 <div className="px-6 py-3">
                   <div className="flex items-center justify-between">
                     <nav className="flex space-x-6">

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { XMarkIcon, MagnifyingGlassIcon, ArrowPathIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
 import type { MCPToolSummary } from '../../lib/api'
 import { apiClient } from '../../lib/api'
+import { surfaces, borderColors, textColors } from '../../styles/designSystem'
 
 interface MCPToolSelectorModalProps {
   isOpen: boolean
@@ -103,10 +104,10 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div className={`relative ${surfaces.raised} rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col`}>
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/[0.08]">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+          <div className={`flex items-center justify-between p-4 border-b ${borderColors.default}`}>
+            <h3 className={`text-lg font-medium ${textColors.primary}`}>
               Add MCP Tools
             </h3>
             <button
@@ -118,7 +119,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
           </div>
 
           {/* Filters */}
-          <div className="p-4 border-b border-gray-200 dark:border-white/[0.08] space-y-3">
+          <div className={`p-4 border-b ${borderColors.default} space-y-3`}>
             {/* Search */}
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -212,7 +213,7 @@ export function MCPToolSelectorModal({ isOpen, onClose, onAdd, excludeToolIds }:
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-white/[0.08]">
+          <div className={`flex items-center justify-between p-4 border-t ${borderColors.default}`}>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {selectedToolIds.size} tool{selectedToolIds.size !== 1 ? 's' : ''} selected
             </span>

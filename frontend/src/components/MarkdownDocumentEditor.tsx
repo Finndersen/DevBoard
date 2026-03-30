@@ -3,7 +3,7 @@ import { CheckIcon, PencilIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { useEditableField } from '../hooks/useEditableField'
 import { Button, Textarea, Markdown } from './ui'
 import TableOfContentsPopover from './ui/TableOfContentsPopover'
-import { textColors } from '../styles/designSystem'
+import { textColors, surfaces, borderColors, hoverColors } from '../styles/designSystem'
 import { extractHeadings } from '../utils/markdown'
 
 interface MarkdownDocumentEditorProps {
@@ -75,7 +75,7 @@ export function MarkdownDocumentEditor({
               {field && (
                 <button
                   onClick={field.startEditing}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm ${surfaces.raised} border ${borderColors.default} shadow-sm ${hoverColors.subtle} transition-colors ${textColors.secondary}`}
                 >
                   <PencilIcon className="w-3.5 h-3.5" />
                   <span>Edit</span>

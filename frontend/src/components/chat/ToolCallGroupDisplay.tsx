@@ -3,6 +3,7 @@ import { memo, useState, useEffect, useMemo } from 'react'
 import type { ToolCall, ToolResult } from '../../lib/api'
 import { formatDuration } from '../../styles/messageStyles'
 import { cleanToolName } from '../../utils/toolDisplayLabels'
+import { surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import ToolCallDisplay from './ToolCallDisplay'
 
 interface ToolCallGroupDisplayProps {
@@ -126,7 +127,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
     <div className="flex flex-col items-start min-w-0">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`rounded-md overflow-hidden max-w-full min-w-[300px] text-left ${surfaces.sunken} border ${borderColors.default} ${hoverColors.default} transition-colors ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -172,7 +173,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
 
       {/* Expanded individual tool calls */}
       {isExpanded && (
-        <div className="w-full mt-1 ml-3 pl-3 border-l-2 border-gray-200 dark:border-white/[0.08]">
+        <div className={`w-full mt-1 ml-3 pl-3 border-l-2 ${borderColors.default}`}>
           {items.map(({ message, index, previousEventTimestamp: itemPrevTs }) => {
             const cacheKey = `${message.timestamp}-tool_call-${index}`
             const toolResult = toolResultMap.get(cacheKey)

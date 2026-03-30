@@ -10,6 +10,7 @@ import type {
 } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { MCPToolSelectorModal } from './MCPToolSelectorModal'
+import { textColors, surfaces, borderColors } from '../../styles/designSystem'
 
 interface AgentRoleConfigPanelProps {
   agentRole: string
@@ -249,13 +250,13 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white">{agentName}</h3>
+        <h3 className={`text-lg font-medium ${textColors.primary}`}>{agentName}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{agentDescription}</p>
       </div>
 
       {/* Engine & Model Selection */}
       <div className="space-y-4">
-        <h4 className="text-sm font-medium text-gray-900 dark:text-white">Engine & Model</h4>
+        <h4 className={`text-sm font-medium ${textColors.primary}`}>Engine & Model</h4>
 
         <div className="flex gap-4">
           {/* Engine Selector */}
@@ -393,7 +394,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white">Custom Instructions</h4>
+            <h4 className={`text-sm font-medium ${textColors.primary}`}>Custom Instructions</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               Additional instructions appended to the agent's system prompt
             </p>
@@ -425,7 +426,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white">Assigned MCP Tools</h4>
+            <h4 className={`text-sm font-medium ${textColors.primary}`}>Assigned MCP Tools</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               External tools available to this agent
             </p>
@@ -454,11 +455,11 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
             {assignedTools.map((tool) => (
               <div
                 key={tool.tool_id}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg"
+                className={`flex items-center justify-between p-3 ${surfaces.sunken} border ${borderColors.default} rounded-lg`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <span className={`text-sm font-medium ${textColors.primary} truncate`}>
                       {tool.tool_name}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-0.5 bg-gray-200 dark:bg-white/[0.06] rounded">

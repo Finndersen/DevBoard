@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { statusColors } from '../../styles/designSystem'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -17,17 +18,17 @@ interface ConfirmDialogProps {
 const variantConfig = {
   danger: {
     icon: 'text-red-600 dark:text-red-500',
-    iconBg: 'bg-red-100 dark:bg-red-900/30',
+    iconBg: statusColors.error.icon,
     confirmButton: 'bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white'
   },
   warning: {
     icon: 'text-yellow-600 dark:text-yellow-500',
-    iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
+    iconBg: statusColors.warning.icon,
     confirmButton: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500 text-white'
   },
   info: {
     icon: 'text-blue-600 dark:text-blue-500',
-    iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+    iconBg: statusColors.info.icon,
     confirmButton: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 text-white'
   }
 }

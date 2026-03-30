@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { apiClient } from '../../lib/api'
 import type { SessionSearchResult } from '../../lib/api'
+import { surfaces, textColors, statusColors, borderColors } from '../../styles/designSystem'
 
 interface SessionSearchProps {
   onResults: (results: SessionSearchResult[], query: string) => void
@@ -47,9 +48,9 @@ export function SessionSearch({ onResults }: SessionSearchProps) {
         onChange={e => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Search all sessions… (Enter)"
-        className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md
-          bg-white dark:bg-gray-800 text-gray-900 dark:text-white
-          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className={`w-full pl-9 pr-8 py-1.5 text-sm border ${borderColors.input} rounded-md
+          ${surfaces.raised} ${textColors.primary}
+          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
       />
       {loading && (
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -65,7 +66,7 @@ export function SessionSearch({ onResults }: SessionSearchProps) {
           <XMarkIcon className="w-3.5 h-3.5" />
         </button>
       )}
-      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className={`mt-1 text-xs ${statusColors.error.text}`}>{error}</p>}
     </div>
   )
 }

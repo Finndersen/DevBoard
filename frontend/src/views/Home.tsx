@@ -5,6 +5,7 @@ import { useCodebases } from '../hooks/useCodebases'
 import { useAllTasks } from '../hooks/useTasks'
 import { TaskStatus } from '../lib/api'
 import { Card } from '../components/ui'
+import { textColors } from '../styles/designSystem'
 
 export default function Home() {
   const { data: projects } = useProjects()
@@ -17,10 +18,10 @@ export default function Home() {
     <div className="space-y-8 h-full overflow-auto">
       {/* Welcome Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className={`text-3xl font-bold ${textColors.primary}`}>
           Welcome to DevBoard
         </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
+        <p className={`mt-2 ${textColors.secondary}`}>
           Your developer command center for managing projects, tasks, and codebases
         </p>
       </div>
@@ -33,7 +34,7 @@ export default function Home() {
               <FolderIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className={`text-2xl font-bold ${textColors.primary}`}>
                 {projects?.length ?? 0}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">Projects</p>
@@ -46,7 +47,7 @@ export default function Home() {
               <ListBulletIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className={`text-2xl font-bold ${textColors.primary}`}>
                 {activeTasks.length}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">Active Tasks</p>
@@ -59,7 +60,7 @@ export default function Home() {
               <CodeBracketIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className={`text-2xl font-bold ${textColors.primary}`}>
                 {codebases?.length ?? 0}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">Codebases</p>
@@ -76,11 +77,11 @@ export default function Home() {
               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                 <FolderIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h2 className={`text-lg font-semibold ${textColors.primary}`}>
                 Projects
               </h2>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className={`text-sm ${textColors.secondary}`}>
               Manage your development projects, specifications, and linked codebases
             </p>
           </Card>
@@ -92,11 +93,11 @@ export default function Home() {
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
                 <ListBulletIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h2 className={`text-lg font-semibold ${textColors.primary}`}>
                 Tasks
               </h2>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className={`text-sm ${textColors.secondary}`}>
               View and manage all tasks across projects in a unified kanban board
             </p>
           </Card>
@@ -108,11 +109,11 @@ export default function Home() {
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                 <CodeBracketIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h2 className={`text-lg font-semibold ${textColors.primary}`}>
                 Codebases
               </h2>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className={`text-sm ${textColors.secondary}`}>
               Manage code repositories, architecture docs, and worktree configurations
             </p>
           </Card>

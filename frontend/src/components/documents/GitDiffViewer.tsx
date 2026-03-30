@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useMemo, Fragment, startTransition, u
 import { useDiffReviewOptional } from '../../contexts/DiffReviewContext'
 import DiffLineCommentButton from './DiffLineCommentButton'
 import DiffLineCommentForm from './DiffLineCommentForm'
+import { surfaces, borderColors, statusColors, textColors } from '../../styles/designSystem'
 
 interface GitDiffViewerProps {
   diff: string
@@ -205,15 +206,15 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
   const getLineStyle = (type: DiffLine['type']) => {
     switch (type) {
       case 'hunk':
-        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium'
+        return `${statusColors.info.bg} ${statusColors.info.text} font-medium`
       case 'added':
-        return 'bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-200'
+        return `${statusColors.success.bg} ${statusColors.success.text}`
       case 'removed':
-        return 'bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200'
+        return `${statusColors.error.bg} ${statusColors.error.text}`
       case 'context':
-        return 'text-gray-700 dark:text-gray-300'
+        return textColors.secondary
       default:
-        return 'text-gray-700 dark:text-gray-300'
+        return textColors.secondary
     }
   }
 
@@ -269,10 +270,10 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
   const commentsEnabled = !!reviewContext && !!fileName
 
   return (
-    <div className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/[0.08] rounded-lg overflow-hidden ${className}`}>
+    <div className={`${surfaces.raised} border ${borderColors.default} rounded-lg overflow-hidden ${className}`}>
       {/* File Header - Clickable to expand/collapse */}
       <div
-        className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center space-x-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+        className={`${surfaces.sunken} px-4 py-2 border-b ${borderColors.default} flex items-center space-x-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Chevron icon */}
@@ -287,12 +288,12 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
           </span>
         )}
         {isNewFile && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 shrink-0">
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusColors.success.icon} ${statusColors.success.text} shrink-0`}>
             New
           </span>
         )}
         {isDeleted && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 shrink-0">
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusColors.error.icon} ${statusColors.error.text} shrink-0`}>
             Deleted
           </span>
         )}

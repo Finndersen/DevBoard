@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Modal, Button, Input, Textarea } from '../ui'
+import Alert from '../ui/Alert'
 import { useCreateCodebase } from '../../hooks/useCodebases'
 import type { Codebase, MergeMethod, BranchHandling } from '../../lib/api'
 
@@ -252,9 +253,7 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
         </div>
 
         {error && (
-          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-md">
-            {error}
-          </div>
+          <Alert variant="error">{error}</Alert>
         )}
 
         <div className="flex justify-end space-x-3 pt-4">

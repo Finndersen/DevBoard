@@ -4,7 +4,7 @@ import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, Cl
 import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, borderColors, surfaces, hoverColors, statusColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
 import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
@@ -108,10 +108,10 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
   }, [step.details])
 
   return (
-    <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg">
+    <div className={`border ${borderColors.default} rounded-lg`}>
       {/* Step Header */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
+        className={`flex items-center gap-3 px-4 py-3 cursor-pointer ${hoverColors.subtle} transition-colors`}
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -183,7 +183,7 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleStartEditing() }}
-                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-all text-gray-500 dark:text-gray-400"
+                  className={`absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded text-xs ${surfaces.raised} border ${borderColors.default} shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all ${textColors.muted}`}
                 >
                   <PencilIcon className="w-3 h-3" />
                   Edit
@@ -196,14 +196,14 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
           {step.outcome && (
             <div className="mt-4">
               <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${
-                step.status === 'failed' ? 'text-red-500' : 'text-green-600 dark:text-green-400'
+                step.status === 'failed' ? statusColors.error.text : statusColors.success.text
               }`}>
                 {step.status === 'failed' ? 'Error' : 'Outcome'}
               </h4>
               <div className={`p-3 rounded-md text-sm ${
                 step.status === 'failed'
-                  ? 'bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30'
-                  : 'bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30'
+                  ? `${statusColors.error.bg} border ${statusColors.error.border}`
+                  : `${statusColors.success.bg} border ${statusColors.success.border}`
               }`}>
                 <Markdown>{step.outcome}</Markdown>
               </div>
@@ -238,7 +238,7 @@ function StructuredPlanView({ plan, taskId, onPlanUpdated }: StructuredPlanViewP
       {plan.overview && (
         <div>
           <h3 className={`text-sm font-semibold ${textColors.primary} mb-2`}>Plan Overview</h3>
-          <div className="p-3 bg-gray-50 dark:bg-white/[0.05] rounded-lg border border-gray-200 dark:border-white/[0.08]">
+          <div className={`p-3 ${surfaces.sunken} rounded-lg border ${borderColors.default}`}>
             <Markdown>{plan.overview}</Markdown>
           </div>
         </div>

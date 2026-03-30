@@ -415,7 +415,7 @@ describe('ToolCallDisplay', () => {
 
       // Check for error border styling on the result container with theme-aware classes
       const resultContainer = errorContent.closest('.px-3')
-      expect(resultContainer).toHaveClass('border-red-300', 'dark:border-red-800', 'bg-red-100', 'dark:bg-red-900/10')
+      expect(resultContainer).toHaveClass('border-red-200', 'dark:border-red-800', 'bg-red-50', 'dark:bg-red-900/20')
     })
 
     it('handles multi-line result content with whitespace preservation', async () => {
@@ -739,7 +739,7 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getAllByRole('button')[0])
 
-      expect(screen.getByText('Conversation: 42')).toBeInTheDocument()
+      expect(screen.getByText('conversation: 42')).toBeInTheDocument()
     })
 
     it('does not display conversation_id when null', async () => {
@@ -753,7 +753,7 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      expect(screen.queryByText(/^Conversation:/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/^conversation:/)).not.toBeInTheDocument()
     })
 
     it('falls back to formatted JSON when result content has invalid shape', async () => {

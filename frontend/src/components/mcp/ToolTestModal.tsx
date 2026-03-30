@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Modal, Button, Input } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors, surfaces, borderColors } from '../../styles/designSystem'
 import { useEditableField } from '../../hooks/useEditableField'
 import { apiClient } from '../../lib/api'
 import type { MCPTool } from '../../lib/api'
@@ -150,7 +150,7 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
     >
       <div className="flex flex-col flex-1 min-h-0">
         {/* Description — full-width at the top */}
-        <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 mb-4">
+        <div className={`border ${borderColors.default} rounded-lg p-3 mb-4`}>
           <div className="flex items-center justify-between mb-2">
             <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary}`}>Description</h4>
             {!isEditingDesc && (
@@ -202,7 +202,7 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
         </div>
 
         {/* Test Tool section — parameters + results side-by-side */}
-        <div className="border border-gray-200 dark:border-white/[0.08] rounded-lg p-4 flex-1 min-h-0 flex flex-col">
+        <div className={`border ${borderColors.default} rounded-lg p-4 flex-1 min-h-0 flex flex-col`}>
           <h4 className={`text-sm font-medium ${textColors.primary} mb-3 shrink-0`}>Test Tool</h4>
           <div className="flex gap-6 flex-1 min-h-0">
             <form onSubmit={handleSubmit} className="flex flex-col w-2/5 min-w-0 shrink-0 min-h-0">
@@ -271,24 +271,24 @@ export function ToolTestModal({ isOpen, onClose, tool, serverId, onToolUpdate }:
             </form>
 
             {/* Result */}
-            <div className="flex-1 min-w-0 border-l border-gray-200 dark:border-white/[0.08] pl-6">
+            <div className={`flex-1 min-w-0 border-l ${borderColors.default} pl-6`}>
               <h4 className={`text-xs font-medium uppercase tracking-wide ${textColors.secondary} mb-2`}>
                 {error ? 'Error' : 'Result'}
               </h4>
               {error ? (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                  <pre className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono">
+                <div className={`p-3 ${statusColors.error.bg} border ${statusColors.error.border} rounded-md`}>
+                  <pre className={`text-sm ${statusColors.error.text} whitespace-pre-wrap font-mono`}>
                     {error}
                   </pre>
                 </div>
               ) : result !== null ? (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-md max-h-[60vh] overflow-auto">
+                <div className={`p-3 ${surfaces.sunken} border ${borderColors.default} rounded-md max-h-[60vh] overflow-auto`}>
                   <pre className={`text-sm ${textColors.primary} whitespace-pre-wrap font-mono`}>
                     {result || '(empty response)'}
                   </pre>
                 </div>
               ) : (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-md">
+                <div className={`p-3 ${surfaces.sunken} border ${borderColors.default} rounded-md`}>
                   <p className={`text-sm ${textColors.secondary} italic`}>
                     Run the tool to see results here
                   </p>

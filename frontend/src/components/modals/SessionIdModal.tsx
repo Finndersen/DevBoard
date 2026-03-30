@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { surfaces, borderColors } from '../../styles/designSystem'
 
 interface SessionIdModalProps {
   isOpen: boolean
@@ -43,7 +44,7 @@ export default function SessionIdModal({
         </p>
 
         <div className="relative">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+          <div className={`${surfaces.sunken} rounded-lg p-3 border ${borderColors.default}`}>
             <code className="text-sm text-gray-800 dark:text-gray-200 break-all select-all">
               {sessionId}
             </code>

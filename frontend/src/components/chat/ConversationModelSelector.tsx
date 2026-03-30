@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import type { ConversationResponse, ModelInfo, UpdateConversationModelRequest, AgentConfigurationResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
+import { surfaces, borderColors, statusColors } from '../../styles/designSystem'
 
 interface ConversationModelSelectorProps {
   conversationId: number
@@ -156,7 +157,7 @@ export default function ConversationModelSelector({
             />
 
             {/* Dropdown options */}
-            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-white/[0.08] z-20 max-h-64 overflow-y-auto">
+            <div className={`absolute right-0 mt-2 w-64 ${surfaces.raised} rounded-md shadow-lg border ${borderColors.default} z-20 max-h-64 overflow-y-auto`}>
               {/* Show "Default" option for engines that don't require model selection */}
               {!engineRequiresModelSelection() && (
                 <button
@@ -165,7 +166,7 @@ export default function ConversationModelSelector({
                   disabled={updating}
                   className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 ${
                     conversation.model_id === null
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                      ? `${statusColors.info.bg} ${statusColors.info.text} font-medium`
                       : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >
@@ -184,7 +185,7 @@ export default function ConversationModelSelector({
                   disabled={updating}
                   className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 ${
                     model.id === conversation.model_id
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                      ? `${statusColors.info.bg} ${statusColors.info.text} font-medium`
                       : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >

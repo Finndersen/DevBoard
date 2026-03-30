@@ -1,3 +1,5 @@
+import { borderColors, surfaces, hoverColors, textColors } from '../../styles/designSystem'
+
 interface CollapsedPanelStripProps {
   icon: React.ReactNode
   label: string
@@ -29,7 +31,7 @@ export default function CollapsedPanelStrip({
         transition-all duration-200
         ${highlightStrip
           ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/15'
-          : 'border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-white/[0.06]'
+          : `${borderColors.default} ${surfaces.raised} hover:border-blue-400 dark:hover:border-blue-500 ${hoverColors.subtle}`
         }
         ${needsAttention && !showStreamingDot ? 'animate-attention-pulse' : ''}
         ${className}
@@ -40,7 +42,7 @@ export default function CollapsedPanelStrip({
         style={{ writingMode: 'vertical-rl' }}
       >
         <span style={{ writingMode: 'horizontal-tb' }}>{icon}</span>
-        <span className={highlightStrip ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}>
+        <span className={highlightStrip ? 'text-blue-600 dark:text-blue-400' : textColors.muted}>
           {label}
         </span>
         {showStreamingDot && (

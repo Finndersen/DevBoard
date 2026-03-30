@@ -8,6 +8,7 @@ import type {
   UpdateAgentConfigurationRequest
 } from '../../lib/api'
 import { apiClient } from '../../lib/api'
+import { textColors, surfaces, borderColors, statusColors } from '../../styles/designSystem'
 
 interface AgentConfigurationSelectorProps {
   agentRole: string
@@ -180,7 +181,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
 
   if (error || !configuration || !availableModels) {
     return (
-      <div className="text-sm text-red-600 dark:text-red-400">
+      <div className={`text-sm ${statusColors.error.text}`}>
         {error || 'Failed to load agent configuration'}
       </div>
     )
@@ -193,7 +194,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+          <h4 className={`text-sm font-medium ${textColors.primary}`}>
             {agentName}
           </h4>
         </div>
@@ -209,7 +210,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
               type="button"
               onClick={() => setIsEngineOpen(!isEngineOpen)}
               disabled={saving}
-              className={`relative w-44 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
+              className={`relative w-44 ${surfaces.raised} border ${borderColors.input} rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${textColors.primary} ${
                 saving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -226,7 +227,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
             </button>
 
             {isEngineOpen && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+              <div className={`absolute z-10 mt-1 w-full ${surfaces.raised} shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none`}>
                 {configuration.available_engines.map((engine) => {
                   const isUnavailable = !engine.is_available
                   return (
@@ -274,7 +275,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
               type="button"
               onClick={() => setIsModelOpen(!isModelOpen)}
               disabled={saving}
-              className={`relative w-60 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
+              className={`relative w-60 ${surfaces.raised} border ${borderColors.input} rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${textColors.primary} ${
                 saving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -291,7 +292,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
             </button>
 
             {isModelOpen && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+              <div className={`absolute z-10 mt-1 w-full ${surfaces.raised} shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none`}>
                 {/* Show "Default" option for engines that don't require model selection */}
                 {!selectedEngineRequiresModelSelection() && (
                   <button

@@ -8,6 +8,7 @@ import {
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
+import { surfaces, borderColors } from '../../styles/designSystem'
 
 function ThinkingAnnotation({ durationText, thinkingText }: { durationText: string; thinkingText: string | null }) {
   const [expanded, setExpanded] = useState(false)
@@ -48,7 +49,7 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
     <div className="flex w-full min-w-0">
       <button
         onClick={hasOutput ? () => setIsExpanded(!isExpanded) : undefined}
-        className={`relative group rounded-md overflow-hidden max-w-full min-w-[200px] text-left bg-gray-100 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
+        className={`relative group rounded-md overflow-hidden max-w-full min-w-[200px] text-left ${surfaces.sunken} border ${borderColors.default} ${hasOutput ? 'hover:bg-gray-150 dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'} transition-colors ${highlightRing}`}
       >
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -80,9 +81,9 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
         </span>
 
         {isExpanded && hasOutput && (
-          <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>
-            <div className="px-3 py-2 bg-gray-100 dark:bg-white/[0.05]">
-              <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-white/[0.08] select-text cursor-text whitespace-pre-wrap overflow-x-auto">
+          <div className={`border-t ${borderColors.default} select-text min-w-0`} onClick={(e) => e.stopPropagation()}>
+            <div className={`px-3 py-2 ${surfaces.sunken}`}>
+              <pre className={`text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border ${borderColors.default} select-text cursor-text whitespace-pre-wrap overflow-x-auto`}>
                 {message.output}
               </pre>
             </div>

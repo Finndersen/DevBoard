@@ -7,7 +7,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
 import { Button, ConfirmDialog } from '../ui'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors } from '../../styles/designSystem'
 import type { MCPServerDetail as MCPServerDetailType, MCPTool, HttpMCPConfig } from '../../lib/api'
 import { ToolTestModal } from './ToolTestModal'
 
@@ -253,8 +253,8 @@ export function MCPServerDetail({
         </div>
 
         {server.last_verified_error && (
-          <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-sm text-red-600 dark:text-red-400 font-mono">
+          <div className={`mt-3 p-3 ${statusColors.error.bg} border ${statusColors.error.border} rounded-lg`}>
+            <p className={`text-sm ${statusColors.error.text} font-mono`}>
               {server.last_verified_error}
             </p>
           </div>

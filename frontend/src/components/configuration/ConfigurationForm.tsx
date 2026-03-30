@@ -3,6 +3,7 @@ import { CheckCircleIcon, XCircleIcon, ExclamationCircleIcon } from '@heroicons/
 import { apiClient } from '../../lib/api'
 import type { ConfigurationDetailResponse } from '../../lib/api'
 import { ConfigurationField } from './ConfigurationField'
+import Alert from '../ui/Alert'
 
 interface ConfigurationFormProps {
   config: ConfigurationDetailResponse
@@ -243,64 +244,30 @@ export const ConfigurationForm: React.FC<ConfigurationFormProps> = ({
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
-          <div className="flex">
-            <XCircleIcon className="h-5 w-5 text-red-400" />
-            <div className="ml-3">
-              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-            </div>
-          </div>
-        </div>
+        <Alert variant="error" className="mb-4" icon={<XCircleIcon className="h-5 w-5" />}>
+          {error}
+        </Alert>
       )}
 
       {config.validation_errors && config.validation_errors.length > 0 && (
-        <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-4">
-          <div className="flex">
-            <ExclamationCircleIcon className="h-5 w-5 text-yellow-400" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Configuration Issues:</p>
-              <ul className="mt-2 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
-                {config.validation_errors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
+        <Alert variant="warning" className="mb-4" title="Configuration Issues:" icon={<ExclamationCircleIcon className="h-5 w-5" />}>
+          <ul className="mt-2 list-disc list-inside">
+            {config.validation_errors.map((error, index) => (
+              <li key={index}>{error}</li>
+            ))}
+          </ul>
+        </Alert>
       )}
 
       {testResult && (
-        <div className={`mb-4 border rounded-md p-4 ${
-          testResult.success 
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
-            : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-        }`}>
-          <div className="flex">
-            {testResult.success ? (
-              <CheckCircleIcon className="h-5 w-5 text-green-400" />
-            ) : (
-              <XCircleIcon className="h-5 w-5 text-red-400" />
-            )}
-            <div className="ml-3">
-              <p className={`text-sm font-medium ${
-                testResult.success 
-                  ? 'text-green-800 dark:text-green-200' 
-                  : 'text-red-800 dark:text-red-200'
-              }`}>
-                Connection Test {testResult.success ? 'Successful' : 'Failed'}
-              </p>
-              {testResult.message && (
-                <p className={`mt-1 text-sm ${
-                  testResult.success 
-                    ? 'text-green-600 dark:text-green-300' 
-                    : 'text-red-600 dark:text-red-300'
-                }`}>
-                  {testResult.message}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+        <Alert
+          variant={testResult.success ? 'success' : 'error'}
+          className="mb-4"
+          title={`Connection Test ${testResult.success ? 'Successful' : 'Failed'}`}
+          icon={testResult.success ? <CheckCircleIcon className="h-5 w-5" /> : <XCircleIcon className="h-5 w-5" />}
+        >
+          {testResult.message && <p className="mt-1 text-sm">{testResult.message}</p>}
+        </Alert>
       )}
 
       <form className="space-y-6">

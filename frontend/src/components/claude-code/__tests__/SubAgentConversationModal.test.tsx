@@ -189,7 +189,7 @@ describe('SubAgentConversationModal', () => {
     expect(screen.queryByText('Bash')).not.toBeInTheDocument()
   })
 
-  it('displays agent ID in the modal header', () => {
+  it('displays subtitle in the modal header when provided', () => {
     render(
       <SubAgentConversationModal
         isOpen={true}

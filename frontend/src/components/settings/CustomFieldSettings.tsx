@@ -4,7 +4,7 @@ import { Card, Button, Modal, ConfirmDialog } from '../ui'
 import { CustomFieldForm } from './CustomFieldForm'
 import { apiClient } from '../../lib/api'
 import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate, CustomFieldEntityType } from '../../lib/api'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors, borderColors } from '../../styles/designSystem'
 
 const ENTITY_TYPE_LABELS: Record<'task' | 'project', string> = {
   task: 'Task',
@@ -161,7 +161,7 @@ export function CustomFieldSettings() {
         </p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md text-sm">
+          <div className={`mb-4 p-3 ${statusColors.error.bg} ${statusColors.error.text} rounded-md text-sm`}>
             {error}
           </div>
         )}
@@ -191,7 +191,7 @@ export function CustomFieldSettings() {
             {fields.map(field => (
               <div
                 key={field.id}
-                className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
+                className={`flex items-center justify-between p-4 border ${borderColors.default} rounded-lg hover:border-gray-300 dark:hover:border-gray-500 transition-colors`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-3">

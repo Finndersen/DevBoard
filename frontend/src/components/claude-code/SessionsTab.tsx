@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { ArrowPathIcon, ChevronLeftIcon } from '@heroicons/react/24/outline'
-import { textColors } from '../../styles/designSystem'
+import { textColors, statusColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
 import type { ClaudeCodeProject, ClaudeCodeSession, SessionSearchResult } from '../../lib/api'
 import { ProjectListPanel } from './ProjectListPanel'
@@ -220,7 +220,7 @@ export default function SessionsTab() {
                 </div>
               ) : projectsError ? (
                 <div className="px-4 py-4">
-                  <p className="text-sm text-red-600 dark:text-red-400">{projectsError}</p>
+                  <p className={`text-sm ${statusColors.error.text}`}>{projectsError}</p>
                   <button onClick={loadProjects} className={`mt-1 text-xs ${textColors.accent} hover:underline`}>
                     Retry
                   </button>

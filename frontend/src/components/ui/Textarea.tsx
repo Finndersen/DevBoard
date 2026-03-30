@@ -1,5 +1,6 @@
 import type { TextareaHTMLAttributes } from 'react'
 import { standardTextareaClasses } from '../../styles/inputStyles'
+import { textColors, statusColors } from '../../styles/designSystem'
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
@@ -24,7 +25,7 @@ export default function Textarea({
       {label && (
         <label 
           htmlFor={textareaId} 
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          className={`block text-sm font-medium ${textColors.secondary} mb-2`}
         >
           {label}
         </label>
@@ -42,11 +43,11 @@ export default function Textarea({
       />
       
       {error && (
-        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className={`mt-1 text-sm ${statusColors.error.text}`}>{error}</p>
       )}
-      
+
       {helpText && !error && (
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helpText}</p>
+        <p className={`mt-1 text-sm ${textColors.muted}`}>{helpText}</p>
       )}
     </div>
   )

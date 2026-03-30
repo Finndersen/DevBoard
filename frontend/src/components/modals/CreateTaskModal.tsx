@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
+import Alert from '../ui/Alert'
 import { apiClient } from '../../lib/api'
 import type { Codebase, CustomFieldDefinition } from '../../lib/api'
 import { useProjects, useProjectCodebases } from '../../hooks'
@@ -266,22 +267,20 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
               {codebasesLoading ? (
                 <div className="text-sm text-gray-500 dark:text-gray-400">Loading codebases...</div>
               ) : !codebases || codebases.length === 0 ? (
-                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
-                  <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
-                    No codebases are linked to this project.
-                  </p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                <Alert variant="warning">
+                  <p className="mb-2">No codebases are linked to this project.</p>
+                  <p>
                     Please{' '}
                     <Link
                       to={`/projects/${selectedProjectId}?tab=settings`}
                       onClick={onClose}
-                      className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
+                      className="font-medium underline hover:opacity-80"
                     >
                       link a codebase in project settings
                     </Link>
                     {' '}before creating a task.
                   </p>
-                </div>
+                </Alert>
               ) : (
                 <select
                   value={newTask.codebase_id ?? ''}

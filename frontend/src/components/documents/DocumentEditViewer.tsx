@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import type { PendingApproval } from '../../lib/api'
+import { surfaces, borderColors, textColors } from '../../styles/designSystem'
 import {
   generateUnifiedDiff,
   createInlineHighlight,
@@ -73,7 +74,7 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
   const renderUnifiedDiff = () => {
     if (!edits || edits.length === 0) {
       return (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div className={`text-center py-8 ${textColors.muted}`}>
           No edits available to generate unified diff
         </div>
       )
@@ -92,13 +93,13 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
     }
 
     return (
-      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg overflow-hidden">
-        <div className="bg-gray-100 dark:bg-white/[0.05] px-4 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+      <div className={`${surfaces.sunken} border ${borderColors.default} rounded-lg overflow-hidden`}>
+        <div className={`${surfaces.sunken} px-4 py-2 border-b ${borderColors.default} flex items-center justify-between`}>
           <div className="flex items-center space-x-3">
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            <span className={`text-xs font-medium ${textColors.secondary}`}>
               Unified Diff
             </span>
-            <span className="text-xs text-gray-500 dark:text-gray-500">
+            <span className={`text-xs ${textColors.muted}`}>
               {formatDiffStats(stats)}
             </span>
           </div>
@@ -139,7 +140,7 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
   const renderCards = () => {
     if (!edits || edits.length === 0) {
       return (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div className={`text-center py-8 ${textColors.muted}`}>
           No individual edits available
         </div>
       )
@@ -152,12 +153,12 @@ export default function DocumentEditViewer({ approval, className = '' }: Documen
           const editStats = calculateDiffStats([edit])
 
           return (
-            <div key={index} className="border border-gray-200 dark:border-white/[0.08] rounded-lg overflow-hidden">
-              <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-white/[0.08] flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            <div key={index} className={`border ${borderColors.default} rounded-lg overflow-hidden`}>
+              <div className={`${surfaces.sunken} px-4 py-2 border-b ${borderColors.default} flex items-center justify-between`}>
+                <span className={`text-sm font-medium ${textColors.secondary}`}>
                   Change {index + 1} of {edits.length}
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-500">
+                <span className={`text-xs ${textColors.muted}`}>
                   {formatDiffStats(editStats)}
                 </span>
               </div>

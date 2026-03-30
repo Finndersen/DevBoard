@@ -1,6 +1,7 @@
 /**
  * Shared styling utilities for message components
  */
+import { textColors, borderColors, colors } from './designSystem'
 
 export const getMessageAlignment = (_isUser: boolean) =>
   'justify-start'
@@ -9,7 +10,7 @@ export const getMessageContainerAlignment = (_isUser: boolean) =>
   'items-start'
 
 export const getUserMessageClasses = (additionalClasses?: string) => {
-  return `w-full px-3 py-2 text-sm bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white ${additionalClasses || ''}`
+  return `w-full px-3 py-2 text-sm bg-gray-100 dark:bg-white/[0.06] border ${borderColors.default} ${textColors.primary} ${additionalClasses || ''}`
 }
 
 export const getMessageBubbleClasses = (isUser: boolean, additionalClasses?: string) => {
@@ -17,13 +18,13 @@ export const getMessageBubbleClasses = (isUser: boolean, additionalClasses?: str
     return getUserMessageClasses(additionalClasses)
   }
   const baseClasses = 'rounded-lg px-3 py-1.5 text-sm'
-  const colorClasses = 'bg-gray-100 dark:bg-white/[0.03] text-gray-900 dark:text-white'
+  const colorClasses = `${colors.gray[100]} ${textColors.primary}`
 
   return `${baseClasses} ${colorClasses} ${additionalClasses || ''}`
 }
 
 export const getPendingMessageBubbleClasses = (status: 'pending' | 'sent' | 'awaiting_approval' | 'failed') => {
-  const baseClasses = 'w-full px-3 py-2 text-sm text-gray-900 dark:text-white'
+  const baseClasses = `w-full px-3 py-2 text-sm ${textColors.primary}`
 
   switch (status) {
     case 'failed':

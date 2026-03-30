@@ -11,7 +11,7 @@ import { LanguageModelSettings } from '../components/settings/LanguageModelSetti
 import { useDarkMode } from '../contexts/DarkModeContext'
 import type { ConfigurationDetailResponse } from '../lib/api'
 import { Card } from '../components/ui'
-import { textColors } from '../styles/designSystem'
+import { textColors, borderColors } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 
 export default function Settings() {
@@ -178,7 +178,7 @@ export default function Settings() {
 
       <div className="flex-1 overflow-auto py-6">
       {/* Navigation Tabs */}
-      <div className="border-b border-gray-200 dark:border-white/[0.08] mb-8">
+      <div className={`border-b ${borderColors.default} mb-8`}>
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'integrations' as const, name: 'Integrations', icon: LinkIcon },
@@ -209,7 +209,7 @@ export default function Settings() {
           {/* Combined Integration List */}
           <div className="md:col-span-1">
             <Card padding="none">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
+              <div className={`px-6 py-4 border-b ${borderColors.default}`}>
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>All Integrations</h3>
                 <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Configure external connections
@@ -253,10 +253,10 @@ export default function Settings() {
             ) : (
               <Card className="p-8 text-center">
                 <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                <h3 className={`mt-4 text-lg font-medium ${textColors.primary}`}>
                   Select an integration
                 </h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                <p className={`mt-2 text-sm ${textColors.secondary}`}>
                   Choose an integration from the list to configure its settings
                 </p>
               </Card>
@@ -274,7 +274,7 @@ export default function Settings() {
           {/* Agent Role List */}
           <div className="md:col-span-1">
             <Card padding="none">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
+              <div className={`px-6 py-4 border-b ${borderColors.default}`}>
                 <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent Roles</h3>
                 <p className={`text-sm ${textColors.secondary} mt-1`}>
                   Configure AI agent behavior
@@ -324,7 +324,7 @@ export default function Settings() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">Dark Mode</h4>
+                  <h4 className={`text-sm font-medium ${textColors.primary}`}>Dark Mode</h4>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Toggle dark mode theme</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -338,8 +338,8 @@ export default function Settings() {
                 </label>
               </div>
               
-              <div className="border-t border-gray-200 dark:border-white/[0.08] pt-6">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">API Configuration</h4>
+              <div className={`border-t ${borderColors.default} pt-6`}>
+                <h4 className={`text-sm font-medium ${textColors.primary} mb-4`}>API Configuration</h4>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

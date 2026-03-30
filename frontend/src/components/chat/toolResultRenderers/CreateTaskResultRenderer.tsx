@@ -6,6 +6,7 @@
 import { useNavigate } from 'react-router-dom'
 
 import type { RichResultRendererProps } from './index'
+import { surfaces, statusColors } from '../../../styles/designSystem'
 
 /**
  * Expected data shape from the create_task tool.
@@ -81,7 +82,7 @@ export default function CreateTaskResultRenderer({ data }: RichResultRendererPro
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Branch: </span>
-          <code className="bg-gray-100 dark:bg-white/[0.05] px-1 rounded">{data.branch_name}</code>
+          <code className={`${surfaces.sunken} px-1 rounded`}>{data.branch_name}</code>
         </div>
         <div>
           <span className="text-gray-500 dark:text-gray-400">Codebase: </span>
@@ -100,7 +101,7 @@ export default function CreateTaskResultRenderer({ data }: RichResultRendererPro
               handleNavigate(e as unknown as React.MouseEvent)
             }
           }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 ${statusColors.info.bg} border ${statusColors.info.border} rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer`}
         >
           <svg
             className="w-3.5 h-3.5"

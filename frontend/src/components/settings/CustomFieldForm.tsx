@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Button, Input } from '../ui'
 import type { CustomFieldDefinition, CustomFieldCreate, CustomFieldUpdate, CustomFieldType, CustomFieldEntityType } from '../../lib/api'
+import { statusColors, borderColors } from '../../styles/designSystem'
 
 interface CustomFieldFormProps {
   field: CustomFieldDefinition | null
@@ -90,7 +91,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md text-sm">
+        <div className={`p-3 ${statusColors.error.bg} ${statusColors.error.text} rounded-md text-sm`}>
           {error}
         </div>
       )}
@@ -206,7 +207,7 @@ export function CustomFieldForm({ field, entityType, onSubmit, onCancel, isSavin
         </label>
       </div>
 
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-white/[0.08]">
+      <div className={`flex justify-end space-x-3 pt-4 border-t ${borderColors.default}`}>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>

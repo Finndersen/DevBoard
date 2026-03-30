@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react'
 import type { ConversationEvent, ToolCall, ToolResult } from '../../lib/api'
+import { textColors } from '../../styles/designSystem'
 import ConversationMessageComponent from './ConversationMessage'
 import PendingMessageComponent from './PendingMessage'
 import ToolCallGroupDisplay from './ToolCallGroupDisplay'
@@ -205,7 +206,7 @@ function ConversationMessageList({
 
   if (showEmptyState) {
     return (
-      <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+      <div className={`text-center ${textColors.secondary} py-8`}>
         <p className="text-sm">{emptyStateMessage}</p>
         <p className="text-xs mt-2">I can help with code analysis, documentation, and project insights.</p>
       </div>

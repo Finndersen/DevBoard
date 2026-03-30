@@ -4,7 +4,7 @@ import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/sol
 import { apiClient } from '../../lib/api'
 import type { TodoItem } from '../../lib/api'
 import { useToolResultHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
-import { textColors } from '../../styles/designSystem'
+import { textColors, hoverColors, statusColors, borderColors } from '../../styles/designSystem'
 
 interface TodoPanelProps {
   conversationId: number
@@ -95,12 +95,12 @@ const TodoPanel = ({ conversationId, engine }: TodoPanelProps) => {
   }
 
   return (
-    <div className="border-b border-gray-200 dark:border-gray-600 flex-shrink-0">
+    <div className={`border-b ${borderColors.default} flex-shrink-0`}>
       {/* Collapsed bar */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className={`w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors ${
-          hasUpdates ? 'animate-pulse bg-blue-50 dark:bg-blue-900/20' : ''
+        className={`w-full px-3 py-2 flex items-center justify-between ${hoverColors.subtle} transition-colors ${
+          hasUpdates ? `animate-pulse ${statusColors.info.bg}` : ''
         }`}
       >
         <div className="flex items-center space-x-2 min-w-0">

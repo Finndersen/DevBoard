@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { CpuChipIcon } from '@heroicons/react/24/outline'
 import type { PRFeedbackResponse, PRFeedbackReview, PRFeedbackCommentThread } from '../../lib/api'
+import { textColors, surfaces, borderColors, statusColors } from '../../styles/designSystem'
 
 interface CommentsTabProps {
   prFeedback: PRFeedbackResponse
@@ -16,9 +17,9 @@ function formatTimestamp(dateStr: string | null): string {
 function getReviewStateBadge(state: string) {
   switch (state.toUpperCase()) {
     case 'APPROVED':
-      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Approved</span>
+      return <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${statusColors.success.icon} ${statusColors.success.text}`}>Approved</span>
     case 'CHANGES_REQUESTED':
-      return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Changes Requested</span>
+      return <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${statusColors.error.icon} ${statusColors.error.text}`}>Changes Requested</span>
     case 'COMMENTED':
       return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700 dark:bg-white/[0.05] dark:text-gray-300">Commented</span>
     default:
@@ -162,7 +163,7 @@ function FileThreadSection({ thread, onSubmit }: { thread: PRFeedbackCommentThre
         )}
       </div>
       {thread.original.diff_hunk && (
-        <pre className="text-xs font-mono bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] rounded p-2 mb-2 overflow-x-auto whitespace-pre">
+        <pre className={`text-xs font-mono ${surfaces.sunken} border ${borderColors.default} rounded p-2 mb-2 overflow-x-auto whitespace-pre`}>
           {thread.original.diff_hunk}
         </pre>
       )}
@@ -202,7 +203,7 @@ export function CommentsTab({ prFeedback, onSubmitComments }: CommentsTabProps) 
       {reviewsWithBody.length > 0 && (
         <div>
           {showHeadings && (
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Reviews</h3>
+            <h3 className={`text-sm font-medium ${textColors.primary} mb-3`}>Reviews</h3>
           )}
           <div className="space-y-3">
             {reviewsWithBody.map((review) => (
@@ -215,7 +216,7 @@ export function CommentsTab({ prFeedback, onSubmitComments }: CommentsTabProps) 
       {generalThreads.length > 0 && (
         <div>
           {showHeadings && (
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">General Comments</h3>
+            <h3 className={`text-sm font-medium ${textColors.primary} mb-3`}>General Comments</h3>
           )}
           <div className="space-y-3">
             {generalThreads.map((thread) => (
@@ -228,7 +229,7 @@ export function CommentsTab({ prFeedback, onSubmitComments }: CommentsTabProps) 
       {fileThreads.length > 0 && (
         <div>
           {showHeadings && (
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">File Comments</h3>
+            <h3 className={`text-sm font-medium ${textColors.primary} mb-3`}>File Comments</h3>
           )}
           <div className="space-y-3">
             {fileThreads.map((thread) => (

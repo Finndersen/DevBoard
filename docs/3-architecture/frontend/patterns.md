@@ -45,6 +45,72 @@ function useProject(id: number): { project: Project | null, loading: boolean, er
 
 **Theme-Aware**: All components support light/dark mode via Tailwind `dark:` prefix.
 
+### Token Categories
+
+Import tokens from `styles/designSystem.ts`:
+
+```typescript
+import { textColors, borderColors, surfaces, statusColors, hoverColors, focusStyles } from '../styles/designSystem'
+```
+
+**`textColors`** — Semantic text colors:
+- `textColors.primary` — `text-gray-900 dark:text-white` — headings, labels, primary content
+- `textColors.secondary` — `text-gray-600 dark:text-gray-400` — descriptions, subtitles
+- `textColors.muted` — `text-gray-500 dark:text-gray-500` — placeholders, timestamps, disabled
+- `textColors.accent` — `text-blue-600 dark:text-blue-400` — links, interactive elements
+
+**`borderColors`** — Semantic border colors:
+- `borderColors.default` — `border-gray-200 dark:border-white/[0.08]` — panels, cards, dividers
+- `borderColors.input` — `border-gray-300 dark:border-gray-600` — form inputs, selects
+- `borderColors.focus` — focus ring styles for interactive elements
+
+**`surfaces`** — Background surface levels:
+- `surfaces.base` — page/app background
+- `surfaces.raised` — `bg-white dark:bg-gray-800` — cards, modals, dropdowns, panels
+- `surfaces.sunken` — `bg-gray-50 dark:bg-white/[0.05]` — inset sections, code blocks, secondary areas
+- `surfaces.overlay` — modal backdrop background
+
+**`statusColors`** — Semantic status color sets; each provides `bg`, `text`, `border`, `icon`:
+- `statusColors.error` — red variants for error states
+- `statusColors.warning` — amber variants for warnings
+- `statusColors.success` — green variants for success states
+- `statusColors.info` — blue variants for informational content
+
+**`hoverColors`** — Standardised hover backgrounds:
+- `hoverColors.subtle` — `hover:bg-gray-50 dark:hover:bg-white/[0.05]` — list rows, sidebar items
+- `hoverColors.default` — `hover:bg-gray-100 dark:hover:bg-white/[0.08]` — buttons, clickable elements
+
+**Other tokens**: `focusStyles` (focus ring), `transitions` (transition utilities), `layouts` (common flex/grid patterns)
+
+### Usage Guidelines
+
+**Use tokens for individual class replacement** — when a single Tailwind class needs a semantic equivalent:
+
+```typescript
+// Before
+<h2 className="text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/[0.08]">
+
+// After
+<h2 className={`${textColors.primary} border-b ${borderColors.default}`}>
+```
+
+**Use `Surface` or `Alert` UI components** — when the full component pattern applies (container with bg + border + rounded, or status message box):
+
+```typescript
+// Container with raised surface
+<Surface variant="raised" padding="md">…</Surface>
+
+// Status message
+<Alert variant="error" title="Failed to load">Details here</Alert>
+```
+
+**Token vs component decision guide**:
+- Single class replacement → token
+- Full container (bg + border + rounded + padding) → `<Surface>`
+- Full status message (colored box with optional title/icon) → `<Alert>`
+- Error display with retry → `<ErrorMessage>` (wraps `<Alert variant="error">`)
+- Elevated container card → `<Card>` (wraps `<Surface variant="raised">`)
+
 ## Type-Safe API Integration
 
 **Comprehensive Interfaces**: Full TypeScript coverage from API responses to UI components (`frontend/src/lib/api.ts`).

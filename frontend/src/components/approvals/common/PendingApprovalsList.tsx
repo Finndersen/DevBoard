@@ -3,6 +3,7 @@ import { ExclamationTriangleIcon, CheckIcon, XMarkIcon } from '@heroicons/react/
 import DocumentEditApproval from '../documents/DocumentEditApproval'
 import type { PendingApproval, ToolApprovalDecision, ToolApprovalRequest } from '../../../lib/api'
 import { standardFeedbackTextareaClasses } from '../../../styles/inputStyles'
+import { surfaces, statusColors } from '../../../styles/designSystem'
 
 interface PendingApprovalsListProps {
   approvals: PendingApproval[]
@@ -109,7 +110,7 @@ export default function PendingApprovalsList({
 
       {/* Global Feedback for Batch Operations */}
       {approvals.length > 1 && (
-        <div className="p-3 bg-gray-50 dark:bg-white/[0.05] rounded-lg">
+        <div className={`p-3 ${surfaces.sunken} rounded-lg`}>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Global feedback (applies to all tools):
           </label>
@@ -154,15 +155,15 @@ export default function PendingApprovalsList({
 
       {/* Batch Decision Submission */}
       {hasPendingDecisions && (
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className={`p-3 ${statusColors.info.bg} rounded-lg border ${statusColors.info.border}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+              <p className={`text-sm font-medium ${statusColors.info.text}`}>
                 {Object.keys(decisions).length} of {approvals.length} decisions made
               </p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">
-                {allDecisionsMade 
-                  ? 'Ready to submit all decisions' 
+              <p className={`text-xs ${statusColors.info.text}`}>
+                {allDecisionsMade
+                  ? 'Ready to submit all decisions'
                   : 'Make decisions for remaining tools, or submit partial decisions'
                 }
               </p>
@@ -179,7 +180,7 @@ export default function PendingApprovalsList({
       )}
 
       {/* Help Text */}
-      <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
+      <div className={`p-3 ${surfaces.sunken} rounded text-xs text-gray-600 dark:text-gray-400`}>
         <p>
           <strong>Individual approval:</strong> Click approve/deny on each tool to process immediately.
         </p>

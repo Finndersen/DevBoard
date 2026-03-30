@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { RefObject } from 'react'
 import { Bars3Icon } from '@heroicons/react/24/outline'
 import type { TocHeading } from '../../utils/markdown'
+import { surfaces, borderColors, textColors, hoverColors } from '../../styles/designSystem'
 
 interface TableOfContentsPopoverProps {
   headings: TocHeading[]
@@ -107,22 +108,22 @@ export default function TableOfContentsPopover({
     <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-gray-600 dark:text-gray-400"
+        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm ${surfaces.raised} border ${borderColors.default} shadow-sm ${hoverColors.subtle} transition-colors ${textColors.secondary}`}
       >
         <Bars3Icon className="w-3.5 h-3.5" />
         <span>Contents</span>
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 w-[230px] max-h-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/[0.08] rounded-lg shadow-lg z-50 py-1">
+        <div className={`absolute top-full right-0 mt-1 w-[230px] max-h-72 overflow-y-auto ${surfaces.raised} border ${borderColors.default} rounded-lg shadow-lg z-50 py-1`}>
           {headings.map((heading) => (
             <button
               key={heading.slug}
               onClick={() => handleHeadingClick(heading.slug)}
-              className={`w-full text-left pr-3 py-1.5 ${levelPadding[heading.level]} ${levelTextSize[heading.level]} transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 ${
+              className={`w-full text-left pr-3 py-1.5 ${levelPadding[heading.level]} ${levelTextSize[heading.level]} transition-colors ${hoverColors.default} ${
                 activeSlug === heading.slug
                   ? 'text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500 dark:border-blue-400'
-                  : 'text-gray-700 dark:text-gray-300'
+                  : textColors.secondary
               }`}
             >
               {heading.text}

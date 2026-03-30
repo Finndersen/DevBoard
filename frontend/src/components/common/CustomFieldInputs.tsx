@@ -1,5 +1,6 @@
 import { Input } from '../ui'
 import type { CustomFieldDefinition } from '../../lib/api'
+import { borderColors, textColors } from '../../styles/designSystem'
 
 interface CustomFieldInputsProps {
   definitions: CustomFieldDefinition[]
@@ -12,8 +13,8 @@ export function CustomFieldInputs({ definitions, values, onChange, loading }: Cu
   if (loading || definitions.length === 0) return null
 
   return (
-    <div className="border-t border-gray-200 dark:border-white/[0.08] pt-4">
-      <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Custom Fields</h4>
+    <div className={`border-t ${borderColors.default} pt-4`}>
+      <h4 className={`text-sm font-medium ${textColors.primary} mb-3`}>Custom Fields</h4>
       <div className="space-y-4">
         {definitions.map(field => (
           <div key={field.id}>
@@ -50,7 +51,7 @@ export function CustomFieldInputs({ definitions, values, onChange, loading }: Cu
               <select
                 value={(values[field.name] as string) || ''}
                 onChange={(e) => onChange(field.name, e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
+                className={`w-full px-3 py-2 border ${borderColors.input} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] ${textColors.primary}`}
               >
                 <option value="">Select {field.name}</option>
                 {field.options.map(option => (

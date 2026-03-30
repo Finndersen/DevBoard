@@ -3,6 +3,7 @@ import mermaid from 'mermaid'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { useDarkMode } from '../../contexts/DarkModeContext'
 import CodeBlock from './CodeBlock'
+import { statusColors, textColors } from '../../styles/designSystem'
 
 interface MermaidDiagramProps {
   code: string
@@ -39,15 +40,15 @@ export default function MermaidDiagram({ code, onExpandClick, className = '' }: 
 
   if (error) {
     return (
-      <div className={`border border-amber-400 dark:border-amber-600 rounded-lg overflow-hidden ${className}`}>
-        <div className="bg-amber-50 dark:bg-amber-900/30 px-4 py-2 flex items-center gap-2 border-b border-amber-400 dark:border-amber-600">
-          <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-          <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+      <div className={`border ${statusColors.warning.border} rounded-lg overflow-hidden ${className}`}>
+        <div className={`${statusColors.warning.bg} px-4 py-2 flex items-center gap-2 border-b ${statusColors.warning.border}`}>
+          <ExclamationTriangleIcon className={`w-5 h-5 ${statusColors.warning.text}`} />
+          <span className={`text-sm font-medium ${statusColors.warning.text}`}>
             Diagram Error
           </span>
         </div>
         <div className="p-4 space-y-3">
-          <p className="text-sm text-amber-700 dark:text-amber-300">{error}</p>
+          <p className={`text-sm ${statusColors.warning.text}`}>{error}</p>
           <div className="max-h-64 overflow-auto">
             <CodeBlock code={code} language="mermaid" />
           </div>
@@ -59,7 +60,7 @@ export default function MermaidDiagram({ code, onExpandClick, className = '' }: 
   if (!svg) {
     return (
       <div className={`bg-gray-100 dark:bg-gray-800 rounded-lg p-4 flex items-center justify-center ${className}`}>
-        <span className="text-gray-500 dark:text-gray-400 text-sm">Loading diagram...</span>
+        <span className={`${textColors.muted} text-sm`}>Loading diagram...</span>
       </div>
     )
   }

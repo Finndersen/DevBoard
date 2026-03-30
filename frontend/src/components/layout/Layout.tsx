@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { surfaces, borderColors, textColors } from '../../styles/designSystem'
 import NotificationsPanel from '../notifications/NotificationsPanel'
 
 interface LayoutProps {
@@ -16,7 +17,7 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Navigation Bar */}
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-white/[0.08]">
+      <nav className={`${surfaces.raised} shadow-sm border-b ${borderColors.default}`}>
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo & Title */}
@@ -25,7 +26,7 @@ export default function Layout({ children }: LayoutProps) {
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">DB</span>
                 </div>
-                <span className="text-xl font-bold text-gray-900 dark:text-white">
+                <span className={`text-xl font-bold ${textColors.primary}`}>
                   DevBoard
                 </span>
               </Link>

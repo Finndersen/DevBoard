@@ -12,6 +12,7 @@ interface UpdateAgentModelRequest {
   model_id: string | null
 }
 import { apiClient } from '../../lib/api'
+import { textColors, surfaces, borderColors, statusColors } from '../../styles/designSystem'
 
 interface AgentModelSelectorProps {
   agentType: string
@@ -114,7 +115,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
 
   if (error || !data) {
     return (
-      <div className="text-sm text-red-600 dark:text-red-400">
+      <div className={`text-sm ${statusColors.error.text}`}>
         {error || 'Failed to load agent models'}
       </div>
     )
@@ -126,7 +127,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+          <h4 className={`text-sm font-medium ${textColors.primary}`}>
             {agentName}
           </h4>
         </div>
@@ -136,7 +137,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
             type="button"
             onClick={() => setIsOpen(!isOpen)}
             disabled={saving}
-            className={`relative w-60 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${
+            className={`relative w-60 ${surfaces.raised} border ${borderColors.input} rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${textColors.primary} ${
               saving ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >
@@ -153,7 +154,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
           </button>
 
           {isOpen && (
-            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+            <div className={`absolute z-10 mt-1 w-full ${surfaces.raised} shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none`}>
               {/* Auto/Default option */}
               <button
                 type="button"
@@ -172,7 +173,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
                 </div>
               </button>
 
-              <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+              <div className={`border-t ${borderColors.default} my-1`}></div>
 
               {/* Available models */}
               {data.available_models.map((model: ModelInfo) => (

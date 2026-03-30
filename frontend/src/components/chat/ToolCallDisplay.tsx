@@ -5,6 +5,7 @@ import type { ToolCall, ToolResult } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { formatDuration, formatEventTiming } from '../../styles/messageStyles'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
+import { surfaces, borderColors, hoverColors, statusColors } from '../../styles/designSystem'
 
 import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
 
@@ -117,7 +118,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
         tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded) } }}
-        className={`relative group rounded-md overflow-hidden max-w-full min-w-[300px] text-left bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+        className={`relative group rounded-md overflow-hidden max-w-full min-w-[300px] text-left ${surfaces.sunken} border ${borderColors.default} ${hoverColors.default} transition-colors cursor-pointer ${isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
       >
         {/* Minimal Header */}
         <div className="px-3 py-1.5 flex items-center justify-between gap-3">
@@ -188,12 +189,12 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
           )}
           {/* Expanded Details */}
           {isExpanded && (
-            <div className="border-t border-gray-300 dark:border-white/[0.08] select-text min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className={`border-t ${borderColors.default} select-text min-w-0`} onClick={(e) => e.stopPropagation()}>
               {/* Tool Arguments */}
               {hasArguments && (
-                <div className="px-3 py-2 bg-gray-100 dark:bg-white/[0.05]">
+                <div className={`px-3 py-2 ${surfaces.sunken}`}>
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-400 select-none mb-1.5">Arguments:</div>
-                  <pre className="text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border border-gray-300 dark:border-white/[0.08] select-text cursor-text whitespace-pre overflow-x-auto">
+                  <pre className={`text-xs text-gray-900 dark:text-gray-300 bg-white dark:bg-gray-900 rounded p-2 font-mono border ${borderColors.default} select-text cursor-text whitespace-pre overflow-x-auto`}>
                     {JSON.stringify(toolCall.tool_args, null, 2)}
                   </pre>
                 </div>
@@ -211,7 +212,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
                 const parsedData = RichRenderer ? tryParseToolResult(toolResult.result_content) : null
 
                 return (
-                  <div className={`px-3 py-2 border-t min-w-0 ${isError ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/10' : 'border-gray-300 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.03]'}`}>
+                  <div className={`px-3 py-2 border-t min-w-0 ${isError ? `${statusColors.error.border} ${statusColors.error.bg}` : `${borderColors.default} ${surfaces.sunken}`}`}>
                     <div className="flex justify-between items-center mb-1.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className={`text-xs font-medium select-none ${isError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { XMarkIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { surfaces, borderColors, textColors } from '../../../styles/designSystem'
 
 interface DocumentApprovalModalProps {
   isOpen: boolean
@@ -100,14 +101,14 @@ export default function DocumentApprovalModal({
       <div
         ref={modalRef}
         tabIndex={-1}
-        className="relative w-full max-w-6xl h-full max-h-[90vh] mx-4 bg-white dark:bg-gray-900 rounded-lg shadow-2xl flex flex-col"
+        className={`relative w-full max-w-6xl h-full max-h-[90vh] mx-4 ${surfaces.raised} rounded-lg shadow-2xl flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-white/[0.08]">
+        <div className={`flex items-center justify-between p-6 border-b ${borderColors.default}`}>
           <div className="flex items-center space-x-3">
             <DocumentTextIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            <h2 id="modal-title" className="text-xl font-semibold text-gray-900 dark:text-white">
+            <h2 id="modal-title" className={`text-xl font-semibold ${textColors.primary}`}>
               {title}
             </h2>
           </div>

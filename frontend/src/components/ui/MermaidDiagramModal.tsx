@@ -10,6 +10,7 @@ import {
 import Modal from './Modal'
 import MermaidDiagram from './MermaidDiagram'
 import CodeBlock from './CodeBlock'
+import { borderColors, textColors, surfaces } from '../../styles/designSystem'
 
 interface MermaidDiagramModalProps {
   isOpen: boolean
@@ -94,43 +95,43 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Mermaid Diagram" maxWidth="screen" scrollable={false}>
       <div className="flex flex-col h-[70vh]">
-        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-white/[0.08] rounded-t-lg">
+        <div className={`flex items-center justify-between px-3 py-2 ${surfaces.sunken} border ${borderColors.default} rounded-t-lg`}>
           <div className="flex items-center gap-1">
             <button
               onClick={handleZoomOut}
               disabled={scale <= MIN_ZOOM}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`p-1.5 ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed`}
               aria-label="Zoom out"
             >
               <MagnifyingGlassMinusIcon className="w-5 h-5" />
             </button>
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-12 text-center tabular-nums">
+            <span className={`text-xs font-medium ${textColors.secondary} w-12 text-center tabular-nums`}>
               {zoomPercent}%
             </span>
             <button
               onClick={handleZoomIn}
               disabled={scale >= MAX_ZOOM}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`p-1.5 ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed`}
               aria-label="Zoom in"
             >
               <MagnifyingGlassPlusIcon className="w-5 h-5" />
             </button>
             <button
               onClick={handleResetView}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+              className={`p-1.5 ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors`}
               aria-label="Reset view"
             >
               <ArrowsPointingOutIcon className="w-5 h-5" />
             </button>
           </div>
-          <span className="text-xs text-gray-500 dark:text-gray-500">
+          <span className={`text-xs ${textColors.muted}`}>
             Scroll to zoom &middot; Drag to pan
           </span>
         </div>
 
         <div
           ref={viewportRef}
-          className={`flex-1 min-h-0 border-x border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-900 overflow-hidden select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex-1 min-h-0 border-x ${borderColors.default} ${surfaces.raised} overflow-hidden select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -147,18 +148,18 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
           </div>
         </div>
 
-        <div className="border border-gray-200 dark:border-white/[0.08] rounded-b-lg">
+        <div className={`border ${borderColors.default} rounded-b-lg`}>
           <div className="flex items-center justify-between px-3 py-2">
             <button
               onClick={() => setShowSource(prev => !prev)}
-              className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              className={`flex items-center gap-2 text-sm font-medium ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-100 transition-colors`}
             >
               <ChevronRightIcon className={`w-4 h-4 transition-transform ${showSource ? 'rotate-90' : ''}`} />
               Source Code
             </button>
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors`}
             >
               {copied ? (
                 <>
@@ -174,7 +175,7 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
             </button>
           </div>
           {showSource && (
-            <div className="max-h-48 overflow-auto border-t border-gray-200 dark:border-white/[0.08]">
+            <div className={`max-h-48 overflow-auto border-t ${borderColors.default}`}>
               <CodeBlock code={code} language="mermaid" />
             </div>
           )}

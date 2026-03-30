@@ -48,6 +48,16 @@ We are working to develop an application as described in @docs/INDEX.md
 - **State Management**: Zustand stores with Immer middleware in `stores/` (UIStore, DataStore, ConversationStore, etc.)
 - **Type-Safe API**: Discriminated unions for events with type guards, comprehensive TypeScript coverage
 
+## Design System Rules
+- **Never hardcode** Tailwind color, border-color, or background-color classes — always use design system tokens from `styles/designSystem.ts`
+- **Text colors**: Use `textColors.primary` (headings/labels), `textColors.secondary` (descriptions), `textColors.muted` (placeholders/timestamps), `textColors.accent` (links)
+- **Borders**: Use `borderColors.default` (panels/cards/dividers), `borderColors.input` (form inputs/selects), `borderColors.focus` (focus rings)
+- **Surfaces/backgrounds**: Use `surfaces.raised` (cards, modals, dropdowns), `surfaces.sunken` (inset sections, code blocks), `surfaces.base` (page background)
+- **Status messages**: Use `<Alert variant="error|warning|info|success">` component — not raw colored `div` elements
+- **Status colors inline**: Use `statusColors.error.*`, `statusColors.warning.*`, `statusColors.success.*`, `statusColors.info.*` for `bg`/`text`/`border`/`icon`
+- **Hover states**: Use `hoverColors.subtle` (list rows, sidebar items) or `hoverColors.default` (buttons, clickable elements)
+- **Containers**: Use `<Card>` or `<Surface variant="raised">` for elevated containers; `<Surface variant="sunken">` for inset containers
+
 ## Coding Style
 - **Type Imports**: Use type-only imports (`import type { XYZ } from '...'`)
 - **TypeScript**: Type all props/state/args, use `interface` for objects, `type` for unions, avoid `any`
