@@ -6,10 +6,10 @@ from fastapi import HTTPException
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.conversation_history import ConversationHistoryService
+from devboard.agents.conversation_history import create_conversation_history_service
 from devboard.agents.engines import AgentEngine
-from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService, ClaudeCodeConversationHistoryService
-from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
+from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService
+from devboard.agents.engines.internal import PydanticAIAgentExecutionService
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
@@ -109,41 +109,6 @@ async def create_agent_role_for_conversation(
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported parent entity type: {type(parent_entity).__name__}",
-        )
-
-
-def create_conversation_history_service(
-    conversation: Conversation,
-    conversation_repo: ConversationRepository,
-) -> ConversationHistoryService:
-    """Create the appropriate history service based on engine type.
-
-    Non-dependency helper that can be called directly from any context.
-
-    Args:
-        conversation: The conversation instance
-        conversation_repo: Repository for conversation operations
-
-    Returns:
-        ConversationHistoryService instance (PydanticAI or ClaudeCode)
-
-    Raises:
-        HTTPException: If engine type is unsupported
-    """
-    if conversation.engine == AgentEngine.INTERNAL:
-        return PydanticAIConversationHistoryService(
-            conversation=conversation,
-            conversation_repository=conversation_repo,
-        )
-    elif conversation.engine == AgentEngine.CLAUDE_CODE:
-        return ClaudeCodeConversationHistoryService(
-            conversation=conversation,
-            conversation_repository=conversation_repo,
-        )
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported engine: {conversation.engine}",
         )
 
 

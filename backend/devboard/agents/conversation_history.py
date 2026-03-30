@@ -2,6 +2,8 @@
 
 from abc import ABC, abstractmethod
 
+from fastapi import HTTPException
+
 from devboard.agents.events import ConversationEvent
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
@@ -56,3 +58,43 @@ class ConversationHistoryService(ABC):
             requests, not conversation history.
         """
         pass
+
+
+def create_conversation_history_service(
+    conversation: Conversation,
+    conversation_repo: ConversationRepository,
+) -> "ConversationHistoryService":
+    """Create the appropriate history service based on engine type.
+
+    Non-dependency helper that can be called directly from any context.
+
+    Args:
+        conversation: The conversation instance
+        conversation_repo: Repository for conversation operations
+
+    Returns:
+        ConversationHistoryService instance (PydanticAI or ClaudeCode)
+
+    Raises:
+        HTTPException: If engine type is unsupported
+    """
+    # Lazy imports to avoid circular dependency: tools → conversation_history → engines → tools
+    from devboard.agents.engines import AgentEngine
+    from devboard.agents.engines.claude_code import ClaudeCodeConversationHistoryService
+    from devboard.agents.engines.internal import PydanticAIConversationHistoryService
+
+    if conversation.engine == AgentEngine.INTERNAL:
+        return PydanticAIConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+    elif conversation.engine == AgentEngine.CLAUDE_CODE:
+        return ClaudeCodeConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported engine: {conversation.engine}",
+        )

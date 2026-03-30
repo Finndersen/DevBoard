@@ -10,6 +10,10 @@ from devboard.agents.tools import (
     create_set_document_content_tool,
 )
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
+from devboard.agents.tools.task_agent_tools import (
+    create_get_task_agent_status_tool,
+    create_send_task_agent_prompt_tool,
+)
 from devboard.agents.tools.task_tools import (
     create_create_task_tool,
     create_edit_task_tool,
@@ -140,6 +144,9 @@ class ProjectQAAgentRole(AgentRole):
             create_view_task_details_tool(self.project, self.task_service),
             create_create_task_tool(self.project, self.task_service, self.conversation_repo),
             create_edit_task_tool(self.project, self.task_service, self.document_repository),
+            # Task agent coordination tools
+            create_send_task_agent_prompt_tool(self.project, self.task_service, self.conversation_repo),
+            create_get_task_agent_status_tool(self.project, self.task_service, self.conversation_repo),
             # HTML rendering tool
             create_render_html_tool(),
         ]
