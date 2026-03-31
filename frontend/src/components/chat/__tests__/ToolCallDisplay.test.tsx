@@ -739,7 +739,7 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getAllByRole('button')[0])
 
-      expect(screen.getByText('conversation: 42')).toBeInTheDocument()
+      expect(screen.getByText('Conversation: 42')).toBeInTheDocument()
     })
 
     it('does not display conversation_id when null', async () => {

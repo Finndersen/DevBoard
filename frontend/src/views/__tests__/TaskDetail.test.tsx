@@ -238,6 +238,61 @@ describe('TaskDetail', () => {
     }, { timeout: 3000 })
   })
 
+  it('refreshes git status after synchronous workflow action (no conversation_id)', async () => {
+    const user = userEvent.setup()
+    const taskWithAction = createMockTask({
+      id: 1,
+      project_id: 1,
+      status: 'Planning',
+      available_workflow_actions: [
+        { key: 'task.begin_implementation' }
+      ],
+    })
+
+    let gitStatusCallCount = 0
+
+    server.use(
+      http.get('*/api/tasks/1', () => {
+        return HttpResponse.json(taskWithAction)
+      }),
+      http.get('*/api/tasks/1/git-status', () => {
+        gitStatusCallCount++
+        return HttpResponse.json({
+          branch_name: null,
+          branch_exists: false,
+          base_branch: 'main',
+          commits_ahead: 0,
+          commits_behind: 0,
+          can_merge: false,
+          has_conflicts: false,
+          worktree_slot: null,
+        })
+      }),
+      http.post('*/api/tasks/1/workflow-action', () => {
+        // Return without conversation_id to simulate synchronous completion
+        return HttpResponse.json({ status: 'completed' })
+      })
+    )
+
+    renderTaskDetail()
+
+    // Wait for the action button to appear
+    await waitFor(() => {
+      expect(screen.getByText('Begin Implementation')).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    const callsBeforeAction = gitStatusCallCount
+
+    // Click the workflow action button
+    const actionButton = screen.getByText('Begin Implementation')
+    await user.click(actionButton)
+
+    // Verify git status was refreshed after the synchronous action
+    await waitFor(() => {
+      expect(gitStatusCallCount).toBeGreaterThan(callsBeforeAction)
+    }, { timeout: 3000 })
+  })
+
   it('handles streaming errors during workflow action gracefully', async () => {
     const user = userEvent.setup()
     const mockCodebase = {

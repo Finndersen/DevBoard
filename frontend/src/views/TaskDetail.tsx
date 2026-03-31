@@ -500,6 +500,7 @@ function TaskDetail({ id }: TaskDetailProps) {
         reconnectStream(result.conversation_id)
       } else {
         // No agent execution was started (action completed synchronously)
+        await refreshGitStatus()
         setStreamingMessage('')
       }
     } catch (error) {
