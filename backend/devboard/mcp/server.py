@@ -8,6 +8,7 @@ from typing import Any, TypedDict
 
 from fastmcp import FastMCP
 
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
     create_multi_codebase_investigation_tool,
@@ -185,6 +186,7 @@ async def investigate_codebase(codebase_name: str, query: str) -> str:
                 conversation_repo=conversation_repo,
                 parent_entity=codebase,
                 parent_conversation_id=None,
+                execution_manager=get_execution_manager(),
             )
 
             # Run the investigation (with codebase name since it's now required)

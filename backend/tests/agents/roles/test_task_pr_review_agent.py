@@ -1,6 +1,6 @@
 """Tests for Task PR Review Agent Role."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -11,6 +11,14 @@ from devboard.db.repositories import ConversationRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_service import TaskService
 from tests.conftest import create_mock_task
+
+
+@pytest.fixture(autouse=True)
+def mock_get_execution_manager():
+    """Patch get_execution_manager so role tests don't require app lifespan."""
+    with patch("devboard.agents.roles.task_base.get_execution_manager") as mock:
+        mock.return_value = Mock()
+        yield mock
 
 
 def create_mock_pr_task(task_id: int = 1) -> Mock:

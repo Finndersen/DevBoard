@@ -5,6 +5,7 @@ from abc import abstractmethod
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import create_list_tasks_tool, create_view_task_details_tool
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
@@ -53,6 +54,7 @@ class TaskAgentRoleBase(AgentRole):
                 conversation_repo=self.conversation_repo,
                 parent_conversation_id=self.conversation_id,
                 working_dir=self.working_dir,
+                execution_manager=get_execution_manager(),
             ),
         ]
 

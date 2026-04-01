@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, memo } from 'react'
 import type { ComponentType } from 'react'
-import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, StopCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
+import { StopIcon } from '@heroicons/react/24/solid'
 import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
@@ -48,7 +49,7 @@ function StepDuration({ step }: StepDurationProps) {
     return <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">{formatDuration(elapsedSeconds)}</span>
   }
 
-  if ((step.status === 'complete' || step.status === 'failed') && step.started_at && step.completed_at) {
+  if ((step.status === 'complete' || step.status === 'failed' || step.status === 'interrupted') && step.started_at && step.completed_at) {
     const durationSeconds = Math.floor(
       (new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()) / 1000
     )
@@ -64,6 +65,7 @@ const STEP_STATUS_CONFIG: Record<ImplementationStepStatus, { icon: ComponentType
   complete: { icon: CheckCircleIcon, iconClass: 'text-green-500', variant: 'success' },
   failed: { icon: XCircleIcon, iconClass: 'text-red-500', variant: 'error' },
   skipped: { icon: MinusCircleIcon, iconClass: 'text-gray-400', variant: 'warning' },
+  interrupted: { icon: StopCircleIcon, iconClass: 'text-yellow-500', variant: 'warning' },
 }
 
 const STEP_TYPE_CONFIG: Record<ImplementationStepType, { label: string; icon: ComponentType<{ className?: string }>; variant: 'default' | 'info' | 'warning' | 'success' }> = {
@@ -85,6 +87,8 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
   const [editedDetails, setEditedDetails] = useState(step.details)
   const [saving, setSaving] = useState(false)
   const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const { addNotification } = useNotificationStore()
 
   const fetchMessages = useCallback(
     () => apiClient.getConversationMessages(step.conversation_id!),
@@ -93,6 +97,20 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
 
   const statusConfig = STEP_STATUS_CONFIG[step.status]
   const typeConfig = STEP_TYPE_CONFIG[step.type]
+
+  const handleCancel = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!step.conversation_id || cancelling) return
+    setCancelling(true)
+    try {
+      await apiClient.interruptConversation(step.conversation_id)
+    } catch (error) {
+      console.error('Failed to interrupt step:', error)
+      addNotification({ type: 'system_error', message: 'Failed to cancel step' })
+    } finally {
+      setCancelling(false)
+    }
+  }, [step.conversation_id, cancelling, addNotification])
 
   const handleSaveDetails = useCallback(async () => {
     setSaving(true)
@@ -133,6 +151,18 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
         </span>
 
         <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+          {step.status === 'running' && step.conversation_id != null && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              title="Cancel step"
+            >
+              <StopIcon className="w-3 h-3" />
+              {cancelling ? 'Cancelling…' : 'Cancel'}
+            </button>
+          )}
           <StepDuration step={step} />
           <StatusBadge variant={typeConfig.variant} size="sm">
             <typeConfig.icon className="w-3 h-3 mr-1" />
@@ -198,18 +228,20 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
             )}
           </div>
 
-          {/* Outcome (for completed/failed steps) */}
+          {/* Outcome (for completed/failed/interrupted steps) */}
           {step.outcome && (
             <div className="mt-4">
               <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${
-                step.status === 'failed' ? statusColors.error.text : statusColors.success.text
+                step.status === 'failed' ? statusColors.error.text : step.status === 'interrupted' ? statusColors.warning.text : statusColors.success.text
               }`}>
-                {step.status === 'failed' ? 'Error' : 'Outcome'}
+                {step.status === 'failed' ? 'Error' : step.status === 'interrupted' ? 'Interrupted' : 'Outcome'}
               </h4>
               <div className={`p-3 rounded-md text-sm ${
                 step.status === 'failed'
                   ? `${statusColors.error.bg} border ${statusColors.error.border}`
-                  : `${statusColors.success.bg} border ${statusColors.success.border}`
+                  : step.status === 'interrupted'
+                    ? `${statusColors.warning.bg} border ${statusColors.warning.border}`
+                    : `${statusColors.success.bg} border ${statusColors.success.border}`
               }`}>
                 <Markdown>{step.outcome}</Markdown>
               </div>

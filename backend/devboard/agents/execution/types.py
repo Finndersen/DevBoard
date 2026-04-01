@@ -24,3 +24,12 @@ class ConversationExecution:
     started_at: datetime.datetime
     completed_at: datetime.datetime | None = None
     error: str | None = None
+    is_sub_agent: bool = False
+
+
+@dataclasses.dataclass
+class SubAgentResult:
+    """Result of a sub-agent execution."""
+
+    result: str
+    conversation_id: int

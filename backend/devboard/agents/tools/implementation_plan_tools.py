@@ -1,19 +1,21 @@
 """Tools for managing structured implementation plans."""
 
+from __future__ import annotations
+
 import json
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.step_execution import StepExecutionAgentRole
 from devboard.agents.tools.sub_agent_tools import (
     build_code_review_prompt,
     create_sub_agent_conversation,
-    execute_sub_agent_conversation,
 )
 from devboard.api.schemas.document import DocumentEdit
 from devboard.db.models.implementation_plan import ImplementationStepStatus, ImplementationStepType
@@ -21,6 +23,9 @@ from devboard.db.models.task import Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.services.task_git.service import TaskGitService
 from devboard.services.task_implementation_plan import DependencyNotResolvedError, TaskImplementationPlanService
+
+if TYPE_CHECKING:
+    from devboard.agents.execution.manager import ConversationExecutionManager
 
 
 class StepInput(BaseModel):
@@ -317,6 +322,7 @@ def create_execute_implementation_step_tool(
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     working_dir: str,
+    execution_manager: ConversationExecutionManager,
     task_git_service: TaskGitService | None = None,
 ) -> Tool:
     async def execute_implementation_step(
@@ -326,7 +332,7 @@ def create_execute_implementation_step_tool(
     ) -> str:
         """Execute a specific implementation step by delegating to a step execution sub-agent.
 
-        The step must be in 'pending' or 'failed' status and all its dependency steps must be 'complete'.
+        The step must be in 'pending', 'failed', or 'interrupted' status and all its dependency steps must be 'complete'.
         Failed or interrupted steps resume the existing conversation so the sub-agent retains full
         prior context. Use `notes` to describe what has changed since the last run or what to do
         differently.
@@ -352,9 +358,17 @@ def create_execute_implementation_step_tool(
             raise ModelRetry(f"Step {step_number} not found.")
 
         if not force_run:
-            EXECUTABLE_STATUSES = {ImplementationStepStatus.PENDING, ImplementationStepStatus.FAILED}
+            # INTERRUPTED steps can be re-executed like FAILED steps — they resume the
+            # existing conversation so the sub-agent retains full prior context.
+            EXECUTABLE_STATUSES = {
+                ImplementationStepStatus.PENDING,
+                ImplementationStepStatus.FAILED,
+                ImplementationStepStatus.INTERRUPTED,
+            }
             if step.status not in EXECUTABLE_STATUSES:
-                raise ModelRetry(f"Step {step_number} is in '{step.status}' status, expected 'pending' or 'failed'.")
+                raise ModelRetry(
+                    f"Step {step_number} is in '{step.status}' status, expected 'pending', 'failed', or 'interrupted'."
+                )
             try:
                 plan_service.check_dependencies_resolved(plan, step)
             except DependencyNotResolvedError as e:
@@ -419,14 +433,13 @@ def create_execute_implementation_step_tool(
                 if notes:
                     prompt += f"\n\n## Coordinator Notes\n\n{notes}"
 
-            sub_agent_result = await execute_sub_agent_conversation(
+            sub_agent_result = await execution_manager.run_sub_agent_execution(
                 conversation=conversation,
                 role=role,
                 prompt=prompt,
                 conversation_repo=conversation_repo,
                 agent_config_service=agent_config_service,
                 working_dir=working_dir,
-                parent_conversation_id=parent_conversation_id,
             )
 
             plan_service.set_step_status(
@@ -441,6 +454,13 @@ def create_execute_implementation_step_tool(
                 }
             )
 
+        except AgentInterruptedError:
+            plan_service.set_step_status(
+                step, status=ImplementationStepStatus.INTERRUPTED, outcome="Step interrupted by user."
+            )
+            raise ModelRetry(
+                f"Step {step_number} was interrupted by the user. Ask the user how they want to proceed."
+            ) from None
         except Exception as e:
             plan_service.set_step_status(step, status=ImplementationStepStatus.FAILED, outcome=str(e))
             raise ModelRetry(f"Step {step_number} failed: {e}") from e

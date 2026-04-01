@@ -37,7 +37,7 @@ export interface Task {
 }
 
 export type ImplementationStepType = 'code_change' | 'documentation' | 'validation' | 'code_review'
-export type ImplementationStepStatus = 'pending' | 'running' | 'complete' | 'failed' | 'skipped'
+export type ImplementationStepStatus = 'pending' | 'running' | 'complete' | 'failed' | 'skipped' | 'interrupted'
 export interface ImplementationStepResponse {
   id: number
   step_number: number

@@ -1,6 +1,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.context_helpers import build_execution_graph_context, build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
@@ -182,6 +183,7 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
                         self.conversation_repo,
                         self.conversation_id,
                         self.working_dir,
+                        execution_manager=get_execution_manager(),
                     ),
                     create_read_implementation_step_details_tool(self.task, self.plan_service),
                     create_get_implementation_plan_overview_tool(self.task),
@@ -209,6 +211,7 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
                     conversation_repo=self.conversation_repo,
                     parent_conversation_id=self.conversation_id,
                     working_dir=self.working_dir,
+                    execution_manager=get_execution_manager(),
                 ),
                 create_rebase_task_branch_tool(self.task),
             ]

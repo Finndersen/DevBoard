@@ -10,15 +10,18 @@ import logfire
 from opentelemetry import context as otel_context
 from sqlalchemy.orm import Session
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
-from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
+from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
+from devboard.agents.roles.base import AgentRole
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
 from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
 from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
+from devboard.db.repositories import ConversationRepository
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.task_git.service import TaskBranchNotFoundException
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
@@ -45,7 +48,7 @@ class ConversationExecutionManager:
         """Run the coroutine and handle lifecycle transitions."""
         execution = self._executions.get(conversation_id)
         if not execution:
-            return
+            raise RuntimeError(f"No execution found for conversation {conversation_id} — this is a programming error")
 
         # Detach from the request's trace context — background tasks run outside
         # the request lifecycle and should produce their own root span in Logfire.
@@ -86,9 +89,13 @@ class ConversationExecutionManager:
         execution = self._executions.get(conversation_id)
         return execution is not None and execution.status == ExecutionStatus.RUNNING
 
-    def list_active_executions(self) -> list[ConversationExecution]:
+    def list_active_executions(self, include_sub_agents: bool = False) -> list[ConversationExecution]:
         """Return all currently running executions."""
-        return [e for e in self._executions.values() if e.status == ExecutionStatus.RUNNING]
+        return [
+            e
+            for e in self._executions.values()
+            if e.status == ExecutionStatus.RUNNING and (include_sub_agents or not e.is_sub_agent)
+        ]
 
     def start_agent_execution(
         self,
@@ -124,6 +131,55 @@ class ConversationExecutionManager:
         self._executions[conversation_id] = execution
         logfire.info(f"Started execution for conversation {conversation_id}")
         return execution
+
+    async def run_sub_agent_execution(
+        self,
+        conversation: Conversation,
+        role: AgentRole,
+        prompt: str,
+        conversation_repo: ConversationRepository,
+        agent_config_service: AgentConfigService,
+        working_dir: str,
+    ) -> SubAgentResult:
+        """Run a sub-agent inline in the calling task, registered for interrupt routing.
+
+        Unlike `start_agent_execution()`, this does not create a new asyncio task — it runs
+        inline in the caller's task. However, it registers a `ConversationExecution` entry
+        so that `request_interrupt()` can signal it.
+
+        Raises:
+            ConversationBusyError: If an active execution already exists for this conversation
+        """
+        conversation_id = conversation.id
+        existing = self._executions.get(conversation_id)
+        if existing and existing.status == ExecutionStatus.RUNNING:
+            raise ConversationBusyError(conversation_id)
+
+        interrupt_event = asyncio.Event()
+        execution = ConversationExecution(
+            conversation_id=conversation_id,
+            interrupt_requested=interrupt_event,
+            asyncio_task=asyncio.current_task(),  # type: ignore[arg-type]
+            status=ExecutionStatus.RUNNING,
+            started_at=datetime.datetime.now(datetime.UTC),
+            is_sub_agent=True,
+        )
+        self._executions[conversation_id] = execution
+        try:
+            with logfire.span("sub_agent_execution", conversation_id=conversation_id):
+                execution_service = create_agent_execution_service(
+                    conversation=conversation,
+                    role=role,
+                    conversation_repo=conversation_repo,
+                    agent_config_service=agent_config_service,
+                    working_dir=working_dir,
+                    interrupt_event=interrupt_event,
+                )
+                result = await execution_service.send_message_or_approval(prompt)
+                conversation_repo.commit()
+                return SubAgentResult(result=result.text_content, conversation_id=conversation_id)
+        finally:
+            self._executions.pop(conversation_id, None)
 
     def request_interrupt(self, conversation_id: int) -> bool:
         """Request interrupt for the active execution.

@@ -1,6 +1,6 @@
 """Tests for Task Planning Role class with deferred tools."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from pydantic_ai.exceptions import ModelRetry
@@ -15,6 +15,14 @@ from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 from tests.conftest import create_mock_task
+
+
+@pytest.fixture(autouse=True)
+def mock_get_execution_manager():
+    """Patch get_execution_manager so role tests don't require app lifespan."""
+    with patch("devboard.agents.roles.task_base.get_execution_manager") as mock:
+        mock.return_value = Mock()
+        yield mock
 
 
 class TestTaskPlanningRoleWithSpec:

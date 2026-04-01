@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from pydantic_ai import ModelRetry
 
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.tools.implementation_plan_tools import (
     create_execute_implementation_step_tool,
     create_read_implementation_step_details_tool,
@@ -75,6 +76,7 @@ class TestExecuteImplementationStepStatusValidation:
             conversation_repo=Mock(),
             parent_conversation_id=None,
             working_dir="/test/working_dir",
+            execution_manager=Mock(),
         )
 
     def _make_step(self, status: ImplementationStepStatus) -> Mock:
@@ -101,7 +103,7 @@ class TestExecuteImplementationStepStatusValidation:
         step = self._make_step(ImplementationStepStatus.RUNNING)
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending' or 'failed'"):
+        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
             await execute_step_tool.function(step_number=1)
 
     @pytest.mark.asyncio
@@ -109,7 +111,7 @@ class TestExecuteImplementationStepStatusValidation:
         step = self._make_step(ImplementationStepStatus.COMPLETE)
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending' or 'failed'"):
+        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
             await execute_step_tool.function(step_number=1)
 
     @pytest.mark.asyncio
@@ -117,7 +119,7 @@ class TestExecuteImplementationStepStatusValidation:
         step = self._make_step(ImplementationStepStatus.SKIPPED)
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending' or 'failed'"):
+        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
             await execute_step_tool.function(step_number=1)
 
 
@@ -133,12 +135,17 @@ class TestExecuteImplementationStepConversationFlow:
         return Mock()
 
     @pytest.fixture
+    def mock_execution_manager(self) -> Mock:
+        return Mock()
+
+    @pytest.fixture
     def execute_step_tool(
         self,
         mock_task: Mock,
         mock_plan_service: Mock,
         mock_agent_config_service: Mock,
         mock_conversation_repo: Mock,
+        mock_execution_manager: Mock,
     ) -> Mock:
         mock_task.implementation_plan_structured = Mock(spec=ImplementationPlan)
         return create_execute_implementation_step_tool(
@@ -148,6 +155,7 @@ class TestExecuteImplementationStepConversationFlow:
             conversation_repo=mock_conversation_repo,
             parent_conversation_id=None,
             working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
             task_git_service=Mock(),
         )
 
@@ -167,7 +175,7 @@ class TestExecuteImplementationStepConversationFlow:
 
     @pytest.mark.asyncio
     async def test_new_step_creates_conversation_and_calls_set_step_conversation(
-        self, execute_step_tool: Mock, mock_plan_service: Mock
+        self, execute_step_tool: Mock, mock_plan_service: Mock, mock_execution_manager: Mock
     ):
         """For a new step (no conversation_id), a conversation is created and set_step_conversation called."""
         step = self._make_step()
@@ -178,34 +186,29 @@ class TestExecuteImplementationStepConversationFlow:
         mock_sub_agent_result = Mock()
         mock_sub_agent_result.result = "Done"
         mock_sub_agent_result.conversation_id = 42
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
 
-        with (
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
-                return_value=mock_conversation,
-            ) as mock_create,
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.execute_sub_agent_conversation",
-                new_callable=AsyncMock,
-                return_value=mock_sub_agent_result,
-            ) as mock_execute,
-        ):
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ) as mock_create:
             await execute_step_tool.function(step_number=1)
 
         mock_create.assert_called_once()
         mock_plan_service.set_step_conversation.assert_called_once_with(step, 42)
-        call_kwargs = mock_execute.call_args.kwargs
+        call_kwargs = mock_execution_manager.run_sub_agent_execution.call_args.kwargs
         assert call_kwargs["conversation"] is mock_conversation
 
     @pytest.mark.asyncio
-    async def test_execute_sub_agent_conversation_called_with_correct_args(
+    async def test_run_sub_agent_execution_called_with_correct_args(
         self,
         execute_step_tool: Mock,
         mock_plan_service: Mock,
         mock_conversation_repo: Mock,
         mock_agent_config_service: Mock,
+        mock_execution_manager: Mock,
     ):
-        """execute_sub_agent_conversation receives the conversation object and correct repo/config."""
+        """run_sub_agent_execution receives the conversation object and correct repo/config."""
         step = self._make_step()
         mock_plan_service.get_step_by_number.return_value = step
 
@@ -214,21 +217,15 @@ class TestExecuteImplementationStepConversationFlow:
         mock_sub_agent_result = Mock()
         mock_sub_agent_result.result = "Done"
         mock_sub_agent_result.conversation_id = 7
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
 
-        with (
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
-                return_value=mock_conversation,
-            ),
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.execute_sub_agent_conversation",
-                new_callable=AsyncMock,
-                return_value=mock_sub_agent_result,
-            ) as mock_execute,
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
         ):
             await execute_step_tool.function(step_number=1)
 
-        call_kwargs = mock_execute.call_args.kwargs
+        call_kwargs = mock_execution_manager.run_sub_agent_execution.call_args.kwargs
         assert call_kwargs["conversation"] is mock_conversation
         assert call_kwargs["conversation_repo"] is mock_conversation_repo
         assert call_kwargs["agent_config_service"] is mock_agent_config_service
@@ -236,7 +233,11 @@ class TestExecuteImplementationStepConversationFlow:
 
     @pytest.mark.asyncio
     async def test_existing_step_resumes_conversation(
-        self, execute_step_tool: Mock, mock_plan_service: Mock, mock_conversation_repo: Mock
+        self,
+        execute_step_tool: Mock,
+        mock_plan_service: Mock,
+        mock_conversation_repo: Mock,
+        mock_execution_manager: Mock,
     ):
         """For a step with an existing conversation_id, it is resumed instead of creating a new one."""
         existing_conv = Mock()
@@ -249,21 +250,42 @@ class TestExecuteImplementationStepConversationFlow:
         mock_sub_agent_result = Mock()
         mock_sub_agent_result.result = "Resumed"
         mock_sub_agent_result.conversation_id = 99
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
 
-        with (
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
-            ) as mock_create,
-            patch(
-                "devboard.agents.tools.implementation_plan_tools.execute_sub_agent_conversation",
-                new_callable=AsyncMock,
-                return_value=mock_sub_agent_result,
-            ) as mock_execute,
-        ):
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+        ) as mock_create:
             await execute_step_tool.function(step_number=1)
 
         mock_create.assert_not_called()
         mock_plan_service.set_step_conversation.assert_not_called()
         mock_conversation_repo.get_by_id.assert_called_with(99)
-        assert mock_execute.call_args.kwargs["conversation"] is existing_conv
-        assert "Resume" in mock_execute.call_args.kwargs["prompt"]
+        call_kwargs = mock_execution_manager.run_sub_agent_execution.call_args.kwargs
+        assert call_kwargs["conversation"] is existing_conv
+        assert "Resume" in call_kwargs["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_agent_interrupted_error_sets_interrupted_status(
+        self,
+        execute_step_tool: Mock,
+        mock_plan_service: Mock,
+        mock_execution_manager: Mock,
+    ):
+        """When sub-agent raises AgentInterruptedError, step status is set to INTERRUPTED and ModelRetry is raised."""
+        step = self._make_step()
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 10
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(side_effect=AgentInterruptedError())
+
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ):
+            with pytest.raises(ModelRetry, match="interrupted by the user"):
+                await execute_step_tool.function(step_number=1)
+
+        mock_plan_service.set_step_status.assert_any_call(
+            step, status=ImplementationStepStatus.INTERRUPTED, outcome="Step interrupted by user."
+        )

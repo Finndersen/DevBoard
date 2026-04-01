@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.exceptions import ConversationBusyError
+from devboard.agents.execution.types import SubAgentResult
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
@@ -15,23 +19,13 @@ from devboard.db.repositories import ConversationRepository
 from devboard.integrations.types import StructuredDiff
 from devboard.services.task_git.service import TaskGitService
 
-_active_sub_agent_conversations: set[int] = set()
-# Backwards-compatibility alias used by existing tests
-_active_investigation_sessions = _active_sub_agent_conversations
-_active_sub_agent_sessions = _active_sub_agent_conversations
+if TYPE_CHECKING:
+    from devboard.agents.execution.manager import ConversationExecutionManager
 
 CODEBASE_INVESTIGATION_PROMPT = """Investigate the codebase documentation and source code to answer the following user query.
 Perform the minimum necessary analysis to quickly provide an answer that addresses the query scope and no more.
 Your answer should be concise and to the point with no unnecessary preamble or superfluous details.
 Query: {query}"""
-
-
-@dataclass
-class SubAgentResult:
-    """Result of a sub-agent execution."""
-
-    result: str
-    conversation_id: int
 
 
 @dataclass
@@ -70,52 +64,6 @@ def create_sub_agent_conversation(
     return conversation
 
 
-async def execute_sub_agent_conversation(
-    conversation: Conversation,
-    role: AgentRole,
-    prompt: str,
-    conversation_repo: ConversationRepository,
-    agent_config_service: AgentConfigService,
-    working_dir: str,
-    parent_conversation_id: int | None = None,
-) -> SubAgentResult:
-    """Execute a sub-agent using an existing conversation record.
-
-    Handles the active-session guard and validates the conversation belongs to the
-    expected parent context. Works for both newly created and resumed conversations.
-    """
-    if conversation.id in _active_sub_agent_conversations:
-        raise ModelRetry(
-            f"conversation_id '{conversation.id}' is already in use by a concurrent investigation. "
-            "Concurrent calls with the same conversation_id are not supported. "
-            "Either wait for the previous investigation to complete before making a follow-up call with this conversation_id, "
-            "or omit conversation_id to start independent parallel investigations."
-        )
-    if conversation.parent_conversation_id != parent_conversation_id:
-        raise ModelRetry(f"conversation_id '{conversation.id}' does not belong to this conversation context.")
-
-    _active_sub_agent_conversations.add(conversation.id)
-    try:
-        # Lazy import to avoid circular dependency:
-        # sub_agent_tools → api.dependencies.factories → roles → sub_agent_tools
-        from devboard.api.dependencies.factories import create_agent_execution_service
-
-        execution_service = create_agent_execution_service(
-            conversation=conversation,
-            role=role,
-            conversation_repo=conversation_repo,
-            agent_config_service=agent_config_service,
-            working_dir=working_dir,
-        )
-
-        result = await execution_service.send_message_or_approval(prompt)
-
-        conversation_repo.commit()
-        return SubAgentResult(result=result.text_content, conversation_id=conversation.id)
-    finally:
-        _active_sub_agent_conversations.discard(conversation.id)
-
-
 async def run_sub_agent(
     role: AgentRole,
     role_type: AgentRoleType,
@@ -124,13 +72,14 @@ async def run_sub_agent(
     conversation_repo: ConversationRepository,
     parent_entity: ParentEntity,
     working_dir: str,
+    execution_manager: ConversationExecutionManager,
     parent_conversation_id: int | None = None,
     conversation_id: int | None = None,
 ) -> SubAgentResult:
     """Execute a sub-agent with the given role and prompt.
 
     Convenience wrapper that creates a new conversation or resumes an existing one,
-    then executes the sub-agent.
+    then executes the sub-agent via the execution manager.
     """
     if conversation_id is None:
         conversation = create_sub_agent_conversation(
@@ -144,16 +93,23 @@ async def run_sub_agent(
         conversation = conversation_repo.get_by_id(conversation_id)
         if conversation is None:
             raise ModelRetry(f"conversation_id '{conversation_id}' not found.")
+        if conversation.parent_conversation_id != parent_conversation_id:
+            raise ModelRetry(f"conversation_id '{conversation_id}' does not belong to this conversation context.")
 
-    return await execute_sub_agent_conversation(
-        conversation=conversation,
-        role=role,
-        prompt=prompt,
-        conversation_repo=conversation_repo,
-        agent_config_service=agent_config_service,
-        working_dir=working_dir,
-        parent_conversation_id=parent_conversation_id,
-    )
+    try:
+        return await execution_manager.run_sub_agent_execution(
+            conversation=conversation,
+            role=role,
+            prompt=prompt,
+            conversation_repo=conversation_repo,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+        )
+    except ConversationBusyError as err:
+        raise ModelRetry(
+            f"conversation_id '{conversation.id}' is already in use. "
+            "Wait for it to complete or omit conversation_id to start a new conversation."
+        ) from err
 
 
 def create_multi_codebase_investigation_tool(
@@ -162,6 +118,7 @@ def create_multi_codebase_investigation_tool(
     conversation_repo: ConversationRepository,
     parent_entity: ParentEntity,
     parent_conversation_id: int | None,
+    execution_manager: ConversationExecutionManager,
 ) -> Tool:
     """Create a codebase investigation tool that delegates investigation queries to a specialized agent.
 
@@ -184,6 +141,7 @@ def create_multi_codebase_investigation_tool(
         conversation_repo: Repository for creating/loading conversation records
         parent_entity: Parent entity (Task, Project, or Codebase) for sub-conversation records
         parent_conversation_id: ID of the invoking agent's conversation
+        execution_manager: Manager for registering and running sub-agent executions
 
     Raises:
         ValueError: If codebases list is empty
@@ -243,6 +201,7 @@ def create_multi_codebase_investigation_tool(
             conversation_repo=conversation_repo,
             parent_entity=parent_entity,
             working_dir=codebase_config.working_dir,
+            execution_manager=execution_manager,
             parent_conversation_id=parent_conversation_id,
             conversation_id=conversation_id,
         )
@@ -264,6 +223,7 @@ def create_task_codebase_investigation_tool(
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     working_dir: str,
+    execution_manager: ConversationExecutionManager,
 ) -> Tool:
     """Create a codebase investigation tool for a task.
 
@@ -297,6 +257,7 @@ def create_task_codebase_investigation_tool(
         conversation_repo=conversation_repo,
         parent_entity=task,
         parent_conversation_id=parent_conversation_id,
+        execution_manager=execution_manager,
     )
 
 
@@ -306,6 +267,7 @@ def create_code_review_tool(
     conversation_repo: ConversationRepository,
     parent_conversation_id: int | None,
     working_dir: str,
+    execution_manager: ConversationExecutionManager,
 ) -> Tool:
     """Create a code review tool that performs a self-review of all task changes.
 
@@ -314,6 +276,7 @@ def create_code_review_tool(
         agent_config_service: AgentConfigService for getting configured LLM
         conversation_repo: Repository for creating conversation records
         parent_conversation_id: ID of the invoking agent's conversation
+        execution_manager: Manager for registering and running sub-agent executions
     """
 
     async def review_code_changes(context: str | None = None) -> str:
@@ -357,6 +320,7 @@ def create_code_review_tool(
             conversation_repo=conversation_repo,
             parent_entity=task,
             working_dir=working_dir,
+            execution_manager=execution_manager,
             parent_conversation_id=parent_conversation_id,
         )
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})

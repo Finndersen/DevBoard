@@ -3,6 +3,7 @@
 from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_document_edit_tool,
@@ -162,6 +163,7 @@ class ProjectQAAgentRole(AgentRole):
                     conversation_repo=self.conversation_repo,
                     parent_entity=self.project,
                     parent_conversation_id=self.conversation_id,
+                    execution_manager=get_execution_manager(),
                 )
             )
 

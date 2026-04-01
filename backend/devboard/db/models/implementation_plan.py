@@ -26,6 +26,7 @@ class ImplementationStepStatus(StrEnum):
     COMPLETE = "complete"
     FAILED = "failed"
     SKIPPED = "skipped"
+    INTERRUPTED = "interrupted"
 
 
 class ImplementationPlan(Base):
