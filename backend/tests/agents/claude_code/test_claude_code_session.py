@@ -944,6 +944,85 @@ class TestClaudeCodeSessionService:
         assert todos[1].priority == TodoPriority.MEDIUM
         assert todos[2].priority == TodoPriority.LOW
 
+    def test_parse_assistant_message_with_model(self):
+        """Test that model field is parsed from assistant JSONL entry and stored on AssistantSessionMessage."""
+        entry = {
+            "type": "assistant",
+            "uuid": "asst-model-1",
+            "timestamp": "2025-10-08T15:11:00.401Z",
+            "isSidechain": False,
+            "message": {
+                "role": "assistant",
+                "model": "claude-sonnet-4-20250514",
+                "content": [{"type": "text", "text": "Hello from model!"}],
+            },
+        }
+
+        session_msg = parse_session_message(entry, line_num=1)
+
+        assert isinstance(session_msg, AssistantSessionMessage)
+        assert session_msg.model == "claude-sonnet-4-20250514"
+
+    def test_parse_assistant_message_without_model(self):
+        """Test that model defaults to None when absent from JSONL entry."""
+        entry = {
+            "type": "assistant",
+            "uuid": "asst-no-model",
+            "timestamp": "2025-10-08T15:11:00.401Z",
+            "isSidechain": False,
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "No model field here."}],
+            },
+        }
+
+        session_msg = parse_session_message(entry, line_num=1)
+
+        assert isinstance(session_msg, AssistantSessionMessage)
+        assert session_msg.model is None
+
+    def test_assistant_model_propagates_to_text_message_event(self):
+        """Test that model from AssistantSessionMessage propagates to TextMessage events."""
+        from datetime import datetime
+
+        session_msg = AssistantSessionMessage(
+            uuid="asst-model-event",
+            timestamp=datetime(2025, 10, 8, 15, 11),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "Response from model"}],
+            model="claude-sonnet-4-20250514",
+        )
+
+        events = session_messages_to_events([session_msg])
+
+        assert len(events) == 1
+        from devboard.agents.events import TextMessage as TxtMsg
+
+        assert isinstance(events[0], TxtMsg)
+        assert events[0].model == "claude-sonnet-4-20250514"
+
+    def test_assistant_model_none_produces_text_message_with_no_model(self):
+        """Test that TextMessage event has model=None when AssistantSessionMessage has no model."""
+        from datetime import datetime
+
+        session_msg = AssistantSessionMessage(
+            uuid="asst-no-model-event",
+            timestamp=datetime(2025, 10, 8, 15, 11),
+            line_num=1,
+            is_sidechain=False,
+            content=[{"type": "text", "text": "No model"}],
+            model=None,
+        )
+
+        events = session_messages_to_events([session_msg])
+
+        assert len(events) == 1
+        from devboard.agents.events import TextMessage as TxtMsg
+
+        assert isinstance(events[0], TxtMsg)
+        assert events[0].model is None
+
 
 class TestEncodePathForClaudeProjects:
     """Tests for ClaudeCodeSessionMigrator.encode_path_for_claude_projects."""

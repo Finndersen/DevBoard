@@ -4,9 +4,11 @@ import datetime
 from typing import Any
 
 from devboard.agents.events import (
+    MessageRole,
     SystemEvent,
     SystemEventType,
     TextMessage,
+    ToolCallRequest,
 )
 
 
@@ -105,3 +107,81 @@ class TestConversationEventUnion:
             elif event_data["event_type"] == "system":
                 event = SystemEvent.model_validate(event_data)
                 assert isinstance(event, SystemEvent)
+
+
+class TestTextMessageModelField:
+    """Tests for model field on TextMessage."""
+
+    def test_model_field_default_is_none(self):
+        """TextMessage.model defaults to None for backward compatibility."""
+        event = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="Hello",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        assert event.model is None
+
+    def test_model_field_can_be_set(self):
+        """TextMessage.model can be set to a model name."""
+        event = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="Hello",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+            model="claude-sonnet-4-20250514",
+        )
+        assert event.model == "claude-sonnet-4-20250514"
+
+    def test_model_field_serialized(self):
+        """TextMessage.model is included in serialized output."""
+        event = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="Hello",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+            model="claude-sonnet-4-20250514",
+        )
+        data = event.model_dump(mode="json")
+        assert data["model"] == "claude-sonnet-4-20250514"
+
+    def test_model_field_none_serialized(self):
+        """TextMessage.model=None is included as null in serialized output."""
+        event = TextMessage(
+            role=MessageRole.AGENT,
+            text_content="Hello",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        data = event.model_dump(mode="json")
+        assert data["model"] is None
+
+
+class TestToolCallRequestModelField:
+    """Tests for model field on ToolCallRequest."""
+
+    def test_model_field_default_is_none(self):
+        """ToolCallRequest.model defaults to None for backward compatibility."""
+        event = ToolCallRequest(
+            tool_call_id="call-123",
+            tool_name="edit_file",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        assert event.model is None
+
+    def test_model_field_can_be_set(self):
+        """ToolCallRequest.model can be set to a model name."""
+        event = ToolCallRequest(
+            tool_call_id="call-123",
+            tool_name="edit_file",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+            model="claude-sonnet-4-20250514",
+        )
+        assert event.model == "claude-sonnet-4-20250514"
+
+    def test_model_field_serialized(self):
+        """ToolCallRequest.model is included in serialized output."""
+        event = ToolCallRequest(
+            tool_call_id="call-123",
+            tool_name="edit_file",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+            model="claude-sonnet-4-20250514",
+        )
+        data = event.model_dump(mode="json")
+        assert data["model"] == "claude-sonnet-4-20250514"

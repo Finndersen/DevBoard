@@ -373,7 +373,13 @@ class ClaudeCodeAgent(BaseAgent):
 
                     # AssistantMessage or UserMessage - convert to ConversationEvents
                     t0 = time.monotonic()
-                    conv_events = list(convert_claude_message_to_events(raw_item, self._virtual_tools))
+                    conv_events = list(
+                        convert_claude_message_to_events(
+                            raw_item,
+                            self._virtual_tools,
+                            model=raw_item.model if isinstance(raw_item, AssistantMessage) else None,
+                        )
+                    )
                     convert_ms = (time.monotonic() - t0) * 1000
                     if convert_ms > 20:
                         logfire.warn(

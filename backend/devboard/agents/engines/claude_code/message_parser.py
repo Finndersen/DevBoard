@@ -91,6 +91,7 @@ def convert_virtual_tool_call_to_events(
     tool_call: VirtualToolCall,
     timestamp: datetime.datetime,
     use_tool_call_request: bool = False,
+    model: str | None = None,
 ) -> list[ConversationEvent]:
     """Convert a VirtualToolCall to a list of ConversationEvent instances.
 
@@ -105,6 +106,7 @@ def convert_virtual_tool_call_to_events(
         timestamp: Timestamp to use for all generated events
         use_tool_call_request: If True, generates ToolCallRequest (for approval workflow),
                                otherwise generates ToolCall (for history/recording)
+        model: Optional model name to attach to TextMessage and ToolCallRequest events
 
     Returns:
         List of ConversationEvent instances (ConversationMessage and ToolCall/ToolCallRequest)
@@ -121,6 +123,7 @@ def convert_virtual_tool_call_to_events(
                 role=MessageRole.AGENT,
                 text_content=tool_call.preamble,
                 timestamp=timestamp,
+                model=model,
             )
         )
 
@@ -132,6 +135,7 @@ def convert_virtual_tool_call_to_events(
                 tool_name=normalized_tool_name,
                 tool_args=tool_call.arguments,
                 timestamp=timestamp,
+                model=model,
             )
         )
     else:
@@ -151,6 +155,7 @@ def convert_virtual_tool_call_to_events(
                 role=MessageRole.AGENT,
                 text_content=tool_call.postamble,
                 timestamp=timestamp,
+                model=model,
             )
         )
 

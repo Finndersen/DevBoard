@@ -211,6 +211,7 @@ export interface ConversationMessage {
   text_content: string
   timestamp: string
   uuid?: string
+  model?: string
 }
 
 export interface ToolCall {
@@ -237,6 +238,7 @@ export interface ToolCallRequest {
   tool_name: string
   tool_args: string | Record<string, unknown> | null
   timestamp: string
+  model?: string
 }
 
 export interface SystemEvent {

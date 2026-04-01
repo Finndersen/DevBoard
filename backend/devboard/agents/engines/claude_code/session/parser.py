@@ -197,12 +197,14 @@ def parse_session_message(entry: MessageEntry, line_num: int) -> SessionMessage 
         )
 
     else:
+        model = user_or_assistant["message"].get("model")  # type: ignore[typeddict-item]
         return AssistantSessionMessage(
             uuid=uuid,
             timestamp=timestamp,
             line_num=line_num,
             is_sidechain=is_sidechain,
             content=content_raw,  # type: ignore[arg-type]
+            model=model,
         )
 
 

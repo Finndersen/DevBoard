@@ -9,6 +9,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    TextPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -586,3 +587,89 @@ class TestRunMethod:
         assert len(message_history) >= 2
         assert isinstance(message_history[0], ModelRequest)
         assert isinstance(message_history[1], ModelResponse)
+
+
+class TestStreamEventsModelExtraction:
+    """Tests for model name extraction from ModelResponse in AgentRunResultEvent."""
+
+    def _make_result_event_with_messages(
+        self,
+        output: str | DeferredToolRequests,
+        new_messages: list[ModelMessage],
+    ) -> AgentRunResultEvent:
+        result = create_mock_agent_run_result(output, new_messages=new_messages)
+        return AgentRunResultEvent(result=result)
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_text_message_gets_model_from_model_response(self, mock_agent_class, agent_with_function_tool):
+        """TextMessage.model is set from ModelResponse.model_name in new_messages."""
+        model_response = ModelResponse(parts=[TextPart(content="Hello!")], model_name="claude-sonnet-4-20250514")
+        result_event = self._make_result_event_with_messages("Hello!", [model_response])
+        setup_mock_pydantic_agent(mock_agent_class, result_event)
+
+        events = []
+        async for event in agent_with_function_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], TextMessage)
+        assert events[0].model == "claude-sonnet-4-20250514"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_text_message_model_is_none_when_no_model_response(self, mock_agent_class, agent_with_function_tool):
+        """TextMessage.model is None when new_messages contains no ModelResponse."""
+        user_msg = ModelRequest(parts=[UserPromptPart(content="Test")])
+        result_event = self._make_result_event_with_messages("Response", [user_msg])
+        setup_mock_pydantic_agent(mock_agent_class, result_event)
+
+        events = []
+        async for event in agent_with_function_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], TextMessage)
+        assert events[0].model is None
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_text_message_model_uses_last_model_response(self, mock_agent_class, agent_with_function_tool):
+        """TextMessage.model uses model_name from the last ModelResponse in new_messages."""
+        first_response = ModelResponse(parts=[TextPart(content="First")], model_name="claude-haiku-4-5")
+        second_response = ModelResponse(parts=[TextPart(content="Second")], model_name="claude-sonnet-4-20250514")
+        result_event = self._make_result_event_with_messages("Second", [first_response, second_response])
+        setup_mock_pydantic_agent(mock_agent_class, result_event)
+
+        events = []
+        async for event in agent_with_function_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], TextMessage)
+        assert events[0].model == "claude-sonnet-4-20250514"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_tool_call_request_gets_model_from_model_response(self, mock_agent_class, agent_with_approval_tool):
+        """ToolCallRequest.model is set from ModelResponse.model_name in new_messages."""
+        model_response = ModelResponse(
+            parts=[ToolCallPart(tool_name="edit_file", tool_call_id="call-1", args={})],
+            model_name="claude-sonnet-4-20250514",
+        )
+        tool_call = ToolCallPart(
+            tool_call_id="call-1",
+            tool_name="edit_file",
+            args={"path": "/test.py", "content": "x"},
+        )
+        deferred = DeferredToolRequests(approvals=[tool_call])
+        result_event = self._make_result_event_with_messages(deferred, [model_response])
+        setup_mock_pydantic_agent(mock_agent_class, result_event)
+
+        events = []
+        async for event in agent_with_approval_tool.stream_events("Edit file"):
+            events.append(event)
+
+        assert len(events) == 1
+        assert isinstance(events[0], ToolCallRequest)
+        assert events[0].model == "claude-sonnet-4-20250514"

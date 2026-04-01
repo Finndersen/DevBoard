@@ -1,6 +1,6 @@
 """PydanticAI conversation history service implementation."""
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelResponse, ToolCallPart, ToolReturnPart
 
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines.internal.utils import convert_tool_args
@@ -62,11 +62,17 @@ class PydanticAIConversationHistoryService(ConversationHistoryService):
             )
         elif msg.message_type == MessageType.TEXT_RESPONSE:
             # Agent text response - single text message
+            # Extract model_name from serialized pydantic_content if available
+            model_name: str | None = None
+            pydantic_msgs = ModelMessagesTypeAdapter.validate_python([msg.pydantic_content])
+            if pydantic_msgs and isinstance(pydantic_msgs[0], ModelResponse):
+                model_name = pydantic_msgs[0].model_name
             events.append(
                 TextMessage(
                     role=MessageRole.AGENT,
                     text_content=msg.text_content,
                     timestamp=msg.timestamp,
+                    model=model_name,
                 )
             )
         elif msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_RESULT, MessageType.STRUCTURED_RESPONSE):

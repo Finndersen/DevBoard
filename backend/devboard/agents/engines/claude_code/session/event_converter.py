@@ -12,6 +12,7 @@ from devboard.agents.engines.claude_code.message_parser import (
     convert_virtual_tool_call_to_events,
 )
 from devboard.agents.engines.claude_code.session.models import (
+    AssistantSessionMessage,
     LocalCommandSessionMessage,
     MetaSessionMessage,
     SessionMessage,
@@ -70,6 +71,7 @@ def session_messages_to_events(
             )
             continue
 
+        session_model = session_msg.model if isinstance(session_msg, AssistantSessionMessage) else None
         for content_block in session_msg.content:
             if content_block["type"] == "thinking":
                 events.append(
@@ -91,6 +93,7 @@ def session_messages_to_events(
                             text_content=parsed.content,
                             timestamp=session_msg.timestamp,
                             uuid=session_msg.uuid,
+                            model=session_model,
                         )
                     )
 
@@ -99,6 +102,7 @@ def session_messages_to_events(
                         tool_call=parsed,
                         timestamp=session_msg.timestamp,
                         use_tool_call_request=session_idx == message_count - 1,
+                        model=session_model,
                     )
                     for event in tool_call_events:
                         event.uuid = session_msg.uuid

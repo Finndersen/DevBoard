@@ -753,7 +753,7 @@ describe('ToolCallDisplay', () => {
 
       await user.click(screen.getByRole('button'))
 
-      expect(screen.queryByText(/^conversation:/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/^Conversation:/)).not.toBeInTheDocument()
     })
 
     it('falls back to formatted JSON when result content has invalid shape', async () => {

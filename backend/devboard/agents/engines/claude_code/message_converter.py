@@ -52,6 +52,7 @@ class InvalidVirtualToolCallError(Exception):
 def convert_claude_message_to_events(
     message: Message,
     virtual_tools: dict[str, VirtualTool],
+    model: str | None = None,
 ) -> Generator[ConversationEvent]:
     """Convert Claude SDK Message to ConversationEvent(s).
 
@@ -75,7 +76,7 @@ def convert_claude_message_to_events(
                     timestamp=timestamp,
                 )
             elif isinstance(content_block, TextBlock):
-                yield from parse_claude_message_text(content_block.text, virtual_tools)
+                yield from parse_claude_message_text(content_block.text, virtual_tools, model=model)
             elif isinstance(content_block, ThinkingBlock):
                 yield ThinkingEvent(thinking_text=content_block.thinking, timestamp=timestamp, uuid=None)
     elif isinstance(message, UserMessage):
@@ -104,6 +105,7 @@ def convert_claude_message_to_events(
 def parse_claude_message_text(
     text_content: str,
     virtual_tools: dict[str, VirtualTool],
+    model: str | None = None,
 ) -> list[ConversationEvent]:
     """Parse Claude response text and convert to conversation events.
 
@@ -125,6 +127,7 @@ def parse_claude_message_text(
             tool_call=tool_call_or_text,
             timestamp=timestamp,
             use_tool_call_request=True,
+            model=model,
         )
 
     elif isinstance(tool_call_or_text, TextResponse):
@@ -133,6 +136,7 @@ def parse_claude_message_text(
                 role=MessageRole.AGENT,
                 text_content=tool_call_or_text.content,
                 timestamp=timestamp,
+                model=model,
             )
         ]
     else:

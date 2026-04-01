@@ -597,6 +597,50 @@ describe('ConversationMessage', () => {
     })
   })
 
+  describe('model name in tooltip', () => {
+    it('shows model name in agent message tooltip when model is provided', () => {
+      const agentMessage: ConversationMessage = {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Response text',
+        timestamp: '2024-01-01T10:00:10Z',
+        model: 'claude-sonnet-4-20250514',
+      }
+
+      const { container } = render(
+        <ConversationMessageComponent
+          message={agentMessage}
+          previousEventTimestamp="2024-01-01T10:00:00Z"
+        />
+      )
+
+      const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(timingEl).toBeInTheDocument()
+      expect(timingEl?.textContent).toContain('claude-sonnet-4-20250514')
+      expect(timingEl?.textContent).toContain('·')
+    })
+
+    it('does not show model separator in agent message tooltip when model is not provided', () => {
+      const agentMessage: ConversationMessage = {
+        event_type: 'message',
+        role: 'agent',
+        text_content: 'Response text',
+        timestamp: '2024-01-01T10:00:10Z',
+      }
+
+      const { container } = render(
+        <ConversationMessageComponent
+          message={agentMessage}
+          previousEventTimestamp="2024-01-01T10:00:00Z"
+        />
+      )
+
+      const timingEl = container.querySelector('.opacity-0.group-hover\\:opacity-100')
+      expect(timingEl).toBeInTheDocument()
+      expect(timingEl?.textContent).not.toContain('·')
+    })
+  })
+
   describe('hover-reveal timestamps', () => {
     it('user message has group class for hover and timing badge', () => {
       const userMessage: ConversationMessage = {

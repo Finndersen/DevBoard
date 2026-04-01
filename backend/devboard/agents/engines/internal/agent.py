@@ -179,6 +179,12 @@ class InternalAgent(BaseAgent):
             self.last_run_result = result
             # Update conversation history with new messages
             self.conversation_history.extend(result.new_messages())
+            # Extract model name from the last ModelResponse in new messages
+            model_name: str | None = None
+            for msg in reversed(result.new_messages()):
+                if isinstance(msg, ModelResponse):
+                    model_name = msg.model_name
+                    break
             # Extract final result information
             if isinstance(result.output, DeferredToolRequests):
                 # Convert deferred tool requests to ToolCallRequest events
@@ -188,6 +194,7 @@ class InternalAgent(BaseAgent):
                         tool_name=tool_call.tool_name,
                         tool_args=tool_call.args if tool_call.args else None,
                         timestamp=timestamp,
+                        model=model_name,
                     )
             elif isinstance(result.output, str):  # pyright: ignore[reportUnnecessaryIsInstance]
                 # Text response
@@ -195,6 +202,7 @@ class InternalAgent(BaseAgent):
                     role=MessageRole.AGENT,
                     text_content=result.output,
                     timestamp=timestamp,
+                    model=model_name,
                 )
             else:
                 raise ValueError(f"Unexpected agent result output: {result.output}")

@@ -64,6 +64,7 @@ class TextMessage(BaseModel):
     text_content: str
     timestamp: datetime.datetime
     uuid: str | None = None
+    model: str | None = None
 
 
 class ToolCall(BaseModel):
@@ -97,6 +98,7 @@ class ToolCallRequest(BaseModel):
     tool_args: str | dict[str, Any] | None = None
     timestamp: datetime.datetime
     uuid: str | None = None
+    model: str | None = None
 
 
 class MetaMessage(BaseModel):

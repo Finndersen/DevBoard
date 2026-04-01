@@ -52,6 +52,7 @@ class AssistantSessionMessage(BaseSessionMessage):
     content: list[TextBlockDict | ThinkingBlockDict | ToolUseBlockDict] = field(
         default_factory=_assistant_content_factory
     )
+    model: str | None = None
 
     @property
     def text_content(self) -> str:

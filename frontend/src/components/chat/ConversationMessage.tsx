@@ -77,7 +77,7 @@ function LocalCommandDisplay({ message, highlightRing, previousEventTimestamp }:
             </div>
           )}
         </div>
-        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <span className="absolute bottom-1 right-1.5 bg-black/75 dark:bg-black/75 backdrop-blur-md rounded-md border border-white/[0.06] px-2 py-0.5 text-[10px] text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
           {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
         </span>
 
@@ -184,7 +184,7 @@ function MessageEventDisplay({ message, isLatest, highlightRing, previousEventTi
             </div>
           )}
         </div>
-        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <span className="absolute bottom-1 right-1.5 bg-black/75 dark:bg-black/75 backdrop-blur-md rounded-md border border-white/[0.06] px-2 py-0.5 text-[10px] text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
           {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
         </span>
       </div>
@@ -194,8 +194,8 @@ function MessageEventDisplay({ message, isLatest, highlightRing, previousEventTi
   return (
     <div className={`relative w-full text-sm ${highlightRing} group`}>
       <Markdown>{message.text_content}</Markdown>
-      <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+      <span className="absolute bottom-1 right-1.5 bg-black/75 dark:bg-black/75 backdrop-blur-md rounded-md border border-white/[0.06] px-2 py-0.5 text-[10px] text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}{message.model && <span className="text-gray-500"> · {message.model}</span>}
       </span>
     </div>
   )
@@ -267,7 +267,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
     return (
       <div className="flex w-full min-w-0">
-        <div className={`rounded-md overflow-hidden max-w-full min-w-[300px] ${highlightRing}`}>
+        <div className={`relative group rounded-md overflow-hidden max-w-full min-w-[300px] ${highlightRing}`}>
           <div className="px-3 py-1.5 flex items-center gap-2 min-w-0">
             <svg
               className="w-4 h-4 text-yellow-400 flex-shrink-0"
@@ -303,6 +303,9 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
               </pre>
             </div>
           )}
+          <span className="absolute bottom-1 right-1.5 bg-black/75 dark:bg-black/75 backdrop-blur-md rounded-md border border-white/[0.06] px-2 py-0.5 text-[10px] text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}{message.model && <span className="text-gray-500"> · {message.model}</span>}
+          </span>
         </div>
       </div>
     )
