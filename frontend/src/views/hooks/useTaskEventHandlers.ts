@@ -46,6 +46,19 @@ export function useTaskEventHandlers({
 
   useToolResultHandler(editTaskHandler)
 
+  const taskSpecificationHandler = useCallback(async (toolName: string) => {
+    if (toolName.includes('edit_task_specification') || toolName.includes('set_task_specification_content')) {
+      try {
+        await refetchSpecification()
+        setActiveTab('specification')
+      } catch (error) {
+        console.error('Failed to refetch task specification document:', error)
+      }
+    }
+  }, [refetchSpecification, setActiveTab])
+
+  useToolResultHandler(taskSpecificationHandler)
+
   const implementationPlanHandler = useCallback(async (toolName: string, _result: unknown) => {
     if (toolName.includes('edit_task_implementation_plan') || toolName.includes('set_task_implementation_plan_content')) {
       try {
