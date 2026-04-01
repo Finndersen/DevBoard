@@ -64,6 +64,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
   const {
     messages,
+    historyLoaded,
     isStreaming,
     pendingToolRequests,
     isQueued,
@@ -83,7 +84,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   } = useToolApprovalLogic(conversationId, pendingToolRequests, clearPendingToolRequests, approveTools)
 
   const { fetchHistoryError, lastFetchedConversationIdRef } = useConversationHistory(
-    conversationId, messages, setStoreMessages, setApprovals, approvalKey
+    conversationId, messages, historyLoaded, setStoreMessages, setApprovals, approvalKey
   )
 
   const initialMessageSentRef = useRef(false)

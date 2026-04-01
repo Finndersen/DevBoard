@@ -20,6 +20,11 @@ function getMessages(conversationId: number): ConversationEvent[] {
   return useConversationStreamStore.getState().conversationMessages.get(conversationId)?.messages ?? []
 }
 
+/** Helper to read historyLoaded flag */
+function isHistoryLoaded(conversationId: number): boolean {
+  return useConversationStreamStore.getState().conversationMessages.get(conversationId)?.historyLoaded ?? false
+}
+
 describe('conversationStreamStore - addEvent deduplication', () => {
   beforeEach(() => {
     useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
@@ -474,5 +479,79 @@ describe('conversationStreamStore - reconnectStream', () => {
 
     expect(addEventSpy).not.toHaveBeenCalled()
     addEventSpy.mockRestore()
+  })
+})
+
+describe('conversationStreamStore - historyLoaded flag', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+  })
+
+  it('setMessages sets historyLoaded to true', () => {
+    const conversationId = 500
+    const store = useConversationStreamStore.getState()
+    const messages: ConversationEvent[] = [
+      { event_type: 'message', role: 'agent', text_content: 'Hi', timestamp: '2024-01-01T00:00:00Z' },
+    ]
+
+    store.setMessages(conversationId, messages)
+
+    expect(isHistoryLoaded(conversationId)).toBe(true)
+    expect(getMessages(conversationId)).toEqual(messages)
+  })
+
+  it('addEvent on a new conversation creates entry with historyLoaded = false', () => {
+    const conversationId = 501
+    const store = useConversationStreamStore.getState()
+    const event: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Hello',
+      timestamp: '2024-01-01T00:00:00Z',
+    }
+
+    store.addEvent(conversationId, event)
+
+    expect(isHistoryLoaded(conversationId)).toBe(false)
+    expect(getMessages(conversationId)).toEqual([event])
+  })
+
+  it('addEvent on a conversation where history was loaded does NOT reset historyLoaded', () => {
+    const conversationId = 502
+    const store = useConversationStreamStore.getState()
+    const initialMessages: ConversationEvent[] = [
+      { event_type: 'message', role: 'user', text_content: 'Start', timestamp: '2024-01-01T00:00:00Z' },
+    ]
+    store.setMessages(conversationId, initialMessages)
+    expect(isHistoryLoaded(conversationId)).toBe(true)
+
+    const newEvent: ConversationEvent = {
+      event_type: 'message',
+      role: 'agent',
+      text_content: 'Reply',
+      timestamp: '2024-01-01T00:00:01Z',
+    }
+    store.addEvent(conversationId, newEvent)
+
+    // historyLoaded should still be true — addEvent must not reset it
+    expect(isHistoryLoaded(conversationId)).toBe(true)
+    expect(getMessages(conversationId)).toHaveLength(2)
+  })
+
+  it('clearMessages removes the entry (historyLoaded implicitly reset to false)', () => {
+    const conversationId = 503
+    const store = useConversationStreamStore.getState()
+    store.setMessages(conversationId, [])
+    expect(isHistoryLoaded(conversationId)).toBe(true)
+
+    store.clearMessages(conversationId)
+
+    expect(isHistoryLoaded(conversationId)).toBe(false)
+    expect(getMessages(conversationId)).toEqual([])
+  })
+
+  it('isHistoryLoaded returns false for an unknown conversation', () => {
+    const store = useConversationStreamStore.getState()
+    expect(store.isHistoryLoaded(99999)).toBe(false)
   })
 })

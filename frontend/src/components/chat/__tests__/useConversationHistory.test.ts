@@ -28,12 +28,12 @@ describe('useConversationHistory', () => {
     vi.clearAllMocks()
   })
 
-  it('fetches history when messages are empty on mount', async () => {
+  it('fetches history when historyLoaded is false on mount', async () => {
     const serverMessages = [makeTextEvent('hello')]
     mockGetMessages.mockResolvedValue(serverMessages)
 
     renderHook(() =>
-      useConversationHistory(1, [], setStoreMessages, setApprovals, approvalKey),
+      useConversationHistory(1, [], false, setStoreMessages, setApprovals, approvalKey),
     )
 
     await waitFor(() => {
@@ -45,31 +45,50 @@ describe('useConversationHistory', () => {
     })
   })
 
-  it('does not fetch when messages already exist', () => {
+  it('skips fetch when historyLoaded is true', () => {
     const existingMessages = [makeTextEvent('existing')]
 
     renderHook(() =>
-      useConversationHistory(1, existingMessages, setStoreMessages, setApprovals, approvalKey),
+      useConversationHistory(1, existingMessages, true, setStoreMessages, setApprovals, approvalKey),
     )
 
     expect(mockGetMessages).not.toHaveBeenCalled()
   })
 
-  it('re-fetches when messages become empty (simulating HMR store clear)', async () => {
+  it('fetches history when historyLoaded is false even if messages exist (background streaming case)', async () => {
+    // Background streaming: messages accumulated via addEvent but historyLoaded = false
+    const streamingMessages = [makeTextEvent('streaming event')]
+    const serverMessages = [makeTextEvent('full history')]
+    mockGetMessages.mockResolvedValue(serverMessages)
+
+    renderHook(() =>
+      useConversationHistory(1, streamingMessages, false, setStoreMessages, setApprovals, approvalKey),
+    )
+
+    await waitFor(() => {
+      expect(mockGetMessages).toHaveBeenCalledWith(1)
+    })
+
+    await waitFor(() => {
+      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages)
+    })
+  })
+
+  it('re-fetches when historyLoaded transitions from true to false (simulating HMR store clear)', async () => {
     const serverMessages = [makeTextEvent('hello')]
     mockGetMessages.mockResolvedValue(serverMessages)
 
-    // Initial render with messages present — no fetch
+    // Initial render with historyLoaded: true — no fetch
     const { rerender } = renderHook(
-      ({ messages }) =>
-        useConversationHistory(1, messages, setStoreMessages, setApprovals, approvalKey),
-      { initialProps: { messages: [makeTextEvent('existing')] } },
+      ({ historyLoaded }) =>
+        useConversationHistory(1, [], historyLoaded, setStoreMessages, setApprovals, approvalKey),
+      { initialProps: { historyLoaded: true } },
     )
 
     expect(mockGetMessages).not.toHaveBeenCalled()
 
-    // Simulate HMR store clear: same conversationId, but messages now empty
-    rerender({ messages: [] })
+    // Simulate HMR store clear: same conversationId, but historyLoaded now false
+    rerender({ historyLoaded: false })
 
     await waitFor(() => {
       expect(mockGetMessages).toHaveBeenCalledWith(1)
@@ -83,15 +102,15 @@ describe('useConversationHistory', () => {
   it('does not double-fetch on StrictMode double-render', async () => {
     mockGetMessages.mockResolvedValue([])
 
-    // Render twice rapidly with empty messages (simulating StrictMode)
+    // Render twice rapidly with historyLoaded: false (simulating StrictMode)
     const { rerender } = renderHook(
-      ({ messages }) =>
-        useConversationHistory(1, messages, setStoreMessages, setApprovals, approvalKey),
-      { initialProps: { messages: [] as ConversationEvent[] } },
+      ({ historyLoaded }) =>
+        useConversationHistory(1, [], historyLoaded, setStoreMessages, setApprovals, approvalKey),
+      { initialProps: { historyLoaded: false } },
     )
 
     // Re-render with same props (StrictMode behavior)
-    rerender({ messages: [] as ConversationEvent[] })
+    rerender({ historyLoaded: false })
 
     await waitFor(() => {
       expect(mockGetMessages).toHaveBeenCalledTimes(1)
@@ -102,7 +121,7 @@ describe('useConversationHistory', () => {
     mockGetMessages.mockRejectedValue(new Error('Server error'))
 
     const { result } = renderHook(() =>
-      useConversationHistory(1, [], setStoreMessages, setApprovals, approvalKey),
+      useConversationHistory(1, [], false, setStoreMessages, setApprovals, approvalKey),
     )
 
     await waitFor(() => {

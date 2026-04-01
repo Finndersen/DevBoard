@@ -6,6 +6,7 @@ import type { PendingApprovalWithContext } from '../../../stores/approvalsStore'
 export function useConversationHistory(
   conversationId: number,
   messages: ConversationEvent[],
+  historyLoaded: boolean,
   setStoreMessages: (id: number, msgs: ConversationEvent[]) => void,
   setApprovals: (key: string, approvals: PendingApprovalWithContext[]) => void,
   approvalKey: string,
@@ -14,16 +15,20 @@ export function useConversationHistory(
   const lastFetchedConversationIdRef = useRef<number | null>(null)
 
   useEffect(() => {
-    // Already have messages in store — no fetch needed
-    if (messages.length > 0) {
+    // History already loaded for this conversation — no fetch needed.
+    // This covers both: messages fetched from API, and messages set after a prior fetch.
+    if (historyLoaded) {
       lastFetchedConversationIdRef.current = conversationId
       return
     }
 
-    // Always re-fetch when messages are empty. The Zustand store may have been cleared
-    // by HMR while React Fast Refresh preserved the ref — without this, the conversation
-    // would stay empty until a full page refresh. A duplicate fetch in React StrictMode
-    // dev mode (effect runs twice) is a known dev-only limitation and harmless.
+    // Always re-fetch when historyLoaded is false. This covers:
+    // - First open of a conversation
+    // - HMR store clear (Zustand store cleared while React Fast Refresh preserved the ref)
+    // - Background streaming conversation opened without prior history fetch
+    //
+    // A duplicate fetch in React StrictMode dev mode (effect runs twice) is a known
+    // dev-only limitation and harmless.
     lastFetchedConversationIdRef.current = conversationId
 
     const fetchHistory = async () => {
@@ -86,7 +91,7 @@ export function useConversationHistory(
     }
 
     fetchHistory()
-  }, [conversationId, messages.length, setApprovals, approvalKey, setStoreMessages])
+  }, [conversationId, historyLoaded, setApprovals, approvalKey, setStoreMessages])
 
   return { fetchHistoryError, lastFetchedConversationIdRef }
 }

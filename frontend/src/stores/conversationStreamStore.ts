@@ -17,6 +17,7 @@ export interface StreamState {
 
 export interface ConversationMessagesState {
   messages: ConversationEvent[]
+  historyLoaded: boolean
 }
 
 // External mutable maps (outside Zustand because Immer freezes objects or they contain functions)
@@ -80,6 +81,7 @@ interface ConversationStreamActions {
     conversationId: number,
     approvals: Record<string, { approved: boolean; feedback?: string }>
   ) => Promise<void>
+  isHistoryLoaded: (conversationId: number) => boolean
   clearMessages: (conversationId: number) => void
   clearPendingToolRequests: (conversationId: number) => void
   setQueued: (conversationId: number, queued: boolean) => void
@@ -365,7 +367,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         let convMessages = draft.conversationMessages.get(conversationId)
         if (!convMessages) {
-          convMessages = { messages: [] }
+          convMessages = { messages: [], historyLoaded: false }
           draft.conversationMessages.set(conversationId, convMessages)
         }
 
@@ -403,7 +405,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
 
     setMessages: (conversationId, messages) => {
       set((draft) => {
-        draft.conversationMessages.set(conversationId, { messages })
+        draft.conversationMessages.set(conversationId, { messages, historyLoaded: true })
       })
     },
 
@@ -513,6 +515,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           conversationIdRefs.delete(conversationId)
         }
       }, 100)
+    },
+
+    isHistoryLoaded: (conversationId) => {
+      return get().conversationMessages.get(conversationId)?.historyLoaded ?? false
     },
 
     clearMessages: (conversationId) => {

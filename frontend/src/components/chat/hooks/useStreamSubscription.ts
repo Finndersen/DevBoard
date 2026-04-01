@@ -10,6 +10,9 @@ export function useStreamSubscription(conversationId: number) {
   const messages = useConversationStreamStore(
     state => state.conversationMessages.get(conversationId)?.messages ?? EMPTY_MESSAGES
   )
+  const historyLoaded = useConversationStreamStore(
+    state => state.conversationMessages.get(conversationId)?.historyLoaded ?? false
+  )
   const isStreaming = useConversationStreamStore(
     state => state.activeStreams.get(conversationId)?.isStreaming ?? false
   )
@@ -68,6 +71,7 @@ export function useStreamSubscription(conversationId: number) {
 
   return {
     messages,
+    historyLoaded,
     isStreaming,
     pendingToolRequests,
     isQueued,
