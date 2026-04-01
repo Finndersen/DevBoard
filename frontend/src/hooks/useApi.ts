@@ -13,7 +13,7 @@ export interface UseApiOptions {
 export function useApi<T>(
   apiCall: () => Promise<T>,
   options: UseApiOptions = {}
-): ApiState<T> & { refetch: () => Promise<void>; setData: (data: T) => void } {
+): ApiState<T> & { refetch: () => Promise<void>; setData: (updater: T | ((prev: T | null) => T | null)) => void } {
   const { immediate = true } = options
 
   // Store the apiCall in a ref to avoid dependency issues
@@ -44,8 +44,13 @@ export function useApi<T>(
     }
   }, [])
 
-  const setData = useCallback((data: T) => {
-    setState({ data, loading: false, error: null })
+  const setData = useCallback((updater: T | ((prev: T | null) => T | null)) => {
+    setState(prev => {
+      const data = typeof updater === 'function'
+        ? (updater as (prev: T | null) => T | null)(prev.data)
+        : updater
+      return { data, loading: false, error: null }
+    })
   }, [])
 
   useEffect(() => {

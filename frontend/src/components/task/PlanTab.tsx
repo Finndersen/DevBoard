@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, memo } from 'react'
 import type { ComponentType } from 'react'
 import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { useEditableField } from '../../hooks/useEditableField'
@@ -79,12 +79,17 @@ interface StepCardProps {
   onStepUpdated: () => void
 }
 
-function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
+const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [editingDetails, setEditingDetails] = useState(false)
   const [editedDetails, setEditedDetails] = useState(step.details)
   const [saving, setSaving] = useState(false)
   const [isSubAgentModalOpen, setIsSubAgentModalOpen] = useState(false)
+
+  const fetchMessages = useCallback(
+    () => apiClient.getConversationMessages(step.conversation_id!),
+    [step.conversation_id]
+  )
 
   const statusConfig = STEP_STATUS_CONFIG[step.status]
   const typeConfig = STEP_TYPE_CONFIG[step.type]
@@ -218,13 +223,13 @@ function StepCard({ step, taskId, onStepUpdated }: StepCardProps) {
         <SubAgentConversationModal
           isOpen={isSubAgentModalOpen}
           onClose={() => setIsSubAgentModalOpen(false)}
-          fetchMessages={() => apiClient.getConversationMessages(step.conversation_id!)}
+          fetchMessages={fetchMessages}
           title={step.title}
         />
       )}
     </div>
   )
-}
+})
 
 interface StructuredPlanViewProps {
   plan: ImplementationPlanResponse
@@ -233,7 +238,7 @@ interface StructuredPlanViewProps {
   onPlanUpdated: () => void
 }
 
-function StructuredPlanView({ plan, taskId, taskStatus, onPlanUpdated }: StructuredPlanViewProps) {
+const StructuredPlanView = memo(function StructuredPlanView({ plan, taskId, taskStatus, onPlanUpdated }: StructuredPlanViewProps) {
   const [addingCodeReview, setAddingCodeReview] = useState(false)
   const { addNotification } = useNotificationStore()
 
@@ -311,7 +316,7 @@ function StructuredPlanView({ plan, taskId, taskStatus, onPlanUpdated }: Structu
       </div>
     </div>
   )
-}
+})
 
 interface PlanTabProps {
   taskId: number

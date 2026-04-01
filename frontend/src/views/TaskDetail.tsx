@@ -368,15 +368,17 @@ function TaskDetail({ id }: TaskDetailProps) {
   })
 
   const markStepRunning = useCallback((stepNumber: number) => {
-    if (!implementationPlan) return
-    setImplementationPlan({
-      ...implementationPlan,
-      status: 'executing',
-      steps: implementationPlan.steps.map(s =>
-        s.step_number === stepNumber ? { ...s, status: 'running' as const, started_at: new Date().toISOString() } : s
-      )
+    setImplementationPlan(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        status: 'executing',
+        steps: prev.steps.map(s =>
+          s.step_number === stepNumber ? { ...s, status: 'running' as const, started_at: new Date().toISOString() } : s
+        ),
+      }
     })
-  }, [implementationPlan, setImplementationPlan])
+  }, [setImplementationPlan])
 
   useTaskEventHandlers({
     task,
@@ -447,7 +449,8 @@ function TaskDetail({ id }: TaskDetailProps) {
     const dataFingerprint = JSON.stringify({
       spec: specificationDoc?.content,
       planDoc: implementationPlanDoc?.content,
-      plan: implementationPlan,
+      planStatus: implementationPlan?.status,
+      planSteps: implementationPlan?.steps.map(s => `${s.step_number}:${s.status}`),
       diff: diffData,
     })
     if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
@@ -456,7 +459,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       }
     }
     prevDetailsDataRef.current = dataFingerprint
-  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan, diffData, isNarrow, expandedPanel])
+  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan?.status, implementationPlan?.steps, diffData, isNarrow, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'details') {
