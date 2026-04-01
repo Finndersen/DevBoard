@@ -129,7 +129,7 @@ class TestBuildProjectQAContext:
         context = build_project_qa_context(project_with_spec, [task], [])
 
         assert "ACTIVE TASKS:" in context
-        assert f"{task.id}|planning|Add user authentication|2026-03-10|2026-03-15" in context
+        assert f"{task.id}|planning|Add user authentication|2026-03-10" in context
         assert "RECENTLY COMPLETED TASKS:" not in context
 
     def test_recently_completed_tasks_section(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
@@ -147,7 +147,7 @@ class TestBuildProjectQAContext:
         context = build_project_qa_context(project_with_spec, [], [task])
 
         assert "RECENTLY COMPLETED TASKS:" in context
-        assert f"{task.id}|complete|Setup CI pipeline|2026-03-01|2026-03-09" in context
+        assert f"{task.id}|complete|Setup CI pipeline|2026-03-01" in context
         assert "ACTIVE TASKS:" not in context
 
     def test_both_active_and_completed_sections(
@@ -195,9 +195,7 @@ class TestBuildProjectQAContext:
         context = build_project_qa_context(project_with_spec, [task], [])
 
         assert "2026-03-10" in context
-        assert "2026-03-15" in context
         assert "14:30" not in context
-        assert "09:00" not in context
 
     def test_row_format(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
         """Task table includes header row and pipe-delimited data rows."""
@@ -213,8 +211,8 @@ class TestBuildProjectQAContext:
 
         context = build_project_qa_context(project_with_spec, [task], [])
 
-        assert "ID|Status|Title|Created|Updated" in context
-        assert f"{task.id}|pr_open|Add user authentication|2026-03-10|2026-03-15" in context
+        assert "ID|Status|Title|Created" in context
+        assert f"{task.id}|pr_open|Add user authentication|2026-03-10" in context
 
 
 class TestGetProjectTaskSummaries:

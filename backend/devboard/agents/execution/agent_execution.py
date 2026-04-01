@@ -12,6 +12,7 @@ from pydantic_ai import Tool
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.roles.base import AgentRole
+from devboard.agents.system_message_tags import wrap_system_message
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
 from devboard.db.repositories import ConversationRepository
@@ -77,6 +78,25 @@ class AgentExecutionService(ABC):
         self._additional_tools = additional_tools or []
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event
+
+    async def _build_context_message(self, user_message: str) -> str:
+        """Wrap context snapshot into the user message for the first run.
+
+        Context is injected here (not in the system prompt) to enable Claude API prompt caching.
+        System prompts must remain static for caching to work; context is delivered as a
+        one-time user message on the first run and persisted in conversation history thereafter.
+
+        Callers are responsible for only calling this on the first run.
+
+        Args:
+            user_message: The raw user message string
+
+        Returns:
+            The augmented message string with context prepended
+        """
+        context_content = await self.role.get_context_content()
+        wrapped = wrap_system_message(context_content, "initial_context")
+        return f"{wrapped}\n\n{user_message}"
 
     def get_custom_instructions(self) -> str | None:
         """Get custom instructions for this agent role from config service."""

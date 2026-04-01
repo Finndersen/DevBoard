@@ -272,6 +272,54 @@ class TestBuildTaskContext:
 
         assert "CURRENT STEP" not in result
 
+    def test_excludes_implementation_plan_when_flag_is_false(self, mock_task: MagicMock):
+        """Test that implementation plan is excluded when include_implementation_plan=False."""
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_implementation_plan=False)
+
+        assert "## Implementation Plan" not in result
+        assert "## Task Specification" in result
+
+    def test_excludes_step_status_when_flag_is_false(self, mock_task: MagicMock):
+        """Test that step status is excluded from structured plan when include_step_status=False."""
+        mock_task.implementation_plan = None
+
+        plan = MagicMock()
+        plan.overview = "Test overview"
+        step1 = MagicMock()
+        step1.step_number = 1
+        step1.status = "complete"
+        step1.title = "First step"
+        step1.type = "code_change"
+        step1.dependencies = []
+        step1.outcome = None
+        plan.steps = [step1]
+        mock_task.implementation_plan_structured = plan
+
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_step_status=False)
+
+        assert "First step" in result
+        assert "[complete]" not in result
+
+    def test_includes_step_status_by_default(self, mock_task: MagicMock):
+        """Test that step status is included by default."""
+        mock_task.implementation_plan = None
+
+        plan = MagicMock()
+        plan.overview = None
+        step1 = MagicMock()
+        step1.step_number = 1
+        step1.status = "pending"
+        step1.title = "First step"
+        step1.type = "code_change"
+        step1.dependencies = []
+        step1.outcome = None
+        plan.steps = [step1]
+        mock_task.implementation_plan_structured = plan
+
+        result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
+
+        assert "[pending]" in result
+
     def test_structured_plan_does_not_include_execution_graph(self, mock_task: MagicMock):
         mock_task.implementation_plan = None
 
@@ -315,6 +363,28 @@ def _make_task_with_steps(steps: list[MagicMock]) -> MagicMock:
     plan.steps = steps
     task.implementation_plan_structured = plan
     return task
+
+
+class TestBuildExecutionGraphContextStepStatus:
+    """Tests for include_step_status parameter of build_execution_graph_context."""
+
+    def test_excludes_step_status_when_flag_is_false(self):
+        steps = [_make_step(1, status="complete"), _make_step(2, status="pending", dependencies=[1])]
+        task = _make_task_with_steps(steps)
+
+        result = build_execution_graph_context(task, include_step_status=False)
+
+        assert "Step 1: Step 1" in result
+        assert "[complete]" not in result
+        assert "[pending]" not in result
+
+    def test_includes_step_status_by_default(self):
+        steps = [_make_step(1, status="complete")]
+        task = _make_task_with_steps(steps)
+
+        result = build_execution_graph_context(task)
+
+        assert "[complete]" in result
 
 
 class TestBuildExecutionGraphContext:

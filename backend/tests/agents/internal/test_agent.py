@@ -55,21 +55,14 @@ class TestInternalAgent:
         assert agent.role == mock_role
         assert agent.model == mock_model
 
-    @pytest.mark.asyncio
-    async def test_build_system_and_context_messages(self, agent, mock_role):
-        """Test agent builds system and context messages from role."""
-        request = await agent.build_system_and_context_messages()
-
-        # Should have system prompt and context message
-        assert len(request.parts) == 2
-
-        # First part should be system prompt (including shared suffix)
-        assert request.parts[0].content == mock_role.get_system_prompt() + SHARED_PROMPT_SUFFIX
-
-        # Second part should be context
-        context_content = await mock_role.get_context_content()
-        assert "CURRENT STATE AND CONTEXT:" in request.parts[1].content
-        assert context_content in request.parts[1].content
+    def test_agent_system_prompt_excludes_context(self, agent, mock_role):
+        """Test that system prompt contains role prompt but not context content."""
+        # System prompt should contain role prompt and shared suffix
+        system_prompt = agent.get_full_system_prompt()
+        assert mock_role.get_system_prompt() in system_prompt
+        assert SHARED_PROMPT_SUFFIX in system_prompt
+        # Context content is no longer in the system prompt
+        assert "CURRENT STATE AND CONTEXT" not in system_prompt
 
     def test_agent_creates_pydantic_agent(self, agent):
         """Test that agent can create PydanticAI agent."""

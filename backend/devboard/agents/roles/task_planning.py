@@ -166,27 +166,25 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         # Tool to edit task metadata and/or specification content (always available)
         tools.append(create_edit_own_task_tool(self.task, self.task_service, self.document_repository))
 
-        # Tool to edit task specification (only if it has content)
-        if self.task.specification.content:
-            tools.append(
-                create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
-            )
+        # Tool to edit task specification (always included; raises ModelRetry if no content yet)
+        tools.append(
+            create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
+        )
 
         # Structured implementation plan tools
         if self.plan_service:
-            tools.append(create_set_implementation_plan_steps_tool(self.task, self.plan_service))
-            # Additional editing tools only if plan already exists
-            if self.task.implementation_plan_structured:
-                tools.extend(
-                    [
-                        create_add_implementation_step_tool(self.task, self.plan_service),
-                        create_edit_implementation_step_tool(self.task, self.plan_service),
-                        create_edit_implementation_step_details_tool(self.task, self.plan_service),
-                        create_remove_implementation_step_tool(self.task, self.plan_service),
-                        create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
-                        create_read_implementation_step_details_tool(self.task, self.plan_service),
-                    ]
-                )
+            # Full tool set always provided; tools validate their own preconditions at runtime
+            tools.extend(
+                [
+                    create_set_implementation_plan_steps_tool(self.task, self.plan_service),
+                    create_add_implementation_step_tool(self.task, self.plan_service),
+                    create_edit_implementation_step_tool(self.task, self.plan_service),
+                    create_edit_implementation_step_details_tool(self.task, self.plan_service),
+                    create_remove_implementation_step_tool(self.task, self.plan_service),
+                    create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
+                    create_read_implementation_step_details_tool(self.task, self.plan_service),
+                ]
+            )
         else:
             # Fallback to Document-based implementation plan tools (backwards compat)
             if self.task.implementation_plan:
@@ -208,9 +206,10 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         """Get context content for task planning role.
 
         Returns:
-            Formatted context containing task details, project spec, task spec, and implementation plan
+            Formatted context containing task details, project spec, and task spec.
+            Implementation plan is excluded (won't exist yet at planning time).
         """
-        return build_task_context(self.task, working_dir=self.working_dir)
+        return build_task_context(self.task, working_dir=self.working_dir, include_implementation_plan=False)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

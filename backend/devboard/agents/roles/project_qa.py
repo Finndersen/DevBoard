@@ -71,13 +71,12 @@ Focus on connecting information across different sources to provide comprehensiv
 """
 
 
-_TASK_TABLE_HEADER = "ID|Status|Title|Created|Updated"
+_TASK_TABLE_HEADER = "ID|Status|Title|Created"
 
 
 def _format_task_summary_row(task: Task) -> str:
     created = task.created_at.strftime("%Y-%m-%d")
-    updated = task.updated_at.strftime("%Y-%m-%d")
-    return f"{task.id}|{task.status.value}|{task.title}|{created}|{updated}"
+    return f"{task.id}|{task.status.value}|{task.title}|{created}"
 
 
 def _format_task_table(tasks: list[Task]) -> str:

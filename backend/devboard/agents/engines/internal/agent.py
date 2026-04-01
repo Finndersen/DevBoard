@@ -15,16 +15,11 @@ from pydantic_ai import (
 from pydantic_ai.messages import (
     FinalResultEvent,
     ModelMessage,
-    ModelRequest,
-    ModelRequestPart,
     ModelResponse,
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
     RetryPromptPart,
-    SystemPromptPart,
-    TextPart,
-    UserPromptPart,
 )
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
@@ -98,20 +93,6 @@ class InternalAgent(BaseAgent):
         assert self.model is not None, "InternalAgent requires a non-None model"
         # Replace google with google-gla for compatibility with PydanticAI
         return self.model.model_id.replace("google", "google-gla")
-
-    async def build_system_and_context_messages(self) -> ModelRequest:
-        """Build initial system and context messages from role.
-
-        Returns:
-            Model request with system prompt and context message
-        """
-        context_content = await self.role.get_context_content()
-        parts: list[ModelRequestPart] = [
-            SystemPromptPart(content=self.get_full_system_prompt()),
-            UserPromptPart(content="CURRENT STATE AND CONTEXT:\n" + context_content),
-        ]
-
-        return ModelRequest(parts=parts)
 
     def _convert_tool_approvals_to_deferred_results(self, approvals: ToolApprovals) -> DeferredToolResults:
         """Convert ToolApprovals model to PydanticAI DeferredToolResults.
@@ -209,14 +190,6 @@ class InternalAgent(BaseAgent):
 
         return
 
-    async def _build_message_history(self) -> list[ModelMessage]:
-        """Build full message history including initial system/context messages."""
-        initial_request = await self.build_system_and_context_messages()
-        dummy_response = ModelResponse(
-            parts=[TextPart(content="Understood, I will use the provided context and tools to answer your query.")]
-        )
-        return [initial_request, dummy_response] + self.conversation_history
-
     async def run(self, prompt: str) -> TextMessage:
         """Execute agent and return only the final text message without streaming intermediate events.
 
@@ -230,8 +203,7 @@ class InternalAgent(BaseAgent):
             The final TextMessage from the agent
         """
         agent = self._create_agent()
-        message_history = await self._build_message_history()
-        result = await agent.run(user_prompt=prompt, message_history=message_history)
+        result = await agent.run(user_prompt=prompt, message_history=self.conversation_history)
 
         self.last_run_result = result
         self.conversation_history.extend(result.new_messages())
@@ -258,13 +230,18 @@ class InternalAgent(BaseAgent):
             Conversation events as they are generated during agent execution
         """
         agent = self._create_agent()
-        message_history = await self._build_message_history()
 
         if isinstance(prompt_or_approvals, ToolApprovals):
             deferred_results = self._convert_tool_approvals_to_deferred_results(prompt_or_approvals)
-            stream = agent.run_stream_events(deferred_tool_results=deferred_results, message_history=message_history)
+            stream = agent.run_stream_events(
+                deferred_tool_results=deferred_results,
+                message_history=self.conversation_history,
+            )
         else:
-            stream = agent.run_stream_events(user_prompt=prompt_or_approvals, message_history=message_history)
+            stream = agent.run_stream_events(
+                user_prompt=prompt_or_approvals,
+                message_history=self.conversation_history,
+            )
 
         async for pydantic_event in stream:
             for conv_event in self._convert_pydantic_event_to_conversation_events(pydantic_event):

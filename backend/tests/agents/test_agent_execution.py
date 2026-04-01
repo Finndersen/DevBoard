@@ -10,6 +10,31 @@ from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.mcp.mcp_tool_factory import MCPServerSetupFailure
 
 
+def _make_concrete_service() -> "ConcreteAgentExecution":
+    """Build a ConcreteAgentExecution with standard mocked dependencies."""
+    conversation = Mock()
+    conversation.id = 1
+    conversation.engine.value = "internal"
+    conversation.agent_role = "project_qa"
+
+    role = Mock()
+    role.get_context_content = AsyncMock(return_value="test context content")
+
+    conversation_repo = Mock()
+    history_service = Mock()
+    agent_config_service = Mock()
+    agent_config_service.get_enabled_mcp_tools.return_value = []
+
+    return ConcreteAgentExecution(
+        conversation=conversation,
+        role=role,
+        conversation_repository=conversation_repo,
+        history_service=history_service,
+        agent_config_service=agent_config_service,
+        working_dir="/test/working_dir",
+    )
+
+
 class ConcreteAgentExecution(AgentExecutionService):
     """Concrete subclass for testing the base class template method."""
 
@@ -20,27 +45,35 @@ class ConcreteAgentExecution(AgentExecutionService):
         yield  # no-op: we only test the MCP setup failure path
 
 
+class TestBuildContextMessage:
+    """Tests for AgentExecutionService._build_context_message()."""
+
+    @pytest.mark.asyncio
+    async def test_wraps_context_in_system_message_tag(self):
+        """Context should be wrapped in a system_message block and prepended."""
+        service = _make_concrete_service()
+
+        result = await service._build_context_message("Hello agent")
+
+        assert '<system_message type="initial_context">' in result
+        assert "test context content" in result
+        assert result.endswith("Hello agent")
+
+    @pytest.mark.asyncio
+    async def test_context_precedes_user_message(self):
+        """Context block should appear before the user message."""
+        service = _make_concrete_service()
+
+        result = await service._build_context_message("User question")
+
+        context_pos = result.index("<system_message")
+        message_pos = result.index("User question")
+        assert context_pos < message_pos
+
+
 class TestAgentExecutionMCPSetupFailures:
     def _build_service(self):
-        conversation = Mock()
-        conversation.id = 1
-        conversation.engine.value = "internal"
-        conversation.agent_role = "project_qa"
-
-        role = Mock()
-        conversation_repo = Mock()
-        history_service = Mock()
-        agent_config_service = Mock()
-        agent_config_service.get_enabled_mcp_tools.return_value = []
-
-        return ConcreteAgentExecution(
-            conversation=conversation,
-            role=role,
-            conversation_repository=conversation_repo,
-            history_service=history_service,
-            agent_config_service=agent_config_service,
-            working_dir="/test/working_dir",
-        )
+        return _make_concrete_service()
 
     @pytest.mark.asyncio
     async def test_yields_stream_error_events_for_mcp_setup_failures(self):

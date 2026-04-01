@@ -28,6 +28,7 @@ class MetaMessageType(StrEnum):
 
     COMPACT_SUMMARY = "compact_summary"
     SKILL_CONTENT = "skill_content"
+    INITIAL_CONTEXT = "initial_context"
 
 
 class LocalCommandType(StrEnum):

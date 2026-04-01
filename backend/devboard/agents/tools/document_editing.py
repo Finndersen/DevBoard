@@ -35,6 +35,12 @@ def create_document_edit_tool(
             edits: List of find-replace edits to apply
             reasoning: Optional CONCISE reasoning for why these edits are being made
         """
+        if not document.content:
+            raise ModelRetry(
+                f"{document.document_type.replace('_', ' ').title()} has no content yet. "
+                f"Use `set_{document.document_type}_content` first."
+            )
+
         # Create document editor service
         editor_service = DocumentEditorService()
 
@@ -45,10 +51,10 @@ def create_document_edit_tool(
 
         # Update document content and hash using repository
         document_repo.update_content(document, edit_result.content)
-        # Commit changes so that new content can be retrieved before stream ends
+        # Commit immediately so the frontend can display updated content during the stream
         document_repo.commit()
 
-        return f"Edits applied successfully to {document.document_type}. Your context will be dynamically updated to reflect these changes."
+        return f"Edits applied successfully to {document.document_type}."
 
     return Tool(
         function=edit_document_tool,
@@ -92,10 +98,10 @@ def create_set_document_content_tool(
 
         # Update document content and hash using repository
         document_repo.update_content(document, content)
-        # Commit changes so that new content can be retrieved before stream ends
+        # Commit immediately so the frontend can display updated content during the stream
         document_repo.commit()
 
-        return f"Successfully set content for {document.document_type}. Your context will be dynamically updated to reflect these changes."
+        return f"Successfully set content for {document.document_type}."
 
     # Determine approval requirement: use provided value or smart logic based on content
     if requires_approval is None:

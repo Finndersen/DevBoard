@@ -76,11 +76,11 @@ class TestTaskPlanningRoleWithSpec:
         assert "implementation plan" in prompt.lower()
 
     def test_get_tools_without_implementation_plan(self, role, mock_task):
-        """Test role creates correct tools when no implementation plan exists."""
+        """Test role creates correct tools when no implementation plan exists (no plan_service)."""
         tools = role.get_tools()
 
         # Should have list_tasks, view_task_details, create_task, investigate_codebase (common),
-        # plus edit_task (own task) and edit for spec
+        # plus edit_task (own task) and edit for spec (always included now)
         assert len(tools) == 6
         tool_names = [tool.name for tool in tools]
 
@@ -91,7 +91,7 @@ class TestTaskPlanningRoleWithSpec:
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-        # Should NOT have plan tools (no plan exists yet)
+        # Should NOT have plan tools (no plan_service provided)
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
 
@@ -164,11 +164,11 @@ class TestTaskPlanningRoleWithPlan:
         assert "implementation plan" in prompt.lower()
 
     def test_get_tools_with_implementation_plan(self, role, mock_task):
-        """Test role creates tools for both documents in planning."""
+        """Test role creates tools for both documents in planning (doc-based plan, no plan_service)."""
         tools = role.get_tools()
 
         # Should have: list_tasks, view_task_details, create_task, investigate_codebase (common),
-        # plus edit_task (own task), edit for spec, set_content for plan, edit for plan
+        # plus edit_task (own task), edit for spec (always), set_content for plan, edit for plan
         assert len(tools) == 8
 
         tool_names = [tool.name for tool in tools]
@@ -182,14 +182,14 @@ class TestTaskPlanningRoleWithPlan:
         assert "view_task_details" in tool_names
 
     @pytest.mark.asyncio
-    async def test_context_content_with_implementation_plan(self, role, mock_task):
-        """Test context content includes both documents."""
+    async def test_context_content_excludes_implementation_plan(self, role, mock_task):
+        """Test context content excludes implementation plan (not needed at planning time)."""
         content = await role.get_context_content()
 
         assert "## Task Specification" in content
         assert mock_task.specification.content in content
-        assert "## Implementation Plan" in content
-        assert mock_task.implementation_plan.content in content
+        # Implementation plan is excluded from planning context snapshot
+        assert "## Implementation Plan" not in content
 
 
 class TestDocumentEditTool:
@@ -459,10 +459,10 @@ class TestRoleToolSelection:
         service.get_custom_fields.return_value = []
         return service
 
-    def test_planning_role_provides_set_content_only_for_empty_spec(
+    def test_planning_role_provides_edit_spec_tool_even_for_empty_spec(
         self, mock_task_with_blank_spec_and_plan, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
-        """Test TaskPlanningRole provides set_content for empty spec and investigation tool."""
+        """Test TaskPlanningRole always provides edit_specification tool (even when spec is empty)."""
         role = TaskPlanningAgentRole(
             task=mock_task_with_blank_spec_and_plan,
             document_repository=mock_document_repo,
@@ -476,7 +476,8 @@ class TestRoleToolSelection:
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # Should have common tools plus edit_task (own task) and set_content for plan
+        # edit_specification is now always included regardless of content
+        assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
         assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
@@ -484,8 +485,7 @@ class TestRoleToolSelection:
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-        # Should NOT have edit tools (documents are empty)
-        assert f"edit_{DocumentType.TASK_SPECIFICATION}" not in tool_names
+        # edit plan NOT included because plan.content is empty (doc-based fallback path)
         assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
 
     def test_planning_role_provides_both_tools_for_documents_with_content(

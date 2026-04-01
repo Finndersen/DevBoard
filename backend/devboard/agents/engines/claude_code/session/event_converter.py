@@ -24,11 +24,13 @@ from devboard.agents.events import (
     LocalCommand,
     MessageRole,
     MetaMessage,
+    MetaMessageType,
     TextMessage,
     ThinkingEvent,
     ToolCall,
     ToolResult,
 )
+from devboard.agents.system_message_tags import extract_system_messages
 
 
 def session_messages_to_events(
@@ -83,7 +85,24 @@ def session_messages_to_events(
                 )
 
             elif content_block["type"] == "text":
-                parsed = ClaudeResponseParser.parse_message_content(content_block["text"])
+                if isinstance(session_msg, UserSessionMessage):
+                    sys_blocks, remaining = extract_system_messages(content_block["text"])
+                    for block in sys_blocks:
+                        events.append(
+                            MetaMessage(
+                                meta_type=MetaMessageType(block.message_type),
+                                text_content=block.content,
+                                timestamp=session_msg.timestamp,
+                                uuid=session_msg.uuid,
+                            )
+                        )
+                    if not remaining:
+                        continue
+                    text_for_parsing = remaining
+                else:
+                    text_for_parsing = content_block["text"]
+
+                parsed = ClaudeResponseParser.parse_message_content(text_for_parsing)
 
                 if isinstance(parsed, TextResponse):
                     conv_role = MessageRole.USER if isinstance(session_msg, UserSessionMessage) else MessageRole.AGENT

@@ -205,6 +205,7 @@ function MetaMessageDisplay({ message, highlightRing }: { message: MetaMessage; 
   const metaLabels: Record<MetaMessageType, string> = {
     compact_summary: 'Conversation compacted',
     skill_content: 'Skill activated',
+    initial_context: 'Initial context',
   }
   const label = metaLabels[message.meta_type]
   const [isModalOpen, setIsModalOpen] = useState(false)

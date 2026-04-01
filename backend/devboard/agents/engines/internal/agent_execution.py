@@ -40,7 +40,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
     ) -> TextMessage:
         """Non-streaming execution via InternalAgent.run().
 
-        Loads history, validates integrity, runs to completion, stores new messages.
+        Loads history, validates integrity, injects context on first run, stores new messages.
         """
         existing_messages = self._get_message_history()
         if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
@@ -48,6 +48,8 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             existing_messages = existing_messages[:-delete_count]
             logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
 
+        if not existing_messages:
+            message = await self._build_context_message(message)
         message_history = convert_messages_to_pydantic(existing_messages)
         agent = self._get_agent(conversation_history=message_history, extra_tools=extra_tools)
         result = await agent.run(message)
@@ -68,8 +70,14 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
         Yields:
             ConversationEvent instances as they are generated during agent execution
         """
-        # Load conversation history
         existing_messages = self._get_message_history()
+
+        # Inject context on first run: string messages only, not ToolApprovals.
+        # Done here (not in the system prompt) so the static system prompt is eligible
+        # for Claude API prompt caching.
+        if isinstance(message_or_approvals, str) and not existing_messages:
+            message_or_approvals = await self._build_context_message(message_or_approvals)
+
         # Verify integrity of message history
         if isinstance(message_or_approvals, ToolApprovals):
             if not existing_messages:

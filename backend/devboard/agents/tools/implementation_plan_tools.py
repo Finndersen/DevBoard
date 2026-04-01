@@ -136,7 +136,7 @@ def create_edit_implementation_step_tool(
         """
         plan = task.implementation_plan_structured
         if not plan:
-            raise ModelRetry("No implementation plan exists.")
+            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
 
         try:
             plan_service.update_step(
@@ -169,7 +169,7 @@ def create_remove_implementation_step_tool(
         """
         plan = task.implementation_plan_structured
         if not plan:
-            raise ModelRetry("No implementation plan exists.")
+            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
 
         try:
             plan_service.remove_step(plan, step_number)
@@ -198,7 +198,7 @@ def create_edit_implementation_plan_overview_tool(
         """
         plan = task.implementation_plan_structured
         if not plan:
-            raise ModelRetry("No implementation plan exists.")
+            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
 
         plan_service.update_overview(plan, overview)
         plan_service.commit()
@@ -224,7 +224,7 @@ def create_read_implementation_step_details_tool(
         """
         plan = task.implementation_plan_structured
         if not plan:
-            raise ModelRetry("No implementation plan exists.")
+            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
 
         step = plan_service.get_step_by_number(plan, step_number)
         if not step:
@@ -258,7 +258,7 @@ def create_edit_implementation_step_details_tool(
         """
         plan = task.implementation_plan_structured
         if not plan:
-            raise ModelRetry("No implementation plan exists.")
+            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
 
         try:
             plan_service.edit_step_details(plan, step_number, edits)
@@ -270,6 +270,38 @@ def create_edit_implementation_step_details_tool(
     return Tool(
         function=edit_implementation_step_details,
         name="edit_implementation_step_details",
+        requires_approval=False,
+        takes_ctx=False,
+    )
+
+
+def create_get_implementation_plan_overview_tool(
+    task: Task,
+) -> Tool:
+    def get_implementation_plan_overview() -> str:
+        """Get a lightweight overview of the current implementation plan.
+
+        Returns all steps with step number, title, type, status, and dependencies.
+        Use this to check current plan state (e.g. which steps are complete/running/pending)
+        since step statuses are not included in the initial context snapshot.
+        """
+        plan = task.implementation_plan_structured
+        if not plan:
+            raise ModelRetry("No implementation plan exists for this task.")
+
+        lines = []
+        if plan.overview:
+            lines.append(f"Overview: {plan.overview}\n")
+        lines.append("Steps:")
+        for step in plan.steps:
+            deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
+            lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}")
+
+        return "\n".join(lines)
+
+    return Tool(
+        function=get_implementation_plan_overview,
+        name="get_implementation_plan_overview",
         requires_approval=False,
         takes_ctx=False,
     )

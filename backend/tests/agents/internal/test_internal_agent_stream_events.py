@@ -428,8 +428,8 @@ class TestStreamEventsEdgeCases:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.internal.agent.Agent")
-    async def test_system_context_added_to_history(self, mock_agent_class, agent_with_function_tool):
-        """Test that system prompt and context are added to message history."""
+    async def test_conversation_history_passed_to_agent(self, mock_agent_class, agent_with_function_tool):
+        """Test that conversation history is passed directly to agent (no injected system messages)."""
         result_event = create_pydantic_result_event("Response")
 
         # Track what was passed to run_stream_events
@@ -448,17 +448,13 @@ class TestStreamEventsEdgeCases:
         async for event in agent_with_function_tool.stream_events("Test prompt"):
             events.append(event)
 
-        # Verify message_history was passed and contains system context
+        # Verify message_history was passed and is just the conversation history
         assert call_args is not None
         assert "message_history" in call_args
+        # With no prior conversation history, message_history should be empty
+        # (context is injected by execution service, not by the agent itself)
         message_history = call_args["message_history"]
-
-        # Should have system prompt + dummy response + any conversation history
-        assert len(message_history) >= 2
-        # First message should be the system/context request
-        assert isinstance(message_history[0], ModelRequest)
-        # Second message should be the dummy response
-        assert isinstance(message_history[1], ModelResponse)
+        assert message_history == []
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.internal.agent.Agent")
@@ -566,8 +562,8 @@ class TestRunMethod:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.internal.agent.Agent")
-    async def test_run_passes_system_context_in_message_history(self, mock_agent_class, agent_with_function_tool):
-        """Test that run() passes system context in message_history to agent."""
+    async def test_run_passes_conversation_history_directly(self, mock_agent_class, agent_with_function_tool):
+        """Test that run() passes conversation_history directly (context injected by execution service)."""
         call_kwargs = None
 
         async def mock_run(*args, **kwargs):
@@ -583,10 +579,9 @@ class TestRunMethod:
 
         assert call_kwargs is not None
         assert "message_history" in call_kwargs
-        message_history = call_kwargs["message_history"]
-        assert len(message_history) >= 2
-        assert isinstance(message_history[0], ModelRequest)
-        assert isinstance(message_history[1], ModelResponse)
+        # Context is injected by AgentExecutionService (not the agent), so message_history
+        # is just the agent's conversation_history — empty for a fresh agent.
+        assert call_kwargs["message_history"] == []
 
 
 class TestStreamEventsModelExtraction:

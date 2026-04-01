@@ -4,7 +4,16 @@ from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRe
 
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines.internal.utils import convert_tool_args
-from devboard.agents.events import ConversationEvent, MessageRole, TextMessage, ToolCall, ToolResult
+from devboard.agents.events import (
+    ConversationEvent,
+    MessageRole,
+    MetaMessage,
+    MetaMessageType,
+    TextMessage,
+    ToolCall,
+    ToolResult,
+)
+from devboard.agents.system_message_tags import extract_system_messages
 from devboard.db.models.messages import ConversationMessage as DbConversationMessage
 from devboard.db.models.messages import MessageType
 
@@ -52,14 +61,23 @@ class PydanticAIConversationHistoryService(ConversationHistoryService):
         events: list[ConversationEvent] = []
 
         if msg.message_type == MessageType.USER_PROMPT:
-            # User prompt - single text message
-            events.append(
-                TextMessage(
-                    role=MessageRole.USER,
-                    text_content=msg.text_content,
-                    timestamp=msg.timestamp,
+            sys_blocks, remaining = extract_system_messages(msg.text_content)
+            for block in sys_blocks:
+                events.append(
+                    MetaMessage(
+                        meta_type=MetaMessageType(block.message_type),
+                        text_content=block.content,
+                        timestamp=msg.timestamp,
+                    )
                 )
-            )
+            if remaining:
+                events.append(
+                    TextMessage(
+                        role=MessageRole.USER,
+                        text_content=remaining,
+                        timestamp=msg.timestamp,
+                    )
+                )
         elif msg.message_type == MessageType.TEXT_RESPONSE:
             # Agent text response - single text message
             # Extract model_name from serialized pydantic_content if available

@@ -166,13 +166,10 @@ class ClaudeCodeAgent(BaseAgent):
     async def _create_client(self) -> ClaudeClient:
         """Create a Claude client with the current system prompt and session ID.
 
-        This is called on each run to ensure the system prompt includes
-        the latest document state.
-
         Returns:
             Configured ClaudeClient instance
         """
-        system_prompt = await self._build_system_prompt()
+        system_prompt = self._build_system_prompt()
         logfire.info(f"Initialising ClaudeClient in directory: {self.working_dir}")
 
         return ClaudeClient(
@@ -186,10 +183,11 @@ class ClaudeCodeAgent(BaseAgent):
             load_settings=self.role.include_claude_md,
         )
 
-    async def _build_system_prompt(self) -> str:
+    def _build_system_prompt(self) -> str:
         """Build the system prompt from role.
 
-        Combines role description (with custom instructions), tool schemas, and state/context data.
+        Combines role description (with custom instructions) and tool schemas.
+        Context is injected separately on the first run via the execution service.
         """
         # Get full system prompt (role prompt + custom instructions)
         role_prompt = self.get_full_system_prompt()
@@ -197,10 +195,7 @@ class ClaudeCodeAgent(BaseAgent):
         # Build tool schemas from virtual tools
         virtual_tool_prompt = build_virtual_tool_schemas_section(list(self._virtual_tools.values()))
 
-        # Get current state/context from role (async operation)
-        state_context = await self.role.get_context_content()
-
-        prompt_parts = [role_prompt, virtual_tool_prompt, state_context]
+        prompt_parts = [role_prompt, virtual_tool_prompt]
 
         if not self.role.include_builtin_system_prompt:
             prompt_parts.append(CLAUDE_COMPACTION_PROMPT)

@@ -14,6 +14,7 @@ from devboard.agents.tools import (
 )
 from devboard.agents.tools.implementation_plan_tools import (
     create_execute_implementation_step_tool,
+    create_get_implementation_plan_overview_tool,
     create_read_implementation_step_details_tool,
 )
 from devboard.agents.tools.sub_agent_tools import create_code_review_tool
@@ -183,6 +184,7 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
                         self.working_dir,
                     ),
                     create_read_implementation_step_details_tool(self.task, self.plan_service),
+                    create_get_implementation_plan_overview_tool(self.task),
                 ]
             )
         elif has_document_plan and self.task.implementation_plan is not None:
@@ -228,10 +230,12 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
         """Get context content for task implementation role.
 
         Returns:
-            Formatted context containing task details, specification, and implementation plan
+            Formatted context containing task details, specification, and implementation plan.
+            Step statuses are excluded from the plan — use get_implementation_plan_overview tool
+            to check current step statuses during execution.
         """
-        context = build_task_context(self.task, working_dir=self.working_dir)
-        execution_graph = build_execution_graph_context(self.task)
+        context = build_task_context(self.task, working_dir=self.working_dir, include_step_status=False)
+        execution_graph = build_execution_graph_context(self.task, include_step_status=False)
         if execution_graph:
             context += "\n\n" + execution_graph
         return context

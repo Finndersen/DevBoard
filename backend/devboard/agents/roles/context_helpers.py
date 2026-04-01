@@ -67,6 +67,7 @@ def _format_implementation_plan_structured(
     task: Task,
     *,
     include_step_outcomes: bool = False,
+    include_step_status: bool = True,
 ) -> str:
     """Format structured implementation plan with steps summary.
 
@@ -74,6 +75,8 @@ def _format_implementation_plan_structured(
         task: Task with structured implementation plan
         include_step_outcomes: If True, include full step outcomes for completed steps.
             If False (default), outcomes are omitted entirely.
+        include_step_status: If True (default), include step status in brackets.
+            If False, omit status from the step summary line.
     """
     plan = task.implementation_plan_structured
     if not plan:
@@ -87,15 +90,22 @@ def _format_implementation_plan_structured(
     lines.append("\nSteps:")
     for step in plan.steps:
         deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
-        lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}")
+        status_part = f"[{step.status}] " if include_step_status else ""
+        lines.append(f"  {step.step_number}. {status_part}{step.title} [{step.type}]{deps}")
         if include_step_outcomes and step.outcome:
             lines.append(f"     Outcome: {step.outcome}")
 
     return "\n".join(lines)
 
 
-def build_execution_graph_context(task: Task) -> str:
-    """Build execution graph context showing step ordering and parallelism."""
+def build_execution_graph_context(task: Task, *, include_step_status: bool = True) -> str:
+    """Build execution graph context showing step ordering and parallelism.
+
+    Args:
+        task: Task with structured implementation plan
+        include_step_status: If True (default), include step status in brackets.
+            If False, omit status from the execution graph entries.
+    """
     plan = task.implementation_plan_structured
     if not plan or not plan.steps:
         return ""
@@ -122,7 +132,8 @@ def build_execution_graph_context(task: Task) -> str:
         step_summaries: list[str] = []
         for n in layer:
             step = steps_by_number[n]
-            step_summaries.append(f"Step {n}: {step.title} [{step.status}]")
+            status_part = f" [{step.status}]" if include_step_status else ""
+            step_summaries.append(f"Step {n}: {step.title}{status_part}")
         parallel_note = " (can run in parallel)" if len(layer) > 1 else ""
         lines.append(f"  Layer {i}{parallel_note}:")
         for summary in step_summaries:
@@ -154,6 +165,8 @@ def build_task_context(
     working_dir: str,
     include_project_specification: bool = True,
     include_step_outcomes: bool = False,
+    include_implementation_plan: bool = True,
+    include_step_status: bool = True,
 ) -> str:
     """Build standardized task context for agent roles.
 
@@ -162,6 +175,8 @@ def build_task_context(
         working_dir: Working directory path for the task's codebase
         include_project_specification: Whether to include the full project specification document
         include_step_outcomes: Whether to include full step outcomes in the structured plan
+        include_implementation_plan: Whether to include the implementation plan section
+        include_step_status: Whether to include step status in the structured plan summary
 
     Returns:
         Formatted context string with consistent structure.
@@ -177,10 +192,17 @@ def build_task_context(
     sections.append(_format_task_specification(task))
 
     # Prefer structured plan, fall back to Document plan
-    if task.implementation_plan_structured:
-        sections.append(_format_implementation_plan_structured(task, include_step_outcomes=include_step_outcomes))
-    elif task.implementation_plan:
-        sections.append(_format_implementation_plan(task))
+    if include_implementation_plan:
+        if task.implementation_plan_structured:
+            sections.append(
+                _format_implementation_plan_structured(
+                    task,
+                    include_step_outcomes=include_step_outcomes,
+                    include_step_status=include_step_status,
+                )
+            )
+        elif task.implementation_plan:
+            sections.append(_format_implementation_plan(task))
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))

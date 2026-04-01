@@ -181,7 +181,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'execution_complete'
 
-export type MetaMessageType = 'compact_summary' | 'skill_content'
+export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context'
 
 export interface MetaMessage {
   event_type: 'meta_message'
