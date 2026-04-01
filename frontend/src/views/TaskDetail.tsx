@@ -88,7 +88,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Document update mutation
   const { mutate: updateDocument } = useUpdateDocument()
 
-  const { setTask, deleteTask: deleteTaskFromStore, fetchProjectTasks } = useDataStore()
+  const { setTask, deleteTask: deleteTaskFromStore } = useDataStore()
   const { cachedViews, findViewByEntity, evictView, switchTab, invalidateConversations, invalidateTasks } = useUIStore()
   const { data: codebases } = useCodebases()
   const { addNotification } = useNotificationStore()

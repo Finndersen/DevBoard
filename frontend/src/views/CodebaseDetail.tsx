@@ -1,6 +1,6 @@
 import { useEffect, useCallback, memo, useRef, useState } from 'react'
 import { FolderIcon, LinkIcon, PencilIcon, CheckIcon, XMarkIcon, CodeBracketIcon, ArrowPathIcon, Square3Stack3DIcon, CommandLineIcon } from '@heroicons/react/24/outline'
-import type { Codebase, MergeMethod, BranchHandling } from '../lib/api'
+import type { MergeMethod, BranchHandling } from '../lib/api'
 import { useCodebase, useUpdateCodebase, useEditableField } from '../hooks'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useDataStore } from '../stores/dataStore'
@@ -126,12 +126,6 @@ function CodebaseDetail({ id }: CodebaseDetailProps) {
       setMaxWorktreesValue(codebase.max_worktrees === null ? '' : String(codebase.max_worktrees))
     }
   }, [codebase?.max_worktrees])
-
-  const getMaxWorktreesDisplayValue = (value: number | null): string => {
-    if (value === null) return 'Unlimited (default)'
-    if (value === 0) return 'Main repository only'
-    return `Maximum ${value} worktree${value === 1 ? '' : 's'}`
-  }
 
   const saveMaxWorktrees = useCallback(
     async (value: string) => {

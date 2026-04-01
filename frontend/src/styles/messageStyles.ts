@@ -39,7 +39,7 @@ export const getPendingMessageBubbleClasses = (status: 'pending' | 'sent' | 'awa
   }
 }
 
-export const getTimestampClasses = (isUser: boolean) =>
+export const getTimestampClasses = (_isUser: boolean) =>
   'text-gray-500 dark:text-gray-400'
 
 export const formatTimestamp = (timestamp: string) =>

@@ -15,7 +15,7 @@ import type { ConversationResponse, GitHubPRStatusResponse } from '../../lib/api
 import { apiClient } from '../../lib/api'
 import { textColors, surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
-import { getStatusInfo, getReviewInfo } from '../github/PRStatusComponents'
+import { getStatusInfo, getReviewInfo } from '../github/prStatusUtils'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',

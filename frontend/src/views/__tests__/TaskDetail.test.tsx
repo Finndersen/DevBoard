@@ -14,7 +14,7 @@ vi.mock('../../contexts/ViewContext', () => ({
 }))
 
 // Helper to create NDJSON streaming response
-const createStreamingResponse = (events: any[]) => {
+const createStreamingResponse = (events: unknown[]) => {
   const ndjson = events.map(e => JSON.stringify(e)).join('\n') + '\n'
   return new HttpResponse(ndjson, {
     headers: { 'Content-Type': 'text/plain' }

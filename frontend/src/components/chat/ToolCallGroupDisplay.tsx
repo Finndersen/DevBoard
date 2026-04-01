@@ -47,7 +47,7 @@ function ToolCallGroupDisplay({ items, toolResultMap, highlightSet, workingDir, 
       const cacheKey = `${message.timestamp}-tool_call-${index}`
       const result = toolResultMap.get(cacheKey)
       if (result) {
-        result.is_error ? failed++ : succeeded++
+        if (result.is_error) { failed++ } else { succeeded++ }
       }
     }
     return { succeeded, failed }

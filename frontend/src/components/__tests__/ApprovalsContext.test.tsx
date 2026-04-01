@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act, renderHook } from '@testing-library/react'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { useApprovalsStore, useApprovalActions, useApprovals, useAllApprovals } from '../../stores/approvalsStore'
 import { createProjectApprovalKey } from '../../utils/approvalKeys'
 import { getReasoningFromToolArgs } from '../../utils/toolTypeUtils'
@@ -12,7 +12,7 @@ beforeEach(() => {
 })
 
 const TestComponent = () => {
-  const { setApprovals, clearApprovals, hasApprovals, getApprovals } = useApprovalActions()
+  const { setApprovals, clearApprovals, hasApprovals } = useApprovalActions()
   const projectKey = createProjectApprovalKey(1)
   const approvals = useApprovals(projectKey)
 

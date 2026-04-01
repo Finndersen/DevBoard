@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
-import type { ConversationEvent, ToolCall, ToolResult, SystemEvent, SystemEventType } from '../lib/api'
+import type { ConversationEvent, ToolCall, ToolResult, SystemEvent } from '../lib/api'
 
 /**
  * Handler function for tool calls.

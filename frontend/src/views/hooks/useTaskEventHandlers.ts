@@ -1,6 +1,6 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { TaskStatus } from '../../lib/api'
-import type { Task, ToolCall, ToolResult } from '../../lib/api'
+import type { Task, ToolCall, ToolResult, SystemEvent } from '../../lib/api'
 import { useToolCallHandler, useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 
 interface UseTaskEventHandlersParams {
@@ -148,7 +148,7 @@ export function useTaskEventHandlers({
 
   useToolResultHandler(rebaseHandler)
 
-  const systemEventHandler = useCallback(async (event: any) => {
+  const systemEventHandler = useCallback(async (event: SystemEvent) => {
     const isRelevantEventType = event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate'
     const isForThisTask = event.data?.task_id === task?.id
 

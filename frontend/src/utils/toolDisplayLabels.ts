@@ -56,13 +56,6 @@ export function relativizePath(absolutePath: string, workingDir?: string): strin
 }
 
 /**
- * Escape special regex characters in a string.
- */
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/**
  * Generate a display label for a tool call based on tool name and arguments.
  *
  * @param toolName - The raw tool name (may include MCP prefixes)

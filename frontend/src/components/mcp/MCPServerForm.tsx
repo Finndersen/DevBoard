@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Modal, Button, Input } from '../ui'
 import { textColors, statusColors, borderColors } from '../../styles/designSystem'
 import { standardInputClasses } from '../../styles/inputStyles'

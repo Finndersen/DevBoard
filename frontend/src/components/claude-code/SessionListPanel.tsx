@@ -1,6 +1,7 @@
 import { DocumentTextIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { textColors } from '../../styles/designSystem'
 import type { ClaudeCodeSession } from '../../lib/api'
+import { AGENT_ROLE_LABELS } from './agentRoleLabels'
 
 interface SessionListPanelProps {
   sessions: ClaudeCodeSession[]
@@ -8,14 +9,6 @@ interface SessionListPanelProps {
   loading: boolean
   onSelect: (session: ClaudeCodeSession) => void
   matchCounts?: Map<string, number>
-}
-
-export const AGENT_ROLE_LABELS: Record<string, string> = {
-  task_planning: 'Planning',
-  task_implementation: 'Implementation',
-  task_pr_review: 'PR Review',
-  investigation: 'Investigation',
-  code_review: 'Code Review',
 }
 
 function formatRelativeTime(isoDate: string): string {

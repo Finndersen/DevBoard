@@ -19,7 +19,6 @@ export default function ProjectConversationSelector({
   projectId,
   activeConversationId,
   onSelect,
-  onNew,
   onDelete,
   onRename,
 }: ProjectConversationSelectorProps) {

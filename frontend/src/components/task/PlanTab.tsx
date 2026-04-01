@@ -323,7 +323,7 @@ interface PlanTabProps {
   planField?: ReturnType<typeof useEditableField<string>>
 }
 
-export function PlanTab({ taskId, taskStatus, implementationPlan, onPlanUpdated, implementationPlanDoc, planField }: PlanTabProps) {
+export function PlanTab({ taskId, taskStatus, implementationPlan, onPlanUpdated, implementationPlanDoc }: PlanTabProps) {
   // Structured plan takes priority
   if (implementationPlan) {
     return (

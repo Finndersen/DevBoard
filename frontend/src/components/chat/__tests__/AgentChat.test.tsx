@@ -32,7 +32,7 @@ describe('AgentChat', () => {
 
     // Mock window.location.reload for jsdom
     delete (window as { location?: unknown }).location
-    // @ts-ignore - mock location for testing
+    // @ts-expect-error - mock location for testing
     window.location = { reload: vi.fn() }
 
     // Reset server handlers

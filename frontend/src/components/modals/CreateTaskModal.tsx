@@ -163,7 +163,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         }
       })
 
-      const taskData: any = {
+      const taskData: Record<string, unknown> = {
         title: newTask.title,
         codebase_id: newTask.codebase_id,
         specification_content: null,

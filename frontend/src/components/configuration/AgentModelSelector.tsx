@@ -36,7 +36,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
       setError(null)
       
       // TODO: Update to use correct API endpoint
-      const response = await (apiClient as any).getAvailableModelsForAgent(agentType)
+      const response = await (apiClient as unknown as Record<string, (...args: unknown[]) => Promise<AvailableModelsForAgentResponse>>).getAvailableModelsForAgent(agentType)
       setData(response)
       setSelectedModel(response.preferred_model)
     } catch (err) {
@@ -73,7 +73,7 @@ export function AgentModelSelector({ agentType, agentName, onModelChange }: Agen
       setSaving(true)
       const request: UpdateAgentModelRequest = { model_id: modelId }
       // TODO: Update to use correct API endpoint
-      const response = await (apiClient as any).updateAgentModel(agentType, request)
+      const response = await (apiClient as unknown as Record<string, (...args: unknown[]) => Promise<{ model_id: string | null }>>).updateAgentModel(agentType, request)
       
       // Update local state directly - no need to refetch data
       setSelectedModel(response.model_id)

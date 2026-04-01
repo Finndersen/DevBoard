@@ -22,8 +22,10 @@ export function useMessageQueueing(
   )
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadTextRef = useRef(!!inputMessage.trim())
+  const inputMessageRef = useRef(inputMessage)
 
   const setInputMessage = useCallback((text: string) => {
+    inputMessageRef.current = text
     setInputMessageRaw(text)
 
     // Update hasDraft flag immediately but only on empty↔non-empty transitions
@@ -46,8 +48,8 @@ export function useMessageQueueing(
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current)
       }
-      // Flush current input to store on unmount
-      useUIStore.getState().saveDraftText(viewType, entityId, inputMessage)
+      // Flush current input to store on unmount (use ref to get latest value, not stale closure)
+      useUIStore.getState().saveDraftText(viewType, entityId, inputMessageRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally capture initial refs only; flushed via ref
   }, [viewType, entityId])
@@ -61,6 +63,7 @@ export function useMessageQueueing(
       return
     }
 
+    inputMessageRef.current = ''
     setInputMessageRaw('')
     hadTextRef.current = false
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
@@ -88,6 +91,7 @@ export function useMessageQueueing(
       (!currentStreamState.pendingToolRequests || currentStreamState.pendingToolRequests.length === 0)
     ) {
       const messageToSend = inputMessage.trim()
+      inputMessageRef.current = ''
       setInputMessageRaw('')
       hadTextRef.current = false
       if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)

@@ -89,7 +89,6 @@ export function TaskDetailHeader({
   onOpenBranchStatusModal,
   onDeleteTask,
   deleteLoading,
-  deleteError,
   onResolveConflicts,
   isConversationStreaming,
 }: TaskDetailHeaderProps) {
