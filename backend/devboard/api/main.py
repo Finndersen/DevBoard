@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -46,6 +47,11 @@ from devboard.services.workspace.pool_manager import WorktreePoolManager
 """Load environment variables from .env files in current directory or home directory."""
 load_dotenv(Path.cwd() / ".env", override=False)
 load_dotenv(Path.home() / ".env", override=False)
+
+# Prevent subprocesses (e.g. Claude Code CLI) from inheriting the server's VIRTUAL_ENV.
+# The running Python interpreter doesn't use VIRTUAL_ENV at runtime (sys.prefix is set at
+# interpreter start), so removing it here is safe and avoids uv warnings in child processes.
+os.environ.pop("VIRTUAL_ENV", None)
 
 
 _GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 60
