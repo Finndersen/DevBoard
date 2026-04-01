@@ -160,7 +160,7 @@ _FINALISATION_PREAMBLE = """## Git Status
 ## Instructions
 IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
 
-If there are uncommitted changes, create appropriate commit(s) with clear commit messages first."""
+If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` with clear commit messages first."""
 
 
 class ApproveAndMergeAction(TaskWorkflowAction):
@@ -169,9 +169,9 @@ class ApproveAndMergeAction(TaskWorkflowAction):
     KEY = "task.approve_and_merge"
 
     _COMMIT_INSTRUCTIONS: dict[str, str] = {
-        MergeMethod.SQUASH: "If there are uncommitted changes, commit them — a single commit is fine since all commits will be squashed into one at merge time.",
-        MergeMethod.REBASE: "If there are uncommitted changes, create logical, atomic commits with clear commit messages — each commit will be individually replayed onto the base branch and preserved in the history.",
-        MergeMethod.MERGE_COMMIT: "If there are uncommitted changes, create appropriate commit(s) with clear commit messages — each commit will be preserved in the full merge history.",
+        MergeMethod.SQUASH: 'If there are uncommitted changes, commit them with `git add -A && git commit -m "..."` — a single commit is fine since all commits will be squashed into one at merge time.',
+        MergeMethod.REBASE: 'If there are uncommitted changes, create logical, atomic commits using `git add -A && git commit -m "..."` — each commit will be individually replayed onto the base branch.',
+        MergeMethod.MERGE_COMMIT: 'If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` — each commit will be preserved in the full merge history.',
     }
 
     @staticmethod
@@ -197,7 +197,8 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
     @classmethod
     def is_available(cls, task: Task) -> bool:
         return (
-            task.status == TaskStatus.IMPLEMENTING and task.codebase.branch_handling == BranchHandling.LOCAL_MERGE.value
+            task.status == TaskStatus.IMPLEMENTING
+            and task.codebase.branch_handling == BranchHandling.DIRECT_MERGE.value
         )
 
     async def run(self) -> str | None:
@@ -216,10 +217,16 @@ class ApproveAndCreatePRAction(TaskWorkflowAction):
     """Approve changes and create a GitHub pull request."""
 
     KEY = "task.approve_and_create_pr"
-    PROMPT_TEMPLATE = (
-        _FINALISATION_PREAMBLE
-        + """
 
+    # Commit instructions for PR flow: inform about style expectations without directing squash
+    # (the feature branch is pushed as-is; GitHub handles squash/rebase/merge at PR merge time)
+    _COMMIT_INSTRUCTIONS: dict[str, str] = {
+        MergeMethod.SQUASH: 'If there are uncommitted changes, commit them with `git add -A && git commit -m "..."` — a single commit is fine; GitHub will squash all commits at PR merge time.',
+        MergeMethod.REBASE: 'If there are uncommitted changes, create logical, atomic commits using `git add -A && git commit -m "..."` — each commit will be individually replayed at PR merge time.',
+        MergeMethod.MERGE_COMMIT: 'If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` — each commit will be preserved in the merge history.',
+    }
+
+    _PR_INSTRUCTIONS = """
 Once all changes are committed, use the `create_pull_request` tool to create a GitHub PR.
 
 When creating the PR:
@@ -231,7 +238,23 @@ When creating the PR:
   - Testing notes if applicable
 
 The PR will be created against the base branch and the task will transition to PR_OPEN status."""
-    )
+
+    @staticmethod
+    def _build_prompt(merge_method: str, changes_context: str) -> str:
+        commit_instruction = ApproveAndCreatePRAction._COMMIT_INSTRUCTIONS.get(
+            merge_method,
+            'If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` with clear commit messages first.',
+        )
+        return (
+            f"""## Git Status
+{changes_context}
+
+## Instructions
+IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
+
+{commit_instruction}"""
+            + ApproveAndCreatePRAction._PR_INSTRUCTIONS
+        )
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -248,7 +271,7 @@ The PR will be created against the base branch and the task will transition to P
             raise ValueError(f"GitHub connection failed: {connection_result.message}")
 
         changes_context = await _get_task_changes_prompt_context(self.task)
-        return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+        return self._build_prompt(self.task.codebase.merge_method, changes_context)
 
 
 class MergeAndFinaliseAction(TaskWorkflowAction):

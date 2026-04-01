@@ -26,13 +26,9 @@ class MergeMethod(StrEnum):
 class BranchHandling(StrEnum):
     """Where/how the feature branch is finalized."""
 
-    LOCAL_MERGE = "local_merge"  # Merge locally using merge_method
+    DIRECT_MERGE = "direct_merge"  # Merge directly (locally) using merge_method
     GITHUB_PR = "github_pr"  # Create PR on GitHub, merge via GitHub using merge_method
     MANUAL = "manual"  # No automatic handling - user manages branch manually
-
-
-# Backwards compatibility alias (deprecated)
-MergeStrategy = MergeMethod
 
 
 class Codebase(Base):
@@ -48,7 +44,7 @@ class Codebase(Base):
     local_path: Mapped[str] = mapped_column(String(512))
     default_branch: Mapped[str] = mapped_column(String(255), default="origin/main")
     merge_method: Mapped[str] = mapped_column(String(50), default=MergeMethod.SQUASH.value)
-    branch_handling: Mapped[str] = mapped_column(String(50), default=BranchHandling.LOCAL_MERGE.value)
+    branch_handling: Mapped[str] = mapped_column(String(50), default=BranchHandling.DIRECT_MERGE.value)
     max_worktrees: Mapped[int | None] = mapped_column(default=None)
     setup_command: Mapped[str | None] = mapped_column(String(1024), default=None)
     developer_context: Mapped[str | None] = mapped_column(Text, default=None)

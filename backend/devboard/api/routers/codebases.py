@@ -72,7 +72,7 @@ async def create_codebase(
     branch_handling = codebase.branch_handling
     if branch_handling is None:
         # Default to GITHUB_PR if remote URL exists, otherwise LOCAL_MERGE
-        branch_handling = BranchHandling.GITHUB_PR if repository_url else BranchHandling.LOCAL_MERGE
+        branch_handling = BranchHandling.GITHUB_PR if repository_url else BranchHandling.DIRECT_MERGE
 
     # Validate github_pr branch handling requires a remote URL
     if branch_handling == BranchHandling.GITHUB_PR and not repository_url:

@@ -3,7 +3,7 @@
 from .agent_role_config import AgentRoleConfig
 from .base import Base
 from .claude_project import ClaudeProjectPathCache
-from .codebase import BranchHandling, Codebase, MergeMethod, MergeStrategy
+from .codebase import BranchHandling, Codebase, MergeMethod
 from .configuration import Configuration
 from .conversation import Conversation
 from .custom_field import CustomFieldDefinition, CustomFieldType
@@ -56,7 +56,6 @@ __all__ = [
     "MCPServerType",
     "MCPTool",
     "MergeMethod",
-    "MergeStrategy",  # Deprecated alias for MergeMethod
     "MessageType",
     "OAuthClientInfo",
     "OAuthProvider",

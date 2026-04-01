@@ -68,6 +68,7 @@ IMPORTANT BEHAVIOUR GUIDELINES:
 - Task or Project documents are internally managed and NOT stored on the filesystem so cannot be viewed or edited like normal files
 - After completing changes, respond with a VERY BRIEF and concise summary of changes made.
 - When creating commits, DO NOT add Claude Code attribution messages
+- When committing changes, stage and commit in a single command: `git add -A && git commit -m "message"`. Using `git add -A` is safe in task worktrees since build artifacts are gitignored. Do NOT list individual files separately with `git add`.
 """
 
 _STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
@@ -216,8 +217,8 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
         if branch_handling == BranchHandling.GITHUB_PR.value:
             # GitHub PR workflow: create PR tool
             tools.append(create_github_pr_tool(self.task, self.github_integration, self.task_service))
-        elif branch_handling == BranchHandling.LOCAL_MERGE.value:
-            # Local merge workflow: complete_task_with_local_merge tool handles change summary + merge
+        elif branch_handling == BranchHandling.DIRECT_MERGE.value:
+            # Direct merge workflow: complete_task_with_local_merge tool handles change summary + merge
             tools.append(create_complete_task_with_local_merge_tool(self.task, self.task_service))
         # For MANUAL branch handling, no completion tools are provided
 

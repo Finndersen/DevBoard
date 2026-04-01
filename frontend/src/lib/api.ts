@@ -339,7 +339,7 @@ export interface LLMProvider {
 }
 
 export type MergeMethod = 'squash' | 'rebase' | 'merge_commit'
-export type BranchHandling = 'local_merge' | 'github_pr' | 'manual'
+export type BranchHandling = 'direct_merge' | 'github_pr' | 'manual'
 
 export interface Codebase {
   id: number

@@ -25,19 +25,19 @@ class TaskGitService:
     """Service for task git operations."""
 
     @classmethod
-    async def _fetch_remote_gracefully(cls, git: GitRepoIntegration, base_branch: str) -> bool:
+    async def _fetch_remote_gracefully(cls, repo_git: GitRepoIntegration, base_branch: str) -> bool:
         """Attempt to fetch the base branch from remote, returning success status.
 
         Returns True if fetch succeeded or branch is local (no fetch needed).
         Returns False if remote fetch failed (logged as warning).
         """
-        remotes = await git.list_remotes()
+        remotes = await repo_git.list_remotes()
         parsed = parse_remote_branch(base_branch, remotes)
         if parsed is None:
             return True
         remote, branch = parsed
         try:
-            await git.fetch(remote=remote, branch=branch, timeout=10.0)
+            await repo_git.fetch(remote=remote, branch=branch, timeout=10.0)
             return True
         except ShellCommandError as e:
             logfire.warn(f"Remote fetch failed for base branch '{base_branch}' (proceeding with local state): {e}")
@@ -91,7 +91,7 @@ class TaskGitService:
         return await git.get_commits_in_range(fork_point, task.branch_name)
 
     @classmethod
-    async def _get_base_conflicting_uncommitted_files(cls, git: GitRepoIntegration, task: Task) -> list[str]:
+    async def _get_base_conflicting_uncommitted_files(cls, repo_git: GitRepoIntegration, task: Task) -> list[str]:
         """Return uncommitted files in the base branch checkout that overlap with task branch changes.
 
         Mirrors the overlap check in merge_task_feature_branch(). Returns an empty list when:
@@ -99,21 +99,21 @@ class TaskGitService:
         - the base checkout has no uncommitted changes, or
         - there are no overlapping files.
         """
-        checkout_path = await git.get_checked_out_location(task.base_branch)
+        checkout_path = await repo_git.get_checked_out_location(task.base_branch)
         if not checkout_path:
             return []
         base_git = GitRepoIntegration(checkout_path)
         uncommitted_files = await base_git.get_uncommitted_file_paths()
         if not uncommitted_files:
             return []
-        feature_files = await git.get_changed_file_paths(task.base_branch, task.branch_name, from_merge_base=True)
+        feature_files = await repo_git.get_changed_file_paths(task.base_branch, task.branch_name, from_merge_base=True)
         return list(set(uncommitted_files) & set(feature_files))
 
     @classmethod
     async def get_base_conflicting_uncommitted_files(cls, task: Task) -> list[str]:
         """Return uncommitted files in the base branch checkout that overlap with task branch changes."""
-        git = GitRepoIntegration(task.codebase.local_path)
-        return await cls._get_base_conflicting_uncommitted_files(git, task)
+        repo_git = GitRepoIntegration(task.codebase.local_path)
+        return await cls._get_base_conflicting_uncommitted_files(repo_git, task)
 
     @classmethod
     async def get_task_git_status(cls, task: Task) -> TaskGitStatus:
@@ -131,8 +131,7 @@ class TaskGitService:
             worktree_git = GitRepoIntegration(worktree_slot_path)
             rebase_in_progress = worktree_git.is_rebase_in_progress()
 
-        git = GitRepoIntegration(task.codebase.local_path)
-        branch_exists = await git.branch_exists(task.branch_name)
+        branch_exists = await main_git.branch_exists(task.branch_name)
 
         if not branch_exists:
             return TaskGitStatus(
@@ -149,20 +148,20 @@ class TaskGitService:
                 rebase_in_progress=rebase_in_progress,
             )
 
-        fetch_succeeded = await cls._fetch_remote_gracefully(git, task.base_branch)
+        fetch_succeeded = await cls._fetch_remote_gracefully(main_git, task.base_branch)
 
-        comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
+        comparison = await main_git.get_branch_comparison(task.branch_name, task.base_branch)
 
         has_uncommitted_base_overlap = False
         if worktree_git and branch_exists:
             uncommitted_files = await worktree_git.get_uncommitted_file_paths()
             if uncommitted_files:
-                fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
+                fork_point = await main_git.get_fork_point(task.base_branch, task.branch_name)
                 if fork_point:
-                    base_changed_files = await git.get_changed_file_paths(fork_point, task.base_branch)
+                    base_changed_files = await main_git.get_changed_file_paths(fork_point, task.base_branch)
                     has_uncommitted_base_overlap = bool(set(uncommitted_files) & set(base_changed_files))
 
-        conflicting_files = await cls._get_base_conflicting_uncommitted_files(git, task)
+        conflicting_files = await cls._get_base_conflicting_uncommitted_files(main_git, task)
 
         return TaskGitStatus(
             branch_name=task.branch_name,
@@ -298,17 +297,12 @@ class TaskGitService:
         """Merge a task's feature branch into its base branch based on codebase merge method.
 
         Validates, pre-checks, then delegates to the appropriate MergeStrategy.
-        Only used for LOCAL_MERGE branch handling — base branch is always expected to be a local branch.
+        Used for DIRECT_MERGE branch handling — supports both local and remote (origin/*) base branches.
         """
-        if task.base_branch.startswith("origin/"):
-            raise ValueError(
-                f"merge_task_feature_branch() requires a local base branch, got remote: '{task.base_branch}'"
-            )
-
         merge_method = MergeMethod(task.codebase.merge_method)
-        git = GitRepoIntegration(task.codebase.local_path)
+        repo_git = GitRepoIntegration(task.codebase.local_path)
 
-        comparison = await git.get_branch_comparison(task.branch_name, task.base_branch)
+        comparison = await repo_git.get_branch_comparison(task.branch_name, task.base_branch)
         if comparison.has_conflicts:
             return MergeResult(
                 outcome=MergeOutcome.CONFLICT,
@@ -326,12 +320,12 @@ class TaskGitService:
         # Check for uncommitted changes in base branch workdir that overlap with
         # feature branch changes. Non-overlapping uncommitted changes are safe —
         # the merge strategies already handle stash/unstash.
-        checkout_path = await git.get_checked_out_location(task.base_branch)
+        checkout_path = await repo_git.get_checked_out_location(task.base_branch)
         if checkout_path:
             base_git = GitRepoIntegration(checkout_path)
             uncommitted_files = await base_git.get_uncommitted_file_paths()
             if uncommitted_files:
-                feature_files = await git.get_changed_file_paths(
+                feature_files = await repo_git.get_changed_file_paths(
                     task.base_branch, task.branch_name, from_merge_base=True
                 )
                 overlapping = set(uncommitted_files) & set(feature_files)
@@ -343,13 +337,23 @@ class TaskGitService:
                         message=f"Cannot merge: uncommitted changes in '{checkout_path}' overlap with feature branch changes:\n{file_list}\nPlease commit or stash these files first.",
                     )
 
-        release_result = await git.release_branch_from_worktree(task.branch_name)
+        feature_worktree_path = await repo_git.get_checked_out_location(task.branch_name)
+        if feature_worktree_path and feature_worktree_path != str(repo_git.repo_path):
+            feature_worktree_git = GitRepoIntegration(feature_worktree_path)
+            if await feature_worktree_git.has_uncommitted_changes():
+                return MergeResult(
+                    outcome=MergeOutcome.ERROR,
+                    merge_method=merge_method,
+                    message=f"Cannot merge: task branch has uncommitted changes in '{feature_worktree_path}'. Commit or discard all changes before merging.",
+                )
+
+        release_result = await repo_git.release_branch_from_worktree(task.branch_name)
         if release_result.worktree_path:
             logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
 
         strategy = get_merge_strategy(merge_method)
         try:
-            return await strategy.execute(task, git)
+            return await strategy.execute(task, repo_git)
         except Exception as e:
             logfire.error(f"Merge failed for task {task.id}: {e}")
             return MergeResult(

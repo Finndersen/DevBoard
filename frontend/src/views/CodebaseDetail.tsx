@@ -18,7 +18,7 @@ const MERGE_METHOD_OPTIONS: { value: MergeMethod; label: string; description: st
 
 // Branch handling options - where/how the feature branch is finalized
 const BRANCH_HANDLING_OPTIONS: { value: BranchHandling; label: string; description: string }[] = [
-  { value: 'local_merge', label: 'Local Merge', description: 'Merge branch locally' },
+  { value: 'direct_merge', label: 'Direct Merge', description: 'Merge branch directly (locally)' },
   { value: 'github_pr', label: 'GitHub PR', description: 'Create PR for review, merge via GitHub' },
   { value: 'manual', label: 'Manual', description: 'No automatic handling - manage branch manually' },
 ]

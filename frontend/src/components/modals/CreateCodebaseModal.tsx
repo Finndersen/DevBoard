@@ -212,7 +212,7 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-gray-100"
           >
             <option value="">Auto-detect</option>
-            <option value="local_merge">Local Merge</option>
+            <option value="direct_merge">Direct Merge</option>
             <option value="github_pr">GitHub PR</option>
             <option value="manual">Manual</option>
           </select>
