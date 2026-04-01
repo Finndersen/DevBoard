@@ -62,6 +62,7 @@ def mock_conversation_repo():
     conversation = Mock(spec=Conversation)
     conversation.id = 99
     repo.get_active_conversation_for_entity.return_value = conversation
+    repo.db = Mock()
     return repo
 
 

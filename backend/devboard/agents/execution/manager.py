@@ -296,16 +296,18 @@ async def _run_agent_for_conversation(
                         ),
                     )
                 )
+            except AgentInterruptedError:
+                raise
             except Exception as e:
-                logfire.exception(f"Workspace preparation failed for conversation {conversation_id}: {e}")
+                logfire.exception(f"Agent execution failed for conversation {conversation_id}: {e}")
                 await broadcast_queue.put(
                     (
                         conversation_id,
                         SystemEvent(
                             type=SystemEventType.STREAM_ERROR,
                             data={
-                                "error_code": "WORKSPACE_ERROR",
-                                "message": f"Workspace preparation failed: {e}",
+                                "error_code": "AGENT_EXECUTION_ERROR",
+                                "message": f"Agent execution failed: {e}",
                             },
                             timestamp=datetime.datetime.now(datetime.UTC),
                         ),
