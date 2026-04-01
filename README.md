@@ -127,11 +127,10 @@ See `.env.example` for complete configuration options.
 ### Backend Development
 ```bash
 cd backend
-make format       # Format code with ruff
-make lint         # Run linting checks
-make type-check   # Run type checking
+make lint         # Auto-fix formatting and lint issues with ruff
+make typecheck    # Type-check with pyright (slow — run separately)
+make validate     # Run lint + typecheck together
 make test         # Run test suite
-make all-checks   # Run all quality checks
 ```
 
 ### Frontend Development

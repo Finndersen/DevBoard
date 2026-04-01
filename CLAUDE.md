@@ -32,8 +32,9 @@ We are working to develop an application as described in @docs/INDEX.md
 - Run: `uv run --frozen --active pytest -q --tb=short 2>&1` (never filter with grep)
 
 ## Development Process
-- `make format` — reformat code and remove unused imports
-- `make lint` — check for linting errors
+- `make lint` — auto-fix formatting and lint issues with ruff (~1-2s, run frequently during iteration)
+- `make typecheck` — type-check with pyright (~40s)
+- `make validate` — run lint + typecheck together; use as a final gate before marking work complete, not on every iteration
 
 ## Patterns
 - Use logfire for logging instead of standard logging module

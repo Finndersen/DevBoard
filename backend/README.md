@@ -21,16 +21,11 @@ make lock
 
 ## Code Quality
 
-Format, lint, and type check:
+Fix formatting/lint issues and run type checking:
 ```bash
-make format
-make lint
-make type-check
-```
-
-Run all checks:
-```bash
-make all-checks
+make lint          # auto-fix formatting and lint issues with ruff
+make typecheck     # type-check with pyright (slow — run separately)
+make validate      # run lint + typecheck together
 ```
 
 ## Database

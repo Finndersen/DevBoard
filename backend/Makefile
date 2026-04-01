@@ -1,6 +1,6 @@
 # DevBoard Backend - Development Commands
 
-.PHONY: help install dev format lint typecheck test start migrate clean
+.PHONY: help install dev lint typecheck validate test start migrate clean
 
 help:		## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -16,20 +16,15 @@ install:	## Install development dependencies & setup dev environment
 		uv run --frozen pre-commit install; \
 	fi
 
-format:		## Format code with ruff
-	uv run --frozen ruff format .
-	uv run --frozen ruff check . --fix
-
-lint:		## Lint code with ruff
-	uv run --frozen ruff format . --check
-	uv run --frozen ruff check .
-	uv run --frozen pyright
+lint:		## Fix formatting/lint issues with ruff (auto-fixes)
+	uv run --frozen --active ruff format .
+	uv run --frozen --active ruff check . --fix
 
 typecheck:	## Type-check code with pyright
-	uv run --frozen pyright
+	uv run --frozen --active pyright
 
 test:		## Run tests
-	uv run --frozen pytest
+	uv run --frozen --active pytest
 
 start:		## Start development server (use BACKEND_PORT=XXXX to override default 8000)
 	@lsof -ti :$${BACKEND_PORT:-8000} | xargs kill -9 2>/dev/null || true
@@ -46,5 +41,5 @@ clean:		## Clean up generated files
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
 
-all-checks:	## Run all checks (format, lint, type-check, test)
-	make format lint typecheck test
+validate:	## Run lint and typecheck together
+	make lint typecheck
