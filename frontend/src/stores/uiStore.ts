@@ -74,9 +74,9 @@ interface UIActions {
 
   // Draft messages
   setHasDraft: (viewType: ViewType, entityId: string, hasDraft: boolean) => void
-  saveDraftText: (viewType: ViewType, entityId: string, text: string) => void
-  getDraftMessage: (viewType: ViewType, entityId: string) => string
-  clearDraftMessage: (viewType: ViewType, entityId: string) => void
+  saveDraftText: (conversationId: number, text: string) => void
+  getDraftMessage: (conversationId: number) => string
+  clearDraftMessage: (conversationId: number, viewType: ViewType, entityId: string) => void
 
   // Utilities
   findViewByEntity: (type: ViewType, entityId: string) => CachedViewState | undefined
@@ -87,8 +87,8 @@ type UIStore = UIState & UIActions
 
 const STORAGE_KEY = 'devboard-ui-state'
 
-function draftKey(viewType: ViewType, entityId: string): string {
-  return `${viewType}:${entityId}`
+function draftKey(conversationId: number): string {
+  return `conversation:${conversationId}`
 }
 
 export const useUIStore = create<UIStore>()(
@@ -131,12 +131,11 @@ export const useUIStore = create<UIStore>()(
 
         // Create new view
         const newViewId = `view-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        const key = draftKey(viewData.type, viewData.entityId)
         const newView: CachedViewState = {
           ...viewData,
           id: newViewId,
           activityStatus: { type: 'idle' },
-          hasDraft: !!state.draftMessages[key],
+          hasDraft: false,
           lastActivity: new Date()
         }
 
@@ -313,9 +312,9 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
-      saveDraftText: (viewType, entityId, text) => {
+      saveDraftText: (conversationId, text) => {
         set((draft) => {
-          const key = draftKey(viewType, entityId)
+          const key = draftKey(conversationId)
           if (text) {
             draft.draftMessages[key] = text
           } else {
@@ -324,13 +323,13 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
-      getDraftMessage: (viewType, entityId) => {
-        return get().draftMessages[draftKey(viewType, entityId)] ?? ''
+      getDraftMessage: (conversationId) => {
+        return get().draftMessages[draftKey(conversationId)] ?? ''
       },
 
-      clearDraftMessage: (viewType, entityId) => {
+      clearDraftMessage: (conversationId, viewType, entityId) => {
         set((draft) => {
-          const key = draftKey(viewType, entityId)
+          const key = draftKey(conversationId)
           delete draft.draftMessages[key]
           const view = draft.cachedViews.find(v => v.type === viewType && v.entityId === entityId)
           if (view) {

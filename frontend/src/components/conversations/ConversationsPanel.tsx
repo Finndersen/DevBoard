@@ -300,7 +300,7 @@ export default function ConversationsPanel() {
                 String(item.parent_entity_id) === activeView.entityId &&
                 (item.parent_entity_type.toUpperCase() !== 'PROJECT' || item.id === activeConversationIdFromUrl)
               )
-              const hasDraft = draftKeys.has(`${item.parent_entity_type.toLowerCase()}:${item.parent_entity_id}`)
+              const hasDraft = draftKeys.has(`conversation:${item.id}`)
               const isPRReview = item.agent_role === 'task_pr_review'
               const prStatus = isPRReview ? prStatusMap.get(item.parent_entity_id) ?? null : null
               const ciInfo = prStatus ? getStatusInfo(prStatus.mergeable_state, prStatus.ci_status) : null

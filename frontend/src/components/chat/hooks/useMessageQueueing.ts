@@ -18,7 +18,7 @@ export function useMessageQueueing(
   entityId: string,
 ) {
   const [inputMessage, setInputMessageRaw] = useState(
-    () => useUIStore.getState().getDraftMessage(viewType, entityId)
+    () => useUIStore.getState().getDraftMessage(conversationId)
   )
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadTextRef = useRef(!!inputMessage.trim())
@@ -38,9 +38,9 @@ export function useMessageQueueing(
     // Debounce persisting the actual draft text
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
     draftSaveTimerRef.current = setTimeout(() => {
-      useUIStore.getState().saveDraftText(viewType, entityId, text)
+      useUIStore.getState().saveDraftText(conversationId, text)
     }, DRAFT_SAVE_DELAY_MS)
-  }, [viewType, entityId])
+  }, [conversationId, viewType, entityId])
 
   // Save draft text on unmount
   useEffect(() => {
@@ -49,10 +49,10 @@ export function useMessageQueueing(
         clearTimeout(draftSaveTimerRef.current)
       }
       // Flush current input to store on unmount (use ref to get latest value, not stale closure)
-      useUIStore.getState().saveDraftText(viewType, entityId, inputMessageRef.current)
+      useUIStore.getState().saveDraftText(conversationId, inputMessageRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally capture initial refs only; flushed via ref
-  }, [viewType, entityId])
+  }, [conversationId, viewType, entityId])
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputMessage.trim()
@@ -67,7 +67,7 @@ export function useMessageQueueing(
     setInputMessageRaw('')
     hadTextRef.current = false
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
-    useUIStore.getState().clearDraftMessage(viewType, entityId)
+    useUIStore.getState().clearDraftMessage(conversationId, viewType, entityId)
     await sendMessageViaHook(messageText)
   }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook, viewType, entityId])
 
@@ -95,7 +95,7 @@ export function useMessageQueueing(
       setInputMessageRaw('')
       hadTextRef.current = false
       if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
-      useUIStore.getState().clearDraftMessage(viewType, entityId)
+      useUIStore.getState().clearDraftMessage(conversationId, viewType, entityId)
       setQueued(conversationId, false)
       sendMessageViaHook(messageToSend)
     }

@@ -173,8 +173,8 @@ describe('uiStore - LRU eviction', () => {
       navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` })
     }
 
-    // Set draft on task0 (the oldest view)
-    saveDraftText('task', 'task0', 'Work in progress...')
+    // Set draft on task0 (the oldest view) — conversationId 0 is arbitrary here
+    saveDraftText(0, 'Work in progress...')
     setHasDraft('task', 'task0', true)
 
     // Add a new view — task1 should be evicted (oldest without draft), not task0
@@ -186,12 +186,11 @@ describe('uiStore - LRU eviction', () => {
   })
 
   it('allows cache to exceed max when all entries have drafts', () => {
-    const { navigateTo, saveDraftText, setHasDraft } = useUIStore.getState()
+    const { navigateTo, setHasDraft } = useUIStore.getState()
 
     // Create 12 views all with drafts
     for (let i = 0; i < 12; i++) {
       navigateTo({ type: 'task', entityId: `task${i}`, title: `Task ${i}` })
-      saveDraftText('task', `task${i}`, `Draft ${i}`)
       setHasDraft('task', `task${i}`, true)
     }
 
@@ -205,26 +204,37 @@ describe('uiStore - LRU eviction', () => {
 describe('uiStore - draft messages', () => {
   beforeEach(resetStore)
 
-  it('sets and gets draft messages', () => {
+  it('sets and gets draft messages by conversationId', () => {
     const { saveDraftText, getDraftMessage } = useUIStore.getState()
 
-    saveDraftText('task', '1', 'Hello draft')
-    expect(getDraftMessage('task', '1')).toBe('Hello draft')
+    saveDraftText(42, 'Hello draft')
+    expect(getDraftMessage(42)).toBe('Hello draft')
   })
 
   it('returns empty string for non-existent drafts', () => {
     const { getDraftMessage } = useUIStore.getState()
-    expect(getDraftMessage('task', '999')).toBe('')
+    expect(getDraftMessage(999)).toBe('')
   })
 
-  it('clears draft messages', () => {
+  it('clears draft messages by conversationId', () => {
     const { saveDraftText, clearDraftMessage, getDraftMessage } = useUIStore.getState()
 
-    saveDraftText('task', '1', 'Hello draft')
-    expect(getDraftMessage('task', '1')).toBe('Hello draft')
+    saveDraftText(42, 'Hello draft')
+    expect(getDraftMessage(42)).toBe('Hello draft')
 
-    clearDraftMessage('task', '1')
-    expect(getDraftMessage('task', '1')).toBe('')
+    clearDraftMessage(42, 'task', '1')
+    expect(getDraftMessage(42)).toBe('')
+  })
+
+  it('draft keys are conversation-specific, not entity-specific', () => {
+    const { saveDraftText, getDraftMessage } = useUIStore.getState()
+
+    // Two different conversations belonging to the same entity
+    saveDraftText(10, 'Draft for conversation 10')
+
+    expect(getDraftMessage(10)).toBe('Draft for conversation 10')
+    // Conversation 11 has no draft even though same entity
+    expect(getDraftMessage(11)).toBe('')
   })
 
   it('sets hasDraft flag on cached view via setHasDraft', () => {
@@ -237,15 +247,14 @@ describe('uiStore - draft messages', () => {
     expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
   })
 
-  it('clears hasDraft flag when draft is cleared', () => {
-    const { navigateTo, saveDraftText, setHasDraft, clearDraftMessage } = useUIStore.getState()
+  it('clears hasDraft flag on cached view when clearDraftMessage is called', () => {
+    const { navigateTo, setHasDraft, clearDraftMessage } = useUIStore.getState()
 
     navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
-    saveDraftText('task', '1', 'draft text')
     setHasDraft('task', '1', true)
     expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
 
-    clearDraftMessage('task', '1')
+    clearDraftMessage(42, 'task', '1')
     expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
   })
 
@@ -253,26 +262,32 @@ describe('uiStore - draft messages', () => {
     const { navigateTo, saveDraftText } = useUIStore.getState()
 
     navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
-    saveDraftText('task', '1', 'draft text')
+    saveDraftText(42, 'draft text')
     expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
   })
 
-  it('restores draft when navigating back to evicted entity', () => {
+  it('new view initializes with hasDraft false regardless of stored drafts', () => {
+    const { navigateTo, saveDraftText, evictView } = useUIStore.getState()
+
+    // Create view, save a draft for its conversation, then evict
+    const viewId = navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    saveDraftText(42, 'my draft')
+    evictView(viewId)
+
+    // Re-navigate: new view should start with hasDraft false
+    // (the hook will set it correctly on mount)
+    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
+    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(false)
+  })
+
+  it('draft text persists after view eviction and can be retrieved by conversationId', () => {
     const { navigateTo, saveDraftText, getDraftMessage, evictView } = useUIStore.getState()
 
-    // Create view and set draft
     const viewId = navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
-    saveDraftText('task', '1', 'my draft')
-
-    // Evict the view
+    saveDraftText(42, 'my draft')
     evictView(viewId)
-    expect(useUIStore.getState().cachedViews).toHaveLength(0)
 
-    // Draft should still be in draftMessages store
-    expect(getDraftMessage('task', '1')).toBe('my draft')
-
-    // Navigate back — new view should pick up the draft
-    navigateTo({ type: 'task', entityId: '1', title: 'Task 1' })
-    expect(useUIStore.getState().cachedViews[0].hasDraft).toBe(true)
+    // Draft text is still accessible by conversationId even after view eviction
+    expect(getDraftMessage(42)).toBe('my draft')
   })
 })
