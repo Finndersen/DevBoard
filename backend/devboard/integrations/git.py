@@ -43,11 +43,6 @@ class GitRepoIntegration:
     """
 
     def __init__(self, repo_path: str | Path):
-        """Initialize git integration.
-
-        Args:
-            repo_path: Path to the git repository root
-        """
         self._repo_path = Path(repo_path).resolve()
 
     async def validate(self) -> IntegrationConnectionResult:
@@ -78,19 +73,7 @@ class GitRepoIntegration:
         raise_on_error: bool = True,
         timeout: float = 30.0,
     ) -> str:
-        """Run a git command in the codebase directory.
-
-        Args:
-            args: Git command arguments (without 'git' prefix)
-            raise_on_error: Whether to raise exception on command failure
-            timeout: Command timeout in seconds
-
-        Returns:
-            Stdout from the git command
-
-        Raises:
-            ShellCommandExecutionError: If git command fails and raise_on_error is True
-        """
+        """Run a git command in the repo dir. args should not include the leading 'git'."""
         result = await execute_shell_command(
             ["git"] + args,
             working_dir=self._repo_path,
@@ -101,15 +84,6 @@ class GitRepoIntegration:
         return result.stdout.strip() if result.success else ""
 
     async def get_git_log(self, max_count: int = 10, file_path: str | None = None) -> list[GitLogEntry]:
-        """Get git commit history.
-
-        Args:
-            max_count: Maximum number of commits to retrieve
-            file_path: Optional file path to get history for specific file
-
-        Returns:
-            List of GitLogEntry objects
-        """
         # Use null bytes as field delimiters and RS (record separator, \x1e) as record separator
         # Format: hash\x00author\x00date\x00subject\x00body\x1e
         args = [
@@ -132,16 +106,6 @@ class GitRepoIntegration:
         commit2: str | None = None,
         file_path: str | None = None,
     ) -> str:
-        """Get git diff between commits or working directory.
-
-        Args:
-            commit1: First commit hash/reference
-            commit2: Second commit hash/reference (optional)
-            file_path: Optional file path to get diff for specific file
-
-        Returns:
-            Diff output as string
-        """
         args = ["diff"]
         if commit1:
             if commit2:
@@ -156,31 +120,10 @@ class GitRepoIntegration:
         return await self.run_git_command(args)
 
     async def get_merge_base(self, branch1: str, branch2: str) -> str:
-        """Get the merge base (common ancestor) between two branches.
-
-        Args:
-            branch1: First branch/commit reference
-            branch2: Second branch/commit reference
-
-        Returns:
-            Commit hash of the merge base
-        """
         return await self.run_git_command(["merge-base", branch1, branch2])
 
     async def get_fork_point(self, base_branch: str, feature_branch: str) -> str | None:
-        """Get the fork point where feature branch diverged from base branch.
-
-        Uses git merge-base to find the common ancestor commit between the two branches.
-        This works reliably for the standard case of a feature branch created from a base
-        branch, even when the base branch has had more commits added since.
-
-        Args:
-            base_branch: The base branch (e.g., 'main', 'master')
-            feature_branch: The feature branch to find fork point for
-
-        Returns:
-            Commit hash of the fork point, or None if it cannot be determined
-        """
+        """Return the merge-base commit where feature_branch diverged from base_branch, or None if undeterminable."""
         merge_base = await self.run_git_command(
             ["merge-base", base_branch, feature_branch],
             raise_on_error=False,
@@ -197,17 +140,7 @@ class GitRepoIntegration:
         return merge_base if merge_base else None
 
     def _parse_git_log_output(self, output: str) -> list[GitLogEntry]:
-        """Parse git log output with null-byte delimited format.
-
-        Expects format: hash\x00author\x00date\x00subject\x00body\x1e
-        (RS/\x1e as record separator, null as field separator)
-
-        Args:
-            output: Raw git log output
-
-        Returns:
-            List of GitLogEntry objects
-        """
+        """Parse git log output. Expected format per record: hash\x00author\x00date\x00subject\x00body\x1e"""
         commits: list[GitLogEntry] = []
         if not output.strip():
             return commits
@@ -242,16 +175,6 @@ class GitRepoIntegration:
         head_commit: str,
         file_paths: list[str] | None = None,
     ) -> list[GitLogEntry]:
-        """Get commits in a range (base..head).
-
-        Args:
-            base_commit: Base commit hash/reference (exclusive)
-            head_commit: Head commit hash/reference (inclusive)
-            file_paths: Optional list of file paths to filter commits by
-
-        Returns:
-            List of GitLogEntry objects for commits in the range
-        """
         # Use null bytes as field delimiters and RS (\x1e) as record separator
         args = [
             "log",
@@ -270,25 +193,10 @@ class GitRepoIntegration:
         return self._parse_git_log_output(output)
 
     async def get_commit_diff(self, commit_hash: str) -> str:
-        """Get the diff for a specific commit.
-
-        Args:
-            commit_hash: Commit hash to get diff for
-
-        Returns:
-            Diff output as string
-        """
         return await self.run_git_command(["show", "--format=", commit_hash])
 
     def _parse_git_diff(self, raw_diff: str) -> StructuredDiff:
-        """Parse raw git diff output into structured per-file diffs.
-
-        Args:
-            raw_diff: Raw git diff output
-
-        Returns:
-            StructuredDiff with parsed files and stats
-        """
+        """Parse raw git diff output into a StructuredDiff."""
         if not raw_diff.strip():
             return StructuredDiff(files=[], additions=0, deletions=0)
 
@@ -354,27 +262,10 @@ class GitRepoIntegration:
         commit1: str | None = None,
         commit2: str | None = None,
     ) -> StructuredDiff:
-        """Get structured git diff between commits or working directory.
-
-        Args:
-            commit1: First commit hash/reference
-            commit2: Second commit hash/reference (optional)
-
-        Returns:
-            StructuredDiff with parsed files and stats
-        """
         raw_diff = await self.get_git_diff(commit1=commit1, commit2=commit2)
         return self._parse_git_diff(raw_diff)
 
     async def get_structured_commit_diff(self, commit_hash: str) -> CommitDiff:
-        """Get structured diff for a specific commit including metadata.
-
-        Args:
-            commit_hash: Commit hash to get diff for
-
-        Returns:
-            CommitDiff with commit metadata and parsed files
-        """
         # Get commit metadata using show with format
         output = await self.run_git_command(
             [
@@ -405,14 +296,6 @@ class GitRepoIntegration:
         )
 
     async def get_git_branches(self, remote: bool = False) -> list[str]:
-        """Get list of git branches.
-
-        Args:
-            remote: Whether to list remote branches
-
-        Returns:
-            List of branch names
-        """
         args = ["branch"]
         if remote:
             args.append("-r")
@@ -429,14 +312,6 @@ class GitRepoIntegration:
         return branches
 
     async def list_worktrees(self) -> list[WorktreeInfo]:
-        """List all git worktrees for this repository.
-
-        Returns:
-            List of WorktreeInfo objects for each worktree
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         output = await self.run_git_command(["worktree", "list", "--porcelain"])
 
         worktrees: list[WorktreeInfo] = []
@@ -483,27 +358,9 @@ class GitRepoIntegration:
         return worktrees
 
     async def create_worktree(self, path: str, branch: str) -> None:
-        """Create a new git worktree.
-
-        Args:
-            path: Filesystem path for the new worktree
-            branch: Branch to checkout in the worktree
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["worktree", "add", path, branch])
 
     async def remove_worktree(self, path: str, force: bool = False) -> None:
-        """Remove a git worktree.
-
-        Args:
-            path: Path to the worktree to remove
-            force: Force removal even with uncommitted changes
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         args = ["worktree", "remove", path]
         if force:
             args.append("--force")
@@ -514,62 +371,25 @@ class GitRepoIntegration:
         await self.run_git_command(["worktree", "prune"])
 
     async def create_branch(self, name: str, base: str = "HEAD") -> None:
-        """Create a new git branch without checking it out.
-
-        Args:
-            name: Name of the new branch
-            base: Base commit/branch to create from (default: HEAD)
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
+        """Create a branch from base without checking it out."""
         await self.run_git_command(["branch", name, base])
 
     async def checkout_branch(self, name: str) -> None:
-        """Checkout a git branch.
-
-        Args:
-            name: Name of the branch to checkout
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["checkout", name])
 
     async def delete_branch(self, name: str, force: bool = False) -> None:
-        """Delete a git branch.
-
-        Args:
-            name: Name of the branch to delete
-            force: Force deletion even if not fully merged
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         args = ["branch"]
         args.append("-D" if force else "-d")
         args.append(name)
         await self.run_git_command(args)
 
     async def get_current_branch(self) -> str:
-        """Get the currently checked out branch name.
-
-        Returns:
-            Name of the current branch
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         return await self.run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
 
     async def get_in_progress_operation_branch(self) -> str | None:
-        """Get the branch associated with an in-progress rebase operation.
+        """Return the branch name being rebased, or None if no rebase is in progress.
 
-        During a rebase, HEAD is detached so get_current_branch() returns 'HEAD'.
-        This method checks for rebase state files to recover the original branch name.
-
-        Returns:
-            Branch name if a rebase is in progress, None otherwise
+        During a rebase HEAD is detached, so get_current_branch() returns 'HEAD'. This method reads rebase state files to recover the original branch name.
         """
         git_dir_str = await self.run_git_command(["rev-parse", "--git-dir"])
         git_dir = self._repo_path / git_dir_str
@@ -585,14 +405,7 @@ class GitRepoIntegration:
         return None
 
     async def get_branch_head(self, branch: str) -> str | None:
-        """Get the HEAD commit hash for a branch.
-
-        Args:
-            branch: Branch name (can be local like 'main' or remote like 'origin/main')
-
-        Returns:
-            The commit hash, or None if the branch doesn't exist
-        """
+        """Return the HEAD commit hash of branch, or None if the branch doesn't exist. Accepts local or remote branch names (e.g. 'main', 'origin/main')."""
         result = await self.run_git_command(
             ["rev-parse", "--verify", branch],
             raise_on_error=False,
@@ -600,19 +413,10 @@ class GitRepoIntegration:
         return result if result else None
 
     async def get_default_branch(self) -> str:
-        """Get the repository's default branch.
+        """Detect the repository default branch.
 
-        Detection strategy:
-        1. Try remote HEAD reference for each configured remote
-        2. Fall back to local HEAD (current branch for repos without remotes)
-        3. Check for common branch names (main, master) as last resort
-
-        Returns:
-            Branch reference (e.g., 'origin/main' for repos with remotes,
-            'main' for local-only repos)
-
-        Raises:
-            Exception: If unable to determine default branch
+        Detection order: remote HEAD ref → common local names (main, master) → local HEAD.
+        Returns a remote-tracking ref (e.g. 'origin/main') when a remote is configured.
         """
         for remote in await self.list_remotes():
             output = await self.run_git_command(
@@ -647,14 +451,6 @@ class GitRepoIntegration:
         )
 
     async def branch_exists(self, name: str) -> bool:
-        """Check if a branch exists.
-
-        Args:
-            name: Name of the branch to check
-
-        Returns:
-            True if branch exists, False otherwise
-        """
         output = await self.run_git_command(
             ["rev-parse", "--verify", f"refs/heads/{name}"],
             raise_on_error=False,
@@ -662,11 +458,6 @@ class GitRepoIntegration:
         return bool(output)
 
     async def has_commits(self) -> bool:
-        """Check if the repository has any commits.
-
-        Returns:
-            True if repository has at least one commit, False otherwise
-        """
         output = await self.run_git_command(
             ["rev-parse", "HEAD"],
             raise_on_error=False,
@@ -675,15 +466,6 @@ class GitRepoIntegration:
         return bool(output)
 
     async def get_branch_comparison(self, branch: str, base: str) -> BranchComparison:
-        """Get comparison information between a branch and its base.
-
-        Args:
-            branch: Branch to compare
-            base: Base branch to compare against
-
-        Returns:
-            BranchComparison object with ahead/behind counts and conflict information
-        """
         # Get ahead/behind counts
         ahead = 0
         behind = 0
@@ -717,19 +499,7 @@ class GitRepoIntegration:
         )
 
     async def merge_branch(self, source: str, target: str, no_ff: bool = False) -> str:
-        """Merge a source branch into a target branch.
-
-        Args:
-            source: Source branch to merge from
-            target: Target branch to merge into
-            no_ff: Create a merge commit even if fast-forward is possible
-
-        Returns:
-            Commit hash of the merge commit
-
-        Raises:
-            ShellCommandExecutionError: If merge fails
-        """
+        """Checkout target and merge source into it. Returns the new HEAD hash."""
         # First checkout the target branch
         await self.checkout_branch(target)
 
@@ -743,28 +513,15 @@ class GitRepoIntegration:
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def has_uncommitted_changes(self, include_untracked: bool = False) -> bool:
-        """Check if there are staged or unstaged changes in the working directory.
+        """Return True if the working directory has staged or unstaged changes.
 
-        Args:
-            include_untracked: When True, also detect untracked files. Default is False,
-                which excludes untracked files (e.g. allocation logic intentionally ignores them).
-
-        Returns:
-            True if there are uncommitted changes, False otherwise
+        include_untracked=False (default) ignores untracked files — use this when checking whether a merge/rebase operation is blocked.
         """
         args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
         output = await self.run_git_command(args, raise_on_error=False)
         return bool(output)
 
     async def get_uncommitted_change_count(self, include_untracked: bool = False) -> int:
-        """Get the number of uncommitted changes in the working directory.
-
-        Args:
-            include_untracked: When True, also count untracked files.
-
-        Returns:
-            Number of changed/untracked files (0 means clean)
-        """
         args = ["status", "--porcelain"] + ([] if include_untracked else ["-uno"])
         output = await self.run_git_command(args, raise_on_error=False)
         if not output:
@@ -772,11 +529,7 @@ class GitRepoIntegration:
         return len([line for line in output.splitlines() if line.strip()])
 
     async def get_uncommitted_file_paths(self) -> list[str]:
-        """Get deduplicated file paths with uncommitted changes (staged + unstaged).
-
-        Returns:
-            List of file paths that have staged or unstaged changes
-        """
+        """Return deduplicated file paths with staged or unstaged changes."""
         unstaged = await self.run_git_command(["diff", "--name-only"], raise_on_error=False)
         staged = await self.run_git_command(["diff", "--name-only", "--cached"], raise_on_error=False)
         paths: set[str] = set()
@@ -785,39 +538,20 @@ class GitRepoIntegration:
         return sorted(paths)
 
     async def get_changed_file_paths(self, commit_a: str, commit_b: str, from_merge_base: bool = False) -> list[str]:
-        """Get file paths changed between two commits.
+        """Return file paths changed between commit_a and commit_b.
 
-        Args:
-            commit_a: Starting commit reference
-            commit_b: Ending commit reference
-            from_merge_base: If True, diffs commit_b against the merge base of commit_a and
-                commit_b, returning only files changed on commit_b's branch since divergence.
-                If False, diffs the two tips directly.
-
-        Returns:
-            List of file paths changed between the two commits
+        When from_merge_base=True, uses three-dot diff (commit_b changes since divergence from commit_a) instead of direct two-tip comparison.
         """
         ref_args = [f"{commit_a}...{commit_b}"] if from_merge_base else [commit_a, commit_b]
         output = await self.run_git_command(["diff", "--name-only", *ref_args], raise_on_error=False)
         return [f for f in output.strip().split("\n") if f]
 
     async def get_conflicted_files(self) -> list[str]:
-        """Get list of files with unmerged conflicts.
-
-        Returns:
-            List of file paths that have unmerged conflicts
-        """
         output = await self.run_git_command(["diff", "--name-only", "--diff-filter=U"])
         return [f for f in output.strip().split("\n") if f]
 
     async def switch_detach(self) -> None:
-        """Detach HEAD from the current branch.
-
-        This releases the branch so it can be checked out in another worktree.
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
+        """Detach HEAD, releasing the current branch so it can be checked out in another worktree."""
         await self.run_git_command(["switch", "--detach"])
 
     async def list_remotes(self) -> list[str]:
@@ -826,38 +560,15 @@ class GitRepoIntegration:
         return output.splitlines() if output else []
 
     async def fetch(self, remote: str = "origin", branch: str | None = None, timeout: float = 30.0) -> None:
-        """Fetch latest changes from a remote.
-
-        Args:
-            remote: Remote name to fetch from (default: origin)
-            branch: Optional specific branch to fetch (default: fetch all)
-            timeout: Command timeout in seconds (default: 30.0)
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         args = ["fetch", remote]
         if branch:
             args.append(branch)
         await self.run_git_command(args, timeout=timeout)
 
     async def rebase_branch(self, branch: str, onto: str, abort_on_conflict: bool = True) -> str:
-        """Rebase a branch onto another branch.
+        """Rebase branch onto onto (git rebase <onto> <branch>).
 
-        This performs `git rebase <onto> <branch>` which rebases <branch> onto <onto>.
-
-        Args:
-            branch: Branch to rebase
-            onto: Branch to rebase onto
-            abort_on_conflict: If True (default), abort rebase on conflict. If False,
-                leave rebase paused on conflict for manual resolution.
-
-        Returns:
-            New HEAD commit hash after successful rebase
-
-        Raises:
-            RebaseConflictError: If rebase encounters conflicts (rebase is aborted if abort_on_conflict=True)
-            ShellCommandExecutionError: If git command fails for other reasons
+        Raises RebaseConflictError on conflicts; aborts the rebase first if abort_on_conflict=True (default).
         """
         try:
             await self.run_git_command(["rebase", onto, branch])
@@ -876,13 +587,7 @@ class GitRepoIntegration:
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     def is_rebase_in_progress(self) -> bool:
-        """Check if a rebase is currently in progress.
-
-        Checks for the existence of `.git/rebase-merge/` or `.git/rebase-apply/` directories.
-
-        Returns:
-            True if a rebase is in progress, False otherwise
-        """
+        """Return True if a rebase is in progress (rebase-merge/ or rebase-apply/ directory exists)."""
         git_dir = self._repo_path / ".git"
 
         # For worktrees, .git is a file pointing to the actual git dir
@@ -898,18 +603,7 @@ class GitRepoIntegration:
         return rebase_merge.exists() or rebase_apply.exists()
 
     async def rebase_continue(self) -> str:
-        """Continue a paused rebase after conflicts have been resolved.
-
-        Automatically stages all changes before continuing, since during a rebase
-        conflict state the only unstaged changes should be the resolved conflict files.
-
-        Returns:
-            New HEAD commit hash after successful rebase continuation
-
-        Raises:
-            RebaseConflictError: If rebase encounters more conflicts (files still have conflict markers)
-            ShellCommandExecutionError: If git command fails for other reasons
-        """
+        """Stage all changes and continue a paused rebase. Raises RebaseConflictError if conflicts remain."""
         # Stage all changes - during rebase conflict, unstaged changes are the resolved files
         await self.run_git_command(["add", "-A"])
 
@@ -927,22 +621,9 @@ class GitRepoIntegration:
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def rebase_abort(self) -> None:
-        """Abort an in-progress rebase.
-
-        Executes `git rebase --abort` to cancel the rebase and restore
-        the branch to its state before the rebase started.
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["rebase", "--abort"])
 
     async def detect_git_remote_url(self) -> str | None:
-        """Detect git remote URL for this repository.
-
-        Returns:
-            Remote URL if found, None otherwise
-        """
         # Try to get "origin" remote URL
         output = await self.run_git_command(
             ["remote", "get-url", "origin"],
@@ -974,14 +655,7 @@ class GitRepoIntegration:
         return None
 
     async def stage_untracked_files_intent(self) -> list[str]:
-        """Stage untracked files with intent-to-add (git add -N).
-
-        This makes untracked files visible in `git diff` output without
-        staging their content. Respects .gitignore automatically.
-
-        Returns:
-            List of file paths that were staged with intent-to-add
-        """
+        """Stage untracked files with intent-to-add (git add -N) so they appear in git diff without staging content."""
         # Get untracked files via git status --porcelain
         output = await self.run_git_command(
             ["status", "--porcelain"],
@@ -1023,14 +697,7 @@ class GitRepoIntegration:
         return staged_files
 
     async def stash(self, message: str | None = None) -> str | None:
-        """Stash uncommitted changes.
-
-        Args:
-            message: Optional message for the stash entry
-
-        Returns:
-            Stash reference (e.g., 'stash@{0}') if changes were stashed, None if nothing to stash
-        """
+        """Stash uncommitted changes. Returns the stash ref, or None if the working tree was clean."""
         # Check if there are changes to stash first
         if not await self.has_uncommitted_changes():
             return None
@@ -1045,11 +712,6 @@ class GitRepoIntegration:
         return "stash@{0}"
 
     async def stash_pop(self) -> bool:
-        """Restore stashed changes.
-
-        Returns:
-            True if stash was popped successfully, False if no stash to pop
-        """
         # Check if there are any stashes
         stash_list = await self.run_git_command(["stash", "list"], raise_on_error=False)
         if not stash_list:
@@ -1059,14 +721,9 @@ class GitRepoIntegration:
         return True
 
     async def stash_push(self, include_untracked: bool = False, message: str | None = None) -> str | None:
-        """Stash changes, clear working tree, and return the stash SHA.
+        """Stash all changes (staged + unstaged + optionally untracked) and return the stash commit SHA.
 
-        Args:
-            include_untracked: If True, include untracked (new) files in stash
-            message: Optional message for the stash entry
-
-        Returns:
-            SHA of the stash commit, or None if there was nothing to stash
+        Returns None if there was nothing to stash. Returns a SHA (not 'stash@{0}') for stability when used across worktrees.
         """
         # Stage all changes first to sync index with working tree
         # This prevents "not uptodate" errors when files have partial staging
@@ -1087,25 +744,9 @@ class GitRepoIntegration:
         return sha.strip()
 
     async def stash_apply(self, stash_ref: str) -> None:
-        """Apply a stash by reference or SHA.
-
-        Args:
-            stash_ref: The stash reference (e.g., 'stash@{0}') or commit SHA
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["stash", "apply", stash_ref])
 
     async def find_stash_by_message(self, message_pattern: str) -> str | None:
-        """Find a stash entry by message pattern.
-
-        Args:
-            message_pattern: Substring to search for in stash messages
-
-        Returns:
-            Stash reference (e.g., 'stash@{0}') if found, None otherwise
-        """
         stash_list = await self.run_git_command(["stash", "list"], raise_on_error=False)
         if not stash_list:
             return None
@@ -1119,42 +760,16 @@ class GitRepoIntegration:
         return None
 
     async def stash_drop(self, stash_ref: str) -> None:
-        """Drop a stash entry.
-
-        Args:
-            stash_ref: The stash reference (e.g., 'stash@{0}')
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["stash", "drop", stash_ref])
 
     async def stash_store(self, commit_sha: str, message: str | None = None) -> None:
-        """Store a stash commit to the stash list.
-
-        This makes the stash accessible via 'git stash list' and 'git stash apply stash@{0}'.
-
-        Args:
-            commit_sha: The SHA of the stash commit to store
-            message: Optional message for the stash entry
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
+        """Store a stash commit (by SHA) into the stash list, making it accessible via 'git stash list'."""
         args = ["stash", "store", commit_sha]
         if message:
             args.extend(["-m", message])
         await self.run_git_command(args)
 
     async def reset_working_tree(self, include_untracked: bool = True) -> None:
-        """Reset all uncommitted changes in the working tree.
-
-        Args:
-            include_untracked: If True, also remove untracked files
-
-        Raises:
-            ShellCommandExecutionError: If git command fails
-        """
         await self.run_git_command(["checkout", "."])
         if include_untracked:
             await self.run_git_command(["clean", "-fd"])
@@ -1165,23 +780,7 @@ class GitRepoIntegration:
         target: str,
         title: str | None = None,
     ) -> str:
-        """Perform a squash merge.
-
-        Merges all commits from source branch into target branch as a single commit.
-        Checks out target branch, performs squash merge, and commits with auto-generated
-        message from the squashed commits.
-
-        Args:
-            source: Source branch to squash merge from
-            target: Target branch to merge into
-            title: Optional title for the commit (prepended to auto-generated message)
-
-        Returns:
-            Commit hash of the new squashed commit
-
-        Raises:
-            ShellCommandExecutionError: If merge or commit fails
-        """
+        """Checkout target, squash-merge source, and commit. Returns the new HEAD hash."""
         # Get commit messages from source branch for auto-generated message
         merge_base = await self.get_merge_base(target, source)
         commits = await self.get_commits_in_range(merge_base, source)
@@ -1214,16 +813,6 @@ class GitRepoIntegration:
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def push_branch(self, branch: str, remote: str = "origin", set_upstream: bool = True) -> None:
-        """Push a branch to a remote.
-
-        Args:
-            branch: Branch name to push
-            remote: Remote name (default: origin)
-            set_upstream: Whether to set upstream tracking (default: True)
-
-        Raises:
-            ShellCommandExecutionError: If push fails
-        """
         args = ["push"]
         if set_upstream:
             args.append("-u")
@@ -1231,29 +820,10 @@ class GitRepoIntegration:
         await self.run_git_command(args, timeout=60.0)
 
     async def push_delete_branch(self, branch: str, remote: str = "origin") -> None:
-        """Delete a branch from a remote.
-
-        Args:
-            branch: Branch name to delete
-            remote: Remote name (default: origin)
-
-        Raises:
-            ShellCommandExecutionError: If deletion fails
-        """
         await self.run_git_command(["push", remote, "--delete", branch], timeout=60.0)
 
     async def get_checked_out_location(self, branch: str) -> str | None:
-        """Get the path where a branch is currently checked out.
-
-        Checks the main repository and all worktrees to find where the branch
-        is currently checked out.
-
-        Args:
-            branch: Branch name to look for
-
-        Returns:
-            Path where the branch is checked out, or None if not checked out anywhere
-        """
+        """Return the path where branch is currently checked out (main repo or any worktree), or None."""
         worktrees = await self.list_worktrees()
         for worktree in worktrees:
             if worktree.branch == branch:
@@ -1265,17 +835,9 @@ class GitRepoIntegration:
         branch_name: str,
         exclude_main_repo: bool = True,
     ) -> BranchReleaseResult:
-        """Find where a branch is checked out and release it by detaching HEAD.
+        """Detach HEAD in the worktree where branch_name is checked out, releasing it for operations like delete/rebase.
 
-        This allows operations like delete or rebase on branches that are
-        currently checked out in a worktree.
-
-        Args:
-            branch_name: Branch to release
-            exclude_main_repo: If True, don't release if checked out in main repo
-
-        Returns:
-            BranchReleaseResult with worktree_path and stash_sha if released
+        Stashes any uncommitted changes before detaching. Does nothing if the branch is not checked out, or if it is only checked out in the main repo and exclude_main_repo=True.
         """
         checkout_path = await self.get_checked_out_location(branch_name)
 
@@ -1298,15 +860,6 @@ class GitRepoIntegration:
         return BranchReleaseResult(checkout_path, stash_sha)
 
     async def is_branch_pushed(self, branch: str, remote: str = "origin") -> bool:
-        """Check if a local branch has been pushed to a remote.
-
-        Args:
-            branch: Local branch name
-            remote: Remote name (default: origin)
-
-        Returns:
-            True if the branch exists on the remote, False otherwise
-        """
         output = await self.run_git_command(
             ["ls-remote", "--heads", remote, branch],
             raise_on_error=False,
@@ -1315,39 +868,13 @@ class GitRepoIntegration:
         return bool(output)
 
     async def fast_forward_merge(self, source: str, target: str) -> str:
-        """Perform a fast-forward merge.
-
-        Checks out the target branch and fast-forwards it to the source branch.
-        Fast-forward is only possible when target is an ancestor of source
-        (i.e., target hasn't diverged).
-
-        Args:
-            source: Source branch to fast-forward to
-            target: Target branch to update
-
-        Returns:
-            Commit hash after fast-forward
-
-        Raises:
-            ShellCommandExecutionError: If fast-forward is not possible
-        """
+        """Checkout target and fast-forward it to source. Returns the new HEAD hash."""
         await self.checkout_branch(target)
         await self.run_git_command(["merge", "--ff-only", source])
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def commit(self, message: str, no_verify: bool = False) -> str:
-        """Create a commit with staged changes.
-
-        Args:
-            message: Commit message
-            no_verify: Skip pre-commit and commit-msg hooks (use when squashing already-verified commits)
-
-        Returns:
-            Hash of the new commit
-
-        Raises:
-            ShellCommandExecutionError: If commit fails
-        """
+        """Commit staged changes. no_verify=True skips hooks (safe for squashing already-verified commits)."""
         args = ["commit", "-m", message]
         if no_verify:
             args.append("--no-verify")
@@ -1355,31 +882,13 @@ class GitRepoIntegration:
         return await self.run_git_command(["rev-parse", "HEAD"])
 
     async def soft_reset(self, commit: str) -> None:
-        """Reset HEAD to a commit, keeping all changes staged.
-
-        Args:
-            commit: Commit hash or ref to reset to
-
-        Raises:
-            ShellCommandExecutionError: If reset fails
-        """
+        """Reset HEAD to commit, keeping all changes staged (git reset --soft)."""
         await self.run_git_command(["reset", "--soft", commit])
 
     async def rebase_onto(self, onto: str) -> str:
-        """Rebase the currently checked-out branch onto the given ref.
+        """Rebase the current branch onto onto in-place.
 
-        Unlike rebase_branch, this operates on the current branch in-place,
-        making it safe to use from within a worktree.
-
-        Args:
-            onto: Branch or ref to rebase onto
-
-        Returns:
-            New HEAD commit hash after successful rebase
-
-        Raises:
-            RebaseConflictError: If rebase encounters conflicts
-            ShellCommandExecutionError: If rebase fails for other reasons
+        Unlike rebase_branch, operates on the checked-out branch directly, making it safe to call from within a worktree. Raises RebaseConflictError on conflicts (and aborts).
         """
         try:
             await self.run_git_command(["rebase", onto])
